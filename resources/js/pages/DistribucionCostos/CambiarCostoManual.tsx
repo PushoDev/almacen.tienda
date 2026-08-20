@@ -21,7 +21,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { AlertCircle, ArrowRightLeft, CheckCircle2, DollarSign, Package, Scale, Wallet, X } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle2, DollarSign, Package, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 // --- Funciones de formato ---
@@ -87,13 +87,6 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
         cuentas: [] as Array<{ account_id: number; monto: string }>,
         exchange_rate: tasaCambioActual.toString(), // Mantener como string para permitir borrado
         details: '',
-        productos: productos.map((producto) => ({
-            product_id: producto.id,
-            product_name: producto.nombre_producto,
-            old_cost_usd: producto.precio_compra_producto,
-            cantidad: producto.pivot.cantidad,
-            amount_usd: '0', // Permitir escritura libre
-        })),
     });
 
     const titulo = `Compra${compraIds.length > 1 ? 's' : ''} #${compraIds.join(', #')}`;
@@ -137,30 +130,34 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
         return cuenta ? acc + montoUsdDeCuenta(cuenta, c.monto) : acc;
     }, 0);
 
-    const distributedTotal = data.productos.reduce((acc, prod) => acc + (parseFloat(prod.amount_usd) || 0), 0);
-    const remainingUsd = totalUsdToDistribute - distributedTotal;
-
     // Peso de cada producto dentro de la compra: (costo unitario × cantidad) / total de la compra.
-    const totalCompra = data.productos.reduce((acc, prod) => acc + parseFloat(String(prod.old_cost_usd)) * prod.cantidad, 0);
+    // El reparto es 100% automático — el mismo cálculo que hace el backend al confirmar, aquí solo
+    // en modo vista previa. El % de aumento sale igual para todos los productos (barato o caro),
+    // porque el monto asignado ya es proporcional al valor que cada uno representaba en la compra.
+    const totalCompra = productos.reduce((acc, p) => acc + Number(p.precio_compra_producto) * p.pivot.cantidad, 0);
+
+    const distribucion = productos.map((producto) => {
+        const costoActual = Number(producto.precio_compra_producto);
+        const cantidad = producto.pivot.cantidad;
+        const totalLinea = costoActual * cantidad;
+        const peso = totalCompra > 0 ? totalLinea / totalCompra : 0;
+        const monto = peso * totalUsdToDistribute;
+        const adicionalUnidad = cantidad > 0 ? monto / cantidad : 0;
+        const nuevoCosto = costoActual + adicionalUnidad;
+        const porcentajeAumento = costoActual > 0 ? (adicionalUnidad / costoActual) * 100 : 0;
+
+        return { producto, costoActual, cantidad, totalLinea, peso, monto, adicionalUnidad, nuevoCosto, porcentajeAumento };
+    });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validaciones
         if (data.cuentas.length === 0) {
             toast.error('Debe seleccionar al menos una cuenta de origen');
             return;
         }
         if (totalUsdToDistribute <= 0) {
             toast.error('El monto a distribuir debe ser mayor a 0');
-            return;
-        }
-        if (distributedTotal === 0) {
-            toast.error('Debes distribuir el gasto en al menos un producto.');
-            return;
-        }
-        if (remainingUsd < -0.01) {
-            toast.error('El monto distribuido excede el monto total disponible.');
             return;
         }
 
@@ -171,14 +168,6 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                 toast.error(firstError || 'Ocurrió un error. Por favor, revisa los datos.');
             },
         });
-    };
-
-    // ✅ PERMITIR ESCRITURA LIBRE - SIN FORMATEO AUTOMÁTICO
-    const handleProductChange = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
-        const { value } = event.target;
-        const newProducts = [...data.productos];
-        newProducts[index].amount_usd = value;
-        setData('productos', newProducts);
     };
 
     // ✅ PERMITIR ESCRITURA LIBRE EN TASA DE CAMBIO - SIN FORMATEO AUTOMÁTICO
@@ -193,17 +182,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
         return isNaN(num) ? '0.00' : num.toFixed(2);
     };
 
-    const distributeRemaining = () => {
-        if (remainingUsd > 0.01) {
-            const newProducts = data.productos.map((producto) => ({
-                ...producto,
-                amount_usd: (parseFloat(producto.amount_usd) + remainingUsd / data.productos.length).toString(),
-            }));
-            setData('productos', newProducts);
-        }
-    };
-
-    const isButtonDisabled = processing || data.cuentas.length === 0 || totalUsdToDistribute <= 0 || distributedTotal === 0 || remainingUsd < -0.01;
+    const isButtonDisabled = processing || data.cuentas.length === 0 || totalUsdToDistribute <= 0;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -439,69 +418,31 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                         </p>
                                     </div>
 
+                                    <div className="bg-card rounded-lg border-l-4 border-violet-400 p-4 shadow-sm dark:border-violet-600">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40">
+                                                <Package className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                                            </div>
+                                            <h3 className="text-sm font-semibold">Total de la Compra</h3>
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(totalCompra)}</p>
+                                    </div>
+
                                     <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
                                         <div className="flex items-center gap-2">
                                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
                                                 <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                                             </div>
-                                            <h3 className="text-sm font-semibold">Distribuido a Productos</h3>
+                                            <h3 className="text-sm font-semibold">Productos Afectados</h3>
                                         </div>
-                                        <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                                            {formatCurrency(distributedTotal)}
-                                        </p>
-                                    </div>
-
-                                    <div
-                                        className={`bg-card rounded-lg border-l-4 p-4 shadow-sm ${
-                                            remainingUsd >= 0 ? 'border-blue-400 dark:border-blue-600' : 'border-red-400 dark:border-red-600'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <div
-                                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                                                    remainingUsd >= 0 ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-red-100 dark:bg-red-900/40'
-                                                }`}
-                                            >
-                                                <Scale
-                                                    className={`h-4 w-4 ${remainingUsd >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}
-                                                />
-                                            </div>
-                                            <h3 className="text-sm font-semibold">Restante</h3>
-                                        </div>
-                                        <p
-                                            className={`mt-1 text-2xl font-bold ${remainingUsd >= 0 ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}
-                                        >
-                                            {formatCurrency(remainingUsd)}
-                                        </p>
+                                        <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{productos.length}</p>
                                     </div>
                                 </div>
-
-                                {remainingUsd > 0.01 && (
-                                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-                                        <div className="mb-2 flex items-center gap-2">
-                                            <AlertCircle size={18} className="text-amber-600" />
-                                            <h4 className="font-semibold text-amber-800 dark:text-amber-200">Atención: Sobrante Detectado</h4>
-                                        </div>
-                                        <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">
-                                            El monto restante de <strong>{formatCurrency(remainingUsd)} USD</strong> se registrará automáticamente
-                                            como un gasto directo, prorrateado entre las cuentas seleccionadas.
-                                        </p>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={distributeRemaining}
-                                            className="cursor-pointer border-amber-300 text-amber-700 hover:bg-amber-100"
-                                        >
-                                            Distribuir sobrante entre todos los productos
-                                        </Button>
-                                    </div>
-                                )}
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* --- Tabla de Productos, con peso (%) de cada uno dentro de la compra — card propia --- */}
+                    {/* --- Tabla de Productos: reparto 100% automático, proporcional al peso de cada uno --- */}
                     <Card className="overflow-hidden border-0 pt-0 shadow-lg">
                         <CardHeader className="bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
                             <div className="flex items-center justify-between gap-3">
@@ -512,7 +453,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                     <div>
                                         <CardTitle className="text-white">Productos de la Compra</CardTitle>
                                         <CardDescription className="text-violet-100">
-                                            Peso de cada producto según su participación en el total de la compra.
+                                            El monto se reparte automáticamente según el peso de cada producto en el total de la compra.
                                         </CardDescription>
                                     </div>
                                 </div>
@@ -521,7 +462,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                 </span>
                             </div>
                         </CardHeader>
-                        <CardContent className="p-0">
+                        <CardContent className="overflow-x-auto p-0">
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
@@ -530,44 +471,34 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                         <TableHead className="text-right">Unidades</TableHead>
                                         <TableHead className="text-right">Total</TableHead>
                                         <TableHead className="text-right">% del Total</TableHead>
-                                        <TableHead>Monto a Distribuir (USD)</TableHead>
+                                        <TableHead className="text-right">Monto Asignado</TableHead>
                                         <TableHead className="text-right">Nuevo Costo</TableHead>
+                                        <TableHead className="text-right">% Aumento</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {data.productos.map((producto, index) => {
-                                        const distributedAmount = parseFloat(producto.amount_usd) || 0;
-                                        const oldCost = parseFloat(String(producto.old_cost_usd));
-                                        const nuevoCosto = oldCost + distributedAmount;
-                                        const totalProducto = oldCost * producto.cantidad;
-                                        const porcentaje = totalCompra > 0 ? (totalProducto / totalCompra) * 100 : 0;
-
-                                        return (
-                                            <TableRow key={producto.product_id}>
-                                                <TableCell className="font-medium">{producto.product_name}</TableCell>
-                                                <TableCell className="text-right">{formatCurrency(oldCost)}</TableCell>
-                                                <TableCell className="text-right">{producto.cantidad}</TableCell>
-                                                <TableCell className="text-right font-medium">{formatCurrency(totalProducto)}</TableCell>
+                                    {distribucion.map(
+                                        ({ producto, costoActual, cantidad, totalLinea, peso, monto, nuevoCosto, porcentajeAumento }) => (
+                                            <TableRow key={producto.id}>
+                                                <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(costoActual)}</TableCell>
+                                                <TableCell className="text-right">{cantidad}</TableCell>
+                                                <TableCell className="text-right font-medium">{formatCurrency(totalLinea)}</TableCell>
                                                 <TableCell className="text-right">
                                                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
-                                                        {porcentaje.toFixed(2)}%
+                                                        {(peso * 100).toFixed(2)}%
                                                     </span>
                                                 </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        type="number"
-                                                        step="any" // ✅ PERMITIR CUALQUIER VALOR
-                                                        min="0"
-                                                        onChange={(e) => handleProductChange(index, e)}
-                                                        value={producto.amount_usd}
-                                                        placeholder="0.00"
-                                                        className="w-32"
-                                                    />
-                                                </TableCell>
+                                                <TableCell className="text-right">{formatCurrency(monto)}</TableCell>
                                                 <TableCell className="text-right font-bold text-green-600">{formatCurrency(nuevoCosto)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                                                        +{porcentajeAumento.toFixed(4)}%
+                                                    </span>
+                                                </TableCell>
                                             </TableRow>
-                                        );
-                                    })}
+                                        ),
+                                    )}
                                 </TableBody>
                                 <TableFooter>
                                     <TableRow className="bg-muted/50">
@@ -576,6 +507,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                         <TableCell></TableCell>
                                         <TableCell className="text-right font-bold">{formatCurrency(totalCompra)}</TableCell>
                                         <TableCell className="text-right font-bold">100%</TableCell>
+                                        <TableCell className="text-right font-bold">{formatCurrency(totalUsdToDistribute)}</TableCell>
                                         <TableCell></TableCell>
                                         <TableCell></TableCell>
                                     </TableRow>
@@ -602,7 +534,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                     disabled={isButtonDisabled}
                                     className={`flex-1 ${!isButtonDisabled ? 'cursor-pointer transition-colors hover:bg-blue-600' : 'cursor-not-allowed opacity-50'}`}
                                 >
-                                    {processing ? 'Procesando...' : `Confirmar Prorrateo${remainingUsd > 0.01 ? ' con Sobrante' : ''}`}
+                                    {processing ? 'Procesando...' : 'Confirmar Distribución de Costos'}
                                 </Button>
                             </div>
                         </CardContent>

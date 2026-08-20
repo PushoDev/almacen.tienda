@@ -7,10 +7,11 @@ import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, 
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowRightLeft, Calendar, DollarSign, Eye, Landmark, Package, Search, Store, Truck, X } from 'lucide-react';
+import { ArrowRightLeft, Calendar, DollarSign, Eye, History, Landmark, Package, Search, Store, Truck, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface Moneda {
@@ -311,20 +312,28 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                 <div>
                                     <CardTitle className="text-white">Compras para Distribuir Costos</CardTitle>
                                     <CardDescription className="text-indigo-100">
-                                        Seleccione una o varias compras para distribuir manualmente los costos adicionales entre sus productos.
-                                        Solo disponible para cuentas en moneda CUP.
+                                        Seleccione una o varias compras para distribuir manualmente los costos adicionales entre sus productos. Solo
+                                        disponible para cuentas en moneda CUP.
                                     </CardDescription>
                                 </div>
                             </div>
-                            {seleccionadas.length > 0 && (
-                                <Button
-                                    onClick={distribuirSeleccionadas}
-                                    className="cursor-pointer bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
-                                >
-                                    <ArrowRightLeft className="h-4 w-4" />
-                                    Distribuir {seleccionadas.length} seleccionada{seleccionadas.length === 1 ? '' : 's'}
-                                </Button>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <Link href={route('distribucion-costos.historial')}>
+                                    <Button variant="outline" className="cursor-pointer border-white/30 bg-white/10 text-white hover:bg-white/20">
+                                        <History className="h-4 w-4" />
+                                        Ver Historial
+                                    </Button>
+                                </Link>
+                                {seleccionadas.length > 0 && (
+                                    <Button
+                                        onClick={distribuirSeleccionadas}
+                                        className="cursor-pointer bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
+                                    >
+                                        <ArrowRightLeft className="h-4 w-4" />
+                                        Distribuir {seleccionadas.length} seleccionada{seleccionadas.length === 1 ? '' : 's'}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -358,7 +367,7 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                             Productos
                                         </div>
                                     </TableHead>
-                                    <TableHead className="w-32 text-right">Acción</TableHead>
+                                    <TableHead className="w-24 text-right">Acción</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -416,23 +425,34 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
-                                                        <Button
-                                                            size="sm"
-                                                            className="cursor-pointer bg-indigo-600 text-white shadow-sm hover:bg-indigo-700"
-                                                        >
-                                                            <ArrowRightLeft className="h-4 w-4" />
-                                                            Distribuir
-                                                        </Button>
-                                                    </Link>
-                                                    {compra.tiene_distribucion && (
-                                                        <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
-                                                            <Button variant="outline" size="sm" className="cursor-pointer">
-                                                                <Eye className="h-4 w-4" />
-                                                                Detalles
-                                                            </Button>
-                                                        </Link>
+                                                    {compra.tiene_distribucion ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Link href={route('distribucion-costos.historial', { compra_id: compra.id })}>
+                                                                    <Button variant="outline" size="icon" className="cursor-pointer">
+                                                                        <Eye className="h-4 w-4" />
+                                                                    </Button>
+                                                                </Link>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Detalles</TooltipContent>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <div className="size-9" />
                                                     )}
+
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
+                                                                <Button
+                                                                    size="icon"
+                                                                    className="cursor-pointer bg-indigo-600 text-white shadow-sm hover:bg-indigo-700"
+                                                                >
+                                                                    <ArrowRightLeft className="h-4 w-4" />
+                                                                </Button>
+                                                            </Link>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>Distribuir</TooltipContent>
+                                                    </Tooltip>
                                                 </div>
                                             </TableCell>
                                         </TableRow>

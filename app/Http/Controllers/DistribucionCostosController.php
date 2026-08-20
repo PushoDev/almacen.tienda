@@ -247,6 +247,7 @@ class DistribucionCostosController extends Controller
                 // desglose es cost_distribution_compras/cost_distribution_cuentas.
                 'purchase_id' => $compras->first()->id,
                 'account_id' => $cuentasSeleccionadas->first()['cuenta']->id,
+                'user_id' => auth()->id(),
                 'amount_cup' => $totalCupLegado,
                 'amount_usd' => $totalUsdDisponible,
                 'exchange_rate' => $tasa_cambio,
@@ -270,40 +271,59 @@ class DistribucionCostosController extends Controller
                 ]);
             }
 
+            // Reparto 100% automático: el peso de cada producto es (costo actual × cantidad) /
+            // total de la compra del lote. El monto que le toca a esa línea se divide entre sus
+            // unidades para obtener el costo adicional por unidad — nunca se suma el monto total
+            // directo al costo unitario (esa era la fórmula vieja, y era incorrecta).
+            $productosAgrupados = $this->agruparProductosPorLinea($productosCompras);
+            $totalCompraLote = $productosAgrupados->sum(fn ($p) => $p->precio_compra_producto * $p->pivot->cantidad);
+
             $totalUsdDistribuidoProductos = 0;
 
-            foreach ($validatedData['productos'] as $productoData) {
-                if ((float) $productoData['amount_usd'] > 0) {
-                    $producto = Producto::findOrFail($productoData['product_id']);
-                    $cantidad = $productosCompras->where('id', $producto->id)->sum(fn ($p) => $p->pivot->cantidad);
-                    $costoActual = $producto->precio_compra_producto;
-                    $incrementoUnitario = (float) $productoData['amount_usd'];
-                    $nuevoCosto = $costoActual + $incrementoUnitario;
+            foreach ($productosAgrupados as $productoAgrupado) {
+                $cantidad = $productoAgrupado->pivot->cantidad;
+                $costoActual = $productoAgrupado->precio_compra_producto;
+                $totalLinea = $costoActual * $cantidad;
 
-                    CostDistributionItem::create([
-                        'cost_distribution_id' => $distribution->id,
-                        'product_id' => $producto->id,
-                        'quantity' => $cantidad,
-                        'distributed_amount_usd' => $productoData['amount_usd'],
-                        'old_cost_usd' => $costoActual,
-                        'new_cost_usd' => $nuevoCosto,
-                    ]);
-
-                    CostoHistorial::create([
-                        'product_id' => $producto->id,
-                        'old_cost_usd' => $costoActual,
-                        'new_cost_usd' => $nuevoCosto,
-                        'cost_distribution_id' => $distribution->id,
-                        'comentario' => 'Ajuste por distribución manual de costos.',
-                    ]);
-
-                    $producto->update(['precio_compra_producto' => $nuevoCosto]);
-
-                    app(ProductoVendedorController::class)
-                        ->actualizarGananciaPorCambioCosto($producto->id);
-
-                    $totalUsdDistribuidoProductos += (float) $productoData['amount_usd'];
+                if ($totalCompraLote <= 0 || $cantidad <= 0) {
+                    continue;
                 }
+
+                $peso = $totalLinea / $totalCompraLote;
+                $montoAsignado = $peso * $totalUsdDisponible;
+
+                if ($montoAsignado <= 0) {
+                    continue;
+                }
+
+                $incrementoUnitario = $montoAsignado / $cantidad;
+                $nuevoCosto = $costoActual + $incrementoUnitario;
+
+                $producto = Producto::findOrFail($productoAgrupado->id);
+
+                CostDistributionItem::create([
+                    'cost_distribution_id' => $distribution->id,
+                    'product_id' => $producto->id,
+                    'quantity' => $cantidad,
+                    'distributed_amount_usd' => $montoAsignado,
+                    'old_cost_usd' => $costoActual,
+                    'new_cost_usd' => $nuevoCosto,
+                ]);
+
+                CostoHistorial::create([
+                    'product_id' => $producto->id,
+                    'old_cost_usd' => $costoActual,
+                    'new_cost_usd' => $nuevoCosto,
+                    'cost_distribution_id' => $distribution->id,
+                    'comentario' => 'Ajuste por distribución automática de costos (compras #' . $compraIds . ').',
+                ]);
+
+                $producto->update(['precio_compra_producto' => $nuevoCosto]);
+
+                app(ProductoVendedorController::class)
+                    ->actualizarGananciaPorCambioCosto($producto->id);
+
+                $totalUsdDistribuidoProductos += $montoAsignado;
             }
 
             $totalUsdSobrante = $totalUsdDisponible - $totalUsdDistribuidoProductos;
@@ -382,6 +402,106 @@ class DistribucionCostosController extends Controller
             Log::error('Error al distribuir costos manualmente: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Ocurrió un error al distribuir los costos. Por favor, revisa los datos e intenta de nuevo.');
         }
+    }
+
+    /**
+     * Historial de todas las distribuciones de costos ya confirmadas. Acepta ?compra_id=X para
+     * ver solo las distribuciones que cubrieron esa compra en particular (usado por el botón
+     * "Detalles" del listado principal).
+     */
+    public function historial(Request $request)
+    {
+        $compraId = $request->input('compra_id', '');
+        $fecha = $request->input('fecha', '');
+
+        $distribuciones = CostDistribution::with(['compras.compra', 'cuentas.cuenta.moneda', 'user', 'items'])
+            ->when($compraId !== '', fn ($query) => $query->whereHas('compras', fn ($q) => $q->where('compra_id', $compraId)))
+            ->when($fecha !== '', fn ($query) => $query->whereDate('created_at', $fecha))
+            ->orderByDesc('created_at')
+            ->paginate(10)
+            ->withQueryString();
+
+        $distribuciones->through(function ($distribucion) {
+            return [
+                'id' => $distribucion->id,
+                'fecha' => $distribucion->created_at,
+                'usuario' => $distribucion->user->name ?? null,
+                'compras' => $distribucion->compras->pluck('compra_id')->sort()->values(),
+                'cuentas' => $distribucion->cuentas->map(fn ($c) => [
+                    'nombre' => $c->cuenta->nombre_cuenta ?? null,
+                    'moneda' => $c->cuenta->moneda->codigo_moneda ?? null,
+                    'monto' => $c->monto,
+                ]),
+                'monto_total_usd' => $distribucion->amount_usd,
+                'productos_afectados' => $distribucion->items->count(),
+                'comentario' => $distribucion->details,
+            ];
+        });
+
+        return Inertia::render('DistribucionCostos/Historial', [
+            'distribuciones' => $distribuciones,
+            'filtros' => [
+                'compra_id' => $compraId,
+                'fecha' => $fecha,
+            ],
+        ]);
+    }
+
+    /**
+     * Detalle de una distribución de costos ya confirmada: resumen de la operación, desglose por
+     * producto, y el historial completo de costo de cada producto afectado (no solo esta
+     * distribución, para ver la evolución completa en el tiempo).
+     */
+    public function show(CostDistribution $distribucion)
+    {
+        $distribucion->load(['compras.compra', 'cuentas.cuenta.moneda', 'user', 'items.product']);
+
+        $productoIds = $distribucion->items->pluck('product_id');
+        $historialesPorProducto = CostoHistorial::with('distribution')
+            ->whereIn('product_id', $productoIds)
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy('product_id');
+
+        return Inertia::render('DistribucionCostos/Show', [
+            'distribucion' => [
+                'id' => $distribucion->id,
+                'fecha' => $distribucion->created_at,
+                'usuario' => $distribucion->user->name ?? null,
+                'comentario' => $distribucion->details,
+                'tasa_cambio' => $distribucion->exchange_rate,
+                'monto_total_usd' => $distribucion->amount_usd,
+                'compras' => $distribucion->compras->pluck('compra_id')->sort()->values(),
+                'cuentas' => $distribucion->cuentas->map(fn ($c) => [
+                    'nombre' => $c->cuenta->nombre_cuenta ?? null,
+                    'moneda' => $c->cuenta->moneda->codigo_moneda ?? null,
+                    'monto' => $c->monto,
+                ]),
+            ],
+            'productos' => $distribucion->items->map(function ($item) use ($historialesPorProducto, $distribucion) {
+                $cantidad = $item->quantity;
+                $porcentajeAumento = $item->old_cost_usd > 0
+                    ? (($item->new_cost_usd - $item->old_cost_usd) / $item->old_cost_usd) * 100
+                    : 0;
+
+                return [
+                    'producto_id' => $item->product_id,
+                    'nombre' => $item->product->nombre_producto ?? "Producto #{$item->product_id}",
+                    'cantidad' => $cantidad,
+                    'costo_anterior' => $item->old_cost_usd,
+                    'monto_asignado' => $item->distributed_amount_usd,
+                    'costo_nuevo' => $item->new_cost_usd,
+                    'porcentaje_aumento' => $porcentajeAumento,
+                    'historial' => ($historialesPorProducto->get($item->product_id) ?? collect())->map(fn ($h) => [
+                        'fecha' => $h->created_at,
+                        'costo_anterior' => $h->old_cost_usd,
+                        'costo_nuevo' => $h->new_cost_usd,
+                        'comentario' => $h->comentario,
+                        'es_esta_distribucion' => $h->cost_distribution_id === $distribucion->id,
+                    ])->values(),
+                ];
+            }),
+        ]);
     }
 
     /**

@@ -37,10 +37,9 @@ class DistribuirCostosManualRequest extends FormRequest
             'cuentas.*.account_id' => 'required|exists:cuentas,id',
             'cuentas.*.monto'      => 'required|numeric|min:0.01',
 
-            // El array de productos con su distribución manual
-            'productos'              => 'required|array',
-            'productos.*.product_id' => 'required|exists:productos,id',
-            'productos.*.amount_usd' => 'required|numeric|min:0',
+            // Los productos y sus montos ya NO se reciben del formulario — el reparto es
+            // 100% automático, calculado en el controlador a partir del peso de cada producto
+            // dentro del total de las compras del lote (ver DistribucionCostosController).
         ];
     }
 }
