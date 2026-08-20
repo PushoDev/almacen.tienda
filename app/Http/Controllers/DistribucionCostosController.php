@@ -134,16 +134,17 @@ class DistribucionCostosController extends Controller
         // producto en dos compras del lote suma cantidad, no aparece dos veces).
         $productos = $this->agruparProductosPorLinea($compras->flatMap->productos);
 
+        // Cuentas CUP o USD — una operación puede financiarse mezclando ambas monedas.
         if (auth()->user()->role === 'vendedor') {
             $cuentas = auth()->user()->cuentas()
                 ->whereHas('moneda', function ($query) {
-                    $query->where('codigo_moneda', 'CUP')->where('estado', true);
+                    $query->whereIn('codigo_moneda', ['CUP', 'USD'])->where('estado', true);
                 })
                 ->with('moneda')
                 ->get();
         } else {
             $cuentas = Cuenta::whereHas('moneda', function ($query) {
-                $query->where('codigo_moneda', 'CUP')->where('estado', true);
+                $query->whereIn('codigo_moneda', ['CUP', 'USD'])->where('estado', true);
             })->with('moneda')->get();
         }
 
@@ -182,10 +183,30 @@ class DistribucionCostosController extends Controller
             $compraIds = $compras->pluck('id')->sort()->implode(', ');
             $productosCompras = $compras->flatMap->productos;
 
-            $cuentasSeleccionadas = collect($validatedData['cuentas'])->map(fn ($item) => [
-                'cuenta' => Cuenta::with('moneda')->findOrFail($item['account_id']),
-                'monto_cup' => (float) $item['amount_cup'],
-            ]);
+            // Tasa de cambio de la operación — aplica solo a las cuentas CUP del lote; las
+            // cuentas USD no la necesitan. Por defecto, la tasa CUP general del sistema.
+            $monedaCUP = Moneda::where('codigo_moneda', 'CUP')->where('estado', true)->orderBy('tasa_cambio', 'desc')->first();
+            $tasa_cambio = $validatedData['exchange_rate'] ?? ($monedaCUP->tasa_cambio ?? null);
+
+            if (!$tasa_cambio || $tasa_cambio == 0) {
+                DB::rollBack();
+                return redirect()->back()->with('error', 'La tasa de cambio no está definida o es cero.');
+            }
+
+            // Cada cuenta financia en su propia moneda (CUP o USD, mezcladas está permitido).
+            // monto_usd es el equivalente en USD de lo que esa cuenta aporta — CUP se convierte
+            // con la tasa de la operación, USD entra directo, sin conversión.
+            $cuentasSeleccionadas = collect($validatedData['cuentas'])->map(function ($item) use ($tasa_cambio) {
+                $cuenta = Cuenta::with('moneda')->findOrFail($item['account_id']);
+                $monto = (float) $item['monto'];
+                $esCup = $cuenta->moneda->codigo_moneda === 'CUP';
+
+                return [
+                    'cuenta' => $cuenta,
+                    'monto' => $monto,
+                    'monto_usd' => $esCup ? $monto / $tasa_cambio : $monto,
+                ];
+            });
 
             $cuentasAsignadas = auth()->user()->role === 'vendedor'
                 ? auth()->user()->cuentas()->pluck('id')->toArray()
@@ -204,35 +225,29 @@ class DistribucionCostosController extends Controller
                     return redirect()->back()->with('error', 'No se puede usar una cuenta de deudas para esta operación.');
                 }
 
-                if ($cuenta->moneda->codigo_moneda !== 'CUP') {
+                if (!in_array($cuenta->moneda->codigo_moneda, ['CUP', 'USD'])) {
                     DB::rollBack();
-                    return redirect()->back()->with('error', 'Solo se pueden usar cuentas en moneda CUP para esta operación.');
+                    return redirect()->back()->with('error', 'Solo se pueden usar cuentas en moneda CUP o USD para esta operación.');
                 }
 
-                if ($cuenta->saldo_cuenta < $item['monto_cup']) {
+                if ($cuenta->saldo_cuenta < $item['monto']) {
                     DB::rollBack();
                     return redirect()->back()->with('error', "El saldo de la cuenta {$cuenta->nombre_cuenta} es insuficiente.");
                 }
             }
 
-            $primeraCuenta = $cuentasSeleccionadas->first()['cuenta'];
-            $tasa_cambio = $validatedData['exchange_rate'] ?? $primeraCuenta->moneda->tasa_cambio;
-
-            if (!$tasa_cambio || $tasa_cambio == 0) {
-                DB::rollBack();
-                return redirect()->back()->with('error', 'La tasa de cambio no está definida o es cero.');
-            }
-
-            $totalCupDistribuir = $cuentasSeleccionadas->sum('monto_cup');
-            $totalUsdDisponible = $totalCupDistribuir / $tasa_cambio;
+            $totalUsdDisponible = $cuentasSeleccionadas->sum('monto_usd');
+            // Legado: solo la parte que vino de cuentas CUP, informativo — la fuente real del
+            // desglose por cuenta/moneda es cost_distribution_cuentas.
+            $totalCupLegado = $cuentasSeleccionadas->filter(fn ($i) => $i['cuenta']->moneda->codigo_moneda === 'CUP')->sum('monto');
 
             $distribution = CostDistribution::create([
                 // Campos legado (una sola compra/cuenta/monto) — se rellenan con la primera
                 // compra/cuenta y el total combinado por compatibilidad; la fuente real del
                 // desglose es cost_distribution_compras/cost_distribution_cuentas.
                 'purchase_id' => $compras->first()->id,
-                'account_id' => $primeraCuenta->id,
-                'amount_cup' => $totalCupDistribuir,
+                'account_id' => $cuentasSeleccionadas->first()['cuenta']->id,
+                'amount_cup' => $totalCupLegado,
                 'amount_usd' => $totalUsdDisponible,
                 'exchange_rate' => $tasa_cambio,
                 'details' => $validatedData['details'],
@@ -251,7 +266,7 @@ class DistribucionCostosController extends Controller
                 CostDistributionCuenta::create([
                     'cost_distribution_id' => $distribution->id,
                     'cuenta_id' => $item['cuenta']->id,
-                    'monto_cup' => $item['monto_cup'],
+                    'monto' => $item['monto'],
                 ]);
             }
 
@@ -299,16 +314,20 @@ class DistribucionCostosController extends Controller
                 'remaining_amount_cup' => $totalCupSobrante,
             ]);
 
-            $montoCupProductos = $totalUsdDistribuidoProductos * $tasa_cambio;
-
-            // Cada cuenta aporta una proporción del total — el movimiento financiero (y el
+            // Cada cuenta aporta una proporción del total en USD — el movimiento financiero (y el
             // descuento de saldo) se reparte según esa proporción, no todo a una sola cuenta.
+            // El movimiento de cada cuenta se registra en SU propia moneda (CUP o USD), no
+            // siempre en CUP como antes.
             foreach ($cuentasSeleccionadas as $item) {
                 $cuenta = $item['cuenta'];
-                $proporcion = $item['monto_cup'] / $totalCupDistribuir;
+                $esCup = $cuenta->moneda->codigo_moneda === 'CUP';
+                $proporcion = $item['monto_usd'] / $totalUsdDisponible;
 
-                $montoProductosCuenta = round($montoCupProductos * $proporcion, 2);
-                $montoSobranteCuenta = round($totalCupSobrante * $proporcion, 2);
+                $montoProductosUsdCuenta = $totalUsdDistribuidoProductos * $proporcion;
+                $montoSobranteUsdCuenta = $totalUsdSobrante * $proporcion;
+
+                $montoProductosCuenta = round($esCup ? $montoProductosUsdCuenta * $tasa_cambio : $montoProductosUsdCuenta, 2);
+                $montoSobranteCuenta = round($esCup ? $montoSobranteUsdCuenta * $tasa_cambio : $montoSobranteUsdCuenta, 2);
 
                 if ($montoProductosCuenta > 0) {
                     MovimientoFinanciero::create([
@@ -319,8 +338,8 @@ class DistribucionCostosController extends Controller
                         'cliente_destino_id' => null,
                         'proveedor_destino_id' => null,
                         'monto' => $montoProductosCuenta,
-                        'moneda' => 'CUP',
-                        'tasa_cambio_aplicada' => $tasa_cambio,
+                        'moneda' => $cuenta->moneda->codigo_moneda,
+                        'tasa_cambio_aplicada' => $esCup ? $tasa_cambio : null,
                         'descripcion' => $validatedData['details'] . ' - Distribución costos productos compras #' . $compraIds,
                         'fecha_operacion' => now(),
                         'estado' => 'completado',
@@ -336,15 +355,15 @@ class DistribucionCostosController extends Controller
                         'cliente_destino_id' => null,
                         'proveedor_destino_id' => null,
                         'monto' => $montoSobranteCuenta,
-                        'moneda' => 'CUP',
-                        'tasa_cambio_aplicada' => $tasa_cambio,
+                        'moneda' => $cuenta->moneda->codigo_moneda,
+                        'tasa_cambio_aplicada' => $esCup ? $tasa_cambio : null,
                         'descripcion' => $validatedData['details'] . ' - Sobrante no distribuido compras #' . $compraIds,
                         'fecha_operacion' => now(),
                         'estado' => 'completado',
                     ]);
                 }
 
-                $cuenta->decrement('saldo_cuenta', $item['monto_cup']);
+                $cuenta->decrement('saldo_cuenta', $item['monto']);
             }
 
             $mensajeExito = $totalUsdSobrante > 0.01

@@ -1,16 +1,27 @@
 import HeadingSmall from '@/components/heading-small';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Combobox, ComboboxChip, ComboboxChips, ComboboxChipsInput, ComboboxContent, ComboboxEmpty, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Combobox,
+    ComboboxChip,
+    ComboboxChips,
+    ComboboxChipsInput,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxItem,
+    ComboboxList,
+} from '@/components/ui/combobox';
 import { Field, FieldDescription, FieldGroup, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { AlertCircle, DollarSign, Wallet, X } from 'lucide-react';
+import { AlertCircle, ArrowRightLeft, CheckCircle2, DollarSign, Package, Scale, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 // --- Funciones de formato ---
@@ -71,8 +82,9 @@ interface Props {
 export default function CambiarCostoManual({ compraIds, productos, cuentas, tasaCambioActual }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         purchase_ids: compraIds,
-        // Una o varias cuentas financiando la distribución, cada una con su propio monto en CUP.
-        cuentas: [] as Array<{ account_id: number; amount_cup: string }>,
+        // Una o varias cuentas financiando la distribución — CUP o USD mezcladas, cada una con
+        // su propio monto en su propia moneda.
+        cuentas: [] as Array<{ account_id: number; monto: string }>,
         exchange_rate: tasaCambioActual.toString(), // Mantener como string para permitir borrado
         details: '',
         productos: productos.map((producto) => ({
@@ -101,20 +113,35 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
         },
     ];
 
-    // ✅ FILTRAR CUENTAS CUP
-    const cuentasCup = cuentas.filter((cuenta) => cuenta.moneda.codigo_moneda === 'CUP' && cuenta.estado === 'activa');
+    // Cuentas CUP o USD, mezcladas — ya no se limita a una sola moneda para toda la operación.
+    const cuentasElegibles = cuentas.filter(
+        (cuenta) => (cuenta.moneda.codigo_moneda === 'CUP' || cuenta.moneda.codigo_moneda === 'USD') && cuenta.estado === 'activa',
+    );
 
     const cuentasSeleccionadas = data.cuentas
-        .map((c) => cuentasCup.find((cuenta) => cuenta.id === c.account_id))
+        .map((c) => cuentasElegibles.find((cuenta) => cuenta.id === c.account_id))
         .filter((c): c is Cuenta => !!c);
 
     // --- Cálculos ---
     const exchangeRate = parseFloat(data.exchange_rate) || tasaCambioActual;
-    const amountCup = data.cuentas.reduce((acc, c) => acc + (parseFloat(c.amount_cup) || 0), 0);
-    const totalUsdToDistribute = amountCup / exchangeRate;
+
+    // Equivalente en USD de lo que aporta una cuenta: CUP se convierte con la tasa de la
+    // operación, USD entra directo — es la moneda común en la que vive el costo de los productos.
+    const montoUsdDeCuenta = (cuenta: Cuenta, monto: string): number => {
+        const valor = parseFloat(monto) || 0;
+        return cuenta.moneda.codigo_moneda === 'CUP' ? valor / exchangeRate : valor;
+    };
+
+    const totalUsdToDistribute = data.cuentas.reduce((acc, c) => {
+        const cuenta = cuentasElegibles.find((cu) => cu.id === c.account_id);
+        return cuenta ? acc + montoUsdDeCuenta(cuenta, c.monto) : acc;
+    }, 0);
+
     const distributedTotal = data.productos.reduce((acc, prod) => acc + (parseFloat(prod.amount_usd) || 0), 0);
     const remainingUsd = totalUsdToDistribute - distributedTotal;
-    const remainingCup = remainingUsd * exchangeRate;
+
+    // Peso de cada producto dentro de la compra: (costo unitario × cantidad) / total de la compra.
+    const totalCompra = data.productos.reduce((acc, prod) => acc + parseFloat(String(prod.old_cost_usd)) * prod.cantidad, 0);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -124,8 +151,8 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
             toast.error('Debe seleccionar al menos una cuenta de origen');
             return;
         }
-        if (amountCup <= 0) {
-            toast.error('El monto en CUP debe ser mayor a 0');
+        if (totalUsdToDistribute <= 0) {
+            toast.error('El monto a distribuir debe ser mayor a 0');
             return;
         }
         if (distributedTotal === 0) {
@@ -176,7 +203,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
         }
     };
 
-    const isButtonDisabled = processing || data.cuentas.length === 0 || amountCup <= 0 || distributedTotal === 0 || remainingUsd < -0.01;
+    const isButtonDisabled = processing || data.cuentas.length === 0 || totalUsdToDistribute <= 0 || distributedTotal === 0 || remainingUsd < -0.01;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -195,186 +222,316 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                 </div>
                 <Separator className="col-span-4" />
 
-                <div className="bg-card rounded-lg p-6 shadow-md">
-                    <h2 className="mb-4 text-xl font-bold">Detalles de Prorrateo para {titulo}</h2>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* --- Cuentas de origen (una o varias) --- */}
-                        <FieldSet>
-                            <FieldLegend className="flex items-center gap-2 text-base font-semibold">
-                                <Wallet className="h-5 w-5 text-emerald-600" />
-                                Cuentas de Origen (CUP)
-                            </FieldLegend>
-                            <FieldDescription>Selecciona una o varias cuentas para financiar esta distribución.</FieldDescription>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <ArrowRightLeft className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Detalles de Prorrateo para {titulo}</CardTitle>
+                                    <CardDescription className="text-indigo-100">
+                                        Complete los datos para distribuir el costo entre los productos seleccionados.
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* --- Cuentas de origen (una o varias) --- */}
+                            <FieldSet>
+                                <FieldLegend className="flex items-center gap-2 text-base font-semibold">
+                                    <Wallet className="h-5 w-5 text-emerald-600" />
+                                    Cuentas de Origen
+                                </FieldLegend>
+                                <FieldDescription>
+                                    Selecciona una o varias cuentas (CUP o USD, se pueden mezclar) para financiar esta distribución.
+                                </FieldDescription>
 
-                            <FieldGroup className="space-y-4 pt-4">
-                                <Field>
-                                    <Combobox
-                                        multiple
-                                        items={cuentasCup}
-                                        itemToStringLabel={(c: Cuenta) => c.nombre_cuenta}
-                                        value={cuentasSeleccionadas}
-                                        onValueChange={(seleccionadas: Cuenta[]) => {
-                                            setData(
-                                                'cuentas',
-                                                seleccionadas.map(
-                                                    (c) => data.cuentas.find((item) => item.account_id === c.id) ?? { account_id: c.id, amount_cup: '' },
-                                                ),
-                                            );
-                                        }}
-                                    >
-                                        <ComboboxChips>
-                                            {cuentasSeleccionadas.map((cuenta) => (
-                                                <ComboboxChip key={cuenta.id}>{cuenta.nombre_cuenta}</ComboboxChip>
-                                            ))}
-                                            <ComboboxChipsInput placeholder="Buscar cuentas en CUP..." />
-                                        </ComboboxChips>
-                                        <ComboboxContent>
-                                            <ComboboxEmpty>No se encontraron cuentas.</ComboboxEmpty>
-                                            <ComboboxList>
-                                                {(cuenta: Cuenta) => (
-                                                    <ComboboxItem key={cuenta.id} value={cuenta}>
-                                                        <div className="flex w-full items-center justify-between gap-2">
-                                                            <span>{cuenta.nombre_cuenta}</span>
-                                                            <span className="text-muted-foreground text-xs">
-                                                                Saldo: {formatCupCurrency(cuenta.saldo_cuenta)}
-                                                            </span>
+                                <FieldGroup className="space-y-4 pt-4">
+                                    <Field>
+                                        <Combobox
+                                            multiple
+                                            items={cuentasElegibles}
+                                            itemToStringLabel={(c: Cuenta) => c.nombre_cuenta}
+                                            value={cuentasSeleccionadas}
+                                            onValueChange={(seleccionadas: Cuenta[]) => {
+                                                setData(
+                                                    'cuentas',
+                                                    seleccionadas.map(
+                                                        (c) =>
+                                                            data.cuentas.find((item) => item.account_id === c.id) ?? {
+                                                                account_id: c.id,
+                                                                monto: '',
+                                                            },
+                                                    ),
+                                                );
+                                            }}
+                                        >
+                                            <ComboboxChips>
+                                                {cuentasSeleccionadas.map((cuenta) => (
+                                                    <ComboboxChip key={cuenta.id}>
+                                                        {cuenta.nombre_cuenta} ({cuenta.moneda.codigo_moneda})
+                                                    </ComboboxChip>
+                                                ))}
+                                                <ComboboxChipsInput placeholder="Buscar cuentas..." />
+                                            </ComboboxChips>
+                                            <ComboboxContent>
+                                                <ComboboxEmpty>No se encontraron cuentas.</ComboboxEmpty>
+                                                <ComboboxList>
+                                                    {(cuenta: Cuenta) => (
+                                                        <ComboboxItem key={cuenta.id} value={cuenta}>
+                                                            <div className="flex w-full items-center justify-between gap-2">
+                                                                <span>
+                                                                    {cuenta.nombre_cuenta}{' '}
+                                                                    <span className="text-muted-foreground text-xs">
+                                                                        ({cuenta.moneda.codigo_moneda})
+                                                                    </span>
+                                                                </span>
+                                                                <span className="text-muted-foreground text-xs">
+                                                                    Saldo:{' '}
+                                                                    {cuenta.moneda.codigo_moneda === 'CUP'
+                                                                        ? formatCupCurrency(cuenta.saldo_cuenta)
+                                                                        : formatCurrency(cuenta.saldo_cuenta)}
+                                                                </span>
+                                                            </div>
+                                                        </ComboboxItem>
+                                                    )}
+                                                </ComboboxList>
+                                            </ComboboxContent>
+                                        </Combobox>
+                                        {errors.cuentas && <div className="mt-1 text-sm text-red-500">{errors.cuentas}</div>}
+                                    </Field>
+
+                                    {cuentasSeleccionadas.length > 0 && (
+                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            {cuentasSeleccionadas.map((cuenta) => {
+                                                const item = data.cuentas.find((c) => c.account_id === cuenta.id);
+                                                const esCup = cuenta.moneda.codigo_moneda === 'CUP';
+
+                                                return (
+                                                    <div
+                                                        key={cuenta.id}
+                                                        className={`bg-card flex items-center gap-3 rounded-lg border border-l-4 p-3 shadow-sm ${
+                                                            esCup
+                                                                ? 'border-l-amber-400 dark:border-l-amber-600'
+                                                                : 'border-l-blue-400 dark:border-l-blue-600'
+                                                        }`}
+                                                    >
+                                                        <div
+                                                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                                                                esCup
+                                                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                                            }`}
+                                                        >
+                                                            {cuenta.nombre_cuenta[0]}
                                                         </div>
-                                                    </ComboboxItem>
-                                                )}
-                                            </ComboboxList>
-                                        </ComboboxContent>
-                                    </Combobox>
-                                    {errors.cuentas && <div className="mt-1 text-sm text-red-500">{errors.cuentas}</div>}
-                                </Field>
-
-                                {cuentasSeleccionadas.length > 0 && (
-                                    <div className="divide-y rounded-lg border">
-                                        {cuentasSeleccionadas.map((cuenta) => {
-                                            const item = data.cuentas.find((c) => c.account_id === cuenta.id);
-                                            return (
-                                                <div key={cuenta.id} className="flex items-center gap-3 p-3">
-                                                    <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold">
-                                                        {cuenta.nombre_cuenta[0]}
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="truncate text-sm font-medium">{cuenta.nombre_cuenta}</p>
-                                                        <p className="text-muted-foreground text-xs">Saldo: {formatCupCurrency(cuenta.saldo_cuenta)}</p>
-                                                    </div>
-                                                    <InputGroup className="w-36 shrink-0">
-                                                        <InputGroupAddon>$</InputGroupAddon>
-                                                        <InputGroupInput
-                                                            inputMode="decimal"
-                                                            placeholder="0.00"
-                                                            value={item?.amount_cup || ''}
-                                                            onChange={(e) => {
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="truncate text-sm font-medium">{cuenta.nombre_cuenta}</p>
+                                                                <Badge
+                                                                    className={
+                                                                        esCup
+                                                                            ? 'border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                                                            : 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                                                                    }
+                                                                >
+                                                                    {cuenta.moneda.codigo_moneda}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="text-muted-foreground text-xs">
+                                                                Saldo:{' '}
+                                                                {esCup ? formatCupCurrency(cuenta.saldo_cuenta) : formatCurrency(cuenta.saldo_cuenta)}
+                                                            </p>
+                                                        </div>
+                                                        <InputGroup className="w-32 shrink-0">
+                                                            <InputGroupAddon>{cuenta.moneda.simbolo_moneda || '$'}</InputGroupAddon>
+                                                            <InputGroupInput
+                                                                inputMode="decimal"
+                                                                placeholder="0.00"
+                                                                value={item?.monto || ''}
+                                                                onChange={(e) => {
+                                                                    setData(
+                                                                        'cuentas',
+                                                                        data.cuentas.map((c) =>
+                                                                            c.account_id === cuenta.id ? { ...c, monto: e.target.value } : c,
+                                                                        ),
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </InputGroup>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="shrink-0 cursor-pointer"
+                                                            onClick={() =>
                                                                 setData(
                                                                     'cuentas',
-                                                                    data.cuentas.map((c) =>
-                                                                        c.account_id === cuenta.id ? { ...c, amount_cup: e.target.value } : c,
-                                                                    ),
-                                                                );
-                                                            }}
-                                                        />
-                                                    </InputGroup>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="shrink-0 cursor-pointer"
-                                                        onClick={() => setData('cuentas', data.cuentas.filter((c) => c.account_id !== cuenta.id))}
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </FieldGroup>
-                        </FieldSet>
+                                                                    data.cuentas.filter((c) => c.account_id !== cuenta.id),
+                                                                )
+                                                            }
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </FieldGroup>
+                            </FieldSet>
 
-                        {/* --- Tasa de cambio --- */}
-                        <div className="max-w-xs">
-                            <Label htmlFor="exchangeRate" className="flex items-center gap-1">
-                                <DollarSign size={16} /> Tasa de Cambio (CUP a USD)
-                            </Label>
-                            <Input
-                                id="exchangeRate"
-                                type="number"
-                                step="any" // ✅ PERMITIR CUALQUIER VALOR
-                                min="0.01"
-                                value={data.exchange_rate}
-                                onChange={handleExchangeRateChange}
-                                placeholder="Tasa de cambio"
-                                className="mt-1"
-                            />
-                            {errors.exchange_rate && <div className="mt-1 text-sm text-red-500">{errors.exchange_rate}</div>}
-                            <p className="text-muted-foreground mt-1 text-xs">Tasa actual: {formatDisplayNumber(tasaCambioActual)} CUP/USD</p>
-                        </div>
-
-                        {/* --- Paneles de Resumen --- */}
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <div className="rounded-lg border p-4">
-                                <h4 className="mb-2 font-semibold">Resumen de Distribución</h4>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between">
-                                        <span>Total CUP a distribuir:</span>
-                                        <span className="font-semibold">{formatCupCurrency(amountCup)}</span>
+                            {/* --- Tasa de cambio — solo aplica si hay alguna cuenta CUP seleccionada --- */}
+                            {cuentasSeleccionadas.some((c) => c.moneda.codigo_moneda === 'CUP') && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+                                    <div className="mb-3 flex items-center gap-2">
+                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
+                                            <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100">Tasa de Cambio (CUP → USD)</h4>
+                                            <p className="text-xs text-amber-700 dark:text-amber-300">
+                                                Solo convierte las cuentas en CUP — las cuentas USD entran directo, sin conversión.
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span>Equivalente en USD:</span>
-                                        <span className="font-semibold">{formatCurrency(totalUsdToDistribute)}</span>
+                                    <div className="flex flex-wrap items-end gap-4">
+                                        <div className="w-40">
+                                            <Label htmlFor="exchangeRate" className="text-muted-foreground text-xs">
+                                                Tasa actual del sistema: {formatDisplayNumber(tasaCambioActual)} CUP/USD
+                                            </Label>
+                                            <InputGroup className="mt-1 bg-white dark:bg-transparent">
+                                                <InputGroupInput
+                                                    id="exchangeRate"
+                                                    type="number"
+                                                    step="any" // ✅ PERMITIR CUALQUIER VALOR
+                                                    min="0.01"
+                                                    value={data.exchange_rate}
+                                                    onChange={handleExchangeRateChange}
+                                                    placeholder="Tasa de cambio"
+                                                />
+                                                <InputGroupAddon>CUP</InputGroupAddon>
+                                            </InputGroup>
+                                            {errors.exchange_rate && <div className="mt-1 text-sm text-red-500">{errors.exchange_rate}</div>}
+                                        </div>
+                                        <div className="pb-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+                                            1 USD = {formatDisplayNumber(exchangeRate)} CUP
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span>Distribuido a productos:</span>
-                                        <span className="font-semibold text-green-600">{formatCurrency(distributedTotal)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Restante por distribuir:</span>
-                                        <span className={`font-semibold ${remainingUsd >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                            {formatCurrency(remainingUsd)}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {remainingUsd > 0.01 && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-                                    <div className="mb-2 flex items-center gap-2">
-                                        <AlertCircle size={18} className="text-amber-600" />
-                                        <h4 className="font-semibold text-amber-800 dark:text-amber-200">Atención: Sobrante Detectado</h4>
-                                    </div>
-                                    <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">
-                                        El monto restante de <strong>{formatCurrency(remainingUsd)} USD</strong> ({formatCupCurrency(remainingCup)}{' '}
-                                        CUP) se registrará automáticamente como un gasto directo.
-                                    </p>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={distributeRemaining}
-                                        className="cursor-pointer border-amber-300 text-amber-700 hover:bg-amber-100"
-                                    >
-                                        Distribuir sobrante entre todos los productos
-                                    </Button>
                                 </div>
                             )}
-                        </div>
 
-                        {/* --- Tabla de Productos --- */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold">Productos de la Compra</h3>
-                                <div className="text-sm text-gray-500">{productos.length} producto(s) encontrado(s)</div>
+                            {/* --- Resumen — mini-widgets con acento lateral, mismo patrón que el listado --- */}
+                            <div>
+                                <h4 className="text-muted-foreground mb-3 text-sm font-semibold tracking-wide uppercase">Resumen de Distribución</h4>
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <div className="bg-card rounded-lg border-l-4 border-indigo-400 p-4 shadow-sm dark:border-indigo-600">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/40">
+                                                <DollarSign className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                            </div>
+                                            <h3 className="text-sm font-semibold">Total a Distribuir</h3>
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                                            {formatCurrency(totalUsdToDistribute)}
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                            </div>
+                                            <h3 className="text-sm font-semibold">Distribuido a Productos</h3>
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                                            {formatCurrency(distributedTotal)}
+                                        </p>
+                                    </div>
+
+                                    <div
+                                        className={`bg-card rounded-lg border-l-4 p-4 shadow-sm ${
+                                            remainingUsd >= 0 ? 'border-blue-400 dark:border-blue-600' : 'border-red-400 dark:border-red-600'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div
+                                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                                                    remainingUsd >= 0 ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-red-100 dark:bg-red-900/40'
+                                                }`}
+                                            >
+                                                <Scale
+                                                    className={`h-4 w-4 ${remainingUsd >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}
+                                                />
+                                            </div>
+                                            <h3 className="text-sm font-semibold">Restante</h3>
+                                        </div>
+                                        <p
+                                            className={`mt-1 text-2xl font-bold ${remainingUsd >= 0 ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}
+                                        >
+                                            {formatCurrency(remainingUsd)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {remainingUsd > 0.01 && (
+                                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                                        <div className="mb-2 flex items-center gap-2">
+                                            <AlertCircle size={18} className="text-amber-600" />
+                                            <h4 className="font-semibold text-amber-800 dark:text-amber-200">Atención: Sobrante Detectado</h4>
+                                        </div>
+                                        <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">
+                                            El monto restante de <strong>{formatCurrency(remainingUsd)} USD</strong> se registrará automáticamente
+                                            como un gasto directo, prorrateado entre las cuentas seleccionadas.
+                                        </p>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={distributeRemaining}
+                                            className="cursor-pointer border-amber-300 text-amber-700 hover:bg-amber-100"
+                                        >
+                                            Distribuir sobrante entre todos los productos
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* --- Tabla de Productos, con peso (%) de cada uno dentro de la compra — card propia --- */}
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Package className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Productos de la Compra</CardTitle>
+                                        <CardDescription className="text-violet-100">
+                                            Peso de cada producto según su participación en el total de la compra.
+                                        </CardDescription>
+                                    </div>
+                                </div>
+                                <span className="rounded-full bg-white/20 px-3 py-1 text-sm font-medium text-white backdrop-blur-sm">
+                                    {productos.length} producto(s)
+                                </span>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
                             <Table>
                                 <TableHeader>
-                                    <TableRow>
+                                    <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                         <TableHead>Producto</TableHead>
-                                        <TableHead>Cantidad</TableHead>
-                                        <TableHead>Costo Actual (USD)</TableHead>
+                                        <TableHead className="text-right">Costo Unitario</TableHead>
+                                        <TableHead className="text-right">Unidades</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                        <TableHead className="text-right">% del Total</TableHead>
                                         <TableHead>Monto a Distribuir (USD)</TableHead>
-                                        <TableHead>Nuevo Costo (USD)</TableHead>
+                                        <TableHead className="text-right">Nuevo Costo</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -382,12 +539,20 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                         const distributedAmount = parseFloat(producto.amount_usd) || 0;
                                         const oldCost = parseFloat(String(producto.old_cost_usd));
                                         const nuevoCosto = oldCost + distributedAmount;
+                                        const totalProducto = oldCost * producto.cantidad;
+                                        const porcentaje = totalCompra > 0 ? (totalProducto / totalCompra) * 100 : 0;
 
                                         return (
                                             <TableRow key={producto.product_id}>
                                                 <TableCell className="font-medium">{producto.product_name}</TableCell>
-                                                <TableCell>{producto.cantidad}</TableCell>
-                                                <TableCell>{formatCurrency(oldCost)}</TableCell>
+                                                <TableCell className="text-right">{formatCurrency(oldCost)}</TableCell>
+                                                <TableCell className="text-right">{producto.cantidad}</TableCell>
+                                                <TableCell className="text-right font-medium">{formatCurrency(totalProducto)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                                                        {porcentaje.toFixed(2)}%
+                                                    </span>
+                                                </TableCell>
                                                 <TableCell>
                                                     <Input
                                                         type="number"
@@ -399,37 +564,50 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                                         className="w-32"
                                                     />
                                                 </TableCell>
-                                                <TableCell className="font-bold text-green-600">{formatCurrency(nuevoCosto)}</TableCell>
+                                                <TableCell className="text-right font-bold text-green-600">{formatCurrency(nuevoCosto)}</TableCell>
                                             </TableRow>
                                         );
                                     })}
                                 </TableBody>
+                                <TableFooter>
+                                    <TableRow className="bg-muted/50">
+                                        <TableCell className="font-bold">Total</TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell className="text-right font-bold">{formatCurrency(totalCompra)}</TableCell>
+                                        <TableCell className="text-right font-bold">100%</TableCell>
+                                        <TableCell></TableCell>
+                                        <TableCell></TableCell>
+                                    </TableRow>
+                                </TableFooter>
                             </Table>
-                        </div>
+                        </CardContent>
 
                         {/* --- Comentario y Botón --- */}
-                        <div>
-                            <Label htmlFor="details">Comentario (opcional)</Label>
-                            <Input
-                                id="details"
-                                value={data.details}
-                                onChange={(e) => setData('details', e.target.value)}
-                                placeholder="Ej: Transporte marítimo desde Panamá"
-                                className="mt-1"
-                            />
-                            {errors.details && <div className="mt-1 text-sm text-red-500">{errors.details}</div>}
-                        </div>
-                        <div className="flex gap-4">
-                            <Button
-                                type="submit"
-                                disabled={isButtonDisabled}
-                                className={`flex-1 ${!isButtonDisabled ? 'cursor-pointer transition-colors hover:bg-blue-600' : 'cursor-not-allowed opacity-50'}`}
-                            >
-                                {processing ? 'Procesando...' : `Confirmar Prorrateo${remainingUsd > 0.01 ? ' con Sobrante' : ''}`}
-                            </Button>
-                        </div>
-                    </form>
-                </div>
+                        <CardContent className="space-y-4 pt-0">
+                            <div>
+                                <Label htmlFor="details">Comentario (opcional)</Label>
+                                <Input
+                                    id="details"
+                                    value={data.details}
+                                    onChange={(e) => setData('details', e.target.value)}
+                                    placeholder="Ej: Transporte marítimo desde Panamá"
+                                    className="mt-1"
+                                />
+                                {errors.details && <div className="mt-1 text-sm text-red-500">{errors.details}</div>}
+                            </div>
+                            <div className="flex gap-4">
+                                <Button
+                                    type="submit"
+                                    disabled={isButtonDisabled}
+                                    className={`flex-1 ${!isButtonDisabled ? 'cursor-pointer transition-colors hover:bg-blue-600' : 'cursor-not-allowed opacity-50'}`}
+                                >
+                                    {processing ? 'Procesando...' : `Confirmar Prorrateo${remainingUsd > 0.01 ? ' con Sobrante' : ''}`}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </form>
             </div>
         </AppLayout>
     );

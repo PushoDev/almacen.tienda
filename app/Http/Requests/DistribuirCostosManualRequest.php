@@ -31,10 +31,11 @@ class DistribuirCostosManualRequest extends FormRequest
             'purchase_ids'   => 'required|array|min:1',
             'purchase_ids.*' => 'required|exists:compras,id',
 
-            // Una o varias cuentas financiando esta distribución
+            // Una o varias cuentas financiando esta distribución — pueden ser CUP o USD
+            // mezcladas; el monto va en la moneda propia de cada cuenta.
             'cuentas'              => 'required|array|min:1',
             'cuentas.*.account_id' => 'required|exists:cuentas,id',
-            'cuentas.*.amount_cup' => 'required|numeric|min:0.01',
+            'cuentas.*.monto'      => 'required|numeric|min:0.01',
 
             // El array de productos con su distribución manual
             'productos'              => 'required|array',

@@ -9,7 +9,9 @@ class CostDistributionCuenta extends Model
     protected $fillable = [
         'cost_distribution_id',
         'cuenta_id',
-        'monto_cup',
+        // Monto en la moneda propia de la cuenta (CUP o USD) — la moneda real se sabe vía
+        // cuenta_id → cuenta.moneda, esta columna ya no asume CUP.
+        'monto',
     ];
 
     public function distribution()
