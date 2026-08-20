@@ -107,6 +107,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Transacciones
     require __DIR__ . '/acciones/transacciones.php';
 
+    // Distribución de Costos
+    require __DIR__ . '/acciones/distribucion-costos.php';
+
     //    Remesas
     require __DIR__ . '/acciones/remesas.php';
 

@@ -20,6 +20,7 @@ import {
     StoreIcon,
     Users,
     CalendarIcon,
+    DollarSignIcon,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -37,15 +38,15 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Resumen Financiero',
-        href: '/logistica',
-        icon: ChartNoAxesCombinedIcon,
-        roles: ['admin'],
-    },
-    {
         title: 'Gestión de Monedas',
         href: '/monedas',
         icon: HandCoins,
+        roles: ['admin'],
+    },
+    {
+        title: 'Distribuicion de Costos',
+        href: '/distribucion-costos',
+        icon: DollarSignIcon,
         roles: ['admin'],
     },
     {
@@ -109,15 +110,21 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador'],
     },
     {
+        title: 'Empleados',
+        href: '/empleados',
+        icon: Contact,
+        roles: ['admin'],
+    },
+    {
         title: 'Reportes',
         href: '/reportes',
         icon: FileText,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Empleados',
-        href: '/empleados',
-        icon: Contact,
+        title: 'Resumen Financiero',
+        href: '/logistica',
+        icon: ChartNoAxesCombinedIcon,
         roles: ['admin'],
     },
     {
@@ -131,9 +138,9 @@ const allNavItems: NavItem[] = [
 const footerNavItems: NavItem[] = [
     {
         title: 'Documentación',
-        href: 'https://documentacion-glorietapos.vercel.app/',
+        href: '#',
         icon: BookOpen,
-        roles: ['moderador', 'vendedor'],
+        roles: ['moderador', 'vendedor', 'admin'],
     },
 ];
 

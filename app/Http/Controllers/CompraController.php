@@ -9,7 +9,6 @@ use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
-use App\Models\HistorialPrecioCosto;
 use App\Models\Producto;
 use App\Models\Proveedor;
 use Illuminate\Http\Request;
@@ -414,18 +413,20 @@ class CompraController extends Controller
                     'capacidad_producto' => $item['capacidad'] ?? null,
                 ];
 
-                $producto = Producto::where($searchAttributes)->first();
+                // El precio de costo es parte de la identidad del producto: si el mismo
+                // producto (mismo nombre+categoría+marca+modelo+capacidad) se compra a un
+                // precio distinto — misma compra para llenar un contenedor, compra separada,
+                // u otro proveedor — es legalmente otro producto. No se pisa el costo del
+                // existente: se crea una ficha aparte. Comparación exacta, sin margen de
+                // tolerancia (decisión explícita del cliente).
+                $producto = Producto::where($searchAttributes)
+                    ->where('precio_compra_producto', $item['precio'])
+                    ->first();
                 $isNew = !$producto;
 
                 if ($isNew) {
                     $producto = new Producto();
                 }
-
-                // Capturado antes de sobreescribir: costo y stock previos a esta compra, para
-                // dejar rastro en historial_precio_costos si el costo cambia (ver más abajo).
-                // Solo aplica a productos existentes — un producto nuevo no tiene "costo anterior".
-                $precioCostoAnterior = $isNew ? null : (float) $producto->precio_compra_producto;
-                $stockAntesDeCompra = $isNew ? 0 : $producto->cantidad_total;
 
                 $producto->fill([
                     'nombre_producto' => $item['producto'],
@@ -438,31 +439,6 @@ class CompraController extends Controller
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
                 ]);
                 $producto->save();
-
-                // Auditoría de cambio de costo — mismo cálculo que ProductoController::update(),
-                // pero sin pedir confirmación de contraseña: aquí el cambio de costo es esperado
-                // (viene de una compra real), no una edición manual, así que solo se registra.
-                if (!$isNew) {
-                    $precioCostoNuevo = (float) $item['precio'];
-                    $precioCostoCambio = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
-
-                    if ($precioCostoCambio) {
-                        $diferencia = $precioCostoNuevo - $precioCostoAnterior;
-                        $impactoFinanciero = $diferencia * $stockAntesDeCompra;
-
-                        HistorialPrecioCosto::create([
-                            'producto_id' => $producto->id,
-                            'user_id' => $request->user()->id,
-                            'precio_anterior' => $precioCostoAnterior,
-                            'precio_nuevo' => $precioCostoNuevo,
-                            'diferencia' => $diferencia,
-                            'stock_momento' => $stockAntesDeCompra,
-                            'impacto_financiero' => $impactoFinanciero,
-                            'es_perdida' => $impactoFinanciero < 0,
-                            'motivo' => "Actualizado automáticamente por compra #{$compra->id}",
-                        ]);
-                    }
-                }
 
                 // Manejo de Códigos de Barras
                 $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));

@@ -8,22 +8,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(
     function () {
-        // --- RUTAS DE DISTRIBUCIÓN DE COSTOS (EXISTENTES) ---
-
-        // Vista principal de transacciones
+        // Vista principal de transacciones (hub de Gasto/Ingreso/Transferencia — la distribución
+        // de costos se movió a Distribución de Costos, ver routes/acciones/distribucion-costos.php)
         Route::get('transacciones', [TransaccionController::class, 'index'])->name('transacciones');
-
-        // Muestra el formulario para distribuir costos de una compra específica.
-        Route::get('transacciones/distribuir-costos/{compra}', [TransaccionController::class, 'mostrarFormularioDistribucion'])
-            ->name('transacciones.distribuir-costos.show');
-
-        // Procesa la distribución manual.
-        Route::post('transacciones/distribuir-costos-manual', [TransaccionController::class, 'distribuirCostosManual'])
-            ->name('transacciones.distribuir-costos-manual');
-
-        Route::post('/transacciones/distribuir-costos', [TransaccionController::class, 'distribuirCostosManual'])
-            ->name('distribuir.costos.manual');
-
 
         // --- RUTAS DE MOVIMIENTOS FINANCIEROS INDEPENDIENTES ---
 

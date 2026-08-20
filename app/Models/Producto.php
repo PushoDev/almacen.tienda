@@ -108,6 +108,13 @@ class Producto extends Model
             ->withTimestamps();
     }
 
+    // Historial de cambios de costo de este producto (una entrada por cada distribución de
+    // costos que lo afectó, más antigua a más reciente por defecto).
+    public function costoHistorial()
+    {
+        return $this->hasMany(CostoHistorial::class, 'product_id')->orderBy('created_at');
+    }
+
     // 🔥 Cantidad total en todos los almacenes
     public function getCantidadTotalAttribute(): int
     {

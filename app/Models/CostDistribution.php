@@ -12,6 +12,7 @@ class CostDistribution extends Model
     protected $fillable = [
         'purchase_id',
         'account_id',
+        'user_id',
         'amount_cup',
         'amount_usd',
         'remaining_amount_usd',
@@ -32,9 +33,27 @@ class CostDistribution extends Model
         return $this->belongsTo(Cuenta::class, 'account_id');
     }
 
+    // Usuario que realizó la distribución
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
     // Relación con los items de la distribución
     public function items()
     {
         return $this->hasMany(CostDistributionItem::class);
+    }
+
+    // Relación con las cuentas que financiaron esta distribución (una o varias)
+    public function cuentas()
+    {
+        return $this->hasMany(CostDistributionCuenta::class);
+    }
+
+    // Relación con las compras cubiertas por esta distribución (una o varias, "lote")
+    public function compras()
+    {
+        return $this->hasMany(CostDistributionCompra::class);
     }
 }
