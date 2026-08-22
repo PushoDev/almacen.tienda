@@ -29,11 +29,8 @@ import AppLayout from '@/layouts/app-layout';
 import { ProveedorProps, ResumenProveedorData, type BreadcrumbItem, type PageProps } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    AlertCircle,
-    ArrowDownCircle,
     BadgePlus,
     Building,
-    CheckCircle,
     DollarSign,
     Edit3,
     Eye,
@@ -64,10 +61,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const ESTADOS = ['fondo', 'deuda', 'neutro'] as const;
+// Mismo criterio rojo/ámbar/esmeralda que Proveedores/Show.tsx (Estado Financiero) —
+// antes "neutro" era gris acá, una paleta distinta para el mismo concepto de negocio
+// según en qué pantalla estuviera el usuario.
 const estadoStyles: Record<string, { label: string; bg: string; text: string; border: string; bar: string; icon: React.ElementType }> = {
     fondo: { label: 'Con Fondo', bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', icon: TrendingUp },
     deuda: { label: 'En Deuda', bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800', bar: 'bg-red-500', icon: TrendingDown },
-    neutro: { label: 'Neutro', bg: 'bg-gray-50 dark:bg-gray-800/40', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700', bar: 'bg-gray-400', icon: CheckCircle },
+    neutro: { label: 'Neutro', bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', bar: 'bg-amber-500', icon: DollarSign },
 };
 
 export default function ProveedoresPage({ proveedores, resumen }: { proveedores: ProveedorProps[]; resumen: ResumenProveedorData }) {
@@ -95,10 +95,39 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
         }).format(valor);
     };
 
+    // Mismo criterio rojo/ámbar/esmeralda que Proveedores/Show.tsx (Estado Financiero) —
+    // el Badge genérico de shadcn (variant="default"/"secondary") no da estos colores,
+    // "default" es el color primario del tema y "secondary" es gris, ninguno lee como
+    // amarillo/verde reales. Única fuente de verdad para el badge "Estado" y la celda
+    // "Saldo" de la tabla — antes tenían cada uno su propia lógica y quedaban
+    // contradictorios entre sí (saldo=0 se pintaba verde en la celda, "Neutro" gris en el badge).
+    //
+    // Coerce a Number: Proveedor::saldo_proveedor usa cast 'decimal:2', que Laravel serializa
+    // como string en el JSON ("0.00", no 0) — comparar con === 0 nunca coincide para un saldo
+    // real de $0.00, aunque el tipo TS declare `number`. < y > "funcionan por suerte" porque
+    // JS coerciona el string al comparar con operadores relacionales; === no coerciona nada.
     const getEstadoSaldo = (saldo: number | undefined | null) => {
-        if (saldo === null || saldo === undefined || saldo === 0) return { texto: 'Neutro', color: 'secondary' as const };
-        if (saldo < 0) return { texto: 'Deuda', color: 'destructive' as const };
-        return { texto: 'Fondo', color: 'default' as const };
+        const saldoNum = Number(saldo ?? 0);
+        if (saldoNum < 0)
+            return {
+                texto: 'Deuda',
+                icon: TrendingDown,
+                badgeClass: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300',
+                textClass: 'text-red-600 dark:text-red-400',
+            };
+        if (saldoNum > 0)
+            return {
+                texto: 'Fondo',
+                icon: TrendingUp,
+                badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
+                textClass: 'text-emerald-600 dark:text-emerald-400',
+            };
+        return {
+            texto: 'Neutro',
+            icon: DollarSign,
+            badgeClass: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300',
+            textClass: 'text-amber-600 dark:text-amber-400',
+        };
     };
 
     const [filtroEstado, setFiltroEstado] = useState('');
@@ -124,7 +153,10 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
 
         return proveedores.filter((p) => {
             if (filtroEstado) {
-                const saldo = p.saldo_proveedor ?? 0;
+                // Coerce a Number: Proveedor::saldo_proveedor usa cast 'decimal:2', que Laravel
+                // serializa como string en el JSON ("0.00", no 0) — un saldo === 0 nunca
+                // coincide con la comparación estricta, aunque el tipo TS diga `number`.
+                const saldo = Number(p.saldo_proveedor ?? 0);
                 if (filtroEstado === 'fondo' && !(saldo > 0)) return false;
                 if (filtroEstado === 'deuda' && !(saldo < 0)) return false;
                 if (filtroEstado === 'neutro' && saldo !== 0) return false;
@@ -395,39 +427,28 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
                                         <TableCell>
                                             <div className="flex items-center gap-1 font-medium">
                                                 {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined ? (
-                                                    proveedor.saldo_proveedor < 0 ? (
-                                                        <ArrowDownCircle size={14} className="shrink-0 text-red-600 dark:text-red-400" />
-                                                    ) : proveedor.saldo_proveedor === 0 ? (
-                                                        <CheckCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
-                                                    ) : (
-                                                        <AlertCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
-                                                    )
-                                                ) : null}
-
-                                                <span
-                                                    className={
-                                                        proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
-                                                            ? proveedor.saldo_proveedor < 0
-                                                                ? 'text-red-600 dark:text-red-400'
-                                                                : proveedor.saldo_proveedor === 0
-                                                                  ? 'text-green-600 dark:text-green-400'
-                                                                  : 'text-green-600 dark:text-green-400'
-                                                            : 'text-gray-400 italic'
-                                                    }
-                                                >
-                                                    {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
-                                                        ? proveedor.saldo_proveedor < 0
-                                                            ? `- ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
-                                                            : proveedor.saldo_proveedor === 0
-                                                              ? 'Sin saldo'
-                                                              : formatearMoneda(proveedor.saldo_proveedor)
-                                                        : 'Sin dato'}
-                                                </span>
+                                                    <>
+                                                        <estado.icon size={14} className={`shrink-0 ${estado.textClass}`} />
+                                                        <span className={estado.textClass}>
+                                                            {/* Coerce a Number antes de comparar — saldo_proveedor llega como string
+                                                                ("0.00") por el cast decimal:2 de Laravel, === 0 nunca coincide. */}
+                                                            {Number(proveedor.saldo_proveedor) < 0
+                                                                ? `- ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
+                                                                : Number(proveedor.saldo_proveedor) === 0
+                                                                  ? 'Sin saldo'
+                                                                  : formatearMoneda(proveedor.saldo_proveedor)}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin dato</span>
+                                                )}
                                             </div>
                                         </TableCell>
 
                                         <TableCell>
-                                            <Badge variant={estado.color}>{estado.texto}</Badge>
+                                            <Badge variant="outline" className={estado.badgeClass}>
+                                                {estado.texto}
+                                            </Badge>
                                         </TableCell>
 
                                         <TableCell className="text-right">

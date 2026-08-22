@@ -158,7 +158,7 @@ export default function MovimientosPage({
     const [destinoSearch, setDestinoSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [selectedMovimiento, setSelectedMovimiento] = useState<MovimientoWithDetails | null>(null);
-    const [productosRecibidos, setProductosRecibidos] = useState<{ [key: string]: number }>({});
+    const [productosRecibidos, setProductosRecibidos] = useState<{ [key: string]: number | undefined }>({});
 
     const [cantidades, setCantidades] = useState<Record<number, number>>({});
     const [observacionesProd, setObservacionesProd] = useState<Record<number, string>>({});
@@ -440,7 +440,7 @@ export default function MovimientosPage({
         setShowDialogs({ ...showDialogs, verProductos: true });
     };
 
-    const handleCantidadRecibidaChange = (productoId: number, cantidad: number) => {
+    const handleCantidadRecibidaChange = (productoId: number, cantidad: number | undefined) => {
         setProductosRecibidos((prev) => ({
             ...prev,
             [productoId]: cantidad,
@@ -1069,8 +1069,13 @@ export default function MovimientosPage({
                                                             type="number"
                                                             min="0"
                                                             max={detalle.cantidad_despachada}
-                                                            value={recibido}
-                                                            onChange={(e) => handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value) || 0)}
+                                                            value={productosRecibidos[detalle.producto_id] ?? ''}
+                                                            onChange={(e) =>
+                                                                handleCantidadRecibidaChange(
+                                                                    detalle.producto_id,
+                                                                    e.target.value === '' ? undefined : parseInt(e.target.value) || 0,
+                                                                )
+                                                            }
                                                             className="h-8 max-w-20 text-center"
                                                         />
                                                         {diferencia === 0 ? (

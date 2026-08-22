@@ -45,8 +45,8 @@ export default function MonedaCreate() {
         codigo_moneda: '',
         nombre_moneda: '',
         simbolo_moneda: '',
-        tasa_cambio: 1,
-        commission: 0,
+        tasa_cambio: '' as number | '',
+        commission: '' as number | '',
         estado: true,
         principal: false,
     });
@@ -197,7 +197,7 @@ export default function MonedaCreate() {
                                             min="0"
                                             placeholder="0.0000"
                                             value={data.commission}
-                                            onChange={(e) => setData('commission', parseFloat(e.target.value) || 0)}
+                                            onChange={(e) => setData('commission', parseFloat(e.target.value) || '')}
                                             className={errors?.commission ? 'border-red-500' : ''}
                                         />
                                         {errors?.commission && <p className="text-sm text-red-500">{errors.commission}</p>}
