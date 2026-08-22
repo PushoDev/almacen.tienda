@@ -6,15 +6,18 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { CompraProveedor, EstadisticasProveedor, ProveedorProps, TransaccionProveedor, type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ArrowLeft,
     Building,
     Calendar,
+    ChevronDown,
+    ChevronRight,
     CreditCard,
     DollarSign,
-    Eye,
     FileText,
     Handshake,
     History,
@@ -27,7 +30,7 @@ import {
     Wallet,
     User,
 } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 interface ShowProveedoresPageProps {
     proveedor: ProveedorProps;
@@ -51,131 +54,13 @@ const breadcrumbs = (proveedor: ProveedorProps): BreadcrumbItem[] => [
     },
 ];
 
-// Componente Modal para detalles de compra
-const DetallesCompraModal = ({ compra, isOpen, onClose }: { compra: CompraProveedor | null; isOpen: boolean; onClose: () => void }) => {
-    if (!isOpen || !compra) return null;
-
-    const formatearMoneda = (valor: number) => {
-        return new Intl.NumberFormat('es-ES', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2,
-        }).format(valor);
-    };
-
-    return (
-        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-            <div className="max-h-[90vh] max-w-4xl overflow-y-auto rounded-lg bg-white p-6 dark:bg-gray-800">
-                <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Detalles de Compra #{compra.id}</h3>
-                    <Button variant="outline" onClick={onClose}>
-                        Cerrar
-                    </Button>
-                </div>
-
-                <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                        <p>
-                            <strong>Fecha:</strong> {new Date(compra.fecha_compra).toLocaleDateString('es-ES')}
-                        </p>
-                        <p>
-                            <strong>Tipo:</strong>
-                            <Badge variant={compra.tipo_compra === 'deuda_proveedor' ? 'destructive' : 'default'} className="ml-2">
-                                {compra.tipo_compra === 'deuda_proveedor' ? 'A Crédito' : 'Al Contado'}
-                            </Badge>
-                        </p>
-                    </div>
-                    <div>
-                        <p>
-                            <strong>Total:</strong> {formatearMoneda(compra.total_compra)}
-                        </p>
-                    </div>
-                </div>
-
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Categoría</TableHead>
-                            <TableHead>Cantidad</TableHead>
-                            <TableHead>Precio Unitario</TableHead>
-                            <TableHead>Subtotal</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {compra.productos.map((producto) => (
-                            <TableRow key={producto.id}>
-                                <TableCell>
-                                    <div>
-                                        <div className="font-medium">{producto.nombre_producto}</div>
-                                        {producto.marca_producto && (
-                                            <div className="text-muted-foreground text-sm">Marca: {producto.marca_producto}</div>
-                                        )}
-                                        {producto.codigo_producto && (
-                                            <div className="text-muted-foreground text-sm">Código: {producto.codigo_producto}</div>
-                                        )}
-                                    </div>
-                                </TableCell>
-                                <TableCell>{producto.categoria?.nombre_categoria}</TableCell>
-                                <TableCell>{producto.pivot.cantidad}</TableCell>
-                                <TableCell>{formatearMoneda(producto.pivot.precio)}</TableCell>
-                                <TableCell>{formatearMoneda(producto.pivot.cantidad * producto.pivot.precio)}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-
-                {compra.pagos && compra.pagos.length > 0 && (
-                    <div className="mt-6">
-                        <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                            <CreditCard className="h-4 w-4" />
-                            Pagos realizados
-                        </h4>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Tipo</TableHead>
-                                    <TableHead>Monto</TableHead>
-                                    <TableHead>Destino</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {compra.pagos.map((pago) => (
-                                    <TableRow key={pago.id}>
-                                        <TableCell>
-                                            <Badge variant="outline">
-                                                {pago.tipo_pago === 'cuenta' ? 'Cuenta' : 'Cliente'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="font-medium">{formatearMoneda(pago.monto)}</TableCell>
-                                        <TableCell>
-                                            {pago.cuenta && (
-                                                <span className="flex items-center gap-1 text-sm">
-                                                    <Wallet className="text-muted-foreground h-3 w-3" />
-                                                    {pago.cuenta.nombre_cuenta}
-                                                </span>
-                                            )}
-                                            {pago.cliente && (
-                                                <span className="flex items-center gap-1 text-sm">
-                                                    <User className="text-muted-foreground h-3 w-3" />
-                                                    {pago.cliente.nombre_cliente}
-                                                </span>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
 export default function ShowProveedoresPage({ proveedor, compras, transacciones, estadisticas }: ShowProveedoresPageProps) {
-    const [compraSeleccionada, setCompraSeleccionada] = useState<CompraProveedor | null>(null);
-    const [modalAbierto, setModalAbierto] = useState(false);
+    // Solo una fila abierta a la vez — mismo patrón que Rastreo de Operaciones
+    // (RastreoOperaciones.tsx), compartido entre las dos tablas de esta página.
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const toggleRow = (key: string) => {
+        setExpandedRow((prev) => (prev === key ? null : key));
+    };
 
     // Función para formatear el saldo
     const formatearMoneda = (valor: number | null) => {
@@ -197,23 +82,32 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
         });
     };
 
-    // Determinar el estado del saldo
+    // Determinar el estado del saldo — mismo criterio rojo/ámbar/esmeralda que ya usa el
+    // resto del proyecto (ver estado de compra en Comprar/Index, Rastreo de Operaciones):
+    // rojo = deuda (negativo), ámbar = neutral, esmeralda = con fondo (positivo). El Badge
+    // genérico de shadcn (variant="default"/"secondary") no da estos colores — "default" es
+    // el color primario del tema, "secondary" es gris, ninguno lee como amarillo/verde.
     const getEstadoSaldo = (saldo: number) => {
-        if (saldo < 0) return { texto: 'En Deuda', color: 'destructive', icon: TrendingDown };
-        if (saldo > 0) return { texto: 'Con Fondo', color: 'default', icon: TrendingUp };
-        return { texto: 'Neutral', color: 'secondary', icon: DollarSign };
-    };
-
-    // Función para abrir modal de detalles de compra
-    const abrirDetallesCompra = (compra: CompraProveedor) => {
-        setCompraSeleccionada(compra);
-        setModalAbierto(true);
-    };
-
-    // Función para cerrar modal
-    const cerrarModal = () => {
-        setModalAbierto(false);
-        setCompraSeleccionada(null);
+        if (saldo < 0)
+            return {
+                texto: 'En Deuda',
+                icon: TrendingDown,
+                badgeClass: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300',
+                textClass: 'text-red-600 dark:text-red-400',
+            };
+        if (saldo > 0)
+            return {
+                texto: 'Con Fondo',
+                icon: TrendingUp,
+                badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
+                textClass: 'text-emerald-600 dark:text-emerald-400',
+            };
+        return {
+            texto: 'Neutral',
+            icon: DollarSign,
+            badgeClass: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300',
+            textClass: 'text-amber-600 dark:text-amber-400',
+        };
     };
 
     const estadoSaldo = getEstadoSaldo(proveedor.saldo_proveedor);
@@ -221,9 +115,6 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
     return (
         <AppLayout breadcrumbs={breadcrumbs(proveedor)}>
             <Head title={`Proveedor - ${proveedor.nombre_proveedor}`} />
-
-            {/* Modal de detalles de compra */}
-            <DetallesCompraModal compra={compraSeleccionada} isOpen={modalAbierto} onClose={cerrarModal} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header Section */}
@@ -260,83 +151,141 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                 {/* Información Principal del Proveedor */}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                     {/* Información Básica */}
-                    <Card className="lg:col-span-2">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Building className="h-5 w-5" />
-                                Información del Proveedor
-                            </CardTitle>
-                            <CardDescription>Datos de contacto y ubicación</CardDescription>
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg lg:col-span-2">
+                        <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                            <div className="flex flex-1 items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Building className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Información del Proveedor</CardTitle>
+                                        <CardDescription className="text-indigo-100">Datos de contacto y ubicación</CardDescription>
+                                    </div>
+                                </div>
+                                {proveedor.created_at && (
+                                    <Badge variant="outline" className="border-white/30 bg-white/20 text-white backdrop-blur-sm">
+                                        <Calendar className="mr-1 h-3 w-3" />
+                                        Proveedor desde{' '}
+                                        {new Date(proveedor.created_at).toLocaleDateString('es-ES', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                        })}
+                                    </Badge>
+                                )}
+                            </div>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-4 pt-5">
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="flex items-center gap-3">
                                     <Phone className="text-muted-foreground h-4 w-4" />
                                     <div>
                                         <p className="text-sm font-medium">Teléfono</p>
-                                        <p className="text-muted-foreground text-sm">{proveedor.telefono_proveedor || 'No especificado'}</p>
+                                        {proveedor.telefono_proveedor ? (
+                                            <p className="text-muted-foreground text-sm">{proveedor.telefono_proveedor}</p>
+                                        ) : (
+                                            <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                No especificado
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <Mail className="text-muted-foreground h-4 w-4" />
                                     <div>
                                         <p className="text-sm font-medium">Correo Electrónico</p>
-                                        <p className="text-muted-foreground text-sm">{proveedor.correo_proveedor || 'No especificado'}</p>
+                                        {proveedor.correo_proveedor ? (
+                                            <p className="text-muted-foreground text-sm">{proveedor.correo_proveedor}</p>
+                                        ) : (
+                                            <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                No especificado
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <MapPin className="text-muted-foreground h-4 w-4" />
                                     <div>
                                         <p className="text-sm font-medium">Localidad</p>
-                                        <p className="text-muted-foreground text-sm">{proveedor.localidad_proveedor || 'No especificado'}</p>
+                                        {proveedor.localidad_proveedor ? (
+                                            <p className="text-muted-foreground text-sm">{proveedor.localidad_proveedor}</p>
+                                        ) : (
+                                            <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                No especificado
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <FileText className="text-muted-foreground h-4 w-4" />
-                                    <div>
-                                        <p className="text-sm font-medium">Notas</p>
-                                        <p className="text-muted-foreground text-sm">{proveedor.notas_proveedor || 'Sin notas adicionales'}</p>
-                                    </div>
+                            </div>
+                            <Separator />
+                            <div className="flex items-start gap-3">
+                                <FileText className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                                <div>
+                                    <p className="text-sm font-medium">Notas</p>
+                                    {proveedor.notas_proveedor ? (
+                                        <p className="text-muted-foreground text-sm">{proveedor.notas_proveedor}</p>
+                                    ) : (
+                                        <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                            Sin notas adicionales
+                                        </Badge>
+                                    )}
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* Estado Financiero */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <DollarSign className="h-5 w-5" />
-                                Estado Financiero
-                            </CardTitle>
-                            <CardDescription>Saldo y estadísticas</CardDescription>
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <DollarSign className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Estado Financiero</CardTitle>
+                                    <CardDescription className="text-teal-100">Saldo y estadísticas</CardDescription>
+                                </div>
+                            </div>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-4 pt-5">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium">Saldo Actual</span>
-                                <Badge variant={estadoSaldo.color as 'destructive' | 'default' | 'secondary'} className="flex items-center gap-1">
+                                <Badge variant="outline" className={cn('flex items-center gap-1 font-normal', estadoSaldo.badgeClass)}>
                                     <estadoSaldo.icon className="h-3 w-3" />
                                     {estadoSaldo.texto}
                                 </Badge>
                             </div>
-                            <div className="text-2xl font-bold">{formatearMoneda(proveedor.saldo_proveedor)}</div>
+                            <div className={cn('text-2xl font-bold', estadoSaldo.textClass)}>{formatearMoneda(proveedor.saldo_proveedor)}</div>
                             <Separator />
                             <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span>Total Compras:</span>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="flex items-center gap-2">
+                                        <Package className="text-muted-foreground h-3.5 w-3.5" />
+                                        Total Compras:
+                                    </span>
                                     <span className="font-medium">{estadisticas.total_compras}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span>Monto en Compras:</span>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="flex items-center gap-2">
+                                        <DollarSign className="text-muted-foreground h-3.5 w-3.5" />
+                                        Monto en Compras:
+                                    </span>
                                     <span className="font-medium">{formatearMoneda(estadisticas.monto_total_compras)}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span>Transacciones:</span>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="flex items-center gap-2">
+                                        <CreditCard className="text-muted-foreground h-3.5 w-3.5" />
+                                        Transacciones:
+                                    </span>
                                     <span className="font-medium">{estadisticas.total_transacciones}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span>Ingresos Recibidos:</span>
-                                    <span className="font-medium text-green-600">{formatearMoneda(estadisticas.monto_total_ingresos)}</span>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="flex items-center gap-2">
+                                        <TrendingUp className="text-muted-foreground h-3.5 w-3.5" />
+                                        Ingresos Recibidos:
+                                    </span>
+                                    <span className="font-medium text-emerald-600">{formatearMoneda(estadisticas.monto_total_ingresos)}</span>
                                 </div>
                             </div>
                         </CardContent>
@@ -358,15 +307,19 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
 
                     {/* Tab de Compras */}
                     <TabsContent value="compras" className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <History className="h-5 w-5" />
-                                    Historial de Compras
-                                </CardTitle>
-                                <CardDescription>Todas las compras realizadas a este proveedor</CardDescription>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <History className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Historial de Compras</CardTitle>
+                                        <CardDescription className="text-amber-100">Todas las compras realizadas a este proveedor</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="pt-5">
                                 {compras.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
@@ -376,51 +329,206 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                     <TableHead>Tipo</TableHead>
                                                     <TableHead>Productos</TableHead>
                                                     <TableHead>Total</TableHead>
-                                                    <TableHead>Detalles</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {compras.map((compra) => (
-                                                    <TableRow key={compra.id}>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2">
-                                                                <Calendar className="text-muted-foreground h-4 w-4" />
-                                                                {formatearFecha(compra.fecha_compra)}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge variant={compra.tipo_compra === 'deuda_proveedor' ? 'destructive' : 'default'}>
-                                                                {compra.tipo_compra === 'deuda_proveedor' ? 'A Crédito' : 'Al Contado'}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="max-w-[200px]">
-                                                                {compra.productos.slice(0, 2).map((producto) => (
-                                                                    <div key={producto.id} className="truncate text-sm">
-                                                                        {producto.nombre_producto} ({producto.pivot.cantidad})
-                                                                    </div>
-                                                                ))}
-                                                                {compra.productos.length > 2 && (
-                                                                    <div className="text-muted-foreground text-xs">
-                                                                        +{compra.productos.length - 2} más
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="font-medium">{formatearMoneda(compra.total_compra)}</TableCell>
-                                                        <TableCell>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={() => abrirDetallesCompra(compra)}
-                                                                className="flex cursor-pointer items-center gap-1"
+                                                {compras.map((compra) => {
+                                                    const rowKey = `compra-${compra.id}`;
+                                                    const expandida = expandedRow === rowKey;
+                                                    return (
+                                                        <React.Fragment key={compra.id}>
+                                                            <TableRow
+                                                                className="hover:bg-sidebar-accent/30 cursor-pointer transition-colors"
+                                                                onClick={() => toggleRow(rowKey)}
                                                             >
-                                                                <Eye size={14} />
-                                                                Ver Detalles
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
+                                                                <TableCell>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {expandida ? (
+                                                                            <ChevronDown className="h-4 w-4 shrink-0" />
+                                                                        ) : (
+                                                                            <ChevronRight className="h-4 w-4 shrink-0" />
+                                                                        )}
+                                                                        <Calendar className="text-muted-foreground h-4 w-4" />
+                                                                        {formatearFecha(compra.fecha_compra)}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge
+                                                                        className={cn(
+                                                                            'text-white hover:opacity-90',
+                                                                            compra.tipo_compra === 'deuda_proveedor'
+                                                                                ? 'bg-red-500'
+                                                                                : compra.es_parcial
+                                                                                  ? 'bg-amber-500'
+                                                                                  : 'bg-emerald-500',
+                                                                        )}
+                                                                    >
+                                                                        {compra.tipo_compra === 'deuda_proveedor' ? (
+                                                                            <CreditCard className="h-3 w-3" />
+                                                                        ) : compra.es_parcial ? (
+                                                                            <AlertTriangle className="h-3 w-3" />
+                                                                        ) : (
+                                                                            <DollarSign className="h-3 w-3" />
+                                                                        )}
+                                                                        {compra.tipo_compra === 'deuda_proveedor'
+                                                                            ? 'A Crédito'
+                                                                            : compra.es_parcial
+                                                                              ? 'Parcial'
+                                                                              : 'Al Contado'}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="max-w-[200px]">
+                                                                        {compra.productos.slice(0, 2).map((producto) => (
+                                                                            <div key={producto.id} className="truncate text-sm">
+                                                                                {producto.nombre_producto} ({producto.pivot.cantidad})
+                                                                            </div>
+                                                                        ))}
+                                                                        {compra.productos.length > 2 && (
+                                                                            <div className="text-muted-foreground text-xs">
+                                                                                +{compra.productos.length - 2} más
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="font-medium">{formatearMoneda(compra.total_compra)}</TableCell>
+                                                            </TableRow>
+                                                            {expandida && (
+                                                                <TableRow>
+                                                                    <TableCell colSpan={4} className="bg-sidebar-accent/20 space-y-3 p-4">
+                                                                        <Card className="bg-background/60">
+                                                                            <CardHeader className="pb-2">
+                                                                                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase">
+                                                                                    <Package className="h-3.5 w-3.5" />
+                                                                                    Productos
+                                                                                </CardTitle>
+                                                                            </CardHeader>
+                                                                            <CardContent className="p-0">
+                                                                                <table className="min-w-full text-xs">
+                                                                                    <thead>
+                                                                                        <tr className="text-muted-foreground">
+                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                Producto
+                                                                                            </th>
+                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                Categoría
+                                                                                            </th>
+                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                Cantidad
+                                                                                            </th>
+                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                Precio Unitario
+                                                                                            </th>
+                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                Subtotal
+                                                                                            </th>
+                                                                                        </tr>
+                                                                                    </thead>
+                                                                                    <tbody className="divide-y divide-sidebar-border/40">
+                                                                                        {compra.productos.map((producto) => (
+                                                                                            <tr key={producto.id}>
+                                                                                                <td className="px-4 py-1.5">
+                                                                                                    <div className="font-medium">
+                                                                                                        {producto.nombre_producto}
+                                                                                                    </div>
+                                                                                                    {producto.marca_producto && (
+                                                                                                        <div className="text-muted-foreground text-[11px]">
+                                                                                                            Marca: {producto.marca_producto}
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                    {producto.codigo_producto && (
+                                                                                                        <div className="text-muted-foreground font-mono text-[10px]">
+                                                                                                            {producto.codigo_producto}
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </td>
+                                                                                                <td className="px-4 py-1.5">
+                                                                                                    {producto.categoria?.nombre_categoria}
+                                                                                                </td>
+                                                                                                <td className="px-4 py-1.5">{producto.pivot.cantidad}</td>
+                                                                                                <td className="px-4 py-1.5 font-mono">
+                                                                                                    {formatearMoneda(producto.pivot.precio)}
+                                                                                                </td>
+                                                                                                <td className="px-4 py-1.5 font-mono">
+                                                                                                    {formatearMoneda(
+                                                                                                        producto.pivot.cantidad * producto.pivot.precio,
+                                                                                                    )}
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        ))}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            </CardContent>
+                                                                        </Card>
+
+                                                                        {compra.pagos && compra.pagos.length > 0 && (
+                                                                            <Card className="bg-background/60">
+                                                                                <CardHeader className="pb-2">
+                                                                                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase">
+                                                                                        <CreditCard className="h-3.5 w-3.5" />
+                                                                                        Pagos realizados
+                                                                                    </CardTitle>
+                                                                                </CardHeader>
+                                                                                <CardContent className="p-0">
+                                                                                    <table className="min-w-full text-xs">
+                                                                                        <thead>
+                                                                                            <tr className="text-muted-foreground">
+                                                                                                <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                    Tipo
+                                                                                                </th>
+                                                                                                <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                    Origen
+                                                                                                </th>
+                                                                                                <th className="px-4 py-1.5 text-left font-medium uppercase">
+                                                                                                    Monto
+                                                                                                </th>
+                                                                                            </tr>
+                                                                                        </thead>
+                                                                                        <tbody className="divide-y divide-sidebar-border/40">
+                                                                                            {compra.pagos.map((pago) => (
+                                                                                                <tr key={pago.id}>
+                                                                                                    <td className="px-4 py-1.5">
+                                                                                                        <Badge variant="outline" className="font-normal">
+                                                                                                            {pago.tipo_pago === 'cuenta'
+                                                                                                                ? 'Cuenta'
+                                                                                                                : pago.tipo_pago === 'cliente'
+                                                                                                                  ? 'Cliente'
+                                                                                                                  : 'Crédito'}
+                                                                                                        </Badge>
+                                                                                                    </td>
+                                                                                                    <td className="px-4 py-1.5">
+                                                                                                        {pago.cuenta && (
+                                                                                                            <span className="flex items-center gap-1">
+                                                                                                                <Wallet className="text-muted-foreground h-3 w-3" />
+                                                                                                                {pago.cuenta.nombre_cuenta}
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                        {pago.cliente && (
+                                                                                                            <span className="flex items-center gap-1">
+                                                                                                                <User className="text-muted-foreground h-3 w-3" />
+                                                                                                                {pago.cliente.nombre_cliente}
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                        {!pago.cuenta && !pago.cliente && (
+                                                                                                            <span className="text-muted-foreground">—</span>
+                                                                                                        )}
+                                                                                                    </td>
+                                                                                                    <td className="px-4 py-1.5 font-mono">
+                                                                                                        {formatearMoneda(pago.monto)}
+                                                                                                    </td>
+                                                                                                </tr>
+                                                                                            ))}
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </CardContent>
+                                                                            </Card>
+                                                                        )}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
                                             </TableBody>
                                         </Table>
                                     </div>
@@ -436,15 +544,21 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
 
                     {/* Tab de Transacciones */}
                     <TabsContent value="transacciones" className="space-y-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <CreditCard className="h-5 w-5" />
-                                    Historial de Transacciones
-                                </CardTitle>
-                                <CardDescription>Transacciones financieras donde el proveedor recibió fondos</CardDescription>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <CreditCard className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Historial de Transacciones</CardTitle>
+                                        <CardDescription className="text-violet-100">
+                                            Transacciones financieras donde el proveedor recibió fondos
+                                        </CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="pt-5">
                                 {transacciones.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
@@ -459,51 +573,105 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {transacciones.map((transaccion) => (
-                                                    <TableRow key={transaccion.id}>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2">
-                                                                <Calendar className="text-muted-foreground h-4 w-4" />
-                                                                {formatearFecha(transaccion.fecha_operacion)}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge
-                                                                variant={
-                                                                    transaccion.tipo_movimiento_id === 1
-                                                                        ? 'destructive'
-                                                                        : transaccion.tipo_movimiento_id === 2
-                                                                          ? 'default'
-                                                                          : 'secondary'
-                                                                }
+                                                {transacciones.map((transaccion) => {
+                                                    const rowKey = `transaccion-${transaccion.id}`;
+                                                    const expandida = expandedRow === rowKey;
+                                                    // Solo colapsable si hay algo que no esté ya visible en la fila
+                                                    // compacta — tasa_cambio_aplicada es el único dato que hoy no
+                                                    // se muestra en ningún lado (existe en TransaccionProveedor
+                                                    // pero solo aparece en Transferencias con conversión de moneda).
+                                                    // Colapsable si hay algo que la fila compacta no muestra entero: la
+                                                    // Descripción va truncada ahí (max-w-[200px] truncate) — si es larga,
+                                                    // hoy no hay forma de leerla completa en ningún lado — o si existe
+                                                    // tasa_cambio_aplicada (solo en Transferencias con conversión).
+                                                    const esColapsable = transaccion.descripcion.length > 40 || transaccion.tasa_cambio_aplicada != null;
+                                                    return (
+                                                        <React.Fragment key={transaccion.id}>
+                                                            <TableRow
+                                                                className={cn(
+                                                                    'transition-colors',
+                                                                    esColapsable && 'hover:bg-sidebar-accent/30 cursor-pointer',
+                                                                )}
+                                                                onClick={() => esColapsable && toggleRow(rowKey)}
                                                             >
-                                                                {transaccion.tipo_movimiento_id === 1
-                                                                    ? 'Gasto'
-                                                                    : transaccion.tipo_movimiento_id === 2
-                                                                      ? 'Ingreso'
-                                                                      : 'Transferencia'}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell className="max-w-[200px] truncate">{transaccion.descripcion}</TableCell>
-                                                        <TableCell className="font-medium text-green-600">
-                                                            +{formatearMoneda(transaccion.monto)}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge variant="outline">{transaccion.moneda}</Badge>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {transaccion.cuenta_origen_id && transaccion.cuenta_origen && (
-                                                                <span className="text-sm">Cuenta: {transaccion.cuenta_origen.nombre_cuenta}</span>
+                                                                <TableCell>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {esColapsable ? (
+                                                                            expandida ? (
+                                                                                <ChevronDown className="h-4 w-4 shrink-0" />
+                                                                            ) : (
+                                                                                <ChevronRight className="h-4 w-4 shrink-0" />
+                                                                            )
+                                                                        ) : (
+                                                                            <span className="w-4 shrink-0" />
+                                                                        )}
+                                                                        <Calendar className="text-muted-foreground h-4 w-4" />
+                                                                        {formatearFecha(transaccion.fecha_operacion)}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge
+                                                                        variant={
+                                                                            transaccion.tipo_movimiento_id === 1
+                                                                                ? 'destructive'
+                                                                                : transaccion.tipo_movimiento_id === 2
+                                                                                  ? 'default'
+                                                                                  : 'secondary'
+                                                                        }
+                                                                    >
+                                                                        {transaccion.tipo_movimiento_id === 1
+                                                                            ? 'Gasto'
+                                                                            : transaccion.tipo_movimiento_id === 2
+                                                                              ? 'Ingreso'
+                                                                              : 'Transferencia'}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell className="max-w-[200px] truncate">{transaccion.descripcion}</TableCell>
+                                                                <TableCell className="font-medium text-green-600">
+                                                                    +{formatearMoneda(transaccion.monto)}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge variant="outline">{transaccion.moneda}</Badge>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {transaccion.cuenta_origen_id && transaccion.cuenta_origen && (
+                                                                        <span className="text-sm">
+                                                                            Cuenta: {transaccion.cuenta_origen.nombre_cuenta}
+                                                                        </span>
+                                                                    )}
+                                                                    {transaccion.cliente_origen_id && transaccion.cliente_origen && (
+                                                                        <span className="text-sm">
+                                                                            Cliente: {transaccion.cliente_origen.nombre_cliente}
+                                                                        </span>
+                                                                    )}
+                                                                    {!transaccion.cuenta_origen_id && !transaccion.cliente_origen_id && (
+                                                                        <span className="text-muted-foreground text-sm">N/A</span>
+                                                                    )}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                            {esColapsable && expandida && (
+                                                                <TableRow>
+                                                                    <TableCell colSpan={6} className="bg-sidebar-accent/20 p-4">
+                                                                        <Card className="bg-background/60">
+                                                                            <CardContent className="space-y-1 p-3 text-xs">
+                                                                                <p>
+                                                                                    <strong className="text-foreground">Descripción:</strong>{' '}
+                                                                                    {transaccion.descripcion}
+                                                                                </p>
+                                                                                {transaccion.tasa_cambio_aplicada != null && (
+                                                                                    <p>
+                                                                                        <strong className="text-foreground">Tasa de cambio aplicada:</strong>{' '}
+                                                                                        {transaccion.tasa_cambio_aplicada}
+                                                                                    </p>
+                                                                                )}
+                                                                            </CardContent>
+                                                                        </Card>
+                                                                    </TableCell>
+                                                                </TableRow>
                                                             )}
-                                                            {transaccion.cliente_origen_id && transaccion.cliente_origen && (
-                                                                <span className="text-sm">Cliente: {transaccion.cliente_origen.nombre_cliente}</span>
-                                                            )}
-                                                            {!transaccion.cuenta_origen_id && !transaccion.cliente_origen_id && (
-                                                                <span className="text-muted-foreground text-sm">N/A</span>
-                                                            )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
                                             </TableBody>
                                         </Table>
                                     </div>

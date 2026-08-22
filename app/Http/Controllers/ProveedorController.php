@@ -98,6 +98,12 @@ class ProveedorController extends Controller
             ->orderBy('fecha_compra', 'desc')
             ->get();
 
+        // es_parcial no es una columna real — setAttribute() la deja en $attributes para que
+        // viaje en el toArray()/JSON de Inertia sin necesitar $appends en el modelo (eso
+        // dispararía el accessor, y por tanto la relación 'pagos', en otros controladores que
+        // serializan Compra sin precargarla — ver DistribucionCostosController/ReporteController).
+        $compras->each(fn (Compra $compra) => $compra->setAttribute('es_parcial', $compra->es_parcial));
+
         // Cargar transacciones financieras relacionadas con el proveedor (SOLO como destino)
         $transacciones = MovimientoFinanciero::with([
             'cuentaOrigen',
