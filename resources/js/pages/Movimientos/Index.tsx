@@ -21,7 +21,7 @@ import { sileo } from '@/lib/sileo';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeftRight, Caravan, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, History, ListCheck, Package, PackageCheck, PackageSearch, Search, Send, TrendingUp, XCircle } from 'lucide-react';
+import { ArrowLeftRight, Caravan, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, History, ListCheck, Package, PackageCheck, PackageSearch, Pencil, Search, Send, TrendingUp, XCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -196,9 +196,36 @@ export default function MovimientosPage({
         rechazar: false,
         producto: false,
         verProductos: false,
+        editar: false,
     });
 
     const [selectedProductDetails, setSelectedProductDetails] = useState<ProductoConStock | null>(null);
+
+    // ── Editar movimiento (solo pendiente_confirmacion, antes de enviar) ──────
+    // Estado propio, separado del formulario "Crear nuevo movimiento" de arriba —
+    // evita que ambos flujos se pisen si el usuario deja el editor abierto.
+    const [editProductos, setEditProductos] = useState<ProductoConStock[]>([]);
+    const [editCantidades, setEditCantidades] = useState<Record<number, number>>({});
+    const [editBusqueda, setEditBusqueda] = useState('');
+    const [editPagina, setEditPagina] = useState(1);
+    const [editLoading, setEditLoading] = useState(false);
+    const EDIT_PRODUCTOS_POR_PAGINA = 10;
+
+    const editProductosFiltrados = editProductos.filter((p) => {
+        if (!editBusqueda.trim()) return true;
+        const termino = editBusqueda.toLowerCase();
+        return (
+            p.nombre?.toLowerCase().includes(termino) ||
+            p.codigo?.toLowerCase().includes(termino) ||
+            p.marca?.toLowerCase().includes(termino) ||
+            p.modelo?.toLowerCase().includes(termino)
+        );
+    });
+    const editTotalPaginas = Math.ceil(editProductosFiltrados.length / EDIT_PRODUCTOS_POR_PAGINA);
+    const editProductosPaginados = editProductosFiltrados.slice(
+        (editPagina - 1) * EDIT_PRODUCTOS_POR_PAGINA,
+        editPagina * EDIT_PRODUCTOS_POR_PAGINA,
+    );
 
     const [dialogData, setDialogData] = useState({
         guia: '',
@@ -334,6 +361,63 @@ export default function MovimientosPage({
                 onError: (errors: ErrorResponse) => {
                     console.error('[Movimientos] Error al enviar:', errors);
                     sileo.error({ title: 'No se pudo despachar el movimiento', description: errors?.general });
+                },
+            },
+        );
+    };
+
+    const handleEditarClick = (movimiento: MovimientoWithDetails) => {
+        console.log('[Movimientos] Abriendo editor para movimiento:', movimiento.id);
+        setSelectedMovimiento(movimiento);
+        setEditBusqueda('');
+        setEditPagina(1);
+        setEditLoading(true);
+
+        fetch(`/movimientos/almacenes/${movimiento.almacen_origen_id}/productos`)
+            .then((res) => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.json();
+            })
+            .then((data: ProductoConStock[]) => {
+                setEditProductos(data);
+                const iniciales: Record<number, number> = {};
+                movimiento.detalles.forEach((detalle) => {
+                    iniciales[detalle.producto_id] = detalle.cantidad_solicitada;
+                });
+                setEditCantidades(iniciales);
+                setShowDialogs({ ...showDialogs, editar: true });
+            })
+            .catch((err) => {
+                console.error('[Movimientos] Error al cargar productos para editar:', err);
+                sileo.error({ title: 'No se pudieron cargar los productos del almacén' });
+            })
+            .finally(() => setEditLoading(false));
+    };
+
+    const handleEditarConfirm = () => {
+        if (!selectedMovimiento) return;
+
+        const productos = Object.entries(editCantidades)
+            .map(([id, cantidad]) => ({ id: Number(id), cantidad }))
+            .filter((p) => p.cantidad > 0);
+
+        if (productos.length === 0) {
+            sileo.warning({ title: 'Faltan datos', description: 'El movimiento debe tener al menos un producto.' });
+            return;
+        }
+
+        router.post(
+            `/movimientos/${selectedMovimiento.id}/actualizar`,
+            { productos },
+            {
+                onSuccess: () => {
+                    sileo.success({ title: 'Movimiento actualizado', description: 'Productos y cantidades guardados.' });
+                    setShowDialogs({ ...showDialogs, editar: false });
+                    router.reload({ only: ['movimientos'] });
+                },
+                onError: (errors: ErrorResponse) => {
+                    console.error('[Movimientos] Error al actualizar:', errors);
+                    sileo.error({ title: 'No se pudo actualizar el movimiento', description: errors?.general });
                 },
             },
         );
@@ -799,6 +883,14 @@ export default function MovimientosPage({
                                                     {movimiento.estado === 'pendiente_confirmacion' && (
                                                         <>
                                                             <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => handleEditarClick(movimiento)}
+                                                                title="Editar productos y cantidades"
+                                                            >
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                            <Button
                                                                 size="sm"
                                                                 onClick={() => handleEnviarClick(movimiento)}
                                                                 title="Despachar movimiento"
@@ -961,6 +1053,144 @@ export default function MovimientosPage({
                             )}
                             <div className="flex justify-end gap-2">
                                 <AlertDialogCancel>Cerrar</AlertDialogCancel>
+                            </div>
+                        </div>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* AlertDialog - Editar Movimiento (solo pendiente_confirmacion, antes de enviar) */}
+                <AlertDialog open={showDialogs.editar} onOpenChange={(open) => setShowDialogs({ ...showDialogs, editar: open })}>
+                    <AlertDialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-3xl">
+                        <AlertDialogHeader className="shrink-0 border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Pencil className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <AlertDialogTitle className="text-white">Editar Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
+                                    <AlertDialogDescription className="text-violet-100">
+                                        Ajustá cantidades, agregá o quitá productos antes de despachar. Poné la cantidad en 0 para quitar un producto.
+                                    </AlertDialogDescription>
+                                </div>
+                            </div>
+                        </AlertDialogHeader>
+
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
+                            <div className="relative mb-3">
+                                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                <Input
+                                    placeholder="Buscar por nombre, código, marca o modelo..."
+                                    value={editBusqueda}
+                                    onChange={(e) => {
+                                        setEditBusqueda(e.target.value);
+                                        setEditPagina(1);
+                                    }}
+                                    className="pl-9"
+                                />
+                            </div>
+
+                            {editLoading ? (
+                                <p className="text-muted-foreground py-8 text-center text-sm">Cargando productos del almacén...</p>
+                            ) : (
+                                <table className="w-full border-collapse text-sm">
+                                    <thead className="bg-muted/50 sticky top-0">
+                                        <tr>
+                                            <th className="px-2 py-2 text-left font-semibold">Producto</th>
+                                            <th className="px-2 py-2 text-center font-semibold">Disponible</th>
+                                            <th className="px-2 py-2 text-center font-semibold">En Tránsito</th>
+                                            <th className="w-[120px] px-2 py-2 text-left font-semibold">Cantidad</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {editProductosPaginados.map((producto) => {
+                                            const cantidadActual = editCantidades[producto.id] || 0;
+                                            return (
+                                                <tr key={producto.id} className={cantidadActual > 0 ? 'bg-violet-500/5' : 'hover:bg-muted/50'}>
+                                                    <td className="px-2 py-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <img
+                                                                src={producto.imagen_url || 'https://via.placeholder.com/32'}
+                                                                alt={producto.nombre}
+                                                                className="h-8 w-8 rounded object-cover"
+                                                            />
+                                                            <div>
+                                                                <div className="font-medium">{producto.nombre}</div>
+                                                                <div className="text-muted-foreground text-xs">
+                                                                    {[producto.marca, producto.modelo, producto.capacidad].filter(Boolean).join(' · ')}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-2 py-2 text-center">
+                                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                                            {producto.stock_disponible}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-2 py-2 text-center">
+                                                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                                                            {producto.stock_en_transito}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-2 py-2">
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max={producto.stock_disponible}
+                                                            placeholder="0"
+                                                            value={editCantidades[producto.id] || ''}
+                                                            onChange={(e) =>
+                                                                setEditCantidades((prev) => ({
+                                                                    ...prev,
+                                                                    [producto.id]: parseInt(e.target.value) || 0,
+                                                                }))
+                                                            }
+                                                            className="h-8"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+
+                            {editTotalPaginas > 1 && (
+                                <div className="mt-3 flex items-center justify-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={editPagina === 1}
+                                        onClick={() => setEditPagina((p) => Math.max(1, p - 1))}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    <span className="text-muted-foreground text-sm">
+                                        Página {editPagina} de {editTotalPaginas}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={editPagina === editTotalPaginas}
+                                        onClick={() => setEditPagina((p) => Math.min(editTotalPaginas, p + 1))}
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="shrink-0 border-t px-6 py-4">
+                            <div className="mb-3 flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                                <span className="text-muted-foreground">Productos en el movimiento</span>
+                                <span className="font-semibold">
+                                    {Object.values(editCantidades).filter((c) => c > 0).length}
+                                </span>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleEditarConfirm} className="bg-violet-600 hover:bg-violet-700">
+                                    Guardar Cambios
+                                </AlertDialogAction>
                             </div>
                         </div>
                     </AlertDialogContent>

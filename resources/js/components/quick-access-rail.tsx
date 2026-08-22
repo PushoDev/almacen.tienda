@@ -2,7 +2,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { type NavItem, type PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { Bell, Eye, ReceiptText } from 'lucide-react';
+import { Bell, ClipboardClock, Eye, ReceiptText, ShoppingBasket } from 'lucide-react';
 
 // Riel de accesos rápidos, global (todas las páginas, vía AppSidebarLayout) — NO reemplaza
 // nada existente (Cierres de Caja / Mis Ventas siguen también como botones dentro del POS,
@@ -15,13 +15,13 @@ const quickAccessItems: NavItem[] = [
     {
         title: 'Cierres de Caja',
         href: '/vendor/cierres',
-        icon: ReceiptText,
+        icon: ClipboardClock,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Mis Ventas',
         href: '/ventas/listado',
-        icon: Eye,
+        icon: ShoppingBasket,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {

@@ -111,6 +111,127 @@ test('un vendedor no puede crear un movimiento desde un almacén que no tiene as
 });
 
 // ==========================================================================
+// ACTUALIZAR — editar productos/cantidades antes de enviar (pedido del cliente:
+// por error humano puede faltar o sobrar algún producto antes de despachar)
+// ==========================================================================
+
+test('actualizar() cambia la cantidad de un producto existente, agrega uno nuevo y quita otro', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $productoA = Producto::factory()->create();
+    $productoB = Producto::factory()->create();
+    $productoC = Producto::factory()->create();
+    crearAlmacenProducto($origen, $productoA, cantidad: 50);
+    crearAlmacenProducto($origen, $productoB, cantidad: 50);
+    crearAlmacenProducto($origen, $productoC, cantidad: 50);
+
+    $this->post(route('movimientos.store'), [
+        'almacen_origen_id' => $origen->id,
+        'almacen_destino_id' => $destino->id,
+        'productos' => [
+            ['id' => $productoA->id, 'cantidad' => 10],
+            ['id' => $productoB->id, 'cantidad' => 5],
+        ],
+    ]);
+    $movimiento = Movimiento::first();
+
+    // Sube A a 20, quita B, agrega C
+    $response = $this->post(route('movimientos.actualizar', $movimiento), [
+        'productos' => [
+            ['id' => $productoA->id, 'cantidad' => 20],
+            ['id' => $productoC->id, 'cantidad' => 7],
+        ],
+    ]);
+    $response->assertRedirect(route('movimientos.index'));
+
+    $this->assertDatabaseHas('movimiento_detalles', [
+        'movimiento_id' => $movimiento->id,
+        'producto_id' => $productoA->id,
+        'cantidad_solicitada' => 20,
+    ]);
+    $this->assertDatabaseHas('movimiento_detalles', [
+        'movimiento_id' => $movimiento->id,
+        'producto_id' => $productoC->id,
+        'cantidad_solicitada' => 7,
+    ]);
+    $this->assertDatabaseMissing('movimiento_detalles', [
+        'movimiento_id' => $movimiento->id,
+        'producto_id' => $productoB->id,
+    ]);
+    expect($movimiento->fresh()->detalles)->toHaveCount(2);
+    // Editar no toca stock — nada se reserva hasta enviar()
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $origen->id, 'producto_id' => $productoA->id, 'cantidad' => 50, 'cantidad_en_transito' => 0,
+    ]);
+});
+
+test('actualizar() rechaza si no hay stock disponible para la nueva cantidad', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 10);
+
+    $this->post(route('movimientos.store'), payloadStoreMovimiento($origen, $destino, $producto, 5));
+    $movimiento = Movimiento::first();
+
+    $response = $this->post(route('movimientos.actualizar', $movimiento), [
+        'productos' => [['id' => $producto->id, 'cantidad' => 999]],
+    ]);
+
+    $response->assertSessionHasErrors('general');
+    $movimiento->refresh();
+    expect($movimiento->detalles->first()->cantidad_solicitada)->toBe(5);
+});
+
+test('no se puede editar un movimiento que ya está en tránsito', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50);
+
+    $this->post(route('movimientos.store'), payloadStoreMovimiento($origen, $destino, $producto, 10));
+    $movimiento = Movimiento::first();
+    $this->post(route('movimientos.enviar', $movimiento), []);
+
+    $response = $this->post(route('movimientos.actualizar', $movimiento->fresh()), [
+        'productos' => [['id' => $producto->id, 'cantidad' => 20]],
+    ]);
+
+    $response->assertSessionHasErrors('general');
+    expect($movimiento->fresh()->detalles->first()->cantidad_solicitada)->toBe(10);
+});
+
+test('un vendedor no puede editar un movimiento de un almacén origen que no tiene asignado', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $origen = Almacen::factory()->almacen()->create(); // no asignado al vendedor
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $this->post(route('movimientos.store'), payloadStoreMovimiento($origen, $destino, $producto, 10));
+    $movimiento = Movimiento::first();
+
+    $this->actingAs($vendedor);
+    $response = $this->post(route('movimientos.actualizar', $movimiento), [
+        'productos' => [['id' => $producto->id, 'cantidad' => 15]],
+    ]);
+
+    $response->assertForbidden();
+    expect($movimiento->fresh()->detalles->first()->cantidad_solicitada)->toBe(10);
+});
+
+// ==========================================================================
 // ENVIAR — reserva stock (cantidad_en_transito), no descuenta cantidad todavía
 // ==========================================================================
 
@@ -254,6 +375,43 @@ test('recibir() parcial: la diferencia no recibida queda de vuelta en el origen,
     $this->assertDatabaseHas('movimiento_detalles', [
         'movimiento_id' => $movimiento->id, 'cantidad_recibida' => 7,
     ]);
+});
+
+test('recibir() no marca completo si una línea recibió de menos y otra de más aunque el total coincida', function () {
+    // Reproduce un caso real (movimiento #52): 2 despachadas/1 recibida en un producto y
+    // 2 despachadas/3 recibidas en otro — el total (4/4) coincide y el código viejo lo
+    // marcaba "recibido_completo", ocultando que ninguna de las 2 líneas llegó exacta.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $productoA = Producto::factory()->create();
+    $productoB = Producto::factory()->create();
+    crearAlmacenProducto($origen, $productoA, cantidad: 50, cantidadEnTransito: 2);
+    crearAlmacenProducto($origen, $productoB, cantidad: 50, cantidadEnTransito: 2);
+    crearAlmacenProducto($destino, $productoA, cantidad: 0);
+    crearAlmacenProducto($destino, $productoB, cantidad: 0);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $admin->id,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $productoA->id, 'cantidad_solicitada' => 2, 'cantidad_despachada' => 2,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $productoB->id, 'cantidad_solicitada' => 2, 'cantidad_despachada' => 2,
+    ]);
+
+    $response = $this->post(route('movimientos.recibir', $movimiento), [
+        'productos' => [
+            ['id' => $productoA->id, 'cantidad_recibida' => 1], // faltó 1
+            ['id' => $productoB->id, 'cantidad_recibida' => 3], // sobró 1
+        ],
+    ]);
+    $response->assertRedirect(route('movimientos.index'));
+
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'recibido_parcial']);
 });
 
 test('no se puede recibir un movimiento que no está en tránsito', function () {
