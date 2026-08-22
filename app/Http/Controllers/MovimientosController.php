@@ -124,7 +124,12 @@ class MovimientosController extends Controller
                     'stock_en_transito' => $producto->pivot->cantidad_en_transito,
                     'stock_disponible' => max(0, $disponible),
                 ];
-            });
+            })
+            // Con 0 disponible no hay nada que trasladar — ocultarlos evita un listado
+            // interminable de productos que existen en el almacén pero no se pueden mover
+            // ahora mismo (agotados, o su stock ya está reservado en otro movimiento).
+            ->filter(fn ($producto) => $producto['stock_disponible'] >= 1)
+            ->values();
 
         return response()->json($productos);
     }
@@ -224,6 +229,103 @@ class MovimientosController extends Controller
 
 
     /**
+     * Edita los productos/cantidades de un movimiento — solo permitido mientras esté
+     * pendiente_confirmacion (antes de enviar()). Pedido del cliente: por error humano
+     * puede faltar o sobrar algún producto antes de despachar. No permite cambiar
+     * almacén origen/destino — si hace falta otro almacén, se rechaza el movimiento y
+     * se crea uno nuevo (decisión explícita del cliente, no un límite técnico).
+     */
+    public function actualizar(Movimiento $movimiento, Request $request)
+    {
+        $user = Auth::user();
+
+        $request->validate([
+            'productos' => ['required', 'array', 'min:1'],
+            'productos.*.id' => ['required', 'exists:productos,id'],
+            'productos.*.cantidad' => ['required', 'integer', 'min:1'],
+        ]);
+
+        if (!in_array($user->role, ['admin', 'moderador'])) {
+            $almacenesPermitidosIds = $user->almacenes->pluck('id');
+            if (!$almacenesPermitidosIds->contains($movimiento->almacen_origen_id)) {
+                abort(403, 'No tienes permisos para editar movimientos de este almacén');
+            }
+        }
+
+        DB::beginTransaction();
+
+        try {
+            if ($movimiento->estado !== 'pendiente_confirmacion') {
+                throw new \Exception('Solo se pueden editar movimientos pendientes de confirmación (antes de enviar).');
+            }
+
+            // Nada se reservó todavía en este estado (cantidad_en_transito solo se toca en
+            // enviar()), así que el chequeo de stock es el mismo que en store(): disponible
+            // real del almacén, sin descontar nada de este movimiento.
+            foreach ($request->productos as $producto) {
+                $stock = AlmacenProducto::where([
+                    'almacen_id' => $movimiento->almacen_origen_id,
+                    'producto_id' => $producto['id']
+                ])->first();
+
+                $disponible = ($stock ? $stock->cantidad - $stock->cantidad_en_transito : 0);
+
+                if (!$stock || $disponible < $producto['cantidad']) {
+                    throw new \Exception(
+                        "Stock insuficiente para el producto ID: {$producto['id']}. " .
+                            "Disponible: {$disponible}, Solicitado: {$producto['cantidad']}"
+                    );
+                }
+            }
+
+            $productosEnviados = collect($request->productos)->keyBy('id');
+            $detallesActuales = $movimiento->detalles()->get()->keyBy('producto_id');
+
+            // Actualiza o crea una línea por cada producto que llegó en el request.
+            foreach ($productosEnviados as $productoId => $producto) {
+                $detalle = $detallesActuales->get($productoId);
+                if ($detalle) {
+                    $detalle->update(['cantidad_solicitada' => $producto['cantidad']]);
+                } else {
+                    MovimientoDetalle::create([
+                        'movimiento_id' => $movimiento->id,
+                        'producto_id' => $productoId,
+                        'cantidad_solicitada' => $producto['cantidad'],
+                    ]);
+                }
+            }
+
+            // Borra las líneas que existían pero ya no vinieron en el request (el usuario
+            // quitó ese producto del movimiento).
+            $idsAEliminar = $detallesActuales->keys()->diff($productosEnviados->keys());
+            if ($idsAEliminar->isNotEmpty()) {
+                MovimientoDetalle::where('movimiento_id', $movimiento->id)
+                    ->whereIn('producto_id', $idsAEliminar)
+                    ->delete();
+            }
+
+            MovimientoSeguimiento::create([
+                'movimiento_id' => $movimiento->id,
+                'estado' => 'pendiente_confirmacion',
+                'observaciones' => 'Productos/cantidades editados antes de despachar.',
+                'user_id' => $user->id,
+            ]);
+
+            DB::commit();
+
+            $this->notificarMovimiento($movimiento, "Movimiento #{$movimiento->id} editado");
+
+            return redirect()->route('movimientos.index')
+                ->with('success', 'Movimiento actualizado correctamente.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Error al editar movimiento - Usuario: {$user->id} - Error: {$e->getMessage()}");
+
+            return back()->withErrors(['general' => 'Error: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Marca un movimiento como enviado/en tránsito - Aquí se reserva el stock
      */
     public function enviar(Movimiento $movimiento, Request $request)
@@ -304,6 +406,7 @@ class MovimientosController extends Controller
 
     /**
      * Recibe un movimiento (parcial o completo)
+     * Puede afectar cuando es menor o mayor la cantidad de productos
      */
     public function recibir(Movimiento $movimiento, Request $request)
     {
@@ -392,8 +495,18 @@ class MovimientosController extends Controller
                 }
             }
 
-            // Determinar el nuevo estado
-            $nuevoEstado = ($totalRecibido == $totalSolicitado) ? 'recibido_completo' : 'recibido_parcial';
+            // Determinar el nuevo estado: "completo" exige que CADA línea haya recibido
+            // exactamente lo despachado, ni de menos ni de más — comparar solo la suma total
+            // (como antes) podía marcar "completo" un movimiento donde a un producto le faltó
+            // 1 y a otro le sobró 1, porque en el total se cancelaban entre sí.
+            $esCompleto = true;
+            foreach ($movimiento->detalles as $detalle) {
+                if ((int) $detalle->cantidad_recibida !== (int) $detalle->cantidad_despachada) {
+                    $esCompleto = false;
+                    break;
+                }
+            }
+            $nuevoEstado = $esCompleto ? 'recibido_completo' : 'recibido_parcial';
 
             // Actualizar movimiento
             $movimiento->update([

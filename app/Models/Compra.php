@@ -64,6 +64,16 @@ class Compra extends Model
         return $this->hasMany(CompraPago::class, 'compra_id');
     }
 
+    // Una compra pago_cash que además tiene un pago tipo deuda_proveedor solo puede venir
+    // del flujo de "completar con deuda si no alcanza" (ver CompraController::store()) — esta
+    // es la forma de distinguirla sin necesitar un tercer valor en el enum tipo_compra.
+    // Requiere 'pagos' cargado o dispara una query (igual que cualquier otro accessor sobre
+    // una relación no eager-loaded).
+    public function getEsParcialAttribute(): bool
+    {
+        return $this->tipo_compra === 'pago_cash' && $this->pagos->contains('tipo_pago', 'deuda_proveedor');
+    }
+
     // ✅ NUEVA: Relación con clientes que participaron en el pago
     public function clientesPagadores()
     {

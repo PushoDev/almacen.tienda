@@ -70,10 +70,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 const ESTADOS = ['fondo', 'deuda', 'neutro'] as const;
+// Mismo criterio rojo/ámbar/esmeralda que Proveedores/Show.tsx y Proveedores/index.tsx —
+// "neutro" era gris acá, una paleta distinta para el mismo concepto de negocio según en
+// qué pantalla estuviera el usuario.
 const estadoStyles: Record<string, { label: string; bg: string; text: string; border: string; bar: string; icon: React.ElementType }> = {
     fondo: { label: 'Con Fondo', bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', icon: TrendingUp },
     deuda: { label: 'En Deuda', bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800', bar: 'bg-red-500', icon: TrendingDown },
-    neutro: { label: 'Neutro', bg: 'bg-gray-50 dark:bg-gray-800/40', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700', bar: 'bg-gray-400', icon: CheckCircle },
+    neutro: { label: 'Neutro', bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', bar: 'bg-amber-500', icon: DollarSign },
 };
 
 export default function ClientesPage({ clientes, resumen }: { clientes: ClienteProps[]; resumen: ResumenClienteData }) {
@@ -168,9 +171,13 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                 cliente.ciudad_cliente?.toLowerCase().includes(busqueda.toLowerCase());
 
             let coincideEstado = true;
-            if (filtroEstado === 'fondo') coincideEstado = (cliente.deuda_pago_cliente ?? 0) > 0;
-            else if (filtroEstado === 'deuda') coincideEstado = (cliente.deuda_pago_cliente ?? 0) < 0;
-            else if (filtroEstado === 'neutro') coincideEstado = (cliente.deuda_pago_cliente ?? 0) === 0;
+            // Coerce a Number: Cliente::deuda_pago_cliente usa cast 'decimal:2', que Laravel
+            // serializa como string en el JSON ("0.00", no 0) — comparar con === 0 nunca
+            // coincide para un saldo real de $0.00, aunque el tipo TS declare `number`.
+            const saldoCliente = Number(cliente.deuda_pago_cliente ?? 0);
+            if (filtroEstado === 'fondo') coincideEstado = saldoCliente > 0;
+            else if (filtroEstado === 'deuda') coincideEstado = saldoCliente < 0;
+            else if (filtroEstado === 'neutro') coincideEstado = saldoCliente === 0;
 
             return coincideTipo && coincideBusqueda && coincideEstado;
         });
@@ -462,22 +469,30 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                     </Card>
 
                      {/* Tabla de Clientes */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Lista de Clientes</CardTitle>
-                            <CardDescription>
-                                {clientesFiltrados.length} cliente{clientesFiltrados.length !== 1 ? 's' : ''} encontrado
-                                {clientesFiltrados.length !== 1 ? 's' : ''}
-                                {hasFilters && (
-                                    <>
-                                        {filtroEstado && ` (${filtroEstado === 'fondo' ? 'Con Fondo' : filtroEstado === 'deuda' ? 'En Deuda' : 'Neutro'})`}
-                                        {busqueda && ` para "${busqueda}"`}
-                                        {filtroTipo && ` — tipo: ${filtroTipo}`}
-                                    </>
-                                )}
-                            </CardDescription>
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Users className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Lista de Clientes</CardTitle>
+                                    <CardDescription className="text-teal-100">
+                                        {clientesFiltrados.length} cliente{clientesFiltrados.length !== 1 ? 's' : ''} encontrado
+                                        {clientesFiltrados.length !== 1 ? 's' : ''}
+                                        {hasFilters && (
+                                            <>
+                                                {filtroEstado &&
+                                                    ` (${filtroEstado === 'fondo' ? 'Con Fondo' : filtroEstado === 'deuda' ? 'En Deuda' : 'Neutro'})`}
+                                                {busqueda && ` para "${busqueda}"`}
+                                                {filtroTipo && ` — tipo: ${filtroTipo}`}
+                                            </>
+                                        )}
+                                    </CardDescription>
+                                </div>
+                            </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="pt-5">
                             <ScrollArea className="h-[600px]">
                                 <Table>
                                     <TableHeader>
@@ -520,7 +535,7 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                                                             variant={cliente.tipo_cliente === 'asociado' ? 'default' : 'secondary'}
                                                             className={
                                                                 cliente.tipo_cliente === 'asociado'
-                                                                    ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-800/30 dark:text-green-500'
+                                                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-800/30 dark:text-emerald-500'
                                                                     : 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-800/30 dark:text-blue-500'
                                                             }
                                                         >
@@ -541,8 +556,8 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                                                                                 estado.color === 'red'
                                                                                     ? 'text-red-600'
                                                                                     : estado.color === 'green'
-                                                                                      ? 'text-green-600'
-                                                                                      : 'text-gray-500'
+                                                                                      ? 'text-emerald-600'
+                                                                                      : 'text-amber-600'
                                                                             }`}
                                                                         >
                                                                             <IconComponent size={14} />
@@ -560,8 +575,8 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                                                                                     estado.color === 'red'
                                                                                         ? 'border-red-200 bg-red-50 text-red-700'
                                                                                         : estado.color === 'green'
-                                                                                          ? 'border-green-200 bg-green-50 text-green-700'
-                                                                                          : 'border-gray-200 bg-gray-50 text-gray-700'
+                                                                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                                                          : 'border-amber-200 bg-amber-50 text-amber-700'
                                                                                 }`}
                                                                             >
                                                                                 {estado.texto}

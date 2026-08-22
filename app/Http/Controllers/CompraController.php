@@ -202,11 +202,7 @@ class CompraController extends Controller
                 'tipo_compra'  => $c->tipo_compra,
                 'proveedor'    => $c->proveedor?->nombre_proveedor,
                 'cliente'      => $c->cliente?->nombre_cliente,
-                // Una compra pago_cash que además tiene un pago tipo deuda_proveedor solo puede venir
-                // del flujo de "completar con deuda si no alcanza" — tipo_compra se queda en pago_cash
-                // a propósito (ver shapeCompraParaVista), esta es la forma de distinguirla sin
-                // necesitar un tercer valor en el enum.
-                'es_parcial'   => $c->tipo_compra === 'pago_cash' && $c->pagos->contains('tipo_pago', 'deuda_proveedor'),
+                'es_parcial'   => $c->es_parcial,
             ]);
 
         return Inertia::render('Comprar/Index', [
@@ -585,9 +581,7 @@ class CompraController extends Controller
             'fecha_compra' => $compra->fecha_compra,
             'total_compra' => (float) $compra->total_compra,
             'tipo_compra'  => $compra->tipo_compra,
-            // Mismo criterio que index(): pago_cash + algún pago tipo deuda_proveedor solo puede
-            // venir de "completar con deuda si no alcanza".
-            'es_parcial'   => $compra->tipo_compra === 'pago_cash' && $compra->pagos->contains('tipo_pago', 'deuda_proveedor'),
+            'es_parcial'   => $compra->es_parcial,
             'proveedor'    => $compra->proveedor
                 ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]
                 : null,

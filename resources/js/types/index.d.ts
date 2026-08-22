@@ -676,6 +676,7 @@ export interface CompraProveedor {
     id: number;
     fecha_compra: string;
     tipo_compra: 'deuda_proveedor' | 'pago_cash';
+    es_parcial: boolean;
     total_compra: number;
     productos: ProductoCompra[];
     proveedor_id: number;

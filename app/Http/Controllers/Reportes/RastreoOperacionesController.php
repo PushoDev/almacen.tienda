@@ -584,14 +584,19 @@ class RastreoOperacionesController extends Controller
             'user_id' => $compra->user_id,
             'referencia' => "Compra #{$compra->id}",
             // compras no tiene columna de descripción/estado propia — el tipo de compra
-            // (deuda_proveedor | pago_cash) es el dato más cercano a "detalle" disponible.
-            'descripcion' => $compra->tipo_compra === 'deuda_proveedor' ? 'Deuda con proveedor' : 'Pago al contado',
+            // (deuda_proveedor | pago_cash) más es_parcial (ver Compra::getEsParcialAttribute,
+            // mismo criterio que Comprar/Index.tsx y Comprar/Show.tsx) son el dato más cercano
+            // a "detalle"/estado disponible.
+            'descripcion' => $compra->tipo_compra === 'deuda_proveedor'
+                ? 'Deuda con proveedor'
+                : ($compra->es_parcial ? 'Pago parcial (con deuda restante)' : 'Pago al contado'),
             'detalle_venta' => null,
             'detalle_movimiento' => null,
             'detalle_compra' => [
                 'info_general' => [
                     'fecha' => $compra->fecha_compra,
                     'tipo_compra' => $compra->tipo_compra,
+                    'es_parcial' => $compra->es_parcial,
                 ],
                 // Quién recibió el pago — siempre uno solo (proveedor O cliente-proveedor),
                 // a diferencia de "pagos" abajo que sí puede ser múltiple (varias cuentas).

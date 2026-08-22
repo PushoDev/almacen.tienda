@@ -154,7 +154,7 @@ export default function CreateProveedoresPage() {
                                         type="number"
                                         step="0.01"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.saldo_proveedor}
+                                        value={data.saldo_proveedor || ''}
                                         onChange={(e) => setData('saldo_proveedor', parseFloat(e.target.value) || 0)}
                                         autoComplete="saldo_proveedor"
                                         placeholder="0.00"

@@ -388,7 +388,14 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                                     {pago.tipo_pago === 'cuenta' ? 'Cuenta' : pago.tipo_pago === 'cliente' ? 'Cliente' : 'Crédito'}
                                                 </Badge>
                                             </div>
-                                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                            <span
+                                                className={cn(
+                                                    'font-bold',
+                                                    pago.tipo_pago === 'deuda_proveedor'
+                                                        ? 'text-red-600 dark:text-red-400'
+                                                        : 'text-emerald-600 dark:text-emerald-400',
+                                                )}
+                                            >
                                                 {formatCurrency(pago.monto)}
                                             </span>
                                         </div>

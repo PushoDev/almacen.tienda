@@ -20,6 +20,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/movimientos', [MovimientosController::class, 'store'])
         ->name('movimientos.store');
 
+    // Editar productos/cantidades — solo mientras esté pendiente_confirmacion (antes de enviar)
+    Route::post('/movimientos/{movimiento}/actualizar', [MovimientosController::class, 'actualizar'])
+        ->name('movimientos.actualizar');
+
     // Acciones adicionales para el flujo de estados
     Route::post('/movimientos/{movimiento}/aprobar', [MovimientosController::class, 'aprobar'])
         ->name('movimientos.aprobar');
