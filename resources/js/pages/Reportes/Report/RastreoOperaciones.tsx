@@ -28,9 +28,10 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, ChevronDown, ChevronRight, CreditCard, DollarSign, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -174,6 +175,10 @@ interface DetalleCompra {
     info_general: {
         fecha: string;
         tipo_compra: string;
+        // pago_cash + una línea deuda_proveedor en pagos (flujo "completar con deuda si no
+        // alcanza") — mismo criterio que Compra::getEsParcialAttribute en el backend y que
+        // Comprar/Index.tsx / Comprar/Show.tsx en el resto del sistema.
+        es_parcial: boolean;
     };
     // Quién recibió el pago — solo uno de los dos, nunca ambos.
     proveedor: string | null;
@@ -322,6 +327,12 @@ const colorPago = (index: number) => coloresPago[index % coloresPago.length];
 // fila no representa una cuenta/cliente real que pagó — se filtra, deuda_proveedor no
 // llena "Cuenta Envía" (no salió dinero de ninguna cuenta del sistema).
 const pagosCompraConOrigen = (op: Operacion) => (op.detalle_compra?.pagos ?? []).filter((p) => p.tipo_pago !== 'deuda_proveedor');
+
+// Lo que quedó sin cubrir con cuentas/clientes — presente tanto en Crédito 100% (todo el
+// total) como en Parcial (solo el resto, junto con pagosCompraConOrigen). Se muestra aparte
+// del listado de arriba porque no representa una cuenta/cliente real que pagó.
+const montoPendienteCompra = (op: Operacion) =>
+    (op.detalle_compra?.pagos ?? []).filter((p) => p.tipo_pago === 'deuda_proveedor').reduce((acc, p) => acc + p.monto, 0);
 
 // Cuenta que Recibe / Monto para Compra: quien recibe el pago es siempre uno solo
 // (proveedor o cliente-proveedor), a diferencia de "Cuenta Envía" que puede ser varios —
@@ -644,15 +655,27 @@ const DetalleMovimientoExpandido = ({
 
 // ─── Componente: DetalleCompraExpandido (sin costo/ganancia — la compra ES el costo) ──
 
-const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleCompra; monto: number; usuario: string }) => (
+const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleCompra; monto: number; usuario: string }) => {
+    const esCredito = detalle.info_general.tipo_compra === 'deuda_proveedor';
+    const esParcial = detalle.info_general.es_parcial;
+    // La línea tipo_pago 'deuda_proveedor' dentro de pagos guarda exactamente el resto no
+    // cubierto por cuentas/clientes (ver CompraController::store()) — en Crédito 100% es el
+    // total completo, en Parcial es solo lo que faltó.
+    const montoPendiente = detalle.pagos.filter((p) => p.tipo_pago === 'deuda_proveedor').reduce((acc, p) => acc + p.monto, 0);
+    const montoPagado = detalle.pagos.filter((p) => p.tipo_pago !== 'deuda_proveedor').reduce((acc, p) => acc + p.monto, 0);
+
+    return (
     <div className="space-y-4 py-2">
-        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
             <span>
                 <strong className="text-foreground">Fecha:</strong> {new Date(detalle.info_general.fecha).toLocaleDateString()}
             </span>
-            <span>
-                <strong className="text-foreground">Tipo de Compra:</strong>{' '}
-                {detalle.info_general.tipo_compra === 'deuda_proveedor' ? 'Deuda con proveedor' : 'Pago al contado'}
+            <span className="flex items-center gap-1.5">
+                <strong className="text-foreground">Tipo de Compra:</strong>
+                <Badge className={cn('text-white hover:opacity-90', esCredito ? 'bg-red-500' : esParcial ? 'bg-amber-500' : 'bg-emerald-500')}>
+                    {esCredito ? <CreditCard className="h-3 w-3" /> : esParcial ? <AlertTriangle className="h-3 w-3" /> : <DollarSign className="h-3 w-3" />}
+                    {esCredito ? 'Crédito' : esParcial ? 'Parcial' : 'Contado'}
+                </Badge>
             </span>
             <span>
                 <strong className="text-foreground">Registrado por:</strong> {usuario}
@@ -667,6 +690,12 @@ const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleC
                 <CardContent className="space-y-1 text-xs">
                     <p><strong>Nombre:</strong> {detalle.proveedor ?? detalle.cliente ?? '—'}</p>
                     <p><strong>Total Compra:</strong> {fmt(monto)}</p>
+                    {(esCredito || esParcial) && (
+                        <>
+                            <p className="text-emerald-600 dark:text-emerald-400"><strong>Pagado:</strong> {fmt(montoPagado)}</p>
+                            <p className="text-amber-600 dark:text-amber-400"><strong>Pendiente:</strong> {fmt(montoPendiente)}</p>
+                        </>
+                    )}
                 </CardContent>
             </Card>
         </div>
@@ -747,7 +776,8 @@ const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleC
             </CardContent>
         </Card>
     </div>
-);
+    );
+};
 
 // ─── Componente: ComboboxFiltro (multiselect con chips, para Cliente/Proveedor/Cuenta) ──
 // Volúmenes chicos (decenas de registros) — se manda la lista completa como prop y este
@@ -1145,22 +1175,20 @@ export default function RastreoOperacionesPage({
                                                         <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
                                                             {op.tipo === 'Compra' ? (
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {pagosCompraConOrigen(op).length > 0 ? (
-                                                                        pagosCompraConOrigen(op).map((p, i) => (
-                                                                            <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
-                                                                                {formatMonto(p.monto, 'USD')}
-                                                                            </Badge>
-                                                                        ))
-                                                                    ) : op.detalle_compra?.info_general.tipo_compra === 'deuda_proveedor' ? (
+                                                                    {pagosCompraConOrigen(op).map((p, i) => (
+                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                            {formatMonto(p.monto, 'USD')}
+                                                                        </Badge>
+                                                                    ))}
+                                                                    {montoPendienteCompra(op) > 0 && (
                                                                         <Badge
                                                                             variant="outline"
-                                                                            className="border-amber-200 bg-amber-50 font-normal text-amber-700 whitespace-nowrap dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                                                                            className="border-red-200 bg-red-50 font-normal text-red-700 whitespace-nowrap dark:border-red-800 dark:bg-red-950/20 dark:text-red-300"
                                                                         >
-                                                                            Deuda pendiente
+                                                                            Deuda pendiente: {formatMonto(montoPendienteCompra(op), 'USD')}
                                                                         </Badge>
-                                                                    ) : (
-                                                                        '—'
                                                                     )}
+                                                                    {pagosCompraConOrigen(op).length === 0 && montoPendienteCompra(op) === 0 && '—'}
                                                                 </div>
                                                             ) : (
                                                                 montoEnvia(op)

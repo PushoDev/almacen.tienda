@@ -62,7 +62,7 @@ const allNavItems: NavItem[] = [
         roles: ['vendedor'],
     },
     {
-        title: 'Movimientos',
+        title: 'Movimientos de Inventario',
         href: '/movimientos',
         icon: Repeat,
         roles: ['admin', 'moderador', 'vendedor'],
@@ -74,7 +74,7 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador'],
     },
     {
-        title: 'Productos',
+        title: 'Productos Generales',
         href: '/listado-productos',
         icon: Package,
         roles: ['admin', 'moderador', 'vendedor'],
@@ -98,25 +98,25 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador'],
     },
     {
-        title: 'Cuentas',
+        title: 'Cuentas Monetarias',
         href: '/cuentas',
         icon: Landmark,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Clientes',
+        title: 'Clientes Asociados',
         href: '/clientes',
         icon: Users,
         roles: ['admin', 'moderador'],
     },
     {
-        title: 'Empleados',
+        title: 'Empleados & Usuarios',
         href: '/empleados',
         icon: Contact,
         roles: ['admin'],
     },
     {
-        title: 'Reportes',
+        title: 'Reportes Generales',
         href: '/reportes',
         icon: FileText,
         roles: ['admin', 'moderador', 'vendedor'],
