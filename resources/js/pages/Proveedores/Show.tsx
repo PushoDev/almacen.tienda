@@ -488,7 +488,17 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                                                             {compra.pagos.map((pago) => (
                                                                                                 <tr key={pago.id}>
                                                                                                     <td className="px-4 py-1.5">
-                                                                                                        <Badge variant="outline" className="font-normal">
+                                                                                                        <Badge
+                                                                                                            variant="outline"
+                                                                                                            className={cn(
+                                                                                                                'font-normal',
+                                                                                                                pago.tipo_pago === 'cuenta'
+                                                                                                                    ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                                                                                                    : pago.tipo_pago === 'cliente'
+                                                                                                                      ? 'border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900 dark:text-green-300'
+                                                                                                                      : 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900 dark:text-amber-300',
+                                                                                                            )}
+                                                                                                        >
                                                                                                             {pago.tipo_pago === 'cuenta'
                                                                                                                 ? 'Cuenta'
                                                                                                                 : pago.tipo_pago === 'cliente'
@@ -499,13 +509,13 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                                                                     <td className="px-4 py-1.5">
                                                                                                         {pago.cuenta && (
                                                                                                             <span className="flex items-center gap-1">
-                                                                                                                <Wallet className="text-muted-foreground h-3 w-3" />
+                                                                                                                <Wallet className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                                                                                                                 {pago.cuenta.nombre_cuenta}
                                                                                                             </span>
                                                                                                         )}
                                                                                                         {pago.cliente && (
                                                                                                             <span className="flex items-center gap-1">
-                                                                                                                <User className="text-muted-foreground h-3 w-3" />
+                                                                                                                <User className="h-3 w-3 text-green-600 dark:text-green-400" />
                                                                                                                 {pago.cliente.nombre_cliente}
                                                                                                             </span>
                                                                                                         )}
@@ -513,7 +523,14 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                                                                             <span className="text-muted-foreground">—</span>
                                                                                                         )}
                                                                                                     </td>
-                                                                                                    <td className="px-4 py-1.5 font-mono">
+                                                                                                    <td
+                                                                                                        className={cn(
+                                                                                                            'px-4 py-1.5 font-mono font-medium',
+                                                                                                            pago.tipo_pago === 'deuda_proveedor'
+                                                                                                                ? 'text-red-600 dark:text-red-400'
+                                                                                                                : 'text-emerald-600 dark:text-emerald-400',
+                                                                                                        )}
+                                                                                                    >
                                                                                                         {formatearMoneda(pago.monto)}
                                                                                                     </td>
                                                                                                 </tr>
