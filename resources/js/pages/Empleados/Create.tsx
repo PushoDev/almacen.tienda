@@ -12,7 +12,8 @@ import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { BookUser, Eye, EyeOff, Search, Store, University, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
@@ -92,10 +93,10 @@ export default function CreateEmpleadoPage({ almacenes, cuentas }: { almacenes: 
         post(route('empleados.store'), {
             onSuccess: () => {
                 reset();
-                toast.success('Empleado creado correctamente');
+                sileo.success({ title: 'Empleado creado', description: 'El empleado se creó correctamente' });
             },
             onError: () => {
-                toast.error('Error al crear el empleado');
+                sileo.error({ title: 'Error al crear', description: 'No se pudo crear el empleado' });
             },
         });
     };
@@ -389,6 +390,7 @@ export default function CreateEmpleadoPage({ almacenes, cuentas }: { almacenes: 
                     </div>
                 </form>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

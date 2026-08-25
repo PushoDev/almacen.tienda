@@ -11,7 +11,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { AlertCircle, ArrowLeft, CheckCircle, DollarSign, HandHeart, Home, Info, MapPin, Phone, Save, User, UserCheck, UserCog } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -44,10 +45,10 @@ export default function CreateClientePage() {
         post(route('clientes.store'), {
             onSuccess: () => {
                 reset();
-                toast.success('Cliente creado correctamente');
+                sileo.success({ title: 'Cliente creado', description: 'El cliente se creó correctamente' });
             },
             onError: () => {
-                toast.error('Error al crear el cliente');
+                sileo.error({ title: 'Error al crear', description: 'No se pudo crear el cliente' });
             },
         });
     };
@@ -448,6 +449,7 @@ export default function CreateClientePage() {
                     </Card>
                 </div>
             </TooltipProvider>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

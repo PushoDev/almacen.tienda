@@ -9,7 +9,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react'; // Agregamos usePage
 import { ArrowLeft, Calendar, CheckCircle, Coins, DollarSign, Edit, Hash, Percent, Star, Tag, XCircle } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 interface Moneda {
     id: number;
@@ -78,13 +79,13 @@ export default function MonedaShow() {
             });
 
             if (response.ok) {
-                toast.success('Moneda establecida como principal exitosamente');
+                sileo.success({ title: 'Moneda principal', description: 'Se estableció correctamente como moneda principal' });
                 window.location.reload();
             } else {
                 throw new Error('Error en la respuesta del servidor');
             }
         } catch (error) {
-            toast.error('Error al establecer la moneda como principal');
+            sileo.error({ title: 'Error al establecer', description: 'No se pudo establecer la moneda como principal' });
         } finally {
             setLoading(false);
         }
@@ -353,6 +354,7 @@ export default function MonedaShow() {
                 </div>
             </div>
             <ScrollProgress />
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

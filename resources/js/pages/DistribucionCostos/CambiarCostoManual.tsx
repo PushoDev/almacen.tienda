@@ -22,7 +22,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { ArrowRightLeft, CheckCircle2, DollarSign, Package, Wallet, X } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 // --- Funciones de formato ---
 const formatCurrency = (value: number) => {
@@ -166,11 +167,11 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
         e.preventDefault();
 
         if (data.cuentas.length === 0) {
-            toast.error('Debe seleccionar al menos una cuenta de origen');
+            sileo.warning({ title: 'Falta la cuenta', description: 'Selecciona al menos una cuenta de origen' });
             return;
         }
         if (totalUsdToDistribute <= 0) {
-            toast.error('El monto a distribuir debe ser mayor a 0');
+            sileo.warning({ title: 'Monto inválido', description: 'El monto a distribuir debe ser mayor a 0' });
             return;
         }
 
@@ -178,7 +179,7 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
             onSuccess: () => {},
             onError: (errors) => {
                 const firstError = Object.values(errors)[0];
-                toast.error(firstError || 'Ocurrió un error. Por favor, revisa los datos.');
+                sileo.error({ title: 'Error al distribuir', description: firstError || 'Revisa los datos e inténtalo de nuevo' });
             },
         });
     };
@@ -558,6 +559,7 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
                     </Card>
                 </form>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

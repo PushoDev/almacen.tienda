@@ -11,7 +11,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ArrowLeft, Coins, Save } from 'lucide-react';
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 interface Moneda {
     id: number;
@@ -76,7 +77,7 @@ export default function MonedaEdit() {
     // Mostrar notificación si hay errores
     useEffect(() => {
         if (errors) {
-            toast.error('Por favor corrige los errores en el formulario');
+            sileo.error({ title: 'Corrige los errores', description: 'Revisa los campos marcados en el formulario' });
         }
     }, [errors]);
 
@@ -85,10 +86,10 @@ export default function MonedaEdit() {
         put(`/monedas/${moneda.id}`, {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success('Moneda actualizada exitosamente');
+                sileo.success({ title: 'Moneda actualizada', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar la moneda');
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar la moneda' });
             },
         });
     };
@@ -98,16 +99,17 @@ export default function MonedaEdit() {
         // Si se desactiva la moneda y era principal, quitar principal
         if (!checked && data.principal) {
             setData('principal', false);
-            toast.warning('No se puede desactivar una moneda principal. Se ha quitado la marca de principal.');
+            sileo.warning({ title: 'Moneda principal', description: 'No se puede desactivar — se ha quitado la marca de principal' });
         }
     };
 
     const handlePrincipalChange = (checked: boolean) => {
         setData('principal', checked);
         if (checked) {
-            toast.info(
-                `Esta moneda será establecida como principal, reemplazando a ${moneda_principal?.nombre_moneda || 'la moneda principal actual'}`,
-            );
+            sileo.info({
+                title: 'Nueva moneda principal',
+                description: `Reemplazará a ${moneda_principal?.nombre_moneda || 'la moneda principal actual'}`,
+            });
         }
     };
 
@@ -398,6 +400,7 @@ export default function MonedaEdit() {
                 </div>
             </div>
             <ScrollProgress />
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

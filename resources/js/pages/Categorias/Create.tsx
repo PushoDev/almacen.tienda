@@ -8,7 +8,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { ListCheck } from 'lucide-react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -39,10 +40,10 @@ export default function CreateCategoriasPage() {
         post(route('categorias.store'), {
             onSuccess: () => {
                 reset(); // Limpia el formulario después de enviar
-                toast.success('Categoría creada correctamente');
+                sileo.success({ title: 'Categoría creada', description: 'La categoría se creó correctamente' });
             },
             onError: () => {
-                toast.error('Error al crear la categoría');
+                sileo.error({ title: 'Error al crear', description: 'No se pudo crear la categoría' });
             },
         });
     };

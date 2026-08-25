@@ -8,7 +8,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { ListCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -42,10 +43,10 @@ export default function CreateProveedoresPage() {
         post(route('proveedores.store'), {
             onSuccess: () => {
                 reset(); // Limpia el formulario después de enviar
-                toast.success('Proveedor creado correctamente');
+                sileo.success({ title: 'Proveedor creado', description: 'El proveedor se creó correctamente' });
             },
             onError: () => {
-                toast.error('Error al crear el proveedor');
+                sileo.error({ title: 'Error al crear', description: 'No se pudo crear el proveedor' });
             },
         });
     };
@@ -232,6 +233,7 @@ export default function CreateProveedoresPage() {
                     </form>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

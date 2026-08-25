@@ -4,7 +4,6 @@ import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
-import { Toaster } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -1607,8 +1606,6 @@ export default function Dashboard({
                         </CardContent>
                     </Card>
                 </div>
-
-                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );

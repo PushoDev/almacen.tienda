@@ -21,7 +21,8 @@ import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit3, Eye, FileText, HousePlus, IdCard, Mail, MapPin, Phone, Search, Sheet, Trash2, User, Warehouse } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -39,10 +40,10 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
     const deleteAlmacen = (id: number) => {
         router.delete(route('almacenes.destroy', { almacen: id }), {
             onSuccess: () => {
-                toast.success('Almacén eliminado satisfactoriamente');
+                sileo.success({ title: 'Almacén eliminado', description: 'El almacén se eliminó correctamente' });
             },
             onError: () => {
-                toast.error('Error en el proceso, inténtelo nuevamente');
+                sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' });
             },
         });
     };

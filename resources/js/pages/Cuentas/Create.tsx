@@ -10,7 +10,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { HandCoins, Landmark } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -56,10 +57,10 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
         post(route('cuentas.store'), {
             onSuccess: () => {
                 reset(); // Limpia el formulario después de enviar
-                toast.success('Cuenta creada correctamente');
+                sileo.success({ title: 'Cuenta creada', description: 'La cuenta se creó correctamente' });
             },
             onError: () => {
-                toast.error('Error al crear la cuenta. Por favor, verifica los datos.');
+                sileo.error({ title: 'Error al crear', description: 'Verifica los datos e inténtalo de nuevo' });
             },
         });
     };
@@ -265,6 +266,7 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                     </CardContent>
                 </Card>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

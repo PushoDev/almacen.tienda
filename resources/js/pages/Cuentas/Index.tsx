@@ -32,7 +32,8 @@ import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Minus, Package, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -93,8 +94,8 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
 
     const deleteCuenta = (id: number) => {
         router.delete(route('cuentas.destroy', { cuenta: id }), {
-            onSuccess: () => toast.success('Cuenta eliminada correctamente'),
-            onError: () => toast.error('Error en el proceso, inténtelo nuevamente'),
+            onSuccess: () => sileo.success({ title: 'Cuenta eliminada', description: 'La cuenta se eliminó correctamente' }),
+            onError: () => sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' }),
         });
     };
 
@@ -522,7 +523,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                                                         <AlertDialogTrigger asChild>
                                                                             <Button variant="outline" size="sm"
                                                                                 className="h-8 w-8 cursor-pointer p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                                                onClick={(e) => { if (!isAdmin) { e.preventDefault(); toast.error('ud no tiene acceso para esta acción'); } }}>
+                                                                                onClick={(e) => { if (!isAdmin) { e.preventDefault(); sileo.error({ title: 'Sin permiso', description: 'No tienes acceso para esta acción' }); } }}>
                                                                                 <Trash2 size={14} />
                                                                             </Button>
                                                                         </AlertDialogTrigger>

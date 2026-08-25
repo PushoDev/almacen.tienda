@@ -11,7 +11,6 @@ import { router } from '@inertiajs/react';
 import axios from 'axios';
 import { ArrowRight, DollarSign, Warehouse } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { NotificationDropdown } from './NotificationDropdown';
 
 interface PrecioCambioData {
@@ -93,7 +92,6 @@ export const NotificationBell = () => {
             await axios.post(route('notifications.markAllAsRead'));
             setNotifications((prev) => prev.map((n) => ({ ...n, read_at: new Date().toISOString() })));
             setUnreadCount(0);
-            toast.success('Todas las notificaciones marcadas como leídas');
         } catch (error) {
             console.error('Error marking all as read', error);
         }

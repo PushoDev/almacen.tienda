@@ -8,7 +8,8 @@ import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { AlertTriangle, Calendar, Edit2, Package2, QrCode, Warehouse, ArrowRightLeft } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -43,13 +44,13 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
         e.preventDefault();
         transferForm.post(route('productos.transferir-codigo', { producto: producto.id }), {
             onSuccess: () => {
-                toast.success('Código de barras transferido correctamente');
+                sileo.success({ title: 'Código transferido', description: 'El código de barras se transfirió correctamente' });
                 setIsTransferModalOpen(false);
                 transferForm.reset();
             },
             onError: (errors) => {
-                if (errors.cantidad) toast.error(errors.cantidad);
-                else toast.error('Error al transferir el código de barras');
+                if (errors.cantidad) sileo.error({ title: 'Cantidad inválida', description: errors.cantidad });
+                else sileo.error({ title: 'Error al transferir', description: 'No se pudo transferir el código de barras' });
             }
         });
     };
@@ -509,6 +510,7 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
                     </div>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

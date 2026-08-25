@@ -21,7 +21,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Coins, Edit, Eye, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react'; // Importamos useEffect
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 interface Moneda {
     id: number;
@@ -65,10 +66,10 @@ export default function MonedasIndex() {
     // Mostrar notificaciones si hay mensajes
     useEffect(() => {
         if (success) {
-            toast.success(success);
+            sileo.success({ title: success });
         }
         if (error) {
-            toast.error(error);
+            sileo.error({ title: error });
         }
     }, [success, error]);
 
@@ -99,7 +100,7 @@ export default function MonedasIndex() {
 
             window.location.reload();
         } catch {
-            toast.error('Error al realizar la acción');
+            sileo.error({ title: 'Error al realizar la acción' });
         } finally {
             setLoadingStates((prev) => ({ ...prev, [monedaId]: '' }));
         }
@@ -116,7 +117,7 @@ export default function MonedasIndex() {
             });
             window.location.reload();
         } catch {
-            toast.error('Error al eliminar la moneda');
+            sileo.error({ title: 'Error al eliminar', description: 'No se pudo eliminar la moneda' });
         }
     };
 
@@ -323,6 +324,7 @@ export default function MonedasIndex() {
                 </Card>
             </div>
             <ScrollProgress />
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

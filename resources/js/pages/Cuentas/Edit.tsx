@@ -12,7 +12,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { Banknote, Eye, EyeOff, Landmark, ShieldAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -84,10 +85,10 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
         put(route('cuentas.update', { cuenta: cuenta.id }), {
             onSuccess: () => {
                 setIsSaldoDialogOpen(false);
-                toast.success('Cuenta actualizada correctamente');
+                sileo.success({ title: 'Cuenta actualizada', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar la cuenta. Por favor, verifica los datos.');
+                sileo.error({ title: 'Error al actualizar', description: 'Verifica los datos e inténtalo de nuevo' });
             },
         });
     };
@@ -106,12 +107,12 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
 
     const confirmarAjusteSaldo = () => {
         if (!data.security_password) {
-            toast.error('Debe ingresar su contraseña para cambiar el saldo.');
+            sileo.warning({ title: 'Falta la contraseña', description: 'Debes ingresar tu contraseña para cambiar el saldo' });
             return;
         }
 
         if (!data.motivo_ajuste_saldo.trim()) {
-            toast.error('Debe indicar el motivo del ajuste de saldo.');
+            sileo.warning({ title: 'Falta el motivo', description: 'Debes indicar el motivo del ajuste de saldo' });
             return;
         }
 
@@ -420,6 +421,7 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                     </DialogContent>
                 </Dialog>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }
