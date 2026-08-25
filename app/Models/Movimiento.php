@@ -24,13 +24,19 @@ class Movimiento extends Model
         'transportista',
         'fecha_aprobacion',
         'fecha_envio',
-        'fecha_recepcion'
+        'fecha_recepcion',
+        'requiere_prorrateo',
+        'prorrateo_decision',
+        'prorrateo_decidido_por',
+        'prorrateo_decidido_en',
     ];
 
     protected $casts = [
         'fecha_aprobacion' => 'datetime',
         'fecha_envio' => 'datetime',
         'fecha_recepcion' => 'datetime',
+        'requiere_prorrateo' => 'boolean',
+        'prorrateo_decidido_en' => 'datetime',
     ];
 
     public function almacenOrigen(): BelongsTo
@@ -51,6 +57,11 @@ class Movimiento extends Model
     public function usuarioAprobacion(): BelongsTo
     {
         return $this->belongsTo(User::class, 'usuario_aprobacion_id');
+    }
+
+    public function usuarioDecisionProrrateo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'prorrateo_decidido_por');
     }
 
     public function detalles(): HasMany

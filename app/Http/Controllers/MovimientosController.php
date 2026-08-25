@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\MovimientoStockNotification;
+use App\Notifications\ProrrateoRequeridoNotification;
 use App\Services\NotificationService;
 use App\Models\User;
 
@@ -33,6 +34,21 @@ class MovimientosController extends Controller
             Notification::send($usuariosParaNotificar, new MovimientoStockNotification($movimiento, $mensajePersonalizado));
         } catch (\Exception $e) {
             \Log::error('Error notificación movimiento: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Avisa a admin/moderador que un movimiento en tránsito quedó marcado como
+     * "requiere_prorrateo" — el prorrateo en sí es una acción libre (no bloquea recibir()),
+     * esto es solo la alerta para que no se les pierda de vista.
+     */
+    private function notificarProrrateoRequerido($movimiento)
+    {
+        try {
+            $usuarios = User::whereIn('role', ['admin', 'moderador'])->get();
+            Notification::send($usuarios, new ProrrateoRequeridoNotification($movimiento));
+        } catch (\Exception $e) {
+            \Log::error('Error notificación de prorrateo requerido: ' . $e->getMessage());
         }
     }
 
@@ -186,6 +202,17 @@ class MovimientosController extends Controller
                 }
             }
 
+            // Vendedor: condicional — no tiene sentido prorratear un traslado dentro de sus
+            // propios almacenes, solo cuando el destino no es suyo (evita llenar la cola de
+            // pendientes con movimientos que nunca lo necesitarían).
+            // Admin/moderador: siempre true, sin condición — no depende de si "casualmente"
+            // tienen algún almacén asignado en user_almacens (hoy no lo tienen, pero apoyarse en
+            // esa coincidencia sería frágil). Un admin que despacha un contenedor completo hacia
+            // otro punto de venta también debe poder decidir el prorrateo, siempre.
+            $requiereProrrateo = $user->role === 'vendedor'
+                ? !$user->almacenes()->where('almacens.id', $request->almacen_destino_id)->exists()
+                : true;
+
             $movimiento = Movimiento::create([
                 'almacen_origen_id' => $request->almacen_origen_id,
                 'almacen_destino_id' => $request->almacen_destino_id,
@@ -193,6 +220,7 @@ class MovimientosController extends Controller
                 'tipo_movimiento' => 'traslado',
                 'estado' => 'pendiente_confirmacion',
                 'observaciones' => $request->observaciones,
+                'requiere_prorrateo' => $requiereProrrateo,
             ]);
 
             foreach ($request->productos as $producto) {
@@ -394,6 +422,10 @@ class MovimientosController extends Controller
             // Notificar a usuarios relevantes
             $this->notificarMovimiento($movimiento, "Movimiento #{$movimiento->id} enviado");
 
+            if ($movimiento->requiere_prorrateo) {
+                $this->notificarProrrateoRequerido($movimiento);
+            }
+
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento despachado y en tránsito.');
         } catch (\Exception $e) {
@@ -407,6 +439,11 @@ class MovimientosController extends Controller
     /**
      * Recibe un movimiento (parcial o completo)
      * Puede afectar cuando es menor o mayor la cantidad de productos
+     *
+     * NOTA: no hay ningún chequeo de "requiere_prorrateo"/"prorrateo_decision" aquí a propósito
+     * — el cliente confirmó explícitamente que el prorrateo es una acción libre para
+     * admin/moderador (desde Distribución de Costos), no un requisito para recibir. No
+     * reintroducir un bloqueo aquí sin que el cliente lo pida de nuevo.
      */
     public function recibir(Movimiento $movimiento, Request $request)
     {

@@ -68,20 +68,33 @@ interface ProductoCompra {
     precio_compra_producto: number;
     pivot: {
         cantidad: number;
-        precio: number;
+        // Solo viene en un lote de compras (precio de esa línea) — un lote de movimientos no
+        // tiene "precio de línea" propio, la cantidad sale de cantidad_despachada. No se usa en
+        // esta pantalla (el reparto se calcula sobre precio_compra_producto, no sobre esto).
+        precio?: number;
     };
 }
 
 interface Props {
-    compraIds: number[];
+    // Mutuamente excluyentes — un lote es de compras o de movimientos, nunca ambos.
+    tipo: 'compras' | 'movimientos';
+    compraIds?: number[];
+    movimientoIds?: number[];
     productos: ProductoCompra[];
     cuentas: Cuenta[];
     tasaCambioActual: number;
 }
 
-export default function CambiarCostoManual({ compraIds, productos, cuentas, tasaCambioActual }: Props) {
+export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, productos, cuentas, tasaCambioActual }: Props) {
+    const loteIds = tipo === 'movimientos' ? (movimientoIds ?? []) : (compraIds ?? []);
+    const etiquetaLote = tipo === 'movimientos' ? 'Movimiento' : 'Compra';
+
     const { data, setData, post, processing, errors } = useForm({
-        purchase_ids: compraIds,
+        // El backend exige uno u otro, nunca ambos (min:1 en el que sí venga) — el que no
+        // aplica queda undefined a propósito para que Inertia lo omita del body por completo,
+        // en vez de mandar un array vacío que rompería esa validación.
+        purchase_ids: (tipo === 'compras' ? loteIds : undefined) as number[] | undefined,
+        movimiento_ids: (tipo === 'movimientos' ? loteIds : undefined) as number[] | undefined,
         // Una o varias cuentas financiando la distribución — CUP o USD mezcladas, cada una con
         // su propio monto en su propia moneda.
         cuentas: [] as Array<{ account_id: number; monto: string }>,
@@ -89,7 +102,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
         details: '',
     });
 
-    const titulo = `Compra${compraIds.length > 1 ? 's' : ''} #${compraIds.join(', #')}`;
+    const titulo = `${etiquetaLote}${loteIds.length > 1 ? 's' : ''} #${loteIds.join(', #')}`;
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -191,7 +204,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Distribución de Costos"
-                        description={`Distribuya un gasto adicional entre los productos de ${compraIds.length > 1 ? 'las compras' : 'la compra'} #${compraIds.join(', #')}.`}
+                        description={`Distribuya un gasto adicional entre los productos de ${tipo === 'movimientos' ? (loteIds.length > 1 ? 'los movimientos' : 'el movimiento') : loteIds.length > 1 ? 'las compras' : 'la compra'} #${loteIds.join(', #')}.`}
                     />
                     <DollarSign
                         size={70}
@@ -423,7 +436,7 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40">
                                                 <Package className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                                             </div>
-                                            <h3 className="text-sm font-semibold">Total de la Compra</h3>
+                                            <h3 className="text-sm font-semibold">Total del Lote</h3>
                                         </div>
                                         <p className="mt-1 text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(totalCompra)}</p>
                                     </div>
@@ -451,9 +464,13 @@ export default function CambiarCostoManual({ compraIds, productos, cuentas, tasa
                                         <Package className="h-5 w-5" />
                                     </div>
                                     <div>
-                                        <CardTitle className="text-white">Productos de la Compra</CardTitle>
+                                        <CardTitle className="text-white">
+                                            {tipo === 'movimientos'
+                                                ? `Productos del Movimiento${loteIds.length > 1 ? 's' : ''}`
+                                                : `Productos de la Compra${loteIds.length > 1 ? 's' : ''}`}
+                                        </CardTitle>
                                         <CardDescription className="text-violet-100">
-                                            El monto se reparte automáticamente según el peso de cada producto en el total de la compra.
+                                            El monto se reparte automáticamente según el peso de cada producto en el total del lote.
                                         </CardDescription>
                                     </div>
                                 </div>

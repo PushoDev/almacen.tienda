@@ -1,3 +1,13 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,13 +16,33 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowRightLeft, Calendar, DollarSign, Eye, History, Landmark, Package, Search, Store, Truck, X } from 'lucide-react';
+import {
+    ArrowRightLeft,
+    Ban,
+    Calendar,
+    CheckCircle2,
+    Clock,
+    DollarSign,
+    Eye,
+    History,
+    Landmark,
+    Package,
+    Scale,
+    Search,
+    Store,
+    Truck,
+    User,
+    X,
+} from 'lucide-react';
 import { useState } from 'react';
+import { Toaster } from '@/components/ui/sileo-toaster';
+import { sileo } from '@/lib/sileo';
 
 interface Moneda {
     id: number;
@@ -79,6 +109,33 @@ interface Filtros {
     fecha: string;
 }
 
+interface MovimientoPendiente {
+    id: number;
+    fecha_envio: string | null;
+    almacen_origen: string | null;
+    almacen_destino: string | null;
+    usuario: string | null;
+    cantidad_lineas: number;
+}
+
+interface MovimientosPaginados {
+    data: MovimientoPendiente[];
+    from: number | null;
+    to: number | null;
+    total: number;
+    links: Array<{
+        url: string | null;
+        label: string;
+        active: boolean;
+    }>;
+}
+
+interface FiltrosMovimientos {
+    buscar: string;
+    almacen_id: string;
+    fecha: string;
+}
+
 interface Props {
     compras: ComprasPaginadas;
     cuentas: Cuenta[];
@@ -86,6 +143,16 @@ interface Props {
     proveedores: Proveedor[];
     almacenes: Almacen[];
     filtros: Filtros;
+    operacionesComprasRealizadas: number;
+    // Solo llegan cuando el usuario autenticado es admin/moderador — un vendedor nunca recibe
+    // estas props y la pestaña "Movimientos" no se renderiza (prorratear movimientos es
+    // admin/moderador-only, regla del cliente).
+    movimientosPendientes?: MovimientosPaginados;
+    almacenesMovimientos?: Almacen[];
+    filtrosMovimientos?: FiltrosMovimientos;
+    movimientosTotal?: number;
+    movimientosPorRecibir?: number;
+    operacionesProrrateoMovimientos?: number;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -99,8 +166,27 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioActual, proveedores, almacenes, filtros }: Props) {
-    const cuentasCUP = cuentas.filter((cuenta) => cuenta.moneda.codigo_moneda === 'CUP' && cuenta.estado === 'activa');
+export default function DistribucionCostosIndex({
+    compras,
+    cuentas,
+    tasaCambioActual,
+    proveedores,
+    almacenes,
+    filtros,
+    operacionesComprasRealizadas,
+    movimientosPendientes,
+    almacenesMovimientos,
+    filtrosMovimientos,
+    movimientosTotal,
+    movimientosPorRecibir,
+    operacionesProrrateoMovimientos,
+}: Props) {
+    // Cuentas elegibles para financiar cualquiera de los dos tipos de prorrateo (CUP o USD,
+    // mezcladas está permitido) — mismo widget en ambas pestañas porque el motor de cálculo es
+    // el mismo sin importar si el lote es de compras o de movimientos.
+    const cuentasElegibles = cuentas.filter(
+        (cuenta) => (cuenta.moneda.codigo_moneda === 'CUP' || cuenta.moneda.codigo_moneda === 'USD') && cuenta.estado === 'activa',
+    );
 
     // Filtros — mismo patrón que Cuentas/Show.tsx: busca por ID/proveedor/cliente (Enter o blur),
     // Select de Proveedor y Almacén (aplica al elegir), todo vía query string al backend.
@@ -132,6 +218,95 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
     const distribuirSeleccionadas = () => {
         if (seleccionadas.length > 0) {
             router.get(route('distribucion-costos.formulario'), { compras: seleccionadas });
+        }
+    };
+
+    // --- Pestaña "Movimientos": mismo patrón de lote que compras, pero con dos acciones
+    // (distribuir/omitir) y filtros propios namespaced (mov_*) para no chocar con los de compras.
+    // Controla qué widget de resumen se muestra arriba (el primero cambia según la pestaña activa).
+    //
+    // Se inicializa leyendo la URL en vez de siempre 'compras': la paginación y los filtros de
+    // esta página navegan con router.get() (visita completa de Inertia, remonta el componente),
+    // así que sin esto, hacer clic en la página 2 de "Movimientos" traía los datos correctos pero
+    // la vista saltaba de vuelta a la pestaña "Compras" — el estado de React no sobrevive la
+    // visita, la URL sí.
+    const [tabActiva, setTabActiva] = useState<'compras' | 'movimientos'>(() => {
+        if (typeof window === 'undefined') return 'compras';
+        const params = new URLSearchParams(window.location.search);
+        const esMovimientos =
+            params.has('movimientos_page') || params.has('mov_buscar') || params.has('mov_almacen_id') || params.has('mov_fecha');
+        return esMovimientos ? 'movimientos' : 'compras';
+    });
+
+    const [busquedaMov, setBusquedaMov] = useState(filtrosMovimientos?.buscar ?? '');
+    const [seleccionadosMov, setSeleccionadosMov] = useState<number[]>([]);
+    const [omitirDialogOpen, setOmitirDialogOpen] = useState(false);
+
+    const aplicarFiltrosMovimientos = (cambios: Record<string, string | undefined>) => {
+        const actuales = Object.fromEntries(new URLSearchParams(window.location.search));
+        const nuevos: Record<string, string> = { ...actuales };
+
+        Object.entries(cambios).forEach(([clave, valor]) => {
+            if (valor) {
+                nuevos[clave] = valor;
+            } else {
+                delete nuevos[clave];
+            }
+        });
+        delete nuevos.movimientos_page;
+
+        router.get(window.location.pathname, nuevos, { preserveState: true, preserveScroll: true, replace: true });
+    };
+
+    const toggleSeleccionadoMov = (id: number) => {
+        setSeleccionadosMov((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+    };
+
+    const distribuirSeleccionadosMov = () => {
+        if (seleccionadosMov.length > 0) {
+            router.get(route('distribucion-costos.formulario'), { movimientos: seleccionadosMov });
+        }
+    };
+
+    const confirmarOmitirSeleccionados = () => {
+        const cantidad = seleccionadosMov.length;
+
+        router.post(
+            route('distribucion-costos.movimientos.omitir'),
+            { movimiento_ids: seleccionadosMov },
+            {
+                onSuccess: () => {
+                    sileo.success({
+                        title: 'Prorrateo omitido',
+                        description: `${cantidad} movimiento${cantidad === 1 ? '' : 's'} marcado${cantidad === 1 ? '' : 's'} como revisado.`,
+                    });
+                    setSeleccionadosMov([]);
+                    setOmitirDialogOpen(false);
+                },
+                onError: (errors) => {
+                    const firstError = Object.values(errors)[0];
+                    sileo.error({ title: 'No se pudo omitir el prorrateo', description: firstError });
+                    setOmitirDialogOpen(false);
+                },
+            },
+        );
+    };
+
+    const hayFiltrosActivosMov = Boolean(filtrosMovimientos?.buscar || filtrosMovimientos?.almacen_id || filtrosMovimientos?.fecha);
+
+    const limpiarFiltrosMovimientos = () => {
+        setBusquedaMov('');
+        aplicarFiltrosMovimientos({ mov_buscar: undefined, mov_almacen_id: undefined, mov_fecha: undefined });
+    };
+
+    const almacenMovSeleccionado = almacenesMovimientos?.find((a) => String(a.id) === filtrosMovimientos?.almacen_id) ?? null;
+
+    const formatFechaHora = (fecha: string | null) => {
+        if (!fecha) return '—';
+        try {
+            return new Date(fecha).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch {
+            return fecha;
         }
     };
 
@@ -190,47 +365,131 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                 </div>
                 <Separator className="col-span-4" />
 
-                {/* Resumen — mini-widgets con acento lateral (Vendor/Show.tsx, Comprar/Show.tsx), número grande al estilo de las tarjetas estadísticas del dashboard */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div className="bg-card rounded-lg border-l-4 border-slate-400 p-4 shadow-sm dark:border-slate-600">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                                <Package className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                {/* Resumen — mini-widgets con acento lateral (Vendor/Show.tsx, Comprar/Show.tsx), número grande al estilo de las tarjetas estadísticas del dashboard. Los 4 widgets cambian por completo según la pestaña activa. */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {tabActiva === 'movimientos' ? (
+                        <>
+                            <div className="bg-card rounded-lg border-l-4 border-slate-400 p-4 shadow-sm dark:border-slate-600">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                                        <Truck className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Total de Movimientos</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-slate-700 dark:text-slate-300">{movimientosTotal ?? 0}</p>
                             </div>
-                            <h3 className="text-sm font-semibold">Compras totales</h3>
-                        </div>
-                        <p className="mt-1 text-2xl font-bold text-slate-700 dark:text-slate-300">{compras.total}</p>
-                    </div>
 
-                    <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
-                                <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            <div className="bg-card rounded-lg border-l-4 border-cyan-400 p-4 shadow-sm dark:border-cyan-600">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-100 dark:bg-cyan-900/40">
+                                        <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Movimientos por Recibir</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-cyan-700 dark:text-cyan-300">{movimientosPorRecibir ?? 0}</p>
                             </div>
-                            <h3 className="text-sm font-semibold">Cuentas CUP disponibles</h3>
-                        </div>
-                        <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{cuentasCUP.length}</p>
-                    </div>
 
-                    <div className="bg-card rounded-lg border-l-4 border-amber-400 p-4 shadow-sm dark:border-amber-600">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
-                                <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <Link
+                                href={route('distribucion-costos.historial', { tipo: 'movimientos' })}
+                                className="bg-card block rounded-lg border-l-4 border-orange-400 p-4 shadow-sm transition-shadow hover:shadow-md dark:border-orange-600"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/40">
+                                        <Scale className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Operaciones de Prorrateo realizadas</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-orange-700 dark:text-orange-300">
+                                    {operacionesProrrateoMovimientos ?? 0}
+                                </p>
+                            </Link>
+
+                            <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                                        <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Cuentas Disponibles USD/CUP</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{cuentasElegibles.length}</p>
                             </div>
-                            <h3 className="text-sm font-semibold">Tasa CUP/USD</h3>
-                        </div>
-                        <p className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-300">{formatNumber(tasaCambioActual)}</p>
-                    </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="bg-card rounded-lg border-l-4 border-slate-400 p-4 shadow-sm dark:border-slate-600">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                                        <Package className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Total de Compras</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-slate-700 dark:text-slate-300">{compras.total}</p>
+                            </div>
+
+                            <Link
+                                href={route('distribucion-costos.historial', { tipo: 'compras' })}
+                                className="bg-card block rounded-lg border-l-4 border-indigo-400 p-4 shadow-sm transition-shadow hover:shadow-md dark:border-indigo-600"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/40">
+                                        <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Operaciones realizadas</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-indigo-700 dark:text-indigo-300">{operacionesComprasRealizadas}</p>
+                            </Link>
+
+                            <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                                        <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Cuentas Disponibles USD/CUP</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">{cuentasElegibles.length}</p>
+                            </div>
+
+                            <div className="bg-card rounded-lg border-l-4 border-amber-400 p-4 shadow-sm dark:border-amber-600">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
+                                        <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                    </div>
+                                    <h3 className="text-sm font-semibold">Tasa CUP/USD</h3>
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-300">{formatNumber(tasaCambioActual)}</p>
+                            </div>
+                        </>
+                    )}
                 </div>
 
-                {/* Barra de Herramientas — filtros en su propia Card, mismo patrón que Clientes/Index.tsx y Proveedores/index.tsx */}
-                <Card>
-                    <CardContent className="p-4">
-                        <div className="flex flex-wrap items-end gap-3">
-                            <div className="relative min-w-[220px] flex-1">
-                                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                <Input
-                                    value={busqueda}
+                <Tabs value={tabActiva} onValueChange={(v) => setTabActiva(v as 'compras' | 'movimientos')} className="w-full">
+                    {movimientosPendientes && (
+                        <TabsList className="grid w-full grid-cols-2 sm:w-auto">
+                            <TabsTrigger value="compras" className="flex items-center gap-2">
+                                <Package className="h-4 w-4" />
+                                Compras
+                            </TabsTrigger>
+                            <TabsTrigger value="movimientos" className="flex items-center gap-2">
+                                <Scale className="h-4 w-4" />
+                                Movimientos
+                                {movimientosPendientes.total > 0 && (
+                                    <Badge variant="secondary" className="ml-1">
+                                        {movimientosPendientes.total}
+                                    </Badge>
+                                )}
+                            </TabsTrigger>
+                        </TabsList>
+                    )}
+
+                    <TabsContent value="compras" className="mt-4 space-y-4">
+                        {/* Barra de Herramientas — filtros en su propia Card, mismo patrón que Clientes/Index.tsx y Proveedores/index.tsx */}
+                        <Card>
+                            <CardContent className="p-4">
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div className="relative min-w-[220px] flex-1">
+                                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                        <Input
+                                            value={busqueda}
                                     onChange={(e) => setBusqueda(e.target.value)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') aplicarFiltros({ buscar: busqueda });
@@ -502,6 +761,258 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                         )}
                     </CardContent>
                 </Card>
+                    </TabsContent>
+
+                    {movimientosPendientes && (
+                        <TabsContent value="movimientos" className="mt-4 space-y-4">
+                            {/* Barra de Herramientas — mismo patrón que la pestaña de compras, filtros propios (mov_*) */}
+                            <Card>
+                                <CardContent className="p-4">
+                                    <div className="flex flex-wrap items-end gap-3">
+                                        <div className="relative min-w-[220px] flex-1">
+                                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                            <Input
+                                                value={busquedaMov}
+                                                onChange={(e) => setBusquedaMov(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') aplicarFiltrosMovimientos({ mov_buscar: busquedaMov });
+                                                }}
+                                                onBlur={() => aplicarFiltrosMovimientos({ mov_buscar: busquedaMov })}
+                                                placeholder="Buscar por ID o solicitante..."
+                                                className="pl-10"
+                                            />
+                                        </div>
+                                        <div className="w-[180px]">
+                                            <Combobox
+                                                items={almacenesMovimientos ?? []}
+                                                itemToStringLabel={(item) => item.nombre_almacen}
+                                                itemToStringValue={(item) => item.nombre_almacen}
+                                                value={almacenMovSeleccionado}
+                                                onValueChange={(a) => aplicarFiltrosMovimientos({ mov_almacen_id: a ? String(a.id) : undefined })}
+                                            >
+                                                <ComboboxInput placeholder="Almacén" showClear={!!filtrosMovimientos?.almacen_id} />
+                                                <ComboboxContent>
+                                                    <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                                    <ComboboxList>
+                                                        {(a) => (
+                                                            <ComboboxItem key={a.id} value={a}>
+                                                                {a.nombre_almacen}
+                                                            </ComboboxItem>
+                                                        )}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-muted-foreground text-[10px]">Fecha de envío</label>
+                                            <Input
+                                                type="date"
+                                                value={filtrosMovimientos?.fecha ?? ''}
+                                                onChange={(e) => aplicarFiltrosMovimientos({ mov_fecha: e.target.value })}
+                                                className="w-[150px]"
+                                            />
+                                        </div>
+                                        {hayFiltrosActivosMov && (
+                                            <Button variant="ghost" size="sm" onClick={limpiarFiltrosMovimientos}>
+                                                <X size={14} className="mr-1" />
+                                                Limpiar filtro
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                                <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                <Scale className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-white">Movimientos Pendientes de Decisión</CardTitle>
+                                                <CardDescription className="text-amber-100">
+                                                    El prorrateo es opcional y no bloquea la recepción — decida cuando le convenga: aplicar el costo
+                                                    de transporte o dejarlo sin prorratear.
+                                                </CardDescription>
+                                            </div>
+                                        </div>
+                                        {seleccionadosMov.length > 0 && (
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => setOmitirDialogOpen(true)}
+                                                    className="cursor-pointer border-white/30 bg-white/10 text-white hover:bg-white/20"
+                                                >
+                                                    <Ban className="h-4 w-4" />
+                                                    Omitir {seleccionadosMov.length} seleccionado{seleccionadosMov.length === 1 ? '' : 's'}
+                                                </Button>
+                                                <Button
+                                                    onClick={distribuirSeleccionadosMov}
+                                                    className="cursor-pointer bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
+                                                >
+                                                    <ArrowRightLeft className="h-4 w-4" />
+                                                    Distribuir {seleccionadosMov.length} seleccionado{seleccionadosMov.length === 1 ? '' : 's'}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                                <TableHead className="w-10"></TableHead>
+                                                <TableHead className="w-20">ID</TableHead>
+                                                <TableHead className="w-32">
+                                                    <div className="flex items-center gap-1">
+                                                        <Calendar className="h-4 w-4" />
+                                                        Enviado
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead>
+                                                    <div className="flex items-center gap-1">
+                                                        <Truck className="h-4 w-4" />
+                                                        Origen → Destino
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead>
+                                                    <div className="flex items-center gap-1">
+                                                        <User className="h-4 w-4" />
+                                                        Solicitado por
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead>
+                                                    <div className="flex items-center gap-1">
+                                                        <Package className="h-4 w-4" />
+                                                        Productos
+                                                    </div>
+                                                </TableHead>
+                                                <TableHead className="w-24 text-right">Acción</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {movimientosPendientes.data.length > 0 ? (
+                                                movimientosPendientes.data.map((movimiento) => (
+                                                    <TableRow key={movimiento.id} className="group hover:bg-muted/50">
+                                                        <TableCell>
+                                                            <Checkbox
+                                                                checked={seleccionadosMov.includes(movimiento.id)}
+                                                                onCheckedChange={() => toggleSeleccionadoMov(movimiento.id)}
+                                                                className="size-5 border-2 border-slate-400 dark:border-slate-300"
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell className="font-medium">
+                                                            <Badge variant="secondary">#{movimiento.id}</Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm">{formatFechaHora(movimiento.fecha_envio)}</TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-1 text-sm">
+                                                                <Badge variant="outline" className="border-cyan-300 text-cyan-700 dark:text-cyan-300">
+                                                                    {movimiento.almacen_origen ?? '—'}
+                                                                </Badge>
+                                                                <ArrowRightLeft className="text-muted-foreground h-3 w-3" />
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="border-violet-300 text-violet-700 dark:text-violet-300"
+                                                                >
+                                                                    {movimiento.almacen_destino ?? '—'}
+                                                                </Badge>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm">{movimiento.usuario ?? '—'}</TableCell>
+                                                        <TableCell>
+                                                            <Badge className="gap-1 border-teal-300 bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300">
+                                                                <Package className="h-3 w-3" />
+                                                                {movimiento.cantidad_lineas} {movimiento.cantidad_lineas === 1 ? 'línea' : 'líneas'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Link href={route('distribucion-costos.formulario', { movimientos: [movimiento.id] })}>
+                                                                        <Button
+                                                                            size="icon"
+                                                                            className="cursor-pointer bg-amber-600 text-white shadow-sm hover:bg-amber-700"
+                                                                        >
+                                                                            <ArrowRightLeft className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </Link>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Distribuir</TooltipContent>
+                                                            </Tooltip>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={7} className="py-8 text-center">
+                                                        <div className="text-muted-foreground flex flex-col items-center gap-2">
+                                                            <Scale className="h-12 w-12 opacity-50" />
+                                                            <p>No hay movimientos pendientes de decisión</p>
+                                                            <p className="text-sm">
+                                                                Aparecerán aquí los movimientos en tránsito hacia un almacén ajeno al vendedor que
+                                                                los solicitó.
+                                                            </p>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+
+                                    {movimientosPendientes.links && movimientosPendientes.data.length > 0 && (
+                                        <div className="mt-4 flex items-center justify-between">
+                                            <div className="text-muted-foreground text-sm">
+                                                Mostrando {movimientosPendientes.from} a {movimientosPendientes.to} de {movimientosPendientes.total}{' '}
+                                                resultados
+                                            </div>
+                                            <div className="flex space-x-2">
+                                                {movimientosPendientes.links.map((link, index) => {
+                                                    const displayLabel = link.label
+                                                        .replace('&laquo;', '«')
+                                                        .replace('&raquo;', '»')
+                                                        .replace('pagination.previous', '«')
+                                                        .replace('pagination.next', '»');
+
+                                                    return (
+                                                        <Button
+                                                            key={index}
+                                                            variant={link.active ? 'default' : 'outline'}
+                                                            size="sm"
+                                                            disabled={!link.url}
+                                                            onClick={() => link.url && router.get(link.url)}
+                                                        >
+                                                            {displayLabel}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                    )}
+                </Tabs>
+
+                <AlertDialog open={omitirDialogOpen} onOpenChange={setOmitirDialogOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Omitir prorrateo</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Se marcará{seleccionadosMov.length === 1 ? ' el movimiento seleccionado' : ` los ${seleccionadosMov.length} movimientos seleccionados`} como
+                                revisado sin aplicar ningún costo adicional. Esto no afecta la recepción del movimiento — solo lo saca de esta lista.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={confirmarOmitirSeleccionados}>Omitir</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );

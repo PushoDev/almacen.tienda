@@ -20,7 +20,10 @@ interface Distribucion {
     id: number;
     fecha: string;
     usuario: string | null;
+    // Mutuamente excluyentes — una distribución cubre un lote de compras o de movimientos,
+    // nunca ambos, así que solo una de las dos listas trae datos.
     compras: number[];
+    movimientos: number[];
     cuentas: CuentaResumen[];
     monto_total_usd: number | string;
     productos_afectados: number;
@@ -41,6 +44,8 @@ interface DistribucionesPaginadas {
 
 interface Filtros {
     compra_id: string;
+    movimiento_id: string;
+    tipo: string;
     fecha: string;
 }
 
@@ -104,10 +109,10 @@ export default function DistribucionCostosHistorial({ distribuciones, filtros }:
         router.get(window.location.pathname, nuevos, { preserveState: true, preserveScroll: true, replace: true });
     };
 
-    const hayFiltrosActivos = Boolean(filtros.compra_id || filtros.fecha);
+    const hayFiltrosActivos = Boolean(filtros.compra_id || filtros.movimiento_id || filtros.tipo || filtros.fecha);
 
     const limpiarFiltros = () => {
-        aplicarFiltros({ compra_id: undefined, fecha: undefined });
+        aplicarFiltros({ compra_id: undefined, movimiento_id: undefined, tipo: undefined, fecha: undefined });
     };
 
     return (
@@ -127,11 +132,22 @@ export default function DistribucionCostosHistorial({ distribuciones, filtros }:
                 </div>
                 <Separator className="col-span-4" />
 
-                {filtros.compra_id && (
+                {(filtros.compra_id || filtros.movimiento_id || filtros.tipo) && (
                     <Card>
                         <CardContent className="flex items-center justify-between p-4">
                             <p className="text-sm">
-                                Mostrando solo distribuciones que incluyen la compra <Badge variant="secondary">#{filtros.compra_id}</Badge>
+                                Mostrando solo distribuciones que incluyen{' '}
+                                {filtros.compra_id ? (
+                                    <>
+                                        la compra <Badge variant="secondary">#{filtros.compra_id}</Badge>
+                                    </>
+                                ) : filtros.movimiento_id ? (
+                                    <>
+                                        el movimiento <Badge variant="secondary">#{filtros.movimiento_id}</Badge>
+                                    </>
+                                ) : (
+                                    <>un lote de {filtros.tipo === 'movimientos' ? 'movimientos' : 'compras'}</>
+                                )}
                             </p>
                             <Button variant="ghost" size="sm" onClick={limpiarFiltros}>
                                 <X size={14} className="mr-1" />
@@ -141,7 +157,7 @@ export default function DistribucionCostosHistorial({ distribuciones, filtros }:
                     </Card>
                 )}
 
-                {!filtros.compra_id && (
+                {!filtros.compra_id && !filtros.movimiento_id && !filtros.tipo && (
                     <Card>
                         <CardContent className="flex flex-wrap items-end gap-3 p-4">
                             <div className="space-y-1">
@@ -189,7 +205,7 @@ export default function DistribucionCostosHistorial({ distribuciones, filtros }:
                                             Fecha
                                         </div>
                                     </TableHead>
-                                    <TableHead>Compras (Lote)</TableHead>
+                                    <TableHead>Lote</TableHead>
                                     <TableHead>
                                         <div className="flex items-center gap-1">
                                             <Wallet className="h-4 w-4" />
@@ -229,11 +245,20 @@ export default function DistribucionCostosHistorial({ distribuciones, filtros }:
                                                 <div className="flex flex-wrap gap-1">
                                                     {distribucion.compras.map((compraId) => (
                                                         <Badge
-                                                            key={compraId}
+                                                            key={`compra-${compraId}`}
                                                             variant="outline"
                                                             className="border-violet-300 text-violet-700 dark:text-violet-300"
                                                         >
-                                                            #{compraId}
+                                                            Compra #{compraId}
+                                                        </Badge>
+                                                    ))}
+                                                    {distribucion.movimientos.map((movimientoId) => (
+                                                        <Badge
+                                                            key={`movimiento-${movimientoId}`}
+                                                            variant="outline"
+                                                            className="border-amber-300 text-amber-700 dark:text-amber-300"
+                                                        >
+                                                            Movimiento #{movimientoId}
                                                         </Badge>
                                                     ))}
                                                 </div>

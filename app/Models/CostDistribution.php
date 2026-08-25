@@ -56,4 +56,10 @@ class CostDistribution extends Model
     {
         return $this->hasMany(CostDistributionCompra::class);
     }
+
+    // Relación con los movimientos cubiertos por esta distribución (una o varios, "lote")
+    public function movimientos()
+    {
+        return $this->hasMany(CostDistributionMovimiento::class);
+    }
 }
