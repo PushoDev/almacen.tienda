@@ -11,7 +11,7 @@ class CuentaFactory extends Factory
     {
         return [
             'nombre_cuenta' => fake()->unique()->word() . ' ' . strtoupper(fake()->lexify('???')),
-            'tipo' => fake()->randomElement(['caja', 'banco', 'tarjeta', 'efectivo', 'otro']),
+            'tipo' => fake()->randomElement(['caja', 'banco', 'tarjeta', 'efectivo']),
             'saldo_cuenta' => fake()->randomFloat(2, 0, 100000),
             'tipo_moneda' => fake()->randomElement(['USD', 'EUR', 'MLC', 'CUP']),
             'moneda_id' => Moneda::factory(),

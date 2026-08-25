@@ -173,7 +173,7 @@ class CuentaController extends Controller
     {
         $validated = $request->validate([
             'nombre_cuenta' => ['required', 'string', 'max:255', 'unique:cuentas,nombre_cuenta'],
-            'tipo' => ['required', 'in:tarjeta,efectivo,otro'],
+            'tipo' => ['required', 'in:tarjeta,efectivo'],
             'saldo_cuenta' => ['nullable', 'numeric'],
             'moneda_id' => ['required', 'exists:monedas,id'],
             'tipo_titular' => ['nullable', 'in:externa,personal'],
@@ -551,7 +551,7 @@ class CuentaController extends Controller
                 'max:255',
                 'unique:cuentas,nombre_cuenta,' . $cuenta->id,
             ],
-            'tipo' => ['required', 'in:tarjeta,efectivo,otro'],
+            'tipo' => ['required', 'in:tarjeta,efectivo'],
             'saldo_cuenta' => ['nullable', 'numeric'],
             'moneda_id' => ['required', 'exists:monedas,id'],
             'tipo_titular' => ['nullable', 'in:externa,personal'],

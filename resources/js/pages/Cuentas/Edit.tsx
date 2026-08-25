@@ -66,7 +66,7 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
 
     const { data, setData, put, errors, processing } = useForm({
         nombre_cuenta: cuenta.nombre_cuenta,
-        tipo: cuenta.tipo as 'tarjeta' | 'efectivo' | 'otro',
+        tipo: cuenta.tipo as 'tarjeta' | 'efectivo',
         saldo_cuenta: cuenta.saldo_cuenta ?? 0,
         moneda_id: cuenta.moneda_id.toString(),
         tipo_cuenta: cuenta.tipo_cuenta as 'permanentes' | 'temporales',
@@ -155,7 +155,7 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                         <Label htmlFor="tipo">Tipo de Activo *</Label>
                                         <Select
                                             value={data.tipo}
-                                            onValueChange={(value: 'tarjeta' | 'efectivo' | 'otro') => setData('tipo', value)}
+                                            onValueChange={(value: 'tarjeta' | 'efectivo') => setData('tipo', value)}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
@@ -163,7 +163,6 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                             <SelectContent>
                                                 <SelectItem value="tarjeta">Tarjeta</SelectItem>
                                                 <SelectItem value="efectivo">Efectivo</SelectItem>
-                                                <SelectItem value="otro">Otro</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <InputError message={errors.tipo} />

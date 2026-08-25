@@ -42,7 +42,7 @@ interface CreateCuentasPageProps {
 export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
-        tipo: 'tarjeta' as 'tarjeta' | 'efectivo' | 'otro',
+        tipo: 'tarjeta' as 'tarjeta' | 'efectivo',
         saldo_cuenta: 0.0,
         moneda_id: '',
         tipo_cuenta: 'permanentes' as 'permanentes' | 'temporales',
@@ -105,7 +105,7 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                         <Label htmlFor="tipo">Tipo de Activo *</Label>
                                         <Select
                                             value={data.tipo}
-                                            onValueChange={(value: 'tarjeta' | 'efectivo' | 'otro') => setData('tipo', value)}
+                                            onValueChange={(value: 'tarjeta' | 'efectivo') => setData('tipo', value)}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
@@ -113,7 +113,6 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                             <SelectContent>
                                                 <SelectItem value="tarjeta">Tarjeta</SelectItem>
                                                 <SelectItem value="efectivo">Efectivo</SelectItem>
-                                                <SelectItem value="otro">Otro</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <InputError message={errors.tipo} />
