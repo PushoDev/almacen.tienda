@@ -432,7 +432,10 @@ export interface LogisticaProps {
         conteo_tipo: Record<string, number>;
         por_estado: Record<string, { saldo: number; cantidad: number }>;
         por_moneda_perm: Record<string, { original: number; equivalente: number; cantidad: number; simbolo: string }>;
-        por_tipo_moneda: Record<string, Record<string, { original: number; equivalente: number; cantidad: number; simbolo: string }>>;
+        // Array (no Record por código) — agrupado por moneda_id, no por codigo_moneda: este
+        // sistema tiene 2 monedas distintas codificadas "CUP" (efectivo/tarjeta, tasas
+        // distintas), así que el código solo no alcanza para distinguirlas.
+        por_tipo_moneda: Record<string, Array<{ original: number; equivalente: number; cantidad: number; codigo: string; nombre: string; simbolo: string }>>;
     } | null;
 
     // Resumen de Clientes
@@ -496,6 +499,10 @@ export interface Movimiento {
     fecha_aprobacion?: string;
     fecha_envio?: string;
     fecha_recepcion?: string;
+    requiere_prorrateo?: boolean;
+    prorrateo_decision?: 'aplicado' | 'omitido' | null;
+    prorrateo_decidido_por?: number | null;
+    prorrateo_decidido_en?: string | null;
     created_at: string;
     updated_at: string;
     detalles?: MovimientoDetalle[];

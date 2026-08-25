@@ -234,7 +234,11 @@ export default function DistribucionCostosIndex({
         if (typeof window === 'undefined') return 'compras';
         const params = new URLSearchParams(window.location.search);
         const esMovimientos =
-            params.has('movimientos_page') || params.has('mov_buscar') || params.has('mov_almacen_id') || params.has('mov_fecha');
+            params.get('tab') === 'movimientos' ||
+            params.has('movimientos_page') ||
+            params.has('mov_buscar') ||
+            params.has('mov_almacen_id') ||
+            params.has('mov_fecha');
         return esMovimientos ? 'movimientos' : 'compras';
     });
 

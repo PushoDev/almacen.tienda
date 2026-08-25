@@ -4,13 +4,14 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { BreadcrumbItem, Movimiento } from '@/types';
+import { Auth, BreadcrumbItem, Movimiento } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, Calendar, Caravan, CheckCircle2, Clock, MapPin, Package, Send, Truck, User, XCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, Caravan, CheckCircle2, Clock, MapPin, Package, Scale, Send, Truck, User, XCircle } from 'lucide-react';
 
 interface PageProps {
     movimiento: Movimiento;
     estados: Record<string, string>;
+    auth: Auth;
     [key: string]: unknown;
 }
 
@@ -26,7 +27,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function MovimientoShow() {
-    const { movimiento, estados } = usePage<PageProps>().props;
+    const { movimiento, estados, auth } = usePage<PageProps>().props;
+    const puedeVerProrrateo = auth.user.role === 'admin' || auth.user.role === 'moderador';
+    const prorrateoSinDecidir = movimiento.requiere_prorrateo && !movimiento.prorrateo_decision;
 
     const getEstadoBadge = (estado: string) => {
         const estadoConfig: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
@@ -175,6 +178,29 @@ export default function MovimientoShow() {
                         {getEstadoBadge(movimiento.estado)}
                     </div>
                 </div>
+
+                {/* Aviso de prorrateo pendiente — solo admin/moderador, solo si aún no hay decisión.
+                    No bloquea nada (recibir() no depende de esto) — solo evita que este movimiento
+                    quede fuera de la vista si nadie fue a buscarlo en Distribución de Costos. */}
+                {puedeVerProrrateo && prorrateoSinDecidir && (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-800 dark:text-amber-300">
+                        <div className="flex items-center gap-3">
+                            <Scale className="h-5 w-5 shrink-0" />
+                            <div>
+                                <p className="text-sm font-semibold">Puede prorratear costo de transporte</p>
+                                <p className="text-xs opacity-90">
+                                    El destino no le pertenece al vendedor que lo solicitó. Es opcional y no bloquea la recepción.
+                                </p>
+                            </div>
+                        </div>
+                        <Link
+                            href="/distribucion-costos?tab=movimientos"
+                            className="shrink-0 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                        >
+                            Ver en Distribución de Costos
+                        </Link>
+                    </div>
+                )}
 
                 {/* Widgets Grid - 4 columnas */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
