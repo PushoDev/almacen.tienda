@@ -37,7 +37,6 @@ import {
     Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Toaster } from 'sonner';
 
 const CollapsibleRoot = Collapsible.Root;
 const CollapsibleTrigger = Collapsible.CollapsibleTrigger;
@@ -681,7 +680,6 @@ export default function Show({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Cierre #${cierre.id}`} />
-            <Toaster position="top-center" />
 
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">

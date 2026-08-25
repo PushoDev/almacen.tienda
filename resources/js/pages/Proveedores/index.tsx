@@ -47,7 +47,8 @@ import {
     Users,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -77,10 +78,10 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
     const deleteProveedor = (id: number) => {
         router.delete(route('proveedores.destroy', { proveedor: id }), {
             onSuccess: () => {
-                toast.success('Proveedor eliminado correctamente');
+                sileo.success({ title: 'Proveedor eliminado', description: 'El proveedor se eliminó correctamente' });
             },
             onError: () => {
-                toast.error('Error en el proceso, inténtelo nuevamente');
+                sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' });
             },
         });
     };
@@ -482,7 +483,7 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
                                                             onClick={(e) => {
                                                                 if (!isAdmin) {
                                                                     e.preventDefault();
-                                                                    toast.error('ud no tiene acceso para esta acción');
+                                                                    sileo.error({ title: 'Sin permiso', description: 'No tienes acceso para esta acción' });
                                                                 }
                                                             }}
                                                         >
@@ -558,6 +559,7 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
                     </div>
                 )}
             </div>
+            <Toaster position="top-center" />
             <ScrollProgress />
         </AppLayout>
     );

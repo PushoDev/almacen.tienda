@@ -162,6 +162,19 @@ class DashboardStatsService
             'original' => $this->getResumenProductos()['total_importe_global'],
             'simbolo' => '$',
         ];
+        // Mismo mecanismo que Inventario (fila sintética, sin moneda propia en el sistema) —
+        // pedido explícito del cliente 2026-08-25, mismo balance_neto que ya suma Tabla 1
+        // (getResumenFinancieroCompacto()) dentro de la moneda principal.
+        $porMoneda['CLIENTES'] = [
+            'original' => $this->getResumenClientes()['balance_neto'],
+            'simbolo' => '$',
+        ];
+        // Mismo mecanismo que Clientes — pedido explícito del cliente 2026-08-25, tras notar que
+        // Totales daba un valor mayor que Capital Financiero por no incluir esta deuda (negativa).
+        $porMoneda['PROVEEDORES'] = [
+            'original' => $this->getResumenProveedores()['balance_neto'],
+            'simbolo' => '$',
+        ];
         $monedasInfo = DB::table('monedas')->get()->groupBy('codigo_moneda');
 
         $resultado = [];
@@ -194,7 +207,23 @@ class DashboardStatsService
             $montoActual = $valorEnVivo;
             $diferencia = $montoActual - $montoAnterior;
             $porcentajeCambio = $montoAnterior != 0.0 ? round(($diferencia / $montoAnterior) * 100, 2) : 0.0;
-            $nombreMoneda = $monedaInfo->nombre_moneda ?? ($codigo === 'INVENTARIO' ? 'Inventario' : $codigo);
+            $nombreMoneda = $monedaInfo->nombre_moneda
+                ?? ($codigo === 'INVENTARIO' ? 'Inventario' : ($codigo === 'CLIENTES' ? 'Clientes' : ($codigo === 'PROVEEDORES' ? 'Proveedores' : $codigo)));
+
+            // Tasa efectiva, no la tasa cruda de "la primera moneda que coincida con el código".
+            // getResumenPorMonedaPerm() agrupa por codigo_moneda — este sistema tiene 2 monedas
+            // distintas codificadas "CUP" (efectivo/tarjeta, cada una con su propia tasa real),
+            // así que `original` ya es una suma mezclada de cuentas con tasas distintas. Dividir
+            // ese monto mezclado por la tasa de una sola de esas monedas da un total incorrecto
+            // en la fila "Totales" del frontend (que hace monto_actual / tasa_cambio). Se deriva
+            // la tasa efectiva de original/equivalente — ambos ya calculados correctamente
+            // por-cuenta antes de mezclarse — que reproduce exacto el equivalente real sin
+            // importar cuántas monedas reales se mezclaron bajo ese código. Para monedas sin
+            // duplicado (USD, EUR) esto da el mismo resultado que la tasa real de siempre.
+            $equivalente = $info['equivalente'] ?? null;
+            $tasaEfectiva = ($equivalente !== null && (float) $equivalente != 0.0)
+                ? $valorEnVivo / (float) $equivalente
+                : (float) ($monedaInfo->tasa_cambio ?? 1);
 
             HistorialComparacionMensual::updateOrCreate(
                 ['user_id' => $userId, 'mes_comparado' => $mesActual, 'moneda_codigo' => $codigo],
@@ -206,7 +235,7 @@ class DashboardStatsService
                     'monto_actual' => $montoActual,
                     'diferencia' => $diferencia,
                     'porcentaje_cambio' => $porcentajeCambio,
-                    'tasa_cambio_usada' => $monedaInfo->tasa_cambio ?? 1,
+                    'tasa_cambio_usada' => $tasaEfectiva,
                 ]
             );
 
@@ -219,7 +248,11 @@ class DashboardStatsService
                 'diferencia' => round($diferencia, 2),
                 'porcentaje_cambio' => $porcentajeCambio,
                 'es_positivo' => $diferencia >= 0,
-                'tasa_cambio' => (float) ($monedaInfo->tasa_cambio ?? 1),
+                'tasa_cambio' => $tasaEfectiva,
+                // Solo viene poblado (>1 elemento) cuando este código combina 2+ monedas reales
+                // distintas (ej. CUP efectivo/tarjeta) — el frontend lo usa para ofrecer un
+                // desglose expandible en vez de mostrar solo el número ya combinado.
+                'detalle' => $info['detalle'] ?? [],
             ];
         }
 
@@ -667,15 +700,18 @@ class DashboardStatsService
 
     private function getResumenCuentas(): array
     {
+        // 'temporales' ya no existe — el ENUM de cuentas.tipo_cuenta se unificó a solo
+        // 'permanentes' el 2026-07-28 (migración unificar_tipo_cuenta_temporales_a_permanentes).
+        // Verificado en datos reales: 110/110 cuentas son 'permanentes'.
         $cuentas = DB::table('cuentas')
             ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
-            ->whereIn('cuentas.tipo_cuenta', ['permanentes', 'temporales'])
+            ->where('cuentas.tipo_cuenta', 'permanentes')
             ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda')
             ->get();
 
         $todas = DB::table('cuentas')
             ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
-            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda')
+            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda', 'monedas.nombre_moneda')
             ->get();
 
         $totalSaldo = 0;
@@ -709,22 +745,30 @@ class DashboardStatsService
             }
 
             $tipoCuenta = $c->tipo ?? 'otro';
+            // Se agrupa por moneda_id, no por codigo_moneda — este sistema tiene 2 monedas
+            // distintas codificadas "CUP" (efectivo vs. tarjeta/transferencia), cada una con su
+            // propia tasa de cambio real (ver reference_moneda_cup_duplicada). Agrupar por
+            // código las mezclaría en una sola fila aunque tengan tasas distintas.
+            $claveMoneda = $c->moneda_id ?? 'sin-moneda';
             $codigoMoneda = $c->codigo_moneda ?? 'N/A';
+            $nombreMoneda = $c->nombre_moneda ?? $codigoMoneda;
             $simboloMoneda = $c->simbolo_moneda ?? '$';
             if (!isset($porTipoMoneda[$tipoCuenta])) {
                 $porTipoMoneda[$tipoCuenta] = [];
             }
-            if (!isset($porTipoMoneda[$tipoCuenta][$codigoMoneda])) {
-                $porTipoMoneda[$tipoCuenta][$codigoMoneda] = [
+            if (!isset($porTipoMoneda[$tipoCuenta][$claveMoneda])) {
+                $porTipoMoneda[$tipoCuenta][$claveMoneda] = [
                     'original' => 0,
                     'equivalente' => 0,
                     'cantidad' => 0,
+                    'codigo' => $codigoMoneda,
+                    'nombre' => $nombreMoneda,
                     'simbolo' => $simboloMoneda,
                 ];
             }
-            $porTipoMoneda[$tipoCuenta][$codigoMoneda]['original'] += (float) ($c->saldo_cuenta ?? 0);
-            $porTipoMoneda[$tipoCuenta][$codigoMoneda]['equivalente'] += $equiv;
-            $porTipoMoneda[$tipoCuenta][$codigoMoneda]['cantidad']++;
+            $porTipoMoneda[$tipoCuenta][$claveMoneda]['original'] += (float) ($c->saldo_cuenta ?? 0);
+            $porTipoMoneda[$tipoCuenta][$claveMoneda]['equivalente'] += $equiv;
+            $porTipoMoneda[$tipoCuenta][$claveMoneda]['cantidad']++;
         }
 
         return [
@@ -742,32 +786,45 @@ class DashboardStatsService
                 'cantidad' => $conteoEstado[$k] ?? 0,
             ])->toArray(),
             'por_moneda_perm' => $this->getResumenPorMonedaPerm(),
-            'por_tipo_moneda' => collect($porTipoMoneda)->map(fn ($monedas) => 
-                collect($monedas)->map(fn ($v) => [
+            'por_tipo_moneda' => collect($porTipoMoneda)->map(fn ($monedas) =>
+                collect($monedas)->values()->map(fn ($v) => [
                     'original' => round($v['original'], 2),
                     'equivalente' => round($v['equivalente'], 2),
                     'cantidad' => $v['cantidad'],
+                    'codigo' => $v['codigo'],
+                    'nombre' => $v['nombre'],
                     'simbolo' => $v['simbolo'],
                 ])->toArray()
             )->toArray(),
         ];
     }
 
+    /**
+     * Agrupa cuentas permanentes por codigo_moneda — pero este sistema puede tener (y hoy tiene,
+     * CUP efectivo/tarjeta) más de una fila en `monedas` compartiendo el mismo código, cada una
+     * con su propia tasa real. Para no esconder eso, cada entrada trae además `detalle`: el
+     * desglose por moneda_id real que compone ese total combinado. Cuando `detalle` tiene más de
+     * un elemento, quien consuma esto (Tabla 2 del dashboard, hoy) debería mostrarlo expandible
+     * en vez de solo el número combinado — cualquier código futuro con 2+ monedas reales cae en
+     * el mismo caso automáticamente, no hace falta tocar este método de nuevo.
+     */
     private function getResumenPorMonedaPerm(): array
     {
         $cuentas = DB::table('cuentas')
             ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
             ->where('cuentas.tipo_cuenta', 'permanentes')
-            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda')
+            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda', 'monedas.nombre_moneda')
             ->get();
 
         $result = [];
+        $detallePorMonedaId = [];
         foreach ($cuentas as $c) {
             $codigo = $c->codigo_moneda ?? 'N/A';
             $simbolo = $c->simbolo_moneda ?? '$';
             $tasa = (float) ($c->tasa_cambio ?? 1);
             $original = (float) ($c->saldo_cuenta ?? 0);
             $equivalente = $tasa > 0 ? $original / $tasa : 0;
+            $monedaId = $c->moneda_id ?? 'sin-moneda';
 
             if (!isset($result[$codigo])) {
                 $result[$codigo] = [
@@ -776,17 +833,40 @@ class DashboardStatsService
                     'cantidad' => 0,
                     'simbolo' => $simbolo,
                 ];
+                $detallePorMonedaId[$codigo] = [];
             }
             $result[$codigo]['original'] += $original;
             $result[$codigo]['equivalente'] += $equivalente;
             $result[$codigo]['cantidad']++;
+
+            if (!isset($detallePorMonedaId[$codigo][$monedaId])) {
+                $detallePorMonedaId[$codigo][$monedaId] = [
+                    'nombre' => $c->nombre_moneda ?? $codigo,
+                    'tasa_cambio' => $tasa,
+                    'original' => 0,
+                    'equivalente' => 0,
+                    'cantidad' => 0,
+                    'simbolo' => $simbolo,
+                ];
+            }
+            $detallePorMonedaId[$codigo][$monedaId]['original'] += $original;
+            $detallePorMonedaId[$codigo][$monedaId]['equivalente'] += $equivalente;
+            $detallePorMonedaId[$codigo][$monedaId]['cantidad']++;
         }
 
-        return collect($result)->map(fn ($v) => [
+        return collect($result)->map(fn ($v, $codigo) => [
             'original' => round($v['original'], 2),
             'equivalente' => round($v['equivalente'], 2),
             'cantidad' => $v['cantidad'],
             'simbolo' => $v['simbolo'],
+            'detalle' => collect($detallePorMonedaId[$codigo])->values()->map(fn ($d) => [
+                'nombre' => $d['nombre'],
+                'tasa_cambio' => round($d['tasa_cambio'], 6),
+                'original' => round($d['original'], 2),
+                'equivalente' => round($d['equivalente'], 2),
+                'cantidad' => $d['cantidad'],
+                'simbolo' => $d['simbolo'],
+            ])->toArray(),
         ])->toArray();
     }
 

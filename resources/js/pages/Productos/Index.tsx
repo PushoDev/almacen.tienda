@@ -38,7 +38,8 @@ import {
     Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -81,14 +82,14 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
         const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
 
         if (!validExtensions.includes(fileExtension)) {
-            toast.error('❌ Formato inválido. Solo se aceptan archivos .xlsx o .xls');
+            sileo.error({ title: 'Formato inválido', description: 'Solo se aceptan archivos .xlsx o .xls' });
             return;
         }
 
         // Validar tamaño (máximo 5MB)
         const maxSize = 5 * 1024 * 1024;
         if (file.size > maxSize) {
-            toast.error('❌ El archivo es demasiado grande. Máximo 5MB');
+            sileo.error({ title: 'Archivo demasiado grande', description: 'El tamaño máximo permitido es 5MB' });
             return;
         }
 
@@ -117,12 +118,12 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
         e.preventDefault();
 
         if (!selectedFile) {
-            toast.error('Por favor, selecciona un archivo para continuar');
+            sileo.warning({ title: 'Falta el archivo', description: 'Selecciona un archivo para continuar' });
             return;
         }
 
         if (!almacenId) {
-            toast.error('Por favor, selecciona un almacén de destino');
+            sileo.warning({ title: 'Falta el almacén', description: 'Selecciona un almacén de destino' });
             return;
         }
 
@@ -353,10 +354,10 @@ export default function ProductosPage({
     const deleteProducto = (id: number) => {
         router.delete(route('productos.destroy', { producto: id }), {
             onSuccess: () => {
-                toast.success('Producto eliminado correctamente');
+                sileo.success({ title: 'Producto eliminado', description: 'El producto se eliminó correctamente' });
             },
             onError: () => {
-                toast.error('Error en el proceso, inténtelo nuevamente');
+                sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' });
             },
         });
     };
@@ -375,21 +376,21 @@ export default function ProductosPage({
             const result = await response.json();
 
             if (result.success) {
-                toast.success('Código de barras regenerado correctamente');
+                sileo.success({ title: 'Código de barras regenerado', description: 'Se regeneró correctamente' });
                 // Recargar la página para ver los cambios
                 router.reload();
             } else {
-                toast.error(result.message || 'Error al regenerar el código de barras');
+                sileo.error({ title: 'Error al regenerar', description: result.message || 'Error al regenerar el código de barras' });
             }
         } catch {
-            toast.error('Error al regenerar el código de barras');
+            sileo.error({ title: 'Error al regenerar', description: 'No se pudo regenerar el código de barras' });
         }
     };
 
     // Exportar a Excel
     const handleExport = () => {
         if (!almacenExportId) {
-            toast.error('❌ Por favor, selecciona un almacén para exportar');
+            sileo.warning({ title: 'Falta el almacén', description: 'Selecciona un almacén para exportar' });
             return;
         }
 
@@ -411,18 +412,19 @@ export default function ProductosPage({
             document.body.appendChild(link);
 
             // Mostrar notificación mientras se descarga
-            toast.loading('⏳ Preparando exportación...', { duration: 2000 });
+            sileo.info({ title: 'Preparando exportación...', duration: 2000 });
 
             link.click();
 
             document.body.removeChild(link);
 
-            toast.success('✓ Exportación completada', {
+            sileo.success({
+                title: 'Exportación completada',
                 description: `Se exportaron los productos del almacén ${almacenSeleccionado?.nombre_almacen || 'seleccionado'}`,
             });
         } catch (error) {
             console.error('Error en exportación:', error);
-            toast.error('❌ Error al exportar productos');
+            sileo.error({ title: 'Error al exportar', description: 'No se pudieron exportar los productos' });
         }
     };
 
@@ -437,7 +439,8 @@ export default function ProductosPage({
                 forceFormData: true,
                 onSuccess: (page) => {
                     // La respuesta exitosa vendrá del servidor
-                    toast.success('✓ ¡Importación completada exitosamente!', {
+                    sileo.success({
+                        title: '¡Importación completada!',
                         description: 'Los productos han sido importados al almacén seleccionado.',
                     });
                     setShowImportModal(false);
@@ -451,15 +454,13 @@ export default function ProductosPage({
 
                     const errorMessage = errors.error || errors.file || errors.almacen_id || 'Ocurrió un error al importar los productos.';
 
-                    toast.error('❌ Error en la importación', {
-                        description: errorMessage,
-                    });
+                    sileo.error({ title: 'Error en la importación', description: errorMessage });
                 },
             });
         } catch (error: any) {
             console.error('Error desconocido:', error);
             const errorMessage = error?.message || 'Error desconocido al importar';
-            toast.error('❌ Error al procesar la importación: ' + errorMessage);
+            sileo.error({ title: 'Error al importar', description: errorMessage });
         }
     };
 
@@ -471,7 +472,7 @@ export default function ProductosPage({
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        toast.info('Descargando plantilla Excel...');
+        sileo.info({ title: 'Descargando plantilla Excel...' });
     };
 
     // Cargar duplicados
@@ -484,10 +485,10 @@ export default function ProductosPage({
             if (data.success) {
                 setDuplicados(data.grupos);
             } else {
-                toast.error('Error al cargar duplicados');
+                sileo.error({ title: 'Error al cargar duplicados' });
             }
         } catch {
-            toast.error('Error de conexión al cargar duplicados');
+            sileo.error({ title: 'Error de conexión', description: 'No se pudieron cargar los duplicados' });
         } finally {
             setLoadingDuplicados(false);
         }
@@ -510,7 +511,7 @@ export default function ProductosPage({
     const handleNormalizar = async () => {
         const grupo = grupoActivo;
         if (!grupo || !Object.keys(valoresCanonicos).length) {
-            toast.error('No hay campos para normalizar');
+            sileo.warning({ title: 'Nada que normalizar', description: 'No hay campos para normalizar' });
             return;
         }
         setProcesando(true);
@@ -528,14 +529,14 @@ export default function ProductosPage({
             });
             const data = await response.json();
             if (data.success) {
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setShowFusionModal(false);
                 cargarDuplicados();
             } else {
-                toast.error(data.message || 'Error al normalizar');
+                sileo.error({ title: data.message || 'Error al normalizar' });
             }
         } catch {
-            toast.error('Error de conexión al normalizar');
+            sileo.error({ title: 'Error de conexión', description: 'No se pudo normalizar' });
         } finally {
             setProcesando(false);
         }
@@ -565,14 +566,14 @@ export default function ProductosPage({
             });
             const data = await response.json();
             if (data.success) {
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setShowFusionModal(false);
                 cargarDuplicados();
             } else {
-                toast.error(data.message || 'Error al fusionar');
+                sileo.error({ title: data.message || 'Error al fusionar' });
             }
         } catch {
-            toast.error('Error de conexión al fusionar');
+            sileo.error({ title: 'Error de conexión', description: 'No se pudo fusionar' });
         } finally {
             setProcesando(false);
         }

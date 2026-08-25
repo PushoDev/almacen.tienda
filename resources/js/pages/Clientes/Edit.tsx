@@ -28,7 +28,8 @@ import {
     UserCheck,
     UserCog,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 interface EditClientePageProps {
     cliente: ClienteProps;
@@ -64,10 +65,10 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
 
         put(route('clientes.update', { cliente: cliente.id }), {
             onSuccess: () => {
-                toast.success('Cliente actualizado correctamente');
+                sileo.success({ title: 'Cliente actualizado', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar el cliente');
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar el cliente' });
             },
         });
     };
@@ -633,6 +634,7 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
                     </Card>
                 </div>
             </TooltipProvider>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

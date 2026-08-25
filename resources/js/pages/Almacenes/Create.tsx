@@ -11,7 +11,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { Building, IdCard, Mail, MapPin, Phone, User, Warehouse } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -53,10 +54,10 @@ export default function CreateAlmacenesPage() {
         post(route('almacenes.store'), {
             onSuccess: () => {
                 reset(); // Limpia el formulario después de enviar
-                toast.success('Almacén creado correctamente');
+                sileo.success({ title: 'Almacén creado', description: 'El almacén se creó correctamente' });
             },
             onError: () => {
-                toast.error('Error al crear el almacén');
+                sileo.error({ title: 'Error al crear', description: 'No se pudo crear el almacén' });
             },
         });
     };
@@ -309,6 +310,7 @@ export default function CreateAlmacenesPage() {
                     </form>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

@@ -11,7 +11,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { Coins, Save } from 'lucide-react';
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 interface PageProps {
     moneda_principal?: {
@@ -54,7 +55,7 @@ export default function MonedaCreate() {
     // Mostrar notificación si hay errores
     useEffect(() => {
         if (errors) {
-            toast.error('Por favor corrige los errores en el formulario');
+            sileo.error({ title: 'Corrige los errores', description: 'Revisa los campos marcados en el formulario' });
         }
     }, [errors]);
 
@@ -63,11 +64,11 @@ export default function MonedaCreate() {
         post('/monedas', {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success('Moneda creada exitosamente');
+                sileo.success({ title: 'Moneda creada', description: 'La moneda se creó correctamente' });
                 reset();
             },
             onError: () => {
-                toast.error('Error al crear la moneda');
+                sileo.error({ title: 'Error al crear', description: 'No se pudo crear la moneda' });
             },
         });
     };
@@ -83,9 +84,10 @@ export default function MonedaCreate() {
     const handlePrincipalChange = (checked: boolean) => {
         setData('principal', checked);
         if (checked) {
-            toast.info(
-                `Esta moneda será establecida como principal, reemplazando a ${moneda_principal?.nombre_moneda || 'la moneda principal actual'}`,
-            );
+            sileo.info({
+                title: 'Nueva moneda principal',
+                description: `Reemplazará a ${moneda_principal?.nombre_moneda || 'la moneda principal actual'}`,
+            });
         }
     };
 
@@ -297,6 +299,7 @@ export default function MonedaCreate() {
                 </div>
             </div>
             <ScrollProgress />
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

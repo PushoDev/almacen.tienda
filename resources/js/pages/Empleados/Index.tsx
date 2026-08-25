@@ -20,7 +20,8 @@ import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { BookUser, Edit2, FileText, Key, Mail, Sheet, Trash2, UserCircle, Warehouse, DollarSign, Users, ShieldCheck, UserCheck, Building2, Wallet } from 'lucide-react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -86,10 +87,10 @@ export default function PageEmpleado({ empleados, almacenes, cuentas }: { emplea
     const deleteEmpleado = (id: number) => {
         router.delete(route('empleados.destroy', { id }), {
             onSuccess: () => {
-                toast.success('Empleado eliminado correctamente');
+                sileo.success({ title: 'Empleado eliminado', description: 'El empleado se eliminó correctamente' });
             },
             onError: () => {
-                toast.error('Error al eliminar el empleado');
+                sileo.error({ title: 'Error al eliminar', description: 'No se pudo eliminar el empleado' });
             },
         });
     };

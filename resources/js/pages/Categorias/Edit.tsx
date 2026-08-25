@@ -8,7 +8,8 @@ import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { ListCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -38,10 +39,10 @@ export default function EditarCategoriasPage({ categoria }: { categoria: Categor
         e.preventDefault();
         put(route('categorias.update', { categoria: categoria.id }), {
             onSuccess: () => {
-                toast.success('Categoría actualizada correctamente');
+                sileo.success({ title: 'Categoría actualizada', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar la categoría');
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar la categoría' });
             },
         });
     };
@@ -139,6 +140,7 @@ export default function EditarCategoriasPage({ categoria }: { categoria: Categor
                     </form>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

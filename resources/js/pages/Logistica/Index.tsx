@@ -118,9 +118,9 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                                        {((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)) === 0
+                                        {((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)) === 0
                                             ? '0.00'
-                                            : ((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                            : ((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                         }
                                     </CardTitle>
                                 </CardHeader>
@@ -171,13 +171,17 @@ export default function LogisticaPage({
 
                     {/* Resumen de Cuentas */}
                     {canViewFinance && resumenCuentas && (
-                        <Card className="col-span-full">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <PiggyBank className="size-5 text-emerald-500" />
-                                    Resumen de Cuentas
-                                </CardTitle>
-                                <CardDescription>Distribución general de todas las cuentas del sistema</CardDescription>
+                        <Card className="col-span-full overflow-hidden border-emerald-500/30 border-l-4 pt-0 shadow-sm hover:shadow-md transition-shadow">
+                            <CardHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <PiggyBank className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Resumen de Cuentas</CardTitle>
+                                        <CardDescription className="text-emerald-100">Distribución general de todas las cuentas del sistema</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {/* Row 1: KPIs */}
@@ -218,16 +222,15 @@ export default function LogisticaPage({
                                     </div>
                                 </div>
 
-                                {/* Row 2: Barras por tipo */}
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                    {(['permanentes', 'temporales'] as const).map((tipo) => {
+                                {/* Row 2: Barras por tipo — 'temporales' ya no existe (ENUM unificado a solo
+                                    'permanentes' desde 2026-07-28), así que ya no hay comparación que hacer. */}
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    {(['permanentes'] as const).map((tipo) => {
                                         const saldo = resumenCuentas.por_tipo[tipo] ?? 0;
                                         const cant = resumenCuentas.conteo_tipo[tipo] ?? 0;
                                         const total = resumenCuentas.total_saldo > 0 ? resumenCuentas.total_saldo : 1;
                                         const pctSaldo = (Math.abs(saldo) / total) * 100;
-                                        const styles = tipo === 'permanentes'
-                                            ? { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', label: 'Permanentes' }
-                                            : { bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', bar: 'bg-amber-500', label: 'Temporales' };
+                                        const styles = { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', label: 'Permanentes' };
                                         return (
                                             <div key={tipo} className={`rounded-lg border p-4 shadow-sm ${styles.border} ${styles.bg}`}>
                                                 <div className="mb-2 flex items-center justify-between">
@@ -291,7 +294,7 @@ export default function LogisticaPage({
                                             <div className="grid gap-6 md:grid-cols-2">
                                                 {(['efectivo', 'tarjeta'] as const).map((tipo) => {
                                                     const monedas = resumenCuentas.por_tipo_moneda[tipo];
-                                                    if (!monedas || Object.keys(monedas).length === 0) return null;
+                                                    if (!monedas || monedas.length === 0) return null;
                                                     const tipoStyles = tipo === 'efectivo'
                                                         ? { bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-700 dark:text-emerald-300', icon: '💰' }
                                                         : { bg: 'bg-blue-50 dark:bg-blue-950/20', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-700 dark:text-blue-300', icon: '💳' };
@@ -302,10 +305,10 @@ export default function LogisticaPage({
                                                                 <span className={`text-sm font-semibold uppercase ${tipoStyles.text}`}>{tipo}</span>
                                                             </div>
                                                             <div className="space-y-2">
-                                                                {Object.entries(monedas).map(([codigo, info]) => (
-                                                                    <div key={codigo} className="flex items-center justify-between rounded-md bg-white/60 p-3 dark:bg-gray-800/40">
+                                                                {monedas.map((info, idx) => (
+                                                                    <div key={`${info.codigo}-${idx}`} className="flex items-center justify-between rounded-md bg-white/60 p-3 dark:bg-gray-800/40">
                                                                         <div className="flex flex-col">
-                                                                            <span className="text-xs font-medium text-muted-foreground">{codigo}</span>
+                                                                            <span className="text-xs font-medium text-muted-foreground">{info.codigo} · {info.nombre}</span>
                                                                             <span className="text-sm font-semibold">
                                                                                 {info.simbolo}: {info.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                             </span>
@@ -332,13 +335,17 @@ export default function LogisticaPage({
 
                     {/* Resumen de Clientes */}
                     {canViewFinance && resumenClientes && (
-                        <Card className="col-span-full">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Handshake className="size-5 text-blue-500" />
-                                    Resumen de Clientes
-                                </CardTitle>
-                                <CardDescription>Distribución general de todos los clientes del sistema</CardDescription>
+                        <Card className="col-span-full overflow-hidden border-blue-500/30 border-l-4 pt-0 shadow-sm hover:shadow-md transition-shadow">
+                            <CardHeader className="border-b bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Handshake className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Resumen de Clientes</CardTitle>
+                                        <CardDescription className="text-blue-100">Distribución general de todos los clientes del sistema</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {/* Row 1: KPIs */}
@@ -417,13 +424,17 @@ export default function LogisticaPage({
 
                     {/* Resumen de Proveedores */}
                     {canViewFinance && resumenProveedores && (
-                        <Card className="col-span-full">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Handshake className="size-5 text-purple-500" />
-                                    Resumen de Proveedores
-                                </CardTitle>
-                                <CardDescription>Distribución general de todos los proveedores del sistema</CardDescription>
+                        <Card className="col-span-full overflow-hidden border-purple-500/30 border-l-4 pt-0 shadow-sm hover:shadow-md transition-shadow">
+                            <CardHeader className="border-b bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Handshake className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Resumen de Proveedores</CardTitle>
+                                        <CardDescription className="text-purple-100">Distribución general de todos los proveedores del sistema</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {/* Row 1: KPIs */}
@@ -502,13 +513,17 @@ export default function LogisticaPage({
 
                     {/* Resumen de Productos */}
                     {canViewFinance && resumenProductos && (
-                        <Card className="col-span-full">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Package className="size-5 text-cyan-500" />
-                                    Resumen de Productos
-                                </CardTitle>
-                                <CardDescription>Distribución general de todos los productos del sistema</CardDescription>
+                        <Card className="col-span-full overflow-hidden border-cyan-500/30 border-l-4 pt-0 shadow-sm hover:shadow-md transition-shadow">
+                            <CardHeader className="border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Package className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Resumen de Productos</CardTitle>
+                                        <CardDescription className="text-cyan-100">Distribución general de todos los productos del sistema</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {/* Row 1: KPIs */}

@@ -10,7 +10,8 @@ import { Head, useForm, usePage } from '@inertiajs/react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { FileBox, Package, QrCode, ArrowRightLeft, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
@@ -47,15 +48,15 @@ export default function EditarProductosPage({ producto, categorias }: { producto
     const doPost = () => {
         post(route('productos.update', { producto: producto.id }), {
             onSuccess: () => {
-                toast.success('Producto actualizado correctamente');
+                sileo.success({ title: 'Producto actualizado', description: 'Los cambios se guardaron correctamente' });
                 setPasswordInput('');
             },
             onError: (errs) => {
                 if (errs.password_confirmacion) {
-                    toast.error(errs.password_confirmacion);
+                    sileo.error({ title: 'Error de confirmación', description: errs.password_confirmacion });
                     setPasswordDialog(true);
                 } else {
-                    toast.error('Error al actualizar el producto');
+                    sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar el producto' });
                 }
             },
         });
@@ -89,13 +90,13 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         e.preventDefault();
         transferForm.post(route('productos.transferir-codigo', { producto: producto.id }), {
             onSuccess: () => {
-                toast.success('Código de barras transferido correctamente');
+                sileo.success({ title: 'Código transferido', description: 'El código de barras se transfirió correctamente' });
                 setIsTransferModalOpen(false);
                 transferForm.reset();
             },
             onError: (errors) => {
-                if (errors.cantidad) toast.error(errors.cantidad);
-                else toast.error('Error al transferir el código de barras');
+                if (errors.cantidad) sileo.error({ title: 'Cantidad inválida', description: errors.cantidad });
+                else sileo.error({ title: 'Error al transferir', description: 'No se pudo transferir el código de barras' });
             }
         });
     };

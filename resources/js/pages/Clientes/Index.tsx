@@ -56,7 +56,8 @@ import {
     X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -92,12 +93,12 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
     const deleteCliente = (id: number) => {
         router.delete(route('clientes.destroy', { cliente: id }), {
             onSuccess: () => {
-                toast.success('Cliente eliminado correctamente');
+                sileo.success({ title: 'Cliente eliminado', description: 'El cliente se eliminó correctamente' });
                 setDeleteConfirmOpen(false);
                 setClienteSeleccionado(null);
             },
             onError: () => {
-                toast.error('Error al eliminar el cliente');
+                sileo.error({ title: 'Error al eliminar', description: 'No se pudo eliminar el cliente' });
             },
         });
     };

@@ -4,7 +4,6 @@ import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
-import { Toaster } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -436,6 +435,11 @@ export default function Dashboard({
                                                                     <Badge variant="outline" className={`${c.bg} ${c.text} ${c.border}`}>
                                                                         {item.codigo}
                                                                     </Badge>
+                                                                    {item.incluye_clientes_proveedores_inventario && (
+                                                                        <span className="text-muted-foreground text-xs italic">
+                                                                            incluye clientes, proveedores e inventario
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-right font-medium">
@@ -465,6 +469,14 @@ export default function Dashboard({
                                                 minimumFractionDigits: 2,
                                                 maximumFractionDigits: 2,
                                             })}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                                        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <span>
+                                            El monto de <strong>{resumenFinanciero.moneda_principal.codigo}</strong> incluye, además del saldo real de
+                                            las cuentas, el saldo neto de clientes y proveedores y el valor del inventario — por eso no coincide con
+                                            la suma simple de solo cuentas. Las demás monedas muestran únicamente su saldo de cuentas.
                                         </span>
                                     </div>
                                 </CardContent>
@@ -552,26 +564,18 @@ export default function Dashboard({
                                             </CardDescription>
                                         </div>
                                     </div>
-                                    {(userRole === 'admin' || userRole === 'moderador') && (
-                                        <button
-                                            onClick={() => window.open(route('dashboard.historial.comparaciones.view'), '_blank')}
-                                            className="flex cursor-pointer items-center gap-2 rounded-md bg-white/20 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/30"
-                                        >
-                                            <TrendingUp className="h-4 w-4" />
-                                            Ver Historial
-                                        </button>
-                                    )}
+                                    {/* Redundante: ya estamos dentro de {userRole !== 'vendedor' && ...} (línea 540), y solo existen los
+                                        3 roles admin/moderador/vendedor — aquí siempre es admin o moderador. */}
+                                    <button
+                                        onClick={() => window.open(route('dashboard.historial.comparaciones.view'), '_blank')}
+                                        className="flex cursor-pointer items-center gap-2 rounded-md bg-white/20 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+                                    >
+                                        <TrendingUp className="h-4 w-4" />
+                                        Ver Historial
+                                    </button>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
-                                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                                    <span>
-                                        <strong>Saldo Acumulado</strong> es el saldo total real de las cuentas ahora mismo (mismo valor que el Resumen
-                                        Financiero). <strong>Mes Actual</strong> muestra cuánto cambió ese saldo desde que cerró el mes pasado — esa
-                                        columna sí puede aparecer en rojo si el saldo bajó, eso no significa que la cuenta esté en negativo.
-                                    </span>
-                                </div>
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
@@ -584,20 +588,28 @@ export default function Dashboard({
                                     <TableBody>
                                         {comparaciones && comparaciones.length > 0 ? (
                                             (() => {
-                                                // Inventario no es dinero líquido — se muestra con su propio detalle,
-                                                // pero nunca se mezcla dentro de "Totales" (eso es solo caja/monedas).
-                                                const filasMonedas = comparaciones.filter((c) => c.moneda !== 'INVENTARIO');
+                                                // Clientes, Proveedores e Inventario se muestran aparte de las monedas reales
+                                                // (su propia fila con borde punteado, sin tasa de cambio propia — igual que
+                                                // antes), pero SÍ cuentan dentro de "Totales" (confirmado por el cliente
+                                                // 2026-08-25 — antes Inventario quedaba fuera a propósito, ya no; Proveedores
+                                                // se agregó el mismo día tras notar que Totales daba más que Capital
+                                                // Financiero por excluir esta deuda, que es negativa).
+                                                const filasMonedas = comparaciones.filter(
+                                                    (c) => c.moneda !== 'INVENTARIO' && c.moneda !== 'CLIENTES' && c.moneda !== 'PROVEEDORES',
+                                                );
                                                 const filaInventario = comparaciones.find((c) => c.moneda === 'INVENTARIO');
+                                                const filaClientes = comparaciones.find((c) => c.moneda === 'CLIENTES');
+                                                const filaProveedores = comparaciones.find((c) => c.moneda === 'PROVEEDORES');
 
-                                                const totalMesAnterior = filasMonedas.reduce(
+                                                const totalMesAnterior = comparaciones.reduce(
                                                     (sum, comp) => sum + comp.monto_anterior / (comp.tasa_cambio || 1),
                                                     0,
                                                 );
-                                                const totalDiferencia = filasMonedas.reduce(
+                                                const totalDiferencia = comparaciones.reduce(
                                                     (sum, comp) => sum + comp.diferencia / (comp.tasa_cambio || 1),
                                                     0,
                                                 );
-                                                const totalSaldoAcumulado = filasMonedas.reduce(
+                                                const totalSaldoAcumulado = comparaciones.reduce(
                                                     (sum, comp) => sum + comp.monto_actual / (comp.tasa_cambio || 1),
                                                     0,
                                                 );
@@ -645,9 +657,59 @@ export default function Dashboard({
                                                     );
                                                 };
 
+                                                // Fila especial (Inventario/Clientes): mismo shape que filaComparacion pero
+                                                // con borde punteado y una etiqueta que explica qué es — no son monedas
+                                                // reales, no tienen tasa de cambio propia, pero sí suman a Totales.
+                                                const filaEspecial = (fila: ComparacionMensual, etiqueta: string) => (
+                                                    <TableRow
+                                                        key={fila.moneda}
+                                                        className="border-t-sidebar-border dark:border-t-sidebar-border hover:bg-sidebar/10 dark:hover:bg-sidebar/20 border-t-2 border-dashed transition-colors"
+                                                    >
+                                                        <TableCell className="font-medium">
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={`${colorMoneda(fila.moneda, 0).bg} ${colorMoneda(fila.moneda, 0).text} ${colorMoneda(fila.moneda, 0).border}`}
+                                                            >
+                                                                {fila.moneda}
+                                                            </Badge>
+                                                            <span className="text-muted-foreground ml-2 text-xs italic">{etiqueta}</span>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {fila.monto_anterior.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 6,
+                                                            })}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <span
+                                                                className={
+                                                                    fila.es_positivo
+                                                                        ? 'font-medium text-green-600 dark:text-green-400'
+                                                                        : 'font-medium text-red-600 dark:text-red-400'
+                                                                }
+                                                            >
+                                                                {fila.diferencia >= 0 ? '+' : ''}
+                                                                {fila.diferencia.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 6,
+                                                                })}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {fila.monto_actual.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 6,
+                                                            })}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+
                                                 return (
                                                     <>
                                                         {filasMonedas.map((comparacion, index) => filaComparacion(comparacion, index))}
+                                                        {filaInventario && filaEspecial(filaInventario, 'valor de inventario (Productos)')}
+                                                        {filaClientes && filaEspecial(filaClientes, 'saldo neto de clientes')}
+                                                        {filaProveedores && filaEspecial(filaProveedores, 'saldo neto de proveedores')}
 
                                                         <TableRow className="bg-muted/40 hover:bg-muted/40 font-semibold">
                                                             <TableCell>Totales</TableCell>
@@ -682,52 +744,6 @@ export default function Dashboard({
                                                                 USD
                                                             </TableCell>
                                                         </TableRow>
-
-                                                        {filaInventario && (
-                                                            <TableRow
-                                                                key="INVENTARIO"
-                                                                className="border-t-sidebar-border dark:border-t-sidebar-border hover:bg-sidebar/10 dark:hover:bg-sidebar/20 border-t-2 border-dashed transition-colors"
-                                                            >
-                                                                <TableCell className="font-medium">
-                                                                    <Badge
-                                                                        variant="outline"
-                                                                        className={`${colorMoneda('INVENTARIO', 0).bg} ${colorMoneda('INVENTARIO', 0).text} ${colorMoneda('INVENTARIO', 0).border}`}
-                                                                    >
-                                                                        {filaInventario.moneda}
-                                                                    </Badge>
-                                                                    <span className="text-muted-foreground ml-2 text-xs italic">
-                                                                        aparte, no incluido en Totales
-                                                                    </span>
-                                                                </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    {filaInventario.monto_anterior.toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 6,
-                                                                    })}
-                                                                </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <span
-                                                                        className={
-                                                                            filaInventario.es_positivo
-                                                                                ? 'font-medium text-green-600 dark:text-green-400'
-                                                                                : 'font-medium text-red-600 dark:text-red-400'
-                                                                        }
-                                                                    >
-                                                                        {filaInventario.diferencia >= 0 ? '+' : ''}
-                                                                        {filaInventario.diferencia.toLocaleString('es-ES', {
-                                                                            minimumFractionDigits: 2,
-                                                                            maximumFractionDigits: 6,
-                                                                        })}
-                                                                    </span>
-                                                                </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    {filaInventario.monto_actual.toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 6,
-                                                                    })}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
                                                     </>
                                                 );
                                             })()
@@ -740,6 +756,14 @@ export default function Dashboard({
                                         )}
                                     </TableBody>
                                 </Table>
+                                <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>
+                                        <strong>Saldo Acumulado</strong> es el saldo total real de las cuentas ahora mismo (mismo valor que el Resumen
+                                        Financiero). <strong>Mes Actual</strong> muestra cuánto cambió ese saldo desde que cerró el mes pasado — esa
+                                        columna sí puede aparecer en rojo si el saldo bajó, eso no significa que la cuenta esté en negativo.
+                                    </span>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>}
@@ -770,11 +794,10 @@ export default function Dashboard({
                                     <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
                                         <p className="text-muted-foreground text-xs">Ganancia de Ventas</p>
                                         <p
-                                            className={`mt-1 text-xl font-semibold ${
-                                                gananciaAgenciaMes.ganancia_ventas >= 0
+                                            className={`mt-1 text-xl font-semibold ${gananciaAgenciaMes.ganancia_ventas >= 0
                                                     ? 'text-green-600 dark:text-green-400'
                                                     : 'text-red-600 dark:text-red-400'
-                                            }`}
+                                                }`}
                                         >
                                             {gananciaAgenciaMes.ganancia_ventas >= 0 ? '+' : ''}
                                             {gananciaAgenciaMes.ganancia_ventas.toLocaleString('es-ES', {
@@ -788,11 +811,10 @@ export default function Dashboard({
                                     <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
                                         <p className="text-muted-foreground text-xs">Ganancia/Pérdida de Transferencias</p>
                                         <p
-                                            className={`mt-1 text-xl font-semibold ${
-                                                gananciaAgenciaMes.ganancia_transferencias >= 0
+                                            className={`mt-1 text-xl font-semibold ${gananciaAgenciaMes.ganancia_transferencias >= 0
                                                     ? 'text-green-600 dark:text-green-400'
                                                     : 'text-red-600 dark:text-red-400'
-                                            }`}
+                                                }`}
                                         >
                                             {gananciaAgenciaMes.ganancia_transferencias >= 0 ? '+' : ''}
                                             {gananciaAgenciaMes.ganancia_transferencias.toLocaleString('es-ES', {
@@ -806,11 +828,10 @@ export default function Dashboard({
                                     <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
                                         <p className="text-amber-800 text-xs dark:text-amber-300">Ganancia Neta del Mes</p>
                                         <p
-                                            className={`mt-1 flex items-center gap-1 text-xl font-bold ${
-                                                gananciaAgenciaMes.ganancia_neta_total >= 0
+                                            className={`mt-1 flex items-center gap-1 text-xl font-bold ${gananciaAgenciaMes.ganancia_neta_total >= 0
                                                     ? 'text-green-600 dark:text-green-400'
                                                     : 'text-red-600 dark:text-red-400'
-                                            }`}
+                                                }`}
                                         >
                                             {gananciaAgenciaMes.ganancia_neta_total >= 0 ? (
                                                 <TrendingUp className="h-4 w-4" />
@@ -867,11 +888,10 @@ export default function Dashboard({
                                         return (
                                             <div
                                                 key={moneda.id}
-                                                className={`rounded-lg border p-3 transition-all hover:shadow-md ${
-                                                    moneda.principal
+                                                className={`rounded-lg border p-3 transition-all hover:shadow-md ${moneda.principal
                                                         ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
                                                         : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
-                                                }`}
+                                                    }`}
                                             >
                                                 {/* Header con símbolo y código */}
                                                 <div className="flex items-center justify-between gap-2">
@@ -932,111 +952,111 @@ export default function Dashboard({
                 </div>
 
                 {(userRole === 'admin' || userRole === 'moderador') && (
-                <>
-                <Separator />
-                {/* Charts */}
-                <div>
-                    <Card className="overflow-hidden border-cyan-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
-                        <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white sm:flex-row">
-                            <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                <div className="flex items-center justify-center gap-3 sm:justify-start">
-                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                                        <TrendingUp className="h-5 w-5" />
+                    <>
+                        <Separator />
+                        {/* Charts */}
+                        <div>
+                            <Card className="overflow-hidden border-cyan-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                                <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white sm:flex-row">
+                                    <div className="grid flex-1 gap-1 text-center sm:text-left">
+                                        <div className="flex items-center justify-center gap-3 sm:justify-start">
+                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                <TrendingUp className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-white">Area Interactiva</CardTitle>
+                                                <CardDescription className="text-cyan-100">Total de Compras y ventas en los ultimos meses</CardDescription>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <CardTitle className="text-white">Area Interactiva</CardTitle>
-                                        <CardDescription className="text-cyan-100">Total de Compras y ventas en los ultimos meses</CardDescription>
-                                    </div>
-                                </div>
-                            </div>
-                            <Select value={timeRange} onValueChange={setTimeRange}>
-                                <SelectTrigger
-                                    className="w-[160px] rounded-lg border-white/30 bg-white/20 text-white backdrop-blur-sm sm:ml-auto [&>svg]:text-white"
-                                    aria-label="Select a value"
-                                >
-                                    <SelectValue placeholder="Ultimos 3 meses" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                    <SelectItem value="1d" className="rounded-lg">
-                                        Hoy
-                                    </SelectItem>
-                                    <SelectItem value="2d" className="rounded-lg">
-                                        Ayer
-                                    </SelectItem>
-                                    <SelectItem value="3d" className="rounded-lg">
-                                        Antes de Ayer
-                                    </SelectItem>
-                                    <SelectItem value="7d" className="rounded-lg">
-                                        Ultimos 7 dias
-                                    </SelectItem>
-                                    <SelectItem value="30d" className="rounded-lg">
-                                        Ultimos 30 dias
-                                    </SelectItem>
-                                    <SelectItem value="90d" className="rounded-lg">
-                                        Ultimos 3 meses
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </CardHeader>
-                        <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-                            {isLoading ? (
-                                <div className="flex h-[250px] items-center justify-center text-center">Cargando datos del gráfico...</div>
-                            ) : chartData.length > 0 ? (
-                                <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
-                                    <AreaChart data={chartData}>
-                                        <defs>
-                                            <linearGradient id="fillVentas" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="var(--color-ventas)" stopOpacity={0.8} />
-                                                <stop offset="95%" stopColor="var(--color-ventas)" stopOpacity={0.1} />
-                                            </linearGradient>
-                                            <linearGradient id="fillCompras" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="var(--color-compras)" stopOpacity={0.8} />
-                                                <stop offset="95%" stopColor="var(--color-compras)" stopOpacity={0.1} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid vertical={false} />
-                                        <XAxis
-                                            dataKey="date"
-                                            tickLine={false}
-                                            axisLine={false}
-                                            tickMargin={8}
-                                            minTickGap={32}
-                                            tickFormatter={(value) => {
-                                                const date = new Date(value);
-                                                return date.toLocaleDateString('es-ES', {
-                                                    month: 'short',
-                                                    day: 'numeric',
-                                                });
-                                            }}
-                                        />
-                                        <ChartTooltip
-                                            cursor={false}
-                                            content={
-                                                <ChartTooltipContent
-                                                    labelFormatter={(value) => {
-                                                        return new Date(value).toLocaleDateString('es-ES', {
+                                    <Select value={timeRange} onValueChange={setTimeRange}>
+                                        <SelectTrigger
+                                            className="w-[160px] rounded-lg border-white/30 bg-white/20 text-white backdrop-blur-sm sm:ml-auto [&>svg]:text-white"
+                                            aria-label="Select a value"
+                                        >
+                                            <SelectValue placeholder="Ultimos 3 meses" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl">
+                                            <SelectItem value="1d" className="rounded-lg">
+                                                Hoy
+                                            </SelectItem>
+                                            <SelectItem value="2d" className="rounded-lg">
+                                                Ayer
+                                            </SelectItem>
+                                            <SelectItem value="3d" className="rounded-lg">
+                                                Antes de Ayer
+                                            </SelectItem>
+                                            <SelectItem value="7d" className="rounded-lg">
+                                                Ultimos 7 dias
+                                            </SelectItem>
+                                            <SelectItem value="30d" className="rounded-lg">
+                                                Ultimos 30 dias
+                                            </SelectItem>
+                                            <SelectItem value="90d" className="rounded-lg">
+                                                Ultimos 3 meses
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </CardHeader>
+                                <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+                                    {isLoading ? (
+                                        <div className="flex h-[250px] items-center justify-center text-center">Cargando datos del gráfico...</div>
+                                    ) : chartData.length > 0 ? (
+                                        <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
+                                            <AreaChart data={chartData}>
+                                                <defs>
+                                                    <linearGradient id="fillVentas" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="var(--color-ventas)" stopOpacity={0.8} />
+                                                        <stop offset="95%" stopColor="var(--color-ventas)" stopOpacity={0.1} />
+                                                    </linearGradient>
+                                                    <linearGradient id="fillCompras" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="var(--color-compras)" stopOpacity={0.8} />
+                                                        <stop offset="95%" stopColor="var(--color-compras)" stopOpacity={0.1} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid vertical={false} />
+                                                <XAxis
+                                                    dataKey="date"
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickMargin={8}
+                                                    minTickGap={32}
+                                                    tickFormatter={(value) => {
+                                                        const date = new Date(value);
+                                                        return date.toLocaleDateString('es-ES', {
                                                             month: 'short',
                                                             day: 'numeric',
                                                         });
                                                     }}
-                                                    indicator="dot"
                                                 />
-                                            }
-                                        />
-                                        <Area dataKey="compras" type="natural" fill="url(#fillCompras)" stroke="var(--color-compras)" stackId="a" />
-                                        <Area dataKey="ventas" type="natural" fill="url(#fillVentas)" stroke="var(--color-ventas)" stackId="a" />
-                                        <ChartLegend content={<ChartLegendContent />} />
-                                    </AreaChart>
-                                </ChartContainer>
-                            ) : (
-                                <div className="flex h-[250px] items-center justify-center text-center">
-                                    No hay datos disponibles para el rango de tiempo seleccionado.
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-                </>
+                                                <ChartTooltip
+                                                    cursor={false}
+                                                    content={
+                                                        <ChartTooltipContent
+                                                            labelFormatter={(value) => {
+                                                                return new Date(value).toLocaleDateString('es-ES', {
+                                                                    month: 'short',
+                                                                    day: 'numeric',
+                                                                });
+                                                            }}
+                                                            indicator="dot"
+                                                        />
+                                                    }
+                                                />
+                                                <Area dataKey="compras" type="natural" fill="url(#fillCompras)" stroke="var(--color-compras)" stackId="a" />
+                                                <Area dataKey="ventas" type="natural" fill="url(#fillVentas)" stroke="var(--color-ventas)" stackId="a" />
+                                                <ChartLegend content={<ChartLegendContent />} />
+                                            </AreaChart>
+                                        </ChartContainer>
+                                    ) : (
+                                        <div className="flex h-[250px] items-center justify-center text-center">
+                                            No hay datos disponibles para el rango de tiempo seleccionado.
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </>
                 )}
 
                 <Separator />
@@ -1084,7 +1104,7 @@ export default function Dashboard({
 
                                             <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
                                                 <div className="flex items-center gap-2">
-                                                    <TrendingUp className="h-4 w-4 text-red-600" />
+                                                    <TrendingDown className="h-4 w-4 text-red-600" />
                                                     <span className="text-sm font-medium text-red-800 dark:text-red-200">Pérdidas Totales</span>
                                                 </div>
                                                 <div className="mt-1 text-2xl font-bold text-red-700 dark:text-red-300">
@@ -1171,8 +1191,8 @@ export default function Dashboard({
                                                                         cambio.es_ganancia
                                                                             ? 'text-green-600 dark:text-green-400'
                                                                             : cambio.es_perdida
-                                                                              ? 'text-red-600 dark:text-red-400'
-                                                                              : 'text-gray-600 dark:text-gray-400'
+                                                                                ? 'text-red-600 dark:text-red-400'
+                                                                                : 'text-gray-600 dark:text-gray-400'
                                                                     }
                                                                 >
                                                                     {cambio.impacto_formateado}
@@ -1184,15 +1204,15 @@ export default function Dashboard({
                                                                         cambio.es_ganancia
                                                                             ? 'default'
                                                                             : cambio.es_perdida
-                                                                              ? 'destructive'
-                                                                              : 'secondary'
+                                                                                ? 'destructive'
+                                                                                : 'secondary'
                                                                     }
                                                                     className={
                                                                         cambio.es_ganancia
                                                                             ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200'
                                                                             : cambio.es_perdida
-                                                                              ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
-                                                                              : ''
+                                                                                ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
+                                                                                : ''
                                                                     }
                                                                 >
                                                                     {cambio.es_ganancia ? 'Ganancia' : cambio.es_perdida ? 'Pérdida' : 'Neutro'}
@@ -1274,7 +1294,7 @@ export default function Dashboard({
                                                 </div>
                                                 <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
                                                     <div className="flex items-center gap-2">
-                                                        <TrendingUp className="h-4 w-4 text-red-600" />
+                                                        <TrendingDown className="h-4 w-4 text-red-600" />
                                                         <span className="text-sm font-medium text-red-800 dark:text-red-200">Pérdida acumulada</span>
                                                     </div>
                                                     <div className="mt-1 text-2xl font-bold text-red-700 dark:text-red-300">
@@ -1341,8 +1361,8 @@ export default function Dashboard({
                                                                         item.es_ganancia
                                                                             ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200'
                                                                             : item.es_perdida
-                                                                              ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
-                                                                              : ''
+                                                                                ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
+                                                                                : ''
                                                                     }
                                                                 >
                                                                     {item.es_ganancia ? 'Ganancia' : item.es_perdida ? 'Pérdida' : 'Neutro'}
@@ -1488,8 +1508,8 @@ export default function Dashboard({
                                                                         estado.tipo_cuenta === 'permanentes'
                                                                             ? 'border-blue-300 text-blue-800 dark:text-blue-300'
                                                                             : estado.tipo_cuenta === 'temporales'
-                                                                              ? 'border-green-300 text-green-800 dark:text-green-300'
-                                                                              : 'border-red-300 text-red-800 dark:text-red-300'
+                                                                                ? 'border-green-300 text-green-800 dark:text-green-300'
+                                                                                : 'border-red-300 text-red-800 dark:text-red-300'
                                                                     }
                                                                 >
                                                                     {estado.tipo_cuenta}
@@ -1586,8 +1606,6 @@ export default function Dashboard({
                         </CardContent>
                     </Card>
                 </div>
-
-                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );

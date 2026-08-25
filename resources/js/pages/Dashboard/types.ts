@@ -23,6 +23,15 @@ export interface MontoPorMoneda {
     tasa_cambio: number;
 }
 
+export interface ComparacionMensualDetalle {
+    nombre: string;
+    tasa_cambio: number;
+    original: number;
+    equivalente: number;
+    cantidad: number;
+    simbolo: string;
+}
+
 export interface ComparacionMensual {
     moneda: string;
     nombre_moneda: string;
@@ -33,6 +42,9 @@ export interface ComparacionMensual {
     porcentaje_cambio: number;
     es_positivo: boolean;
     tasa_cambio: number;
+    // Más de 1 elemento cuando este código combina 2+ monedas reales distintas con tasas
+    // propias (ej. CUP efectivo/tarjeta) — se usa para ofrecer un desglose expandible.
+    detalle: ComparacionMensualDetalle[];
 }
 
 export interface EstadoFinanciero {

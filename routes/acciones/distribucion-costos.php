@@ -15,6 +15,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('distribucion-costos/distribuir', [DistribucionCostosController::class, 'distribuirCostosManual'])
         ->name('distribucion-costos.distribuir');
 
+    // Omitir prorrateo de uno o varios movimientos en lote (housekeeping, sin cálculo) —
+    // admin/moderador-only, chequeado inline en el controller.
+    Route::post('distribucion-costos/movimientos/omitir', [DistribucionCostosController::class, 'omitirProrrateo'])
+        ->name('distribucion-costos.movimientos.omitir');
+
     // Registradas antes de la ruta con {distribucion} para que "historial" nunca se intente
     // resolver como un ID de distribución.
     Route::get('distribucion-costos/historial', [DistribucionCostosController::class, 'historial'])

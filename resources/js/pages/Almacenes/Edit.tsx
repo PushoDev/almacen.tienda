@@ -11,7 +11,8 @@ import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { Building, IdCard, Mail, MapPin, Phone, Truck, User, Warehouse } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -51,10 +52,10 @@ export default function EditarAlmacenesPage({ almacen, cuentas = [] }: { almacen
         e.preventDefault();
         put(route('almacenes.update', { almacen: almacen.id }), {
             onSuccess: () => {
-                toast.success('Almacén actualizado correctamente');
+                sileo.success({ title: 'Almacén actualizado', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar el almacén');
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar el almacén' });
             },
         });
     };
@@ -345,6 +346,7 @@ export default function EditarAlmacenesPage({ almacen, cuentas = [] }: { almacen
                     </form>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

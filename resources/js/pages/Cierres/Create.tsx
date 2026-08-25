@@ -41,7 +41,8 @@ import {
     Wallet,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const CollapsibleRoot = Collapsible.Root;
 const CollapsibleTrigger = Collapsible.CollapsibleTrigger;
@@ -585,11 +586,11 @@ export default function Create({
             preserveScroll: true,
             onSuccess: () => {
                 console.log('Cierre exitoso');
-                toast.success('Cierre realizado con éxito');
+                sileo.success({ title: 'Cierre realizado', description: 'El cierre se realizó con éxito' });
             },
             onError: (err) => {
                 console.error('Errores en el cierre:', err);
-                toast.error('Error al realizar el cierre. Revise los datos.');
+                sileo.error({ title: 'Error al cerrar', description: 'Revisa los datos e inténtalo de nuevo' });
             },
         });
     };

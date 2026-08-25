@@ -8,7 +8,8 @@ import AppLayout from '@/layouts/app-layout';
 import { ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { Eye, EyeOff, ListCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -51,10 +52,10 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
         e.preventDefault();
         put(route('proveedores.update', { proveedor: proveedor.id }), {
             onSuccess: () => {
-                toast.success('Proveedor actualizado correctamente');
+                sileo.success({ title: 'Proveedor actualizado', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar el proveedor');
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar el proveedor' });
             },
         });
     };
@@ -251,6 +252,7 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
                     </form>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

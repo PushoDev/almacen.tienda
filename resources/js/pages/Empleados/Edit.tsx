@@ -12,7 +12,8 @@ import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { BookUser, Eye, EyeOff, Search, Store, University, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
@@ -91,10 +92,10 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
         e.preventDefault();
         put(route('empleados.update', { id: empleado.id }), {
             onSuccess: () => {
-                toast.success('Empleado actualizado correctamente');
+                sileo.success({ title: 'Empleado actualizado', description: 'Los cambios se guardaron correctamente' });
             },
             onError: () => {
-                toast.error('Error al actualizar el empleado');
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo actualizar el empleado' });
             },
         });
     };
@@ -388,6 +389,7 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                     </div>
                 </form>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

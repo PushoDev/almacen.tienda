@@ -20,7 +20,8 @@ import { CategoriasProps, type BreadcrumbItem, type PageProps } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { CheckIcon, Edit3, FileText, Info, ListCheck, MessageCircleWarningIcon, MessageSquareDiff, Sheet, Tag, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -40,7 +41,7 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
     // Eliminar Categoría
     const deleteCategoria = (id: number) => {
         if (!isAdmin) {
-            toast.error('ud no tiene acceso para esta acción');
+            sileo.error({ title: 'Sin permiso', description: 'No tienes acceso para esta acción' });
             return;
         }
 
@@ -48,13 +49,13 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
             onSuccess: (page) => {
                 const flash = page.props.flash as any;
                 if (flash.error) {
-                    toast.error(flash.error);
+                    sileo.error({ title: flash.error });
                 } else {
-                    toast.success('Categoría eliminada correctamente');
+                    sileo.success({ title: 'Categoría eliminada', description: 'La categoría se eliminó correctamente' });
                 }
             },
             onError: () => {
-                toast.error('Error en el proceso, inténtelo nuevamente');
+                sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' });
             },
         });
     };
@@ -178,7 +179,7 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                                                     onClick={(e) => {
                                                         if (!isAdmin) {
                                                             e.preventDefault();
-                                                            toast.error('ud no tiene acceso para esta acción');
+                                                            sileo.error({ title: 'Sin permiso', description: 'No tienes acceso para esta acción' });
                                                         }
                                                     }}
                                                 >

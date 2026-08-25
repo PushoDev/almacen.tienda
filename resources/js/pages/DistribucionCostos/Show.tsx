@@ -41,7 +41,9 @@ interface Distribucion {
     comentario: string | null;
     tasa_cambio: number | string;
     monto_total_usd: number | string;
+    // Mutuamente excluyentes — un lote es de compras o de movimientos, nunca ambos.
     compras: number[];
+    movimientos: number[];
     cuentas: CuentaResumen[];
 }
 
@@ -84,6 +86,8 @@ export default function DistribucionCostosShow({ distribucion, productos }: Prop
     ];
 
     const totalAsignado = productos.reduce((acc, p) => acc + Number(p.monto_asignado), 0);
+    const esLoteMovimientos = distribucion.movimientos.length > 0;
+    const loteIds = esLoteMovimientos ? distribucion.movimientos : distribucion.compras;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -93,7 +97,7 @@ export default function DistribucionCostosShow({ distribucion, productos }: Prop
                     <div className="flex items-center justify-between">
                         <HeadingSmall
                             title={titulo}
-                            description={`Detalle de la distribución de costos aplicada a compra${distribucion.compras.length > 1 ? 's' : ''} #${distribucion.compras.join(', #')}.`}
+                            description={`Detalle de la distribución de costos aplicada a ${esLoteMovimientos ? 'movimiento' : 'compra'}${loteIds.length > 1 ? 's' : ''} #${loteIds.join(', #')}.`}
                         />
                         <Link href={route('distribucion-costos.historial')}>
                             <Button variant="outline" size="sm" className="cursor-pointer">
@@ -132,12 +136,12 @@ export default function DistribucionCostosShow({ distribucion, productos }: Prop
                             <div className="bg-card rounded-lg border-l-4 border-violet-400 p-4 shadow-sm dark:border-violet-600">
                                 <div className="flex items-center gap-2">
                                     <Package className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                                    <h3 className="text-sm font-semibold">Compras (Lote)</h3>
+                                    <h3 className="text-sm font-semibold">{esLoteMovimientos ? 'Movimientos (Lote)' : 'Compras (Lote)'}</h3>
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-1">
-                                    {distribucion.compras.map((compraId) => (
-                                        <Badge key={compraId} variant="outline" className="border-violet-300 text-violet-700 dark:text-violet-300">
-                                            #{compraId}
+                                    {loteIds.map((id) => (
+                                        <Badge key={id} variant="outline" className="border-violet-300 text-violet-700 dark:text-violet-300">
+                                            #{id}
                                         </Badge>
                                     ))}
                                 </div>

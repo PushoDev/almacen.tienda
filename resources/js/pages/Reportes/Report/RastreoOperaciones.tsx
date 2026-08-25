@@ -33,7 +33,8 @@ import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { AlertTriangle, ArrowLeftRight, ChevronDown, ChevronRight, CreditCard, DollarSign, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
+import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -960,10 +961,10 @@ export default function RastreoOperacionesPage({
             });
 
             doc.save(`rastreo_operaciones_${new Date().getTime()}.pdf`);
-            toast.success('PDF generado correctamente');
+            sileo.success({ title: 'PDF generado', description: 'El reporte se generó correctamente' });
         } catch (error) {
             console.error('Error generando PDF:', error);
-            toast.error('Error al generar el PDF');
+            sileo.error({ title: 'Error al generar', description: 'No se pudo generar el PDF' });
         }
     };
 
@@ -1341,6 +1342,7 @@ export default function RastreoOperacionesPage({
                     </CardContent>
                 </Card>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }
