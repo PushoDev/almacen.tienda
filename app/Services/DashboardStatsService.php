@@ -162,6 +162,13 @@ class DashboardStatsService
             'original' => $this->getResumenProductos()['total_importe_global'],
             'simbolo' => '$',
         ];
+        // Mismo mecanismo que Inventario (fila sintética, sin moneda propia en el sistema) —
+        // pedido explícito del cliente 2026-08-25, mismo balance_neto que ya suma Tabla 1
+        // (getResumenFinancieroCompacto()) dentro de la moneda principal.
+        $porMoneda['CLIENTES'] = [
+            'original' => $this->getResumenClientes()['balance_neto'],
+            'simbolo' => '$',
+        ];
         $monedasInfo = DB::table('monedas')->get()->groupBy('codigo_moneda');
 
         $resultado = [];
@@ -194,7 +201,8 @@ class DashboardStatsService
             $montoActual = $valorEnVivo;
             $diferencia = $montoActual - $montoAnterior;
             $porcentajeCambio = $montoAnterior != 0.0 ? round(($diferencia / $montoAnterior) * 100, 2) : 0.0;
-            $nombreMoneda = $monedaInfo->nombre_moneda ?? ($codigo === 'INVENTARIO' ? 'Inventario' : $codigo);
+            $nombreMoneda = $monedaInfo->nombre_moneda
+                ?? ($codigo === 'INVENTARIO' ? 'Inventario' : ($codigo === 'CLIENTES' ? 'Clientes' : $codigo));
 
             HistorialComparacionMensual::updateOrCreate(
                 ['user_id' => $userId, 'mes_comparado' => $mesActual, 'moneda_codigo' => $codigo],
