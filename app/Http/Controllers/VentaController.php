@@ -1892,6 +1892,42 @@ class VentaController extends Controller
     }
 
     /**
+     * Guarda/corrige manualmente la tasa de cambio usada para convertir el reporte/ticket
+     * de la venta a otra moneda (ej. CUP), para el caso donde la venta se pagó 100% en la
+     * moneda principal y nunca se capturó ninguna tasa de conversión. No afecta ningún
+     * movimiento de dinero ya realizado (aprobarVenta usa gestor_monto/comision directamente,
+     * no deriva nada de tasa_aplicada_venta) — es puramente informativa para el reporte,
+     * por eso se permite en cualquier estado de la venta, no solo pendiente.
+     */
+    public function actualizarTasaReporte(Request $request, Venta $venta)
+    {
+        $validated = $request->validate([
+            'moneda_cobro_id' => 'required|exists:monedas,id',
+            'tasa' => 'required|numeric|min:0.0001',
+        ]);
+
+        $venta->update([
+            'moneda_cobro_id' => $validated['moneda_cobro_id'],
+            'tasa_aplicada_venta' => $validated['tasa'],
+        ]);
+
+        $venta->refresh()->load('monedaCobro');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tasa de cambio del reporte actualizada.',
+            'tasa_aplicada_venta' => (float) $venta->tasa_aplicada_venta,
+            'moneda_cobro' => $venta->monedaCobro ? [
+                'id' => $venta->monedaCobro->id,
+                'codigo' => $venta->monedaCobro->codigo_moneda,
+                'nombre' => $venta->monedaCobro->nombre_moneda,
+                'simbolo' => $venta->monedaCobro->simbolo_moneda,
+            ] : null,
+            'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
+        ]);
+    }
+
+    /**
      * Anular venta (pendiente o completada)
      */
     public function anularVenta(Request $request, Venta $venta)

@@ -60,6 +60,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/ventas/{venta}/anular', [VentaController::class, 'anularVenta'])->name('ventas.anular');
     Route::post('/ventas/{venta}/editar-pendiente', [VentaController::class, 'editarVentaPendiente'])->name('ventas.editar.pendiente');
     Route::post('/ventas/{venta}/distribucion', [VentaController::class, 'guardarDistribucion'])->name('ventas.distribucion.store');
+    Route::post('/ventas/{venta}/tasa-reporte', [VentaController::class, 'actualizarTasaReporte'])->name('ventas.tasaReporte.store');
 
     // ========================================================================
     // VENTAS ESPECIALES

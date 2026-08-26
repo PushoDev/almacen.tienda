@@ -2,6 +2,7 @@ import AppLogoIcon from '@/components/app-logo-icon';
 import HeadingSmall from '@/components/heading-small';
 import PaymentForm, { type Moneda as MonedaForm, type Payment as PaymentEdit } from '@/components/ventas/PaymentForm';
 import PaymentList from '@/components/ventas/PaymentList';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -49,12 +50,14 @@ import {
     Edit,
     FileText,
     IdCard,
+    ListOrdered,
     MapPin,
     MessageSquare,
     Package,
     Phone,
     Printer,
     ShoppingBag,
+    ShoppingCart,
     Store,
     TrendingUp,
     Truck,
@@ -420,6 +423,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(() =>
         String(venta.moneda_principal?.id ?? venta.monedas_para_reporte?.[0]?.id ?? ''),
     );
+    // Tasa editable para cuando la venta se pagó 100% en la moneda principal y nunca se
+    // capturó ninguna conversión (ej. a CUP) — también sirve para corregir a mano cuando
+    // la tasa global del sistema quedó desactualizada por error humano.
+    const [tasaReporteInput, setTasaReporteInput] = useState<string>('');
+    const [guardandoTasaReporte, setGuardandoTasaReporte] = useState(false);
 
     // ─────────────────────────────────────────
     // Cargar cuentas para gestor al montar
@@ -696,10 +704,63 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // Derivados de estado
     // ─────────────────────────────────────────
     const monedasReporte = currentVenta.monedas_para_reporte ?? [];
-    const monedaReporte = monedasReporte.find((m) => String(m.id) === monedaReporteSeleccionada) ?? monedasReporte[0];
-    const tasaReporte = monedaReporte?.tasa ?? 1;
-    const codigoReporte = monedaReporte?.codigo || 'USD';
+    const monedaReporte = monedasReporte.find((m) => String(m.id) === monedaReporteSeleccionada);
+    const esMonedaPrincipalReporte = String(currentVenta.moneda_principal?.id ?? '') === monedaReporteSeleccionada;
+    const esMonedaCobroActual = String(currentVenta.moneda_cobro?.id ?? '') === monedaReporteSeleccionada;
+    // El campo de tasa siempre está visible y editable para cualquier moneda seleccionada —
+    // el ticket recalcula en vivo con lo que esté tipeado ahí, sin excepciones por moneda.
+    const tasaReporte = parseFloat(tasaReporteInput) || 1;
+    const codigoReporte =
+        monedasSistema.find((m) => String(m.id) === monedaReporteSeleccionada)?.codigo ??
+        monedaReporte?.codigo ??
+        'USD';
     const convertirMontoReporte = (monto: number) => monto * tasaReporte;
+
+    // Precarga el campo de tasa al cambiar de moneda: usa el mejor dato ya conocido (moneda
+    // principal siempre es 1; la moneda de cobro guardada en la venta si coincide; la tasa
+    // capturada por un pago real si existe) y si no hay nada capturado, sugiere la tasa global
+    // actual del sistema como punto de partida — siempre editable, nunca se congela.
+    useEffect(() => {
+        if (esMonedaPrincipalReporte) {
+            setTasaReporteInput('1');
+        } else if (esMonedaCobroActual && currentVenta.tasa_aplicada_venta) {
+            setTasaReporteInput(String(currentVenta.tasa_aplicada_venta));
+        } else if (monedaReporte) {
+            setTasaReporteInput(String(monedaReporte.tasa));
+        } else {
+            const sugerida = monedasSistema.find((m) => String(m.id) === monedaReporteSeleccionada)?.tasa;
+            setTasaReporteInput(sugerida ? String(sugerida) : '');
+        }
+    }, [monedaReporteSeleccionada, currentVenta.tasa_aplicada_venta, currentVenta.moneda_cobro?.id]);
+
+    const guardarTasaReporte = async () => {
+        const tasa = parseFloat(tasaReporteInput);
+        if (!tasa || tasa <= 0) {
+            sileo.warning({ title: 'Ingresa una tasa de cambio válida.' });
+            return;
+        }
+        setGuardandoTasaReporte(true);
+        try {
+            const { data } = await axios.post(route('ventas.tasaReporte.store', currentVenta.id), {
+                moneda_cobro_id: Number(monedaReporteSeleccionada),
+                tasa,
+            });
+            if (data.success) {
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    tasa_aplicada_venta: data.tasa_aplicada_venta,
+                    moneda_cobro: data.moneda_cobro,
+                    monedas_para_reporte: data.monedas_para_reporte,
+                }));
+                sileo.success({ title: data.message });
+            }
+        } catch (e: unknown) {
+            const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar.';
+            sileo.error({ title: 'No se pudo guardar la tasa', description: msg });
+        } finally {
+            setGuardandoTasaReporte(false);
+        }
+    };
 
     const isVentaPendiente = currentVenta.estado === 'pendiente';
     const isVentaCompletada = currentVenta.estado === 'completada';
@@ -1293,19 +1354,19 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Botones de acción ── */}
                 <div className="flex flex-wrap justify-end gap-2">
-                    <Link
-                        href="/punto-venta"
-                        className="focus-visible:ring-ring border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    >
-                        Nueva Venta
-                    </Link>
+                    <Button variant="outline" asChild>
+                        <Link href="/punto-venta" className="flex items-center gap-2">
+                            <ShoppingCart size={16} />
+                            Nueva Venta
+                        </Link>
+                    </Button>
 
-                    <Link
-                        href={route('ventas.listado')}
-                        className="focus-visible:ring-ring border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                    >
-                        Ver Todas las Ventas
-                    </Link>
+                    <Button variant="outline" asChild>
+                        <Link href={route('ventas.listado')} className="flex items-center gap-2">
+                            <ListOrdered size={16} />
+                            Ver Todas las Ventas
+                        </Link>
+                    </Button>
 
                     {/* ── Acciones para Solicitud Especial ── */}
                     {isVentaSolicitudEspecial && (userRole === 'admin' || userRole === 'moderador') && (
@@ -1314,7 +1375,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 <AlertDialogTrigger asChild>
                                     <Button
                                         variant="default"
-                                        className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                                        className="flex cursor-pointer items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
                                         disabled={isApproving}
                                     >
                                         <CheckCircle size={16} />
@@ -1323,7 +1384,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
-                                        <AlertDialogTitle className="text-green-600">Confirmar Aprobación</AlertDialogTitle>
+                                        <AlertDialogTitle className="text-emerald-600">Confirmar Aprobación</AlertDialogTitle>
                                         <AlertDialogDescription asChild>
                                             <div className="space-y-3">
                                                 <p>¿Aprobar la solicitud especial <strong>#{currentVenta.id}</strong>?</p>
@@ -1333,7 +1394,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                         <p className="mt-1 italic text-amber-600 dark:text-amber-400">{currentVenta.nota_venta_especial}</p>
                                                     </div>
                                                 )}
-                                                <div className="rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+                                                <div className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                                                     Al aprobar, la venta pasará a estado <strong>Pendiente</strong> y el vendedor podrá agregar el receptor para completarla.
                                                 </div>
                                             </div>
@@ -1343,7 +1404,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         <AlertDialogCancel disabled={isApproving}>Cancelar</AlertDialogCancel>
                                         <AlertDialogAction
                                             onClick={handleAprobarSolicitudEspecial}
-                                            className="bg-green-600 hover:bg-green-700"
+                                            className="bg-emerald-600 hover:bg-emerald-700"
                                             disabled={isApproving}
                                         >
                                             Sí, Aprobar
@@ -1402,7 +1463,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     {isVentaPendiente && !currentVenta.destinatario && (
                         <Button
                             variant="outline"
-                            className="flex cursor-pointer items-center gap-2"
+                            className="flex cursor-pointer items-center gap-2 border-violet-300 text-violet-600 hover:bg-violet-50"
                             onClick={() => {
                                 setIsEditingDestinatario(false);
                                 setActiveTab('receptor');
@@ -1843,7 +1904,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     </AlertDialog>
 
                     {/* Exportar PDF */}
-                    <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                    <Button variant="outline" className="flex cursor-pointer items-center gap-2 border-indigo-300 text-indigo-600 hover:bg-indigo-50">
                         <FileText size={16} />
                         Exportar PDF
                     </Button>
@@ -1851,39 +1912,73 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     {/* Imprimir Reporte */}
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Button variant="outline" className="flex cursor-pointer items-center gap-2 border-sky-300 text-sky-600 hover:bg-sky-50">
                                 <Printer size={16} />
                                 Imprimir Reporte
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-w-2xl">
-                            <AlertDialogHeader>
-                                <AlertDialogTitle className="text-center">
-                                    <div className="flex justify-center">
+                        <AlertDialogContent className="max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
+                            <AlertDialogHeader className="border-b bg-gradient-to-r from-sky-600 to-sky-700 px-8 py-6 text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                         <AppLogoIcon />
                                     </div>
-                                </AlertDialogTitle>
-                                <AlertDialogDescription className="text-center">
-                                    <h2 className="text-lg font-bold">
-                                        Reporte de Venta #{currentVenta.id} - {currentVenta.almacen.nombre}
-                                    </h2>
-                                </AlertDialogDescription>
+                                    <div>
+                                        <AlertDialogTitle className="text-2xl font-bold text-white">Venta #{currentVenta.id}</AlertDialogTitle>
+                                        <AlertDialogDescription className="text-sky-100">
+                                            {currentVenta.almacen.nombre} · {formatDate(currentVenta.fecha)}
+                                        </AlertDialogDescription>
+                                    </div>
+                                </div>
                             </AlertDialogHeader>
-                            {monedasReporte.length > 0 && (
-                                <div className="flex items-center gap-2 px-4 pb-2">
-                                    <Label htmlFor="moneda-reporte">Moneda del reporte</Label>
-                                    <Select value={monedaReporteSeleccionada} onValueChange={setMonedaReporteSeleccionada}>
-                                        <SelectTrigger id="moneda-reporte" className="w-[200px]">
-                                            <SelectValue placeholder="Seleccionar moneda" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {monedasReporte.map((m) => (
-                                                <SelectItem key={m.id} value={String(m.id)}>
-                                                    {m.nombre} ({m.codigo})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                            {monedasSistema.length > 0 && (
+                                <div className="px-4 pt-4 pb-2">
+                                    <Alert className="border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950">
+                                        <DollarSign className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                                        <AlertTitle className="text-sky-700 dark:text-sky-300">Moneda del reporte</AlertTitle>
+                                        <AlertDescription>
+                                            <div className="mt-1 flex flex-nowrap items-center gap-3">
+                                                <Select value={monedaReporteSeleccionada} onValueChange={setMonedaReporteSeleccionada}>
+                                                    <SelectTrigger id="moneda-reporte" className="min-w-[220px] flex-1 bg-background">
+                                                        <SelectValue placeholder="Seleccionar moneda" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {monedasSistema.map((m) => (
+                                                            <SelectItem key={m.id} value={String(m.id)}>
+                                                                {m.nombre} ({m.codigo})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <div className="flex shrink-0 items-center gap-2 rounded-md border border-dashed border-amber-300 bg-amber-100/60 px-2 py-1 dark:bg-amber-950">
+                                                    <Label
+                                                        htmlFor="tasa-reporte"
+                                                        className="text-xs whitespace-nowrap text-amber-700 dark:text-amber-300"
+                                                    >
+                                                        Tasa de cambio:
+                                                    </Label>
+                                                    <Input
+                                                        id="tasa-reporte"
+                                                        type="number"
+                                                        min="0.0001"
+                                                        step="0.01"
+                                                        value={tasaReporteInput}
+                                                        onChange={(e) => setTasaReporteInput(e.target.value)}
+                                                        className="h-8 w-20 bg-background text-sm"
+                                                    />
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={guardandoTasaReporte}
+                                                        onClick={guardarTasaReporte}
+                                                        className="cursor-pointer"
+                                                    >
+                                                        {guardandoTasaReporte ? 'Guardando...' : 'Guardar'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </AlertDescription>
+                                    </Alert>
                                 </div>
                             )}
                             <div className="max-h-[70vh] overflow-y-auto">
@@ -1896,72 +1991,103 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                     <div className="mb-2">
                                         {currentVenta.destinatario && (
-                                            <>
-                                                <p>
-                                                    <span className="font-bold">Receptor / Cliente:</span> {currentVenta.destinatario.nombre}{' '}
-                                                    {currentVenta.destinatario.apellidos}
-                                                </p>
-                                                <p>
-                                                    <span className="font-bold">CI:</span> {currentVenta.destinatario.carnet_identidad}
-                                                </p>
-                                                <p>
-                                                    <span className="font-bold">Teléfono:</span>{' '}
-                                                    {currentVenta.destinatario.telefono_contacto || 'No especificado'}
-                                                </p>
-                                            </>
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center gap-1.5 font-bold text-violet-600 dark:text-violet-400">
+                                                    <User className="h-3.5 w-3.5" />
+                                                    {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-violet-300 font-normal text-violet-700 dark:border-violet-800 dark:text-violet-300"
+                                                    >
+                                                        <IdCard />
+                                                        {currentVenta.destinatario.carnet_identidad}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-violet-300 font-normal text-violet-700 dark:border-violet-800 dark:text-violet-300"
+                                                    >
+                                                        <Phone />
+                                                        {currentVenta.destinatario.telefono_contacto || 'No especificado'}
+                                                    </Badge>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                     <div className="mb-2 border-t pt-2">
                                         <h3 className="text-center font-bold">PRODUCTOS</h3>
-                                        <table className="w-full text-xs">
-                                            <thead>
-                                                <tr>
-                                                    <th className="text-left">Producto</th>
-                                                    <th className="text-center">Cant</th>
-                                                    <th className="text-right">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {currentVenta.items.map((item, index) => (
-                                                    <tr key={index} className="border-b">
-                                                        <td className="text-left">{item.producto.nombre}</td>
-                                                        <td className="text-center">{item.cantidad}</td>
-                                                        <td className="text-right">
-                                                            {formatCurrency(convertirMontoReporte(item.subtotal), codigoReporte)}
-                                                        </td>
+                                        <div className="mt-2 overflow-x-auto rounded-md border">
+                                            <table className="w-full text-xs">
+                                                <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                                    <tr>
+                                                        <th className="px-2 py-1.5 text-left font-semibold">Producto</th>
+                                                        <th className="px-2 py-1.5 text-left font-semibold">Categoría</th>
+                                                        <th className="px-2 py-1.5 text-center font-semibold">Cant</th>
+                                                        <th className="px-2 py-1.5 text-right font-semibold">Total</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                                    {currentVenta.items.map((item, index) => (
+                                                        <tr key={index}>
+                                                            <td className="px-2 py-1.5">
+                                                                <div className="font-medium">{item.producto.nombre}</div>
+                                                                <div className="text-muted-foreground text-[11px]">
+                                                                    {[item.producto.marca, item.producto.modelo].filter(Boolean).join(' · ')}
+                                                                </div>
+                                                            </td>
+                                                            <td className="text-muted-foreground px-2 py-1.5">{item.producto.categoria}</td>
+                                                            <td className="px-2 py-1.5 text-center">{item.cantidad}</td>
+                                                            <td className="px-2 py-1.5 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                                                                {formatCurrency(convertirMontoReporte(item.subtotal), codigoReporte)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                     <div className="mb-2 border-t pt-2">
-                                        <div className="flex justify-between">
-                                            <span>Total:</span>
-                                            <span className="font-bold">
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-1">
+                                                <DollarSign className="h-3 w-3" /> Total:
+                                            </span>
+                                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
                                                 {formatCurrency(convertirMontoReporte(currentVenta.total), codigoReporte)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span>Pagado:</span>
-                                            <span>{formatCurrency(convertirMontoReporte(currentVenta.total_pagado), codigoReporte)}</span>
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-1">
+                                                <CheckCircle className="h-3 w-3" /> Pagado:
+                                            </span>
+                                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                {formatCurrency(convertirMontoReporte(currentVenta.total_pagado), codigoReporte)}
+                                            </span>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span>Restante:</span>
-                                            <span>{formatCurrency(convertirMontoReporte(currentVenta.restante), codigoReporte)}</span>
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-1">
+                                                <Clock className="h-3 w-3" /> Restante:
+                                            </span>
+                                            <span
+                                                className={`font-semibold ${
+                                                    currentVenta.restante > 0
+                                                        ? 'text-amber-600 dark:text-amber-400'
+                                                        : 'text-emerald-600 dark:text-emerald-400'
+                                                }`}
+                                            >
+                                                {formatCurrency(convertirMontoReporte(currentVenta.restante), codigoReporte)}
+                                            </span>
                                         </div>
                                     </div>
                                     <div className="mb-2 border-t pt-2">
-                                        <p className="text-xs">
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                            <UserCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
                                             <span className="font-bold">Vendedor:</span> {currentVenta.usuario.nombre}
-                                        </p>
-                                    </div>
-                                    <div className="mt-4 text-center text-xs">
-                                        <p>Gracias por su compra</p>
-                                        <p>¡Vuelva pronto!</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <AlertDialogFooter>
+                            <AlertDialogFooter className="border-t p-4">
                                 <Button
                                     variant="secondary"
                                     onClick={() => {
@@ -1992,7 +2118,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <AlertDialogTrigger asChild>
                                 <Button
                                     variant="default"
-                                    className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="flex cursor-pointer items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={isApproving || !puedeAprobar}
                                 >
                                     <CheckCircle size={16} />
@@ -2011,13 +2137,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
-                                    <AlertDialogTitle className="text-green-600">Confirmar Aprobación</AlertDialogTitle>
+                                    <AlertDialogTitle className="text-emerald-600">Confirmar Aprobación</AlertDialogTitle>
                                     <AlertDialogDescription asChild>
                                         <div className="space-y-3">
                                             <p>
                                                 ¿Está seguro que desea aprobar la Venta <strong>#{currentVenta.id}</strong>?
                                             </p>
-                                            <div className="rounded-md bg-green-50 p-3 text-sm font-semibold text-green-600 dark:bg-green-950 dark:text-green-400">
+                                            <div className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
                                                 Al aprobar se ejecutará:
                                                 <ul className="mt-1 list-inside list-disc space-y-1 font-normal">
                                                     <li>Acreditará pagos en cuentas bancarias</li>
@@ -2100,7 +2226,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     <AlertDialogCancel disabled={isApproving}>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
                                         onClick={handleAprobarVenta}
-                                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
                                         disabled={isApproving}
                                     >
                                         {isApproving ? (
@@ -2121,7 +2247,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     {isVentaPendiente && (
                         <Button
                             variant="outline"
-                            className="flex cursor-pointer items-center gap-2"
+                            className="flex cursor-pointer items-center gap-2 border-amber-300 text-amber-600 hover:bg-amber-50"
                             onClick={handleAbrirEdicion}
                         >
                             <Edit size={16} />
