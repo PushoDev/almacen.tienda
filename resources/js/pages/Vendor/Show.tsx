@@ -2091,19 +2091,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 <Button
                                     variant="secondary"
                                     onClick={() => {
-                                        const printContent = document.querySelector('[aria-label="alert-dialog-content"]');
-                                        if (printContent) {
-                                            const originalContents = document.body.innerHTML;
-                                            document.body.innerHTML = printContent.innerHTML;
-                                            window.print();
-                                            document.body.innerHTML = originalContents;
-                                        } else {
-                                            sileo.error({ title: 'No se pudo generar el reporte para imprimir' });
-                                        }
+                                        const url = route('ventas.imprimir', {
+                                            venta: currentVenta.id,
+                                            moneda_id: monedaReporteSeleccionada,
+                                            tasa: tasaReporte,
+                                        });
+                                        window.open(url, '_blank');
                                     }}
                                     className="cursor-pointer"
                                 >
-                                    Imprimir Ticket
+                                    Imprimir Factura
                                 </Button>
                                 <AlertDialogCancel className="bg-destructive hover:bg-destructive-foreground cursor-pointer text-white">
                                     Cerrar
