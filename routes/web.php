@@ -119,6 +119,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/acciones/reportes.php';
     // Movimientos
     require __DIR__ . '/acciones/movimientos.php';
+    // Calendario de Historial
+    require __DIR__ . '/acciones/calendario.php';
 });
 
 

@@ -30,6 +30,7 @@ import { ProductosPorAlmacenCharts } from './layout/ProductosPorAlmacen';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
+import { Calendar } from '@/Components/ui/calendar';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
