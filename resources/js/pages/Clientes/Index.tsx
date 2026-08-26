@@ -779,7 +779,7 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle className="flex items-center gap-2">
-                                <AlertCircle size={18} className={estadoSeleccionado?.color === 'red' ? 'text-red-500' : 'text-green-500'} />
+                                <AlertCircle size={18} className={estadoSeleccionado?.color === 'red' ? 'text-red-500' : 'text-emerald-500'} />
                                 No se puede eliminar este cliente
                             </AlertDialogTitle>
                             <AlertDialogDescription asChild>
@@ -793,14 +793,14 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                                             className={`rounded-lg border p-3 ${
                                                 estadoSeleccionado?.color === 'red'
                                                     ? 'border-red-200 bg-red-50'
-                                                    : 'border-green-200 bg-green-50'
+                                                    : 'border-emerald-200 bg-emerald-50'
                                             }`}
                                         >
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="font-medium">Estado actual:</span>
                                                 <span
                                                     className={`font-bold ${
-                                                        estadoSeleccionado?.color === 'red' ? 'text-red-700' : 'text-green-700'
+                                                        estadoSeleccionado?.color === 'red' ? 'text-red-700' : 'text-emerald-700'
                                                     }`}
                                                 >
                                                     {estadoSeleccionado?.texto}
@@ -810,7 +810,7 @@ export default function ClientesPage({ clientes, resumen }: { clientes: ClienteP
                                                 <span className="font-medium">Monto:</span>
                                                 <span
                                                     className={`font-bold ${
-                                                        estadoSeleccionado?.color === 'red' ? 'text-red-700' : 'text-green-700'
+                                                        estadoSeleccionado?.color === 'red' ? 'text-red-700' : 'text-emerald-700'
                                                     }`}
                                                 >
                                                     {formatearMoneda(Math.abs(saldoSeleccionado))}
