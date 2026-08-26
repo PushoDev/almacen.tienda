@@ -24,6 +24,7 @@ class Cuenta extends Model
         'tipo',
         'estado',
         'tipo_titular',
+        'imagen',
     ];
 
     protected $casts = [

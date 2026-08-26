@@ -123,8 +123,10 @@ export default function Dashboard({
         fetchChartData();
     }, [timeRange, userRole]);
 
-    // Cargar usuarios al montar el componente
+    // Cargar usuarios al montar el componente (solo admin/moderador, mismo gate que el backend)
     useEffect(() => {
+        if (userRole === 'vendedor') return;
+
         const fetchUsuarios = async () => {
             try {
                 const response = await fetch(route('dashboard.usuarios'));
@@ -136,7 +138,7 @@ export default function Dashboard({
         };
 
         fetchUsuarios();
-    }, []);
+    }, [userRole]);
 
     // Cargar monedas al montar el componente
     useEffect(() => {

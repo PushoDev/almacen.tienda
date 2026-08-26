@@ -27,6 +27,7 @@ use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
+use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class VentaController extends Controller
 {
@@ -720,6 +721,75 @@ class VentaController extends Controller
             'venta'         => $ventaData,
             'userRole'      => Auth::user()->role ?? 'vendedor',
             'monedasSistema' => $monedasSistema,
+        ]);
+    }
+
+    /**
+     * Página de impresión dedicada (Ticket + Factura de Venta lado a lado, media hoja A4).
+     * Reemplaza el mecanismo roto de imprimir dentro del diálogo (document.body.innerHTML
+     * swap) — se abre en pestaña nueva y usa Ctrl+P / "Guardar como PDF" del navegador sobre
+     * una página real, con su propio CSS @media print.
+     */
+    public function imprimir(Request $request, Venta $venta)
+    {
+        $venta->load([
+            'destinatario',
+            'detalles.producto.categoria',
+            'usuario',
+            'almacen',
+            'moneda',
+        ]);
+
+        // Moneda/tasa del reporte: el modal (Vendor/Show.tsx, sección "Moneda del reporte")
+        // ya resuelve cuál tasa aplicar (capturada o tecleada a mano) y la manda por query
+        // string al abrir esta página — acá solo se aplica, no se recalcula. Sin query params
+        // (acceso directo por URL), cae a la moneda principal de la venta, tasa 1.
+        $monedaReporteId = $request->query('moneda_id');
+        $tasaReporte = $monedaReporteId ? (float) $request->query('tasa', 1) : 1.0;
+        $monedaReporte = $monedaReporteId ? Moneda::find($monedaReporteId) : $venta->moneda;
+        $codigoReporte = $monedaReporte->codigo_moneda ?? $venta->moneda?->codigo_moneda ?? 'USD';
+
+        $totalPagado = (float) $venta->pagos()->sum('monto_equivalente');
+        $qrUrl = route('ventas.show', $venta->id);
+        $qrPng = DNS2D::getBarcodePNG($qrUrl, 'QRCODE,M', 4, 4, [0, 0, 0]);
+
+        return Inertia::render('Vendor/Imprimir', [
+            'venta' => [
+                'id' => $venta->id,
+                'fecha' => $venta->created_at->toISOString(),
+                'almacen' => [
+                    'nombre' => $venta->almacen->nombre_almacen,
+                    'ciudad' => $venta->almacen->ciudad_almacen,
+                    'provincia' => $venta->almacen->provincia_almacen,
+                ],
+                'usuario' => [
+                    'nombre' => $venta->usuario->name,
+                ],
+                'destinatario' => $venta->destinatario ? [
+                    'nombre' => $venta->destinatario->nombre,
+                    'apellidos' => $venta->destinatario->apellidos,
+                    'carnet_identidad' => $venta->destinatario->carnet_identidad,
+                    'telefono_contacto' => $venta->destinatario->telefono_contacto,
+                ] : null,
+                'items' => $venta->detalles->map(fn ($detalle) => [
+                    'producto' => [
+                        'nombre' => $detalle->producto->nombre_producto,
+                        'marca' => $detalle->producto->marca_producto,
+                        'modelo' => $detalle->producto->modelo_producto,
+                        'categoria' => $detalle->producto->categoria->nombre_categoria ?? 'Sin categoría',
+                    ],
+                    'cantidad' => $detalle->cantidad,
+                    'subtotal' => (float) $detalle->subtotal * $tasaReporte,
+                ]),
+                'total' => (float) $venta->total * $tasaReporte,
+                'total_pagado' => $totalPagado * $tasaReporte,
+                'restante' => ((float) $venta->total - $totalPagado) * $tasaReporte,
+                'moneda_principal' => [
+                    'codigo' => $codigoReporte,
+                    'simbolo' => $monedaReporte->simbolo_moneda ?? $venta->moneda?->simbolo_moneda,
+                ],
+            ],
+            'qrCode' => 'data:image/png;base64,' . $qrPng,
         ]);
     }
 
@@ -1888,6 +1958,42 @@ class VentaController extends Controller
                     'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_cuenta ?? 0),
                 ] : null,
             ] : null,
+        ]);
+    }
+
+    /**
+     * Guarda/corrige manualmente la tasa de cambio usada para convertir el reporte/ticket
+     * de la venta a otra moneda (ej. CUP), para el caso donde la venta se pagó 100% en la
+     * moneda principal y nunca se capturó ninguna tasa de conversión. No afecta ningún
+     * movimiento de dinero ya realizado (aprobarVenta usa gestor_monto/comision directamente,
+     * no deriva nada de tasa_aplicada_venta) — es puramente informativa para el reporte,
+     * por eso se permite en cualquier estado de la venta, no solo pendiente.
+     */
+    public function actualizarTasaReporte(Request $request, Venta $venta)
+    {
+        $validated = $request->validate([
+            'moneda_cobro_id' => 'required|exists:monedas,id',
+            'tasa' => 'required|numeric|min:0.0001',
+        ]);
+
+        $venta->update([
+            'moneda_cobro_id' => $validated['moneda_cobro_id'],
+            'tasa_aplicada_venta' => $validated['tasa'],
+        ]);
+
+        $venta->refresh()->load('monedaCobro');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tasa de cambio del reporte actualizada.',
+            'tasa_aplicada_venta' => (float) $venta->tasa_aplicada_venta,
+            'moneda_cobro' => $venta->monedaCobro ? [
+                'id' => $venta->monedaCobro->id,
+                'codigo' => $venta->monedaCobro->codigo_moneda,
+                'nombre' => $venta->monedaCobro->nombre_moneda,
+                'simbolo' => $venta->monedaCobro->simbolo_moneda,
+            ] : null,
+            'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
         ]);
     }
 

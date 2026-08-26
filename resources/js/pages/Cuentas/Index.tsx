@@ -30,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Minus, Package, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
+import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Minus, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -472,11 +472,9 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                             <Badge variant="outline" className={
                                                 cuenta.tipo === 'tarjeta'
                                                     ? 'inline-flex items-center gap-1.5 border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300'
-                                                    : cuenta.tipo === 'efectivo'
-                                                        ? 'inline-flex items-center gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
-                                                        : 'inline-flex items-center gap-1.5 border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300'
+                                                    : 'inline-flex items-center gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
                                             }>
-                                                {cuenta.tipo === 'tarjeta' ? <><CreditCard size={12} /> Tarjeta</> : cuenta.tipo === 'efectivo' ? <><Banknote size={12} /> Efectivo</> : <><Package size={12} /> Otro</>}
+                                                {cuenta.tipo === 'tarjeta' ? <><CreditCard size={12} /> Tarjeta</> : <><Banknote size={12} /> Efectivo</>}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>

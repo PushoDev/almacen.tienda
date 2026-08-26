@@ -129,7 +129,7 @@ const allNavItems: NavItem[] = [
     },
     {
         title: 'Calendario de Historial',
-        href: '#',
+        href: '/calendario',
         icon: CalendarIcon,
         roles: ['admin'],
     },

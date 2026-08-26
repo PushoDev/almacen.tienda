@@ -56,11 +56,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
      * Dashboard para todos los usuarios
      */
     Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
-    Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update');
-    Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc');
+    Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update')->middleware('admin');
+    Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc')->middleware('admin');
     Route::get('/dashboard/chart-data', [ReporteController::class, 'getComprasVentasData'])->name('dashboard.chart.data');
     Route::get('/dashboard/financial-states', [ReporteController::class, 'getFinancialStates'])->name('dashboard.financial.states');
-    Route::get('/dashboard/usuarios', [ReporteController::class, 'getUsuarios'])->name('dashboard.usuarios');
+    Route::get('/dashboard/usuarios', [ReporteController::class, 'getUsuarios'])->name('dashboard.usuarios')->middleware('admin');
     Route::get('/dashboard/monedas', [ReporteController::class, 'getMonedas'])->name('dashboard.monedas');
     Route::get('/dashboard/historial-comparaciones', [AdminController::class, 'getHistorialComparaciones'])->name('dashboard.historial.comparaciones');
     Route::get('/dashboard/estadisticas-costo-precio', [AdminController::class, 'getEstadisticasCostoPrecio'])->name('dashboard.estadisticas.costo_precio');
@@ -119,6 +119,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/acciones/reportes.php';
     // Movimientos
     require __DIR__ . '/acciones/movimientos.php';
+    // Calendario de Historial
+    require __DIR__ . '/acciones/calendario.php';
 });
 
 
