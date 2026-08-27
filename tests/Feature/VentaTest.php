@@ -2,7 +2,6 @@
 
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
-use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\Moneda;
@@ -50,7 +49,7 @@ function crearCuentaCup(float $saldo = 10000): Cuenta
     );
 
     return Cuenta::create([
-        'nombre_cuenta' => 'Cuenta CUP ' . uniqid(),
+        'nombre_cuenta' => 'Cuenta CUP '.uniqid(),
         'saldo_cuenta' => $saldo,
         'tipo_cuenta' => 'permanentes',
         'tipo' => 'banco',
@@ -67,7 +66,7 @@ function crearCuentaUsd(float $saldo = 10000): Cuenta
     );
 
     return Cuenta::create([
-        'nombre_cuenta' => 'Cuenta USD ' . uniqid(),
+        'nombre_cuenta' => 'Cuenta USD '.uniqid(),
         'saldo_cuenta' => $saldo,
         'tipo_cuenta' => 'permanentes',
         'tipo' => 'banco',
@@ -690,6 +689,80 @@ test('no se puede anular una venta ya anulada', function () {
 });
 
 // ==========================================================================
+// PROTECCIÓN DE RUTAS — aprobar/anular/editar-pendiente: admin/moderador
+// gestionan cualquier venta, un vendedor solo las suyas (mismo criterio que
+// listadoVentas()).
+// ==========================================================================
+
+test('un vendedor no puede aprobar la venta de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
+    crearDestinatario($venta);
+
+    $response = $this->postJson(route('ventas.aprobar', $venta));
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('un vendedor puede aprobar su propia venta', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $vendedor->id, 'estado' => 'pendiente']);
+    crearDestinatario($venta);
+
+    $response = $this->postJson(route('ventas.aprobar', $venta));
+
+    $response->assertJson(['success' => true]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'completada']);
+});
+
+test('un vendedor no puede anular la venta de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
+
+    $response = $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio']);
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('un moderador puede anular la venta de cualquier vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
+
+    $response = $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio']);
+
+    $response->assertJson(['success' => true]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'cancelada']);
+});
+
+test('un vendedor no puede editar la venta pendiente de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
+
+    $response = $this->postJson(route('ventas.editar.pendiente', $venta), ['pagos' => []]);
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+});
+
+// ==========================================================================
 // GUARDAR DISTRIBUCIÓN — bug B1 (saldo_disponible desde saldo_cuenta)
 // ==========================================================================
 
@@ -875,4 +948,198 @@ test('buscarDestinatarios no busca con menos de 2 caracteres', function () {
 
     $response->assertOk();
     expect($response->json())->toBe([]);
+});
+
+// ==========================================================================
+// IMPRIMIR — página de impresión (Ticket + Factura)
+// ==========================================================================
+
+test('guests are redirected to the login page al intentar imprimir una venta', function () {
+    $venta = Venta::factory()->create();
+
+    $this->get(route('ventas.imprimir', $venta))->assertRedirect('/login');
+});
+
+test('imprimir renderiza el ticket con la moneda principal cuando no hay parámetros de conversión', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $venta = Venta::factory()->conMoneda($monedaUsd)->create([
+        'user_id' => $admin->id, 'almacen_id' => $almacen->id, 'total' => 40,
+    ]);
+    crearDestinatario($venta);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 2, 'precio_venta' => 20, 'subtotal' => 40,
+        'costo_unitario' => 10, 'ganancia' => 20, 'comision_unitaria' => 2,
+    ]);
+    $venta->pagos()->create([
+        'tipo_pago' => 'efectivo', 'moneda_id' => $monedaUsd->id,
+        'monto' => 40, 'tasa_cambio_aplicada' => 1, 'monto_equivalente' => 40,
+    ]);
+
+    $response = $this->get(route('ventas.imprimir', $venta));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->component('Vendor/Imprimir')
+        ->where('venta.id', $venta->id)
+        // Inertia serializa estos floats "redondos" (40.0) como enteros JSON (40),
+        // así que el valor decodificado es int, no float — comparar contra int.
+        ->where('venta.total', 40)
+        ->where('venta.total_pagado', 40)
+        ->where('venta.restante', 0)
+        ->where('venta.moneda_principal.codigo', 'USD')
+        ->where('venta.destinatario.nombre', 'Juan')
+        ->where('venta.items.0.cantidad', 2)
+        ->where('venta.items.0.subtotal', 40)
+    );
+});
+
+test('imprimir no incluye datos de destinatario cuando la venta no tiene uno', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $venta = Venta::factory()->conMoneda($monedaUsd)->create([
+        'user_id' => $admin->id, 'almacen_id' => $almacen->id, 'total' => 0,
+    ]);
+
+    $response = $this->get(route('ventas.imprimir', $venta));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page->where('venta.destinatario', null));
+});
+
+test('imprimir aplica la tasa y moneda pasadas por query string a los totales e items', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    // nombre_moneda explícito en ambas — evita la colisión conocida de unicidad
+    // cuando Faker genera el mismo nombre al azar para dos monedas en el mismo test.
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'nombre_moneda' => 'Dólar Test', 'estado' => true]);
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'nombre_moneda' => 'Peso Test', 'estado' => true, 'tasa_cambio' => 100]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $venta = Venta::factory()->conMoneda($monedaUsd)->create([
+        'user_id' => $admin->id, 'almacen_id' => $almacen->id, 'total' => 40,
+    ]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 2, 'precio_venta' => 20, 'subtotal' => 40,
+        'costo_unitario' => 10, 'ganancia' => 20, 'comision_unitaria' => 2,
+    ]);
+    $venta->pagos()->create([
+        'tipo_pago' => 'efectivo', 'moneda_id' => $monedaUsd->id,
+        'monto' => 40, 'tasa_cambio_aplicada' => 1, 'monto_equivalente' => 40,
+    ]);
+
+    $response = $this->get(route('ventas.imprimir', [
+        'venta' => $venta->id, 'moneda_id' => $monedaCup->id, 'tasa' => 100,
+    ]));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('venta.total', 4000)
+        ->where('venta.total_pagado', 4000)
+        ->where('venta.restante', 0)
+        ->where('venta.moneda_principal.codigo', 'CUP')
+        ->where('venta.items.0.subtotal', 4000)
+    );
+});
+
+// ==========================================================================
+// TASA DE CAMBIO DEL REPORTE — corrección manual, no gatea por estado
+// ==========================================================================
+
+test('actualizarTasaReporte guarda la tasa y la moneda de cobro en la venta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true]);
+    $venta = Venta::factory()->create(['user_id' => $admin->id]);
+
+    $response = $this->postJson(route('ventas.tasaReporte.store', $venta), [
+        'moneda_cobro_id' => $monedaCup->id,
+        'tasa' => 350,
+    ]);
+
+    $response->assertOk();
+    $response->assertJson([
+        'success' => true,
+        'tasa_aplicada_venta' => 350.0,
+        'moneda_cobro' => ['codigo' => 'CUP'],
+    ]);
+
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'moneda_cobro_id' => $monedaCup->id,
+        'tasa_aplicada_venta' => 350,
+    ]);
+});
+
+test('actualizarTasaReporte rechaza el payload vacío — moneda_cobro_id y tasa son requeridos', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->create(['user_id' => $admin->id]);
+
+    $response = $this->postJson(route('ventas.tasaReporte.store', $venta), []);
+
+    $response->assertJsonValidationErrors(['moneda_cobro_id', 'tasa']);
+});
+
+test('actualizarTasaReporte rechaza una tasa igual a 0', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true]);
+    $venta = Venta::factory()->create(['user_id' => $admin->id]);
+
+    $response = $this->postJson(route('ventas.tasaReporte.store', $venta), [
+        'moneda_cobro_id' => $monedaCup->id,
+        'tasa' => 0,
+    ]);
+
+    $response->assertJsonValidationErrors('tasa');
+});
+
+test('actualizarTasaReporte rechaza un moneda_cobro_id que no existe', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->create(['user_id' => $admin->id]);
+
+    $response = $this->postJson(route('ventas.tasaReporte.store', $venta), [
+        'moneda_cobro_id' => 999999,
+        'tasa' => 100,
+    ]);
+
+    $response->assertJsonValidationErrors('moneda_cobro_id');
+});
+
+test('actualizarTasaReporte funciona en una venta ya completada porque solo afecta el reporte, no mueve dinero', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true]);
+    $venta = Venta::factory()->completada()->create(['user_id' => $admin->id]);
+
+    $response = $this->postJson(route('ventas.tasaReporte.store', $venta), [
+        'moneda_cobro_id' => $monedaCup->id,
+        'tasa' => 120,
+    ]);
+
+    $response->assertJson(['success' => true]);
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'estado' => 'completada',
+        'tasa_aplicada_venta' => 120,
+    ]);
 });

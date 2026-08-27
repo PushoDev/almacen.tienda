@@ -144,7 +144,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                 {/* Media hoja A4 — Ticket + Factura de Venta lado a lado */}
                 <div className="print-sheet mx-auto flex max-w-4xl divide-x divide-dashed divide-slate-400 rounded-md bg-white text-slate-900 shadow-lg print:divide-slate-500 print:rounded-none print:shadow-none">
                     {/* ── TICKET (angosto, para el vendedor) ── */}
-                    <div className={`w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
+                    <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
                         <div className="mb-1.5 border-b border-slate-300 pb-1.5 text-center">
                             <div className="mb-0.5 flex justify-center [&_img]:!h-9 [&_img]:!w-9">
                                 <AppLogoIcon />
@@ -194,7 +194,16 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </div>
 
                     {/* ── FACTURA DE VENTA (formal, para el cliente) ── */}
-                    <div className={`flex-1 p-3 leading-snug ${tallaFactura}`}>
+                    <div className={`relative flex-1 p-3 leading-snug ${tallaFactura}`}>
+                        {/* Marca de agua — va primero en el DOM y sin z-index propio, así el
+                            contenido real (envuelto abajo en un `relative`) siempre pinta encima. */}
+                        <img
+                            src="/projects/mascota/mascota.webp"
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-2 bottom-2 h-48 w-48 opacity-25 select-none"
+                        />
+                        <div className="relative">
                         <div className="mb-1.5 flex items-start justify-between">
                             <div className="flex w-12 shrink-0 justify-start [&_img]:!h-9 [&_img]:!w-9">
                                 <AppLogoIcon />
@@ -280,11 +289,21 @@ export default function Imprimir({ venta, qrCode }: Props) {
                                 <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
                             </div>
                         </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ── */}
-                <div className="print-sheet mx-auto mt-8 max-w-4xl bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                <div className="print-sheet relative mx-auto mt-8 max-w-4xl overflow-hidden bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                    {/* Marca de agua central, bien sutil — el texto de garantía (31 cláusulas
+                        a 7px) tiene que seguir siendo legible encima. */}
+                    <img
+                        src="/projects/mascota/mascota.webp"
+                        alt=""
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-10 select-none"
+                    />
+                    <div className="relative">
                     <h2 className="mb-1 text-center text-[10px] font-bold tracking-wide">TÉRMINOS Y CONDICIONES DE GARANTÍA</h2>
                     <div className="columns-2 gap-4 text-[7px] leading-[1.15] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
                         {CLAUSULAS_GARANTIA.map((clausula, index) => (
@@ -312,6 +331,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                         verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
                         Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
                         conceptos ni por considerar que el equipo no cumple con sus expectativas.
+                    </div>
                     </div>
                 </div>
             </div>
