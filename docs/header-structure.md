@@ -98,6 +98,8 @@ Propiedades clave:
 - `absolute right-2 bottom-0` — Esquina inferior derecha
 - `opacity-40` — Semitransparente
 
+**Alternativa (2026-08-27):** en `dashboard.tsx` este ícono se reemplazó por la mascota del proyecto con un efecto distinto (opaca, sobresaliendo del borde superior del banner en vez de semitransparente y contenida) — ver `docs/patron-mascota-bleed.md` antes de replicar este cambio en otra página, tiene gotchas propios (`overflow-hidden` del banner, choque con la barra superior fija).
+
 ## Ejemplos por página
 
 | Página | Título | Icono | Color icono |
@@ -110,7 +112,7 @@ Propiedades clave:
 | Reporte VentasPorVendedor | Reporte de Ventas por Vendedor | `User` | `#22d3ee` |
 | Empleados/Index | Gestión de Empleados | — | — |
 | Cierres/Index | Cierres de Caja | `ComputerIcon` | — |
-| dashboard.tsx | Opciones Generales del Sistema | `ComputerIcon` | `#d6d3d1` (tiene además `CursorProvider`/`CursorFollow`) |
+| dashboard.tsx | Opciones Generales del Sistema | Mascota (2026-08-27, reemplazó a `ComputerIcon`) — ver `docs/patron-mascota-bleed.md`, Variante A (bleed opaco) | — (tiene además `CursorProvider`/`CursorFollow`) |
 | Comprar/Index | Opciones Generales del Sistema | `ShoppingBasket` | `#f59e0b` |
 
 Algunas páginas (como Empleados) no usan el icono decorativo. Otras personalizan el color del icono.

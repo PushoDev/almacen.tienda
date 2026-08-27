@@ -9,7 +9,6 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
-    ComputerIcon,
     Coins,
     DiamondPercent,
     DollarSign,
@@ -202,7 +201,7 @@ export default function Dashboard({
             <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <CursorProvider>
                         <CursorFollow>
                             <div className="bg-sidebar-accent rounded-lg px-2 py-1 text-sm text-white shadow-lg">Opciones Generales</div>
@@ -213,11 +212,14 @@ export default function Dashboard({
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
-                    <ComputerIcon
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                    {/* Mascota — anclada abajo del header, más grande para que la parte de
+                        arriba sobresalga del borde superior; corrida a la izquierda para no
+                        chocar con los íconos de la barra superior (luna/notificaciones). */}
+                    <img
+                        src="/projects/mascota/mascota.webp"
+                        alt=""
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-24 bottom-0 h-32 w-32 select-none"
                     />
                 </div>
 

@@ -88,6 +88,16 @@ const CLAUSULAS_GARANTIA = [
 export default function Imprimir({ venta, qrCode }: Props) {
     const codigo = venta.moneda_principal?.codigo || 'USD';
 
+    // La mitad de página está pensada para el caso normal de hasta 5 productos —
+    // con ese tope se ve cómoda y siempre sale del mismo tamaño. Si una venta
+    // puntual tiene más, se compacta un poco para seguir cabiendo en la misma
+    // media hoja en vez de desbordar a una hoja completa.
+    const esComoda = venta.items.length <= 5;
+    const tallaTicket = esComoda ? 'text-[10px]' : 'text-[9px]';
+    const tallaFactura = esComoda ? 'text-[10px]' : 'text-[9px]';
+    const tallaTablaFactura = esComoda ? 'text-[9px]' : 'text-[8px]';
+    const filaFactura = esComoda ? 'px-1 py-1' : 'px-1 py-0.5';
+
     const formatMonto = (monto: number) =>
         new Intl.NumberFormat('es-ES', { style: 'currency', currency: codigo, minimumFractionDigits: 2 }).format(monto);
 
@@ -134,7 +144,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                 {/* Media hoja A4 — Ticket + Factura de Venta lado a lado */}
                 <div className="print-sheet mx-auto flex max-w-4xl divide-x divide-dashed divide-slate-400 rounded-md bg-white text-slate-900 shadow-lg print:divide-slate-500 print:rounded-none print:shadow-none">
                     {/* ── TICKET (angosto, para el vendedor) ── */}
-                    <div className="w-[38%] shrink-0 p-3 font-mono text-[9px] leading-snug">
+                    <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
                         <div className="mb-1.5 border-b border-slate-300 pb-1.5 text-center">
                             <div className="mb-0.5 flex justify-center [&_img]:!h-9 [&_img]:!w-9">
                                 <AppLogoIcon />
@@ -146,17 +156,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             <p>Vendedor: {venta.usuario.nombre}</p>
                         </div>
 
-                        {venta.destinatario && (
-                            <div className="mb-1.5 border-b border-slate-300 pb-1.5">
-                                <p className="font-bold">
-                                    {venta.destinatario.nombre} {venta.destinatario.apellidos}
-                                </p>
-                                <p>CI: {venta.destinatario.carnet_identidad || '—'}</p>
-                                <p>Tel: {venta.destinatario.telefono_contacto || '—'}</p>
-                            </div>
-                        )}
-
-                        <div className="mb-1.5 border-b border-slate-300 pb-1.5">
+                        <div className="mb-1.5 min-h-[32mm] border-b border-slate-300 pb-1.5">
                             <table className="w-full">
                                 <thead>
                                     <tr className="border-b border-slate-300">
@@ -194,7 +194,16 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </div>
 
                     {/* ── FACTURA DE VENTA (formal, para el cliente) ── */}
-                    <div className="flex-1 p-3 text-[9px] leading-snug">
+                    <div className={`relative flex-1 p-3 leading-snug ${tallaFactura}`}>
+                        {/* Marca de agua — va primero en el DOM y sin z-index propio, así el
+                            contenido real (envuelto abajo en un `relative`) siempre pinta encima. */}
+                        <img
+                            src="/projects/mascota/mascota.webp"
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-2 bottom-2 h-48 w-48 opacity-25 select-none"
+                        />
+                        <div className="relative">
                         <div className="mb-1.5 flex items-start justify-between">
                             <div className="flex w-12 shrink-0 justify-start [&_img]:!h-9 [&_img]:!w-9">
                                 <AppLogoIcon />
@@ -204,7 +213,10 @@ export default function Imprimir({ venta, qrCode }: Props) {
                                 <p className="text-xs font-semibold">{venta.almacen.nombre}</p>
                                 {ubicacionAlmacen && <p className="text-slate-500">{ubicacionAlmacen}</p>}
                             </div>
-                            <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12 shrink-0" />
+                            <div className="flex shrink-0 flex-col items-center gap-0.5">
+                                <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
+                                <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
+                            </div>
                         </div>
 
                         <div className="mb-1.5 flex justify-between border-t border-b border-slate-300 py-1">
@@ -222,24 +234,24 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             </div>
                         </div>
 
-                        <table className="mb-1.5 w-full border-collapse text-[8px]">
+                        <table className={`mb-1.5 min-h-[32mm] w-full border-collapse align-top ${tallaTablaFactura}`}>
                             <thead>
                                 <tr className="border-y border-slate-400">
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-center font-semibold">Cant</th>
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-left font-semibold">Descripción del equipo</th>
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-center font-semibold">Días Garantía</th>
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-left font-semibold">Modelo</th>
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-center font-semibold">No. Serie</th>
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-center font-semibold">Sello</th>
-                                    <th className="border-r border-slate-300 px-1 py-0.5 text-right font-semibold">Precio</th>
-                                    <th className="px-1 py-0.5 text-right font-semibold">Sub.Total</th>
+                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Cant</th>
+                                    <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Descripción del equipo</th>
+                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Días Garantía</th>
+                                    <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Modelo</th>
+                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>No. Serie</th>
+                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Sello</th>
+                                    <th className={`border-r border-slate-300 text-right font-semibold ${filaFactura}`}>Precio</th>
+                                    <th className={`text-right font-semibold ${filaFactura}`}>Sub.Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {venta.items.map((item, index) => (
                                     <tr key={index} className="border-b border-slate-200">
-                                        <td className="border-r border-slate-200 px-1 py-0.5 text-center">{item.cantidad}</td>
-                                        <td className="border-r border-slate-200 px-1 py-0.5">
+                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}>{item.cantidad}</td>
+                                        <td className={`border-r border-slate-200 ${filaFactura}`}>
                                             {item.producto.nombre}
                                             {(item.producto.marca || item.producto.modelo) && (
                                                 <span className="text-slate-500">
@@ -248,23 +260,23 @@ export default function Imprimir({ venta, qrCode }: Props) {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="border-r border-slate-200 px-1 py-0.5 text-center"></td>
-                                        <td className="border-r border-slate-200 px-1 py-0.5">{item.producto.modelo || ''}</td>
-                                        <td className="border-r border-slate-200 px-1 py-0.5 text-center"></td>
-                                        <td className="border-r border-slate-200 px-1 py-0.5 text-center"></td>
-                                        <td className="border-r border-slate-200 px-1 py-0.5 text-right">
+                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                        <td className={`border-r border-slate-200 ${filaFactura}`}>{item.producto.modelo || ''}</td>
+                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                        <td className={`border-r border-slate-200 text-right ${filaFactura}`}>
                                             {formatMonto(item.subtotal / item.cantidad)}
                                         </td>
-                                        <td className="px-1 py-0.5 text-right">{formatMonto(item.subtotal)}</td>
+                                        <td className={`text-right ${filaFactura}`}>{formatMonto(item.subtotal)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
                                 <tr className="border-t border-slate-400">
-                                    <td colSpan={7} className="px-1 py-0.5 text-right font-bold">
+                                    <td colSpan={7} className={`text-right font-bold ${filaFactura}`}>
                                         TOTAL:
                                     </td>
-                                    <td className="px-1 py-0.5 text-right font-bold">{formatMonto(venta.total)}</td>
+                                    <td className={`text-right font-bold ${filaFactura}`}>{formatMonto(venta.total)}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -277,11 +289,21 @@ export default function Imprimir({ venta, qrCode }: Props) {
                                 <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
                             </div>
                         </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ── */}
-                <div className="print-sheet mx-auto mt-8 max-w-4xl bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                <div className="print-sheet relative mx-auto mt-8 max-w-4xl overflow-hidden bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                    {/* Marca de agua central, bien sutil — el texto de garantía (31 cláusulas
+                        a 7px) tiene que seguir siendo legible encima. */}
+                    <img
+                        src="/projects/mascota/mascota.webp"
+                        alt=""
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-10 select-none"
+                    />
+                    <div className="relative">
                     <h2 className="mb-1 text-center text-[10px] font-bold tracking-wide">TÉRMINOS Y CONDICIONES DE GARANTÍA</h2>
                     <div className="columns-2 gap-4 text-[7px] leading-[1.15] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
                         {CLAUSULAS_GARANTIA.map((clausula, index) => (
@@ -309,6 +331,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                         verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
                         Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
                         conceptos ni por considerar que el equipo no cumple con sus expectativas.
+                    </div>
                     </div>
                 </div>
             </div>
