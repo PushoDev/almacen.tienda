@@ -66,7 +66,23 @@ Dónde se usa hoy:
 
 - `resources/js/pages/dashboard.tsx` — banner "Opciones Generales del Sistema" (Variante A, reemplaza al `ComputerIcon` que traía el patrón base).
 - `resources/js/pages/Vendor/Imprimir.tsx` — Página 1 (Factura) y Página 2 (garantía) del ticket impreso (Variante B).
+- `resources/js/pages/Cuentas/Index.tsx` — banner "Gestión de Cuentas" (Variante A, con `public/projects/tarjetas.webp` en vez de la mascota — ver nota abajo sobre imágenes panorámicas).
+
+### Nota: el patrón no es exclusivo de la mascota
+
+El asset no tiene que ser `mascota.webp` — el mismo mecanismo (Variante A) sirve para cualquier imagen recortada/protagonista. Probado 2026-08-28 con `tarjetas.webp` (719×213px, panorámica — un abanico de tarjetas bancarias), en `Cuentas/Index.tsx`:
+
+```tsx
+<img
+    src="/projects/tarjetas.webp"
+    alt=""
+    aria-hidden="true"
+    className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+/>
+```
+
+Diferencia real con la mascota (que es ~cuadrada): con una imagen panorámica, un intento inicial de que **sobresaliera por el lado derecho** (en vez de por arriba) se descartó — el cliente lo probó y no le gustó, prefirió la Variante A de siempre (asomando por el borde superior). No asumir que una imagen ancha necesita una variante nueva — probar primero la Variante A tal cual, con `w-auto` para respetar su proporción real (no forzar `w-28` cuadrado como con la mascota).
 
 ## Dónde falta aplicarlo
 
-No pedido todavía en ningún otro banner/página — no asumir que el resto de los banners del proyecto (ver tabla en `docs/header-structure.md`) deben migrar a la mascota sin que el cliente lo pida explícitamente para esa pantalla puntual (mismo criterio que ya aplica `docs/header-structure.md` para no "arreglar" el banner sin pedido explícito).
+No pedido todavía en ningún otro banner/página — no asumir que el resto de los banners del proyecto (ver tabla en `docs/header-structure.md`) deben migrar a este efecto sin que el cliente lo pida explícitamente para esa pantalla puntual (mismo criterio que ya aplica `docs/header-structure.md` para no "arreglar" el banner sin pedido explícito).
