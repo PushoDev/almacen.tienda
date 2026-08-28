@@ -1553,12 +1553,14 @@ class VentaController extends Controller
             return redirect()->route('login');
         }
 
+        $esAdminOModerador = in_array($user->role, ['admin', 'moderador']);
+
         // Construir query base
         $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro', 'gestorCuenta', 'mensajeroCuenta'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin y moderador)
-        if (! in_array($user->role, ['admin', 'moderador'])) {
+        if (! $esAdminOModerador) {
             $query->where('user_id', $user->id);
         }
 
@@ -1600,7 +1602,7 @@ class VentaController extends Controller
         $ventas = $query->orderBy('created_at', 'desc')
             ->paginate(15)
             ->withQueryString()
-            ->through(function ($venta) {
+            ->through(function ($venta) use ($esAdminOModerador) {
                 return [
                     'id' => $venta->id,
                     'cliente' => $venta->cliente ? [
@@ -1616,11 +1618,16 @@ class VentaController extends Controller
                         'nombre' => $venta->usuario->name,
                     ],
                     'total' => $venta->total,
-                    'total_ganancia' => $venta->total_ganancia,
+                    // Comisión Punto de Venta: es la ganancia propia del vendedor en esta venta,
+                    // visible para cualquier rol que llegue acá (un vendedor solo ve sus propias
+                    // ventas de todas formas). Ganancia Agencia (ganancia neta real del negocio)
+                    // solo se manda para admin/moderador — null para vendedor, igual que el resto
+                    // de reportes que ocultan costo/margen por rol (ver Rastreo de Operaciones).
+                    'total_ganancia' => $esAdminOModerador ? $venta->total_ganancia : null,
                     'total_comision' => (float) $venta->total_comision,
                     'total_esperado_usd' => $venta->total_esperado_usd,
-                    'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
-                    'ganancia_real_total' => $venta->ganancia_real_total,
+                    'ganancia_perdida_cambiaria' => $esAdminOModerador ? $venta->ganancia_perdida_cambiaria : null,
+                    'ganancia_real_total' => $esAdminOModerador ? $venta->ganancia_real_total : null,
                     'estado' => $venta->estado,
                     'total_pagado' => $venta->pagos->sum('monto_equivalente'),
                     'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),

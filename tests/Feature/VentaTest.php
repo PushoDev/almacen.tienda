@@ -1262,3 +1262,53 @@ test('actualizarTasaReporte funciona en una venta ya completada porque solo afec
         'tasa_aplicada_venta' => 120,
     ]);
 });
+
+// ==========================================================================
+// LISTADO DE VENTAS — Ganancia Agencia oculta a vendedor, Comisión Punto de
+// Venta visible a cualquiera (es su propio dato).
+// ==========================================================================
+
+test('un vendedor no recibe la ganancia de la agencia en el listado, pero sí su propia comisión', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    Venta::factory()->completada()->create([
+        'user_id' => $vendedor->id,
+        'total_ganancia' => 100,
+        'total_comision' => 15,
+        'ganancia_real_total' => 85,
+        'ganancia_perdida_cambiaria' => 0,
+    ]);
+
+    $response = $this->get(route('ventas.listado'));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('ventas.data.0.total_comision', 15)
+        ->where('ventas.data.0.total_ganancia', null)
+        ->where('ventas.data.0.ganancia_real_total', null)
+        ->where('ventas.data.0.ganancia_perdida_cambiaria', null)
+    );
+});
+
+test('un admin sí recibe la ganancia de la agencia en el listado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    Venta::factory()->completada()->create([
+        'user_id' => $admin->id,
+        'total_ganancia' => 100,
+        'total_comision' => 15,
+        'ganancia_real_total' => 85,
+        'ganancia_perdida_cambiaria' => 0,
+    ]);
+
+    $response = $this->get(route('ventas.listado'));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('ventas.data.0.total_comision', 15)
+        ->where('ventas.data.0.total_ganancia', '100.00')
+        ->where('ventas.data.0.ganancia_real_total', '85.00')
+    );
+});

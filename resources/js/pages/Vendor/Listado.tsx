@@ -1,7 +1,8 @@
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,7 +13,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -35,9 +35,11 @@ import {
     Store,
     User,
     Users,
+    Wallet,
+    Warehouse,
     XCircle,
 } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -64,7 +66,8 @@ interface Venta {
     almacen: { id: number; nombre: string };
     usuario: { id: number; nombre: string };
     total: number;
-    total_ganancia: number;
+    total_ganancia: number | null;
+    total_comision: number;
     total_esperado_usd: number | null;
     ganancia_perdida_cambiaria: number | null;
     ganancia_real_total: number | null;
@@ -118,12 +121,14 @@ interface PageProps {
     filters: Filters;
     almacenes: Almacen[];
     estados_venta: EstadoVenta[];
+    auth?: { user?: { role?: string } };
     [key: string]: unknown;
 }
 
 export default function ListadoVentas() {
     const { props } = usePage<PageProps>();
-    const { ventas, filters, almacenes, estados_venta } = props;
+    const { ventas, filters, almacenes, estados_venta, auth } = props;
+    const puedeVerGananciaAgencia = auth?.user?.role === 'admin' || auth?.user?.role === 'moderador';
 
     const [localFilters, setLocalFilters] = useState<Filters>(filters || {});
 
@@ -149,6 +154,39 @@ export default function ListadoVentas() {
             },
         );
     };
+
+    // Mismo criterio que Productos/Index.tsx para navegar de página.
+    const navigateToPage = (url: string | null) => {
+        if (url) {
+            router.get(url, {}, { preserveState: true, preserveScroll: true });
+        }
+    };
+
+    // La paginación nativa de Laravel manda TODOS los números de página en `links`
+    // (con 27 páginas eso es "1 2 3 4 5 6 7 8 9 10 ... 26 27", muy cargado). Acá se
+    // recorta a una ventana chica alrededor de la página actual + primera/última,
+    // con "..." donde se salta — mismo criterio visual que ya usa Cuentas/Index.tsx.
+    const paginationLinksVisibles = useMemo(() => {
+        const numeradas = ventas.links.slice(1, -1);
+        if (numeradas.length <= 7) return ventas.links;
+
+        const actual = numeradas.findIndex((link) => link.active);
+        const mantener = new Set([0, numeradas.length - 1, actual - 1, actual, actual + 1].filter((i) => i >= 0 && i < numeradas.length));
+
+        const resultado: PaginationLink[] = [ventas.links[0]];
+        let ultimoIncluido = -1;
+        numeradas.forEach((link, i) => {
+            if (mantener.has(i)) {
+                if (i - ultimoIncluido > 1) {
+                    resultado.push({ url: null, label: '...', active: false });
+                }
+                resultado.push(link);
+                ultimoIncluido = i;
+            }
+        });
+        resultado.push(ventas.links[ventas.links.length - 1]);
+        return resultado;
+    }, [ventas.links]);
 
     const getEstadoBadge = (estado: string) => {
         const config = {
@@ -207,13 +245,14 @@ export default function ListadoVentas() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Listado de Ventas" />
             <div className="flex h-full flex-1 flex-col gap-6 p-4 sm:p-6">
-                <Card className="relative overflow-hidden">
-                    <CardHeader>
-                        <CardTitle>Listado de Ventas</CardTitle>
-                        <CardDescription>Busca, filtra y gestiona todas las ventas registradas en el sistema.</CardDescription>
-                    </CardHeader>
-                    <ShoppingCart size={80} className="pointer-events-none absolute -bottom-4 -right-4 text-gray-200/40 dark:text-gray-500/10" />
-                </Card>
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                    <HeadingSmall title="Listado de Ventas" description="Busca, filtra y gestiona todas las ventas registradas en el sistema." />
+                    <ShoppingCart
+                        size={70}
+                        color="#d6d3d1"
+                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                    />
+                </div>
 
                 <Card>
                     <CardContent className="p-4">
@@ -240,12 +279,29 @@ export default function ListadoVentas() {
                                 </div>
                                 <div className="space-y-1">
                                      <Label htmlFor="almacen" className="text-xs">Almacén</Label>
-                                    <Select value={localFilters.almacen_id || ''} onValueChange={(v) => handleFilterChange('almacen_id', v)}>
-                                        <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                                        <SelectContent>
-                                            {almacenes.map((a) => (<SelectItem key={a.id} value={a.id.toString()}>{a.nombre_almacen}</SelectItem>))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Combobox
+                                        items={almacenes}
+                                        itemToStringLabel={(item) => item.nombre_almacen}
+                                        itemToStringValue={(item) => item.nombre_almacen}
+                                        value={almacenes.find((a) => a.id.toString() === localFilters.almacen_id) || null}
+                                        onValueChange={(almacen) => handleFilterChange('almacen_id', almacen ? almacen.id.toString() : '')}
+                                    >
+                                        <ComboboxInput
+                                            id="almacen"
+                                            placeholder="Todos los almacenes"
+                                            showClear={!!localFilters.almacen_id}
+                                        />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(almacen) => (
+                                                    <ComboboxItem key={almacen.id} value={almacen}>
+                                                        {almacen.nombre_almacen}
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
                                 </div>
                                 <div className="space-y-1">
                                     <Label htmlFor="fecha_desde" className="text-xs">Desde</Label>
@@ -264,12 +320,16 @@ export default function ListadoVentas() {
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Ventas Registradas</CardTitle>
-                        <CardDescription>
-                            Mostrando {ventas.from}-{ventas.to} de {ventas.total} ventas.
-                        </CardDescription>
+                <Card className="overflow-hidden border-l-4 border-blue-500/30 pt-0 shadow-sm">
+                    <CardHeader className="border-b bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <ShoppingCart className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Ventas Registradas</CardTitle>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0">
                         <Table>
@@ -290,21 +350,76 @@ export default function ListadoVentas() {
                                     ventas.data.map((venta) => (
                                         <TableRow key={venta.id}>
                                             <TableCell>
-                                                <div className="font-medium">#{venta.id}</div>
-                                                <div className="text-sm text-muted-foreground">{formatDate(venta.fecha_iso)}</div>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="w-fit gap-1 border-indigo-200 bg-indigo-50 font-mono text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300"
+                                                >
+                                                    <FileText className="h-3 w-3" />#{venta.id}
+                                                </Badge>
+                                                <div className="mt-1 text-sm text-muted-foreground">{formatDate(venta.fecha_iso)}</div>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="font-medium">{venta.cliente?.nombre || 'N/A'}</div>
-                                                <div className="text-sm text-muted-foreground">{venta.destinatario ? `${venta.destinatario.nombre} ${venta.destinatario.apellidos}` : 'Sin receptor'}</div>
+                                                <Badge
+                                                    variant="outline"
+                                                    className={
+                                                        venta.destinatario
+                                                            ? 'w-fit gap-1 border-pink-200 bg-pink-50 uppercase text-pink-700 dark:border-pink-800 dark:bg-pink-950/20 dark:text-pink-300'
+                                                            : 'w-fit gap-1 text-muted-foreground'
+                                                    }
+                                                >
+                                                    <User className="h-3 w-3" />
+                                                    {venta.destinatario ? `${venta.destinatario.nombre} ${venta.destinatario.apellidos}` : 'Sin receptor'}
+                                                </Badge>
+                                                {venta.cliente && (
+                                                    <div className="mt-1 text-sm text-muted-foreground uppercase">{venta.cliente.nombre}</div>
+                                                )}
                                             </TableCell>
-                                            <TableCell>{venta.almacen.nombre}</TableCell>
-                                            <TableCell className="text-center">{venta.cantidad_items}</TableCell>
                                             <TableCell>
-                                                <div className="font-semibold">{formatMonto(venta.total)} {venta.moneda_principal?.codigo || ''}</div>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="w-fit gap-1 border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300"
+                                                >
+                                                    <Warehouse className="h-3 w-3" />
+                                                    {venta.almacen.nombre}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Badge
+                                                    variant="outline"
+                                                    className="w-fit gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                                                >
+                                                    <Package className="h-3 w-3" />
+                                                    {venta.cantidad_items}
+                                                </Badge>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="font-semibold text-green-600" title="Ganancia Operacional">{formatMonto(venta.total_ganancia)}</div>
-                                                <div className="text-sm text-blue-600" title="Ganancia Real">{formatMonto(venta.ganancia_real_total)}</div>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="w-fit gap-1 border-teal-200 bg-teal-50 font-semibold text-teal-700 dark:border-teal-800 dark:bg-teal-950/20 dark:text-teal-300"
+                                                >
+                                                    <Wallet className="h-3 w-3" />
+                                                    {formatMonto(venta.total)} {venta.moneda_principal?.codigo || ''}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-fit gap-1 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300"
+                                                    >
+                                                        <DollarSign className="h-3 w-3" />
+                                                        Comisión: {formatMonto(venta.total_comision)}
+                                                    </Badge>
+                                                    {puedeVerGananciaAgencia && venta.ganancia_real_total !== null && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="w-fit gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300"
+                                                        >
+                                                            <Store className="h-3 w-3" />
+                                                            Agencia: {formatMonto(venta.ganancia_real_total)}
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col gap-1">
@@ -335,25 +450,41 @@ export default function ListadoVentas() {
                             </TableBody>
                         </Table>
                     </CardContent>
+                    {ventas.data.length > 0 && (
+                        <CardFooter className="flex flex-col items-center justify-between gap-3 border-t pt-4 sm:flex-row">
+                            <p className="text-sm text-muted-foreground">
+                                Mostrando {ventas.from}-{ventas.to} de {ventas.total} ventas.
+                            </p>
+                            <div className="flex gap-1">
+                                {paginationLinksVisibles.map((link, index) => (
+                                    <Button
+                                        key={index}
+                                        variant={link.active ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => navigateToPage(link.url)}
+                                        disabled={!link.url || link.active}
+                                        className="cursor-pointer"
+                                    >
+                                        {renderPaginationLabel(link.label)}
+                                    </Button>
+                                ))}
+                            </div>
+                        </CardFooter>
+                    )}
                 </Card>
-
-                {ventas.data.length > 0 && (
-                    <Pagination>
-                        <PaginationContent>
-                            {ventas.links.map((link, index) => (
-                                <PaginationItem key={index}>
-                                    <PaginationLink
-                                        href={link.url || '#'}
-                                        isActive={link.active}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                        className={!link.url ? 'pointer-events-none opacity-50' : ''}
-                                     />
-                                </PaginationItem>
-                            ))}
-                        </PaginationContent>
-                    </Pagination>
-                )}
             </div>
         </AppLayout>
     );
 }
+
+// Defensa en el frontend, igual que ya usa Productos/Index.tsx — si por lo que sea el backend
+// vuelve a mandar la clave cruda ('pagination.previous'/'pagination.next', ver
+// [[project_lang_path_pagination_fix]]) en vez del texto traducido, esto lo normaliza a un
+// símbolo limpio de todas formas, sin depender de que la traducción del servidor esté bien.
+const renderPaginationLabel = (label: string) => {
+    if (!label) return '';
+    const normalized = label.toLowerCase();
+    if (normalized.includes('pagination.previous') || normalized.includes('previous') || normalized.includes('anterior')) return '«';
+    if (normalized.includes('pagination.next') || normalized.includes('next') || normalized.includes('siguiente')) return '»';
+    return label.replace('&laquo;', '«').replace('&raquo;', '»');
+};

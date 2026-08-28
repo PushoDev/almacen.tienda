@@ -250,7 +250,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             espacio liberado se usa para ensanchar No. Serie y Sello, que a menudo
                             llevan datos/escritura larga. table-fixed + colgroup para que los anchos
                             se respeten de verdad. */}
-                            <table className={`mb-1.5 min-h-[32mm] w-full table-fixed border-collapse align-top ${tallaTablaFactura}`}>
+                            <table className={`mb-1.5 min-h-[32mm] w-full table-fixed border-collapse border border-slate-400 align-top ${tallaTablaFactura}`}>
                                 <colgroup>
                                     <col className="w-[7%]" />
                                     <col className="w-[33%]" />
@@ -325,13 +325,14 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     incluso si el contenido real es más corto — así la línea de corte de abajo
                     siempre queda en la posición física correcta. */}
                 <div className="print-sheet relative mx-auto mt-8 min-h-[148.5mm] max-w-4xl bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:p-[10mm] print:shadow-none print:break-before-page">
-                    {/* Marca de agua central, bien sutil — el texto de garantía (31 cláusulas
-                        a 7px) tiene que seguir siendo legible encima. */}
+                    {/* Marca de agua central — subida a opacity-20 (2026-08-28, antes 10) porque
+                        en la impresión real casi no se veía; el texto de garantía tiene que
+                        seguir siendo legible encima. */}
                     <img
                         src="/projects/mascota/mascota.webp"
                         alt=""
                         aria-hidden="true"
-                        className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-10 select-none"
+                        className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-20 select-none"
                     />
                     {/* Línea de corte — marca físicamente dónde cae el 50% real de la hoja A4
                         (media hoja), para verificar que el contenido de arriba nunca la cruce. */}
