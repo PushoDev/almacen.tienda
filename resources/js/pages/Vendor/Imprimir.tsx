@@ -110,8 +110,6 @@ export default function Imprimir({ venta, qrCode }: Props) {
             minute: '2-digit',
         });
 
-    const formatFechaCorta = (fecha: string) => new Date(fecha).toLocaleDateString('es-ES');
-
     const ubicacionAlmacen = [venta.almacen.ciudad, venta.almacen.provincia].filter(Boolean).join(', ');
 
     return (
@@ -120,7 +118,13 @@ export default function Imprimir({ venta, qrCode }: Props) {
 
             <style>{`
                 @media print {
-                    @page { size: A4 portrait; margin: 10mm; }
+                    /* margin: 0 a propósito — con cualquier margen > 0 en @page, Chrome reserva esa
+                       franja para dibujar su encabezado/pie nativos (fecha/hora, título, URL, número
+                       de página) si el usuario tiene esa opción activada en el diálogo de impresión,
+                       lo que le roba espacio real a la media hoja. Con margin: 0 no hay franja donde
+                       dibujarlos y Chrome los omite — el inset visual de 10mm lo recreamos nosotros
+                       con padding en cada print-sheet (ver Página 1 y Página 2 más abajo). */
+                    @page { size: A4 portrait; margin: 0; }
                     .no-print { display: none !important; }
                     .print-sheet { box-shadow: none !important; border: none !important; }
                     body { background: white !important; }
@@ -141,10 +145,31 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </button>
                 </div>
 
-                {/* Media hoja A4 — Ticket + Factura de Venta lado a lado */}
-                <div className="print-sheet mx-auto flex max-w-4xl divide-x divide-dashed divide-slate-400 rounded-md bg-white text-slate-900 shadow-lg print:divide-slate-500 print:rounded-none print:shadow-none">
+                {/* Media hoja A4 — Ticket + Factura de Venta lado a lado.
+                    print:p-[10mm] reemplaza el margen que antes daba @page (ver arriba).
+                    La línea de corte (abajo) quedaba recortada en el PDF real aunque en pantalla se
+                    viera bien — quitamos `overflow-hidden` de este contenedor (y del de Página 2) a
+                    propósito: si `min-h-[148.5mm]` no termina de aplicarse igual en el motor de
+                    impresión de Chrome que en pantalla, la línea (posicionada a 148.5mm desde el
+                    tope de este div, que sí coincide con el tope real de la hoja) ya no depende de
+                    que la caja alcance esa altura para poder pintarse — nunca se recorta. */}
+                <div className="print-sheet relative mx-auto min-h-[148.5mm] max-w-4xl rounded-md bg-white text-slate-900 shadow-lg print:rounded-none print:p-[10mm] print:shadow-none">
+                    {/* Línea de corte — misma marca que la Página 2, ver ese comentario para el
+                        porqué del cálculo (148.5mm = mitad física de una hoja A4). */}
+                    <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
+                    <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
+                        ✂ 50% — línea de corte
+                    </span>
+                    {/* mt fijo (no flex/justify-center) a propósito — ver el comentario de arriba
+                        sobre el bug de min-height en el motor de impresión: un offset fijo en mm
+                        empuja el contenido hacia abajo sin depender de que el contenedor padre
+                        calcule bien su propia altura. */}
+                    <div className="flex divide-x divide-dashed divide-slate-400 mt-[21mm] print:divide-slate-500">
                     {/* ── TICKET (angosto, para el vendedor) ── */}
                     <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
+                        {/* QR movido a la Factura (2026-08-28), entre las firmas — este header
+                            vuelve a ser texto centrado simple, sin necesitar el espacio de balance
+                            que pedía la columna del QR. */}
                         <div className="mb-1.5 border-b border-slate-300 pb-1.5 text-center">
                             <div className="mb-0.5 flex justify-center [&_img]:!h-9 [&_img]:!w-9">
                                 <AppLogoIcon />
@@ -156,13 +181,24 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             <p>Vendedor: {venta.usuario.nombre}</p>
                         </div>
 
+                        {/* Datos del cliente — vive acá (copia de la tienda) y no en la Factura
+                            (copia del cliente, que ya sabe quién es), para que el vendedor pueda
+                            identificar la venta en sus registros. Con guiones bajos para llenar a
+                            mano cuando no hay destinatario capturado, igual que hacía la Factura. */}
+                        <div className="mb-1.5 border-b border-slate-300 pb-1.5">
+                            <p>Cliente: {venta.destinatario ? `${venta.destinatario.nombre} ${venta.destinatario.apellidos}` : '_'.repeat(20)}</p>
+                            <p>CI: {venta.destinatario?.carnet_identidad || '_'.repeat(12)}</p>
+                            <p>Tel: {venta.destinatario?.telefono_contacto || '_'.repeat(12)}</p>
+                        </div>
+
                         <div className="mb-1.5 min-h-[32mm] border-b border-slate-300 pb-1.5">
                             <table className="w-full">
                                 <thead>
                                     <tr className="border-b border-slate-300">
                                         <th className="text-left font-semibold">Producto</th>
                                         <th className="text-center font-semibold">Cant</th>
-                                        <th className="text-right font-semibold">Total</th>
+                                        <th className="text-right font-semibold">Precio</th>
+                                        <th className="text-right font-semibold">Sub.Total</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -170,6 +206,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                                         <tr key={index}>
                                             <td className="text-left">{item.producto.nombre}</td>
                                             <td className="text-center">{item.cantidad}</td>
+                                            <td className="text-right">{formatMonto(item.subtotal / item.cantidad)}</td>
                                             <td className="text-right">{formatMonto(item.subtotal)}</td>
                                         </tr>
                                     ))}
@@ -193,7 +230,11 @@ export default function Imprimir({ venta, qrCode }: Props) {
                         </div>
                     </div>
 
-                    {/* ── FACTURA DE VENTA (formal, para el cliente) ── */}
+                    {/* ── FACTURA DE VENTA (formal, para el cliente) ──
+                        Header (mascota/título/almacén/fecha/no.factura) quitado (2026-08-28) — esa
+                        identificación ya está completa en el Ticket de al lado, y sacarla de acá le
+                        da todo ese margen a la tabla. La marca de agua SÍ se restauró (pedido
+                        explícito) — sigue detrás de la tabla, sin ocupar espacio real del layout. */}
                     <div className={`relative flex-1 p-3 leading-snug ${tallaFactura}`}>
                         {/* Marca de agua — va primero en el DOM y sin z-index propio, así el
                             contenido real (envuelto abajo en un `relative`) siempre pinta encima. */}
@@ -204,97 +245,86 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             className="pointer-events-none absolute right-2 bottom-2 h-48 w-48 opacity-25 select-none"
                         />
                         <div className="relative">
-                        <div className="mb-1.5 flex items-start justify-between">
-                            <div className="flex w-12 shrink-0 justify-start [&_img]:!h-9 [&_img]:!w-9">
-                                <AppLogoIcon />
-                            </div>
-                            <div className="flex-1 text-center">
-                                <h1 className="text-sm font-bold tracking-wide">FACTURA DE VENTA</h1>
-                                <p className="text-xs font-semibold">{venta.almacen.nombre}</p>
-                                {ubicacionAlmacen && <p className="text-slate-500">{ubicacionAlmacen}</p>}
-                            </div>
-                            <div className="flex shrink-0 flex-col items-center gap-0.5">
-                                <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
-                                <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
-                            </div>
-                        </div>
-
-                        <div className="mb-1.5 flex justify-between border-t border-b border-slate-300 py-1">
-                            <span>Fecha Compra: {formatFechaCorta(venta.fecha)}</span>
-                            <span>No. Factura: {venta.id}</span>
-                        </div>
-
-                        <div className="mb-1.5 border-b border-slate-300 pb-1.5">
-                            <p>
-                                Nombre Cliente: {venta.destinatario ? `${venta.destinatario.nombre} ${venta.destinatario.apellidos}` : '_'.repeat(30)}
-                            </p>
-                            <div className="mt-0.5 flex gap-4">
-                                <span>CI: {venta.destinatario?.carnet_identidad || '_'.repeat(15)}</span>
-                                <span>Teléfono: {venta.destinatario?.telefono_contacto || '_'.repeat(15)}</span>
-                            </div>
-                        </div>
-
-                        <table className={`mb-1.5 min-h-[32mm] w-full border-collapse align-top ${tallaTablaFactura}`}>
-                            <thead>
-                                <tr className="border-y border-slate-400">
-                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Cant</th>
-                                    <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Descripción del equipo</th>
-                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Días Garantía</th>
-                                    <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Modelo</th>
-                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>No. Serie</th>
-                                    <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Sello</th>
-                                    <th className={`border-r border-slate-300 text-right font-semibold ${filaFactura}`}>Precio</th>
-                                    <th className={`text-right font-semibold ${filaFactura}`}>Sub.Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {venta.items.map((item, index) => (
-                                    <tr key={index} className="border-b border-slate-200">
-                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}>{item.cantidad}</td>
-                                        <td className={`border-r border-slate-200 ${filaFactura}`}>
-                                            {item.producto.nombre}
-                                            {(item.producto.marca || item.producto.modelo) && (
-                                                <span className="text-slate-500">
-                                                    {' '}
-                                                    ({[item.producto.marca, item.producto.modelo].filter(Boolean).join(' · ')})
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
-                                        <td className={`border-r border-slate-200 ${filaFactura}`}>{item.producto.modelo || ''}</td>
-                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
-                                        <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
-                                        <td className={`border-r border-slate-200 text-right ${filaFactura}`}>
-                                            {formatMonto(item.subtotal / item.cantidad)}
-                                        </td>
-                                        <td className={`text-right ${filaFactura}`}>{formatMonto(item.subtotal)}</td>
+                            {/* Precio/Sub.Total quitados (2026-08-28) — ya están en el Ticket. Modelo
+                            queda en blanco como Días Garantía/No.Serie/Sello (llenado a mano); ese
+                            espacio liberado se usa para ensanchar No. Serie y Sello, que a menudo
+                            llevan datos/escritura larga. table-fixed + colgroup para que los anchos
+                            se respeten de verdad. */}
+                            <table className={`mb-1.5 min-h-[32mm] w-full table-fixed border-collapse align-top ${tallaTablaFactura}`}>
+                                <colgroup>
+                                    <col className="w-[7%]" />
+                                    <col className="w-[33%]" />
+                                    <col className="w-[10%]" />
+                                    <col className="w-[12%]" />
+                                    <col className="w-[20%]" />
+                                    <col className="w-[18%]" />
+                                </colgroup>
+                                <thead>
+                                    <tr className="border-y border-slate-400">
+                                        <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Cant</th>
+                                        <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Descripción del equipo</th>
+                                        <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Días Garantía</th>
+                                        <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Modelo</th>
+                                        <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>No. Serie</th>
+                                        <th className={`text-center font-semibold ${filaFactura}`}>Sello</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                            <tfoot>
-                                <tr className="border-t border-slate-400">
-                                    <td colSpan={7} className={`text-right font-bold ${filaFactura}`}>
-                                        TOTAL:
-                                    </td>
-                                    <td className={`text-right font-bold ${filaFactura}`}>{formatMonto(venta.total)}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {venta.items.map((item, index) => (
+                                        <tr key={index} className="border-b border-slate-200">
+                                            <td className={`border-r border-slate-200 text-center ${filaFactura}`}>{item.cantidad}</td>
+                                            <td className={`border-r border-slate-200 ${filaFactura}`}>
+                                                {item.producto.nombre}
+                                                {(item.producto.marca || item.producto.modelo) && (
+                                                    <div className="text-slate-500">
+                                                        ({[item.producto.marca, item.producto.modelo].filter(Boolean).join(' · ')})
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                            <td className={`border-r border-slate-200 ${filaFactura}`}></td>
+                                            <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                            <td className={`text-center ${filaFactura}`}></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="border-t border-slate-400">
+                                        <td colSpan={6} className={`text-right font-bold ${filaFactura}`}>
+                                            TOTAL: {formatMonto(venta.total)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
 
-                        <div className="mt-3 flex justify-around text-center">
-                            <div>
-                                <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA VENDEDOR</div>
-                            </div>
-                            <div>
-                                <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
+                            <div className="mt-24 flex items-end justify-around text-center">
+                                <div>
+                                    <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA VENDEDOR</div>
+                                </div>
+                                {/* QR movido acá (2026-08-28) — antes vivía en el header del Ticket,
+                                    quedaba descentrado; en el medio de las firmas deja el header del
+                                    Ticket volver a ser texto simple centrado. */}
+                                <div className="flex flex-col items-center gap-0.5">
+                                    <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
+                                    <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
+                                </div>
+                                <div>
+                                    <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
+                                </div>
                             </div>
                         </div>
-                        </div>
+                    </div>
                     </div>
                 </div>
 
-                {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ── */}
-                <div className="print-sheet relative mx-auto mt-8 max-w-4xl overflow-hidden bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ──
+                    @page ya no da margen (ver arriba) — este print-sheet arranca justo en el borde
+                    físico de la hoja, así que su propio top ya ES el 0mm físico de esta página.
+                    print:p-[10mm] recrea el inset visual; min-h asegura que el bloque siempre
+                    represente la media hoja física completa (148.5mm = la mitad exacta de una A4),
+                    incluso si el contenido real es más corto — así la línea de corte de abajo
+                    siempre queda en la posición física correcta. */}
+                <div className="print-sheet relative mx-auto mt-8 min-h-[148.5mm] max-w-4xl bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:p-[10mm] print:shadow-none print:break-before-page">
                     {/* Marca de agua central, bien sutil — el texto de garantía (31 cláusulas
                         a 7px) tiene que seguir siendo legible encima. */}
                     <img
@@ -303,35 +333,44 @@ export default function Imprimir({ venta, qrCode }: Props) {
                         aria-hidden="true"
                         className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-10 select-none"
                     />
+                    {/* Línea de corte — marca físicamente dónde cae el 50% real de la hoja A4
+                        (media hoja), para verificar que el contenido de arriba nunca la cruce. */}
+                    <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
+                    <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
+                        ✂ 50% — línea de corte
+                    </span>
                     <div className="relative">
-                    <h2 className="mb-1 text-center text-[10px] font-bold tracking-wide">TÉRMINOS Y CONDICIONES DE GARANTÍA</h2>
-                    <div className="columns-2 gap-4 text-[7px] leading-[1.15] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
-                        {CLAUSULAS_GARANTIA.map((clausula, index) => (
-                            <p key={index} className="mb-0.5 break-inside-avoid">
-                                <span className="font-semibold">{index + 1}. </span>
-                                {clausula}
-                            </p>
-                        ))}
-                    </div>
+                        <div className="columns-3 gap-3 text-[9px] leading-[1.2] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
+                            {CLAUSULAS_GARANTIA.map((clausula, index) => (
+                                <p key={index} className="mb-0.5 break-inside-avoid">
+                                    <span className="font-semibold">{index + 1}. </span>
+                                    {clausula}
+                                </p>
+                            ))}
 
-                    <div className="mt-1.5 border border-slate-300 bg-slate-50 p-1 text-[7px] leading-[1.15] text-slate-700">
-                        <span className="font-semibold">Nota:</span> El horario de atención a clientes para evaluación de equipos en garantía
-                        es de 9:00 a.m. a 2:00 p.m. de lunes a sábado en la tienda ubicada en Dr. Codina 110 / Martí y Mártires de Vietnam
-                        (DIVEP).
-                    </div>
+                            {/* Aceptación fluye dentro de las mismas 3 columnas, igual que en la
+                            plantilla real — ocupa el espacio que sobra en la última columna en
+                            vez de agregar un bloque a todo el ancho debajo, que desperdicia
+                            espacio vertical.
+                            Nota de horario/dirección quitada (2026-08-28): cada almacén tiene su
+                            propia dirección, un texto fijo hardcodeado a una sola tienda era
+                            incorrecto para el resto. */}
+                            <div className="mb-1 break-inside-avoid">
+                                <div className="font-bold underline">CLÁUSULA DE ACEPTACIÓN</div>
+                                <p>
+                                    La compra, recepción, uso o aceptación del producto por parte del cliente implica la aceptación total de
+                                    los presentes términos y condiciones de garantía, así como de todas sus limitaciones, exclusiones y
+                                    procedimientos.
+                                </p>
+                            </div>
+                        </div>
 
-                    <div className="mt-1.5 text-center text-[8px] font-bold tracking-wide">CLÁUSULA DE ACEPTACIÓN</div>
-                    <p className="text-center text-[7px] leading-[1.15] text-slate-700">
-                        La compra, recepción, uso o aceptación del producto por parte del cliente implica la aceptación total de los
-                        presentes términos y condiciones de garantía, así como de todas sus limitaciones, exclusiones y procedimientos.
-                    </p>
-
-                    <div className="mt-1.5 border border-slate-300 p-1 text-[7px] leading-[1.15] text-slate-700">
-                        <span className="font-semibold">Importante:</span> El cliente debe revisar cuidadosamente el producto comprado,
-                        verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
-                        Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
-                        conceptos ni por considerar que el equipo no cumple con sus expectativas.
-                    </div>
+                        <div className="mt-1.5 border border-slate-300 p-1 text-[9px] leading-[1.2] text-slate-700">
+                            <span className="font-semibold">Importante:</span> El cliente debe revisar cuidadosamente el producto comprado,
+                            verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
+                            Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
+                            conceptos ni por considerar que el equipo no cumple con sus expectativas.
+                        </div>
                     </div>
                 </div>
             </div>

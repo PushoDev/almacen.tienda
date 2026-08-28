@@ -12,7 +12,7 @@ class MonedaFactory extends Factory
 
         return [
             'codigo_moneda' => $codigo,
-            'nombre_moneda' => fake()->word(),
+            'nombre_moneda' => fake()->unique()->word(),
             'simbolo_moneda' => $codigo,
             'tasa_cambio' => fake()->randomFloat(6, 0.5, 500),
             'commission' => fake()->randomFloat(4, 0, 5),

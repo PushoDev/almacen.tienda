@@ -523,6 +523,10 @@ class VentaController extends Controller
             'comisionCuenta.moneda',
         ])->findOrFail($id);
 
+        if (! $this->puedeGestionarVenta($venta)) {
+            abort(403, 'No tienes permiso para ver esta venta.');
+        }
+
         $ventaData = [
             'id' => $venta->id,
             'almacen' => [
@@ -1212,6 +1216,10 @@ class VentaController extends Controller
      */
     public function guardarDestinatario(Request $request, Venta $venta)
     {
+        if (! $this->puedeGestionarVenta($venta)) {
+            return response()->json(['success' => false, 'message' => 'No tienes permiso para gestionar esta venta.'], 403);
+        }
+
         if ($venta->estado !== 'pendiente') {
             return response()->json([
                 'success' => false,
@@ -1341,6 +1349,17 @@ class VentaController extends Controller
         $user = Auth::user();
 
         return in_array($user->role, ['admin', 'moderador']) || $venta->user_id === $user->id;
+    }
+
+    /**
+     * Solo admin/moderador — a propósito SIN la excepción de "el dueño también puede" que tiene
+     * puedeGestionarVenta(). Estas acciones deciden si se acepta una venta por debajo del
+     * precio/costo mínimo; si el vendedor dueño pudiera aprobarla, se estaría auto-concediendo
+     * una excepción de precio a sí mismo.
+     */
+    private function puedeDecidirSolicitudEspecial(): bool
+    {
+        return in_array(Auth::user()->role, ['admin', 'moderador']);
     }
 
     /**
@@ -1868,6 +1887,10 @@ class VentaController extends Controller
      */
     public function guardarDistribucion(Request $request, Venta $venta)
     {
+        if (! $this->puedeGestionarVenta($venta)) {
+            return response()->json(['success' => false, 'message' => 'No tienes permiso para gestionar esta venta.'], 403);
+        }
+
         if ($venta->estado !== 'pendiente') {
             return response()->json(['success' => false, 'message' => 'Solo se puede modificar una venta pendiente.'], 422);
         }
@@ -2160,6 +2183,10 @@ class VentaController extends Controller
      */
     public function aprobarSolicitudEspecial(Venta $venta)
     {
+        if (! $this->puedeDecidirSolicitudEspecial()) {
+            return response()->json(['success' => false, 'message' => 'No tienes permiso para decidir esta solicitud.'], 403);
+        }
+
         if ($venta->estado !== 'solicitud_especial') {
             return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
         }
@@ -2186,6 +2213,10 @@ class VentaController extends Controller
      */
     public function rechazarSolicitudEspecial(Venta $venta)
     {
+        if (! $this->puedeDecidirSolicitudEspecial()) {
+            return response()->json(['success' => false, 'message' => 'No tienes permiso para decidir esta solicitud.'], 403);
+        }
+
         if ($venta->estado !== 'solicitud_especial') {
             return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
         }
@@ -2244,6 +2275,10 @@ class VentaController extends Controller
      */
     public function marcarDecisionNotificada(Venta $venta)
     {
+        if (! $this->puedeGestionarVenta($venta)) {
+            return response()->json(['success' => false, 'message' => 'No tienes permiso para gestionar esta venta.'], 403);
+        }
+
         $venta->update(['decision_notificada' => true]);
 
         return response()->json(['success' => true]);

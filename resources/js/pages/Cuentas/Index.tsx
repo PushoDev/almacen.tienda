@@ -230,9 +230,18 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Cuentas" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 rounded-xl p-6">
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Gestión de Cuentas" description="Administre las cuentas disponibles para su negocio." />
-                    <Landmark size={70} color="#d6d3d1" className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40" />
+                    {/* Bleed tipo Variante A (mismo patrón que dashboard.tsx, ver
+                        docs/patron-mascota-bleed.md) — sin overflow-hidden en el contenedor, anclada
+                        abajo, y a una altura mayor que la del banner para que la parte de arriba
+                        sobresalga del borde superior. */}
+                    <img
+                        src="/projects/tarjetas.webp"
+                        alt=""
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                    />
                 </div>
 
                 {/* Row 1: KPIs */}
