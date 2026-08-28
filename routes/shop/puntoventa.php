@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\VentaController;
-use App\Http\Controllers\CierreCajaController; // Importar nuevo controlador
+use App\Http\Controllers\CierreCajaController;
+use App\Http\Controllers\VentaController; // Importar nuevo controlador
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -44,8 +44,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ========================================================================
 
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
-    Route::post('/ventas/validar-stock', [VentaController::class, 'validarStock'])->name('ventas.validarStock');
-    Route::post('/ventas/actualizar-tasas', [VentaController::class, 'actualizarTasas'])->name('ventas.actualizarTasas');
 
     // ========================================================================
     // GESTIÓN DE DESTINATARIOS

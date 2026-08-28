@@ -762,6 +762,71 @@ test('un vendedor no puede editar la venta pendiente de otro vendedor', function
     $response->assertJson(['success' => false]);
 });
 
+test('un vendedor no puede guardar el destinatario de la venta pendiente de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
+
+    $response = $this->postJson(route('ventas.destinatario.store', $venta), [
+        'nombre' => 'Juan', 'apellidos' => 'Pérez', 'telefono_contacto' => '55555555',
+    ]);
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+    $this->assertDatabaseMissing('destinatarios_venta', ['venta_id' => $venta->id]);
+});
+
+test('un vendedor no puede marcar como notificada la decisión de la venta especial de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'decision_notificada' => false]);
+
+    $response = $this->postJson(route('ventas.decision.notificada', $venta));
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'decision_notificada' => false]);
+});
+
+test('un vendedor no puede ver el detalle de la venta de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id]);
+
+    $response = $this->get(route('ventas.show', $venta->id));
+
+    $response->assertStatus(403);
+});
+
+test('un vendedor puede ver el detalle de su propia venta', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $vendedor->id]);
+
+    $response = $this->get(route('ventas.show', $venta->id));
+
+    $response->assertOk();
+});
+
+test('un moderador puede ver el detalle de la venta de cualquier vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id]);
+
+    $response = $this->get(route('ventas.show', $venta->id));
+
+    $response->assertOk();
+});
+
 // ==========================================================================
 // GUARDAR DISTRIBUCIÓN — bug B1 (saldo_disponible desde saldo_cuenta)
 // ==========================================================================
@@ -796,6 +861,21 @@ test('guardarDistribucion solo permite modificar ventas pendientes', function ()
     ]);
 
     $response->assertStatus(422);
+});
+
+test('un vendedor no puede guardar la distribución de la venta pendiente de otro vendedor', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $this->actingAs($otroVendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente', 'total' => 100]);
+
+    $response = $this->postJson(route('ventas.distribucion.store', $venta), [
+        'comision_tasa' => 365,
+    ]);
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
 });
 
 // ==========================================================================
@@ -865,6 +945,45 @@ test('aprobarSolicitudEspecial pasa la venta de solicitud_especial a pendiente',
     $response = $this->postJson(route('ventas.especial.aprobar', $venta));
     $response->assertJson(['success' => true]);
 
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('el vendedor dueño de la venta NO puede aprobar su propia solicitud especial — solo admin/moderador', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $venta = Venta::factory()->especial()->create(['user_id' => $vendedor->id]);
+
+    $response = $this->postJson(route('ventas.especial.aprobar', $venta));
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'solicitud_especial']);
+});
+
+test('el vendedor dueño de la venta NO puede rechazar su propia solicitud especial — solo admin/moderador', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $venta = Venta::factory()->especial()->create(['user_id' => $vendedor->id]);
+
+    $response = $this->postJson(route('ventas.especial.rechazar', $venta));
+
+    $response->assertStatus(403);
+    $response->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'solicitud_especial']);
+});
+
+test('un moderador puede aprobar la solicitud especial de cualquier vendedor', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $venta = Venta::factory()->especial()->create(['user_id' => $vendedor->id]);
+
+    $response = $this->postJson(route('ventas.especial.aprobar', $venta));
+
+    $response->assertJson(['success' => true]);
     $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
 });
 
