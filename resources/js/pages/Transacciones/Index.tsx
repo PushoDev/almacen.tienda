@@ -5,7 +5,6 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Banknote, Repeat } from 'lucide-react';
-import CostosAdicionales from './layouts/CostosAdicionales';
 import Movimientos from './layouts/Movimientos';
 
 // ✅ INTERFACES ACTUALIZADAS con el sistema de monedas
@@ -47,24 +46,11 @@ interface Proveedor {
     notas_proveedor: string | null;
 }
 
-interface Compra {
-    id: number;
-    fecha_compra: string;
-    total_compra: number;
-    productos: Array<{
-        id: number;
-        nombre_producto: string;
-        precio_compra_producto: number;
-    }>;
-}
-
 interface Props {
-    compras: Compra[];
     cuentasOrigen: Cuenta[];
     cuentasDestino: Cuenta[];
     clientes: Cliente[];
     proveedores: Proveedor[];
-    tasaCambioActual: number;
     monedasActivas: Moneda[];
     userRole: 'admin' | 'moderador' | 'vendedor';
 }
@@ -88,56 +74,41 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones({ compras, cuentasOrigen, cuentasDestino, clientes, proveedores, tasaCambioActual, monedasActivas, userRole }: Props) {
+export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas, userRole }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Transacciones"
-                        description="Administre las transacciones financieras, distribución de costos y movimientos entre cuentas, clientes y proveedores"
+                        description="Administre las transacciones financieras y movimientos entre cuentas, clientes y proveedores"
                     />
-                    <Banknote
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                    {/* Bleed Variante A (ver docs/patron-mascota-bleed.md) — mismo tratamiento que
+                        Cuentas/Index.tsx, con la misma imagen de tarjetas. */}
+                    <img
+                        src="/projects/tarjetas.webp"
+                        alt=""
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
                     />
                 </div>
                 <Separator className="col-span-4" />
 
-                {/* Opciones de Transacciones */}
+                {/* Opciones de Transacciones — "Distribuir Costos" quitada (2026-08-28): el cliente
+                    ya la migró a otra pantalla, este tab quedó obsoleto. */}
                 <Tabs defaultValue="movimientos" className="w-full">
-                    <TabsList className={`grid w-full ${userRole === 'admin' || userRole === 'moderador' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <TabsList className="grid w-full grid-cols-1">
                         <TabsTrigger value="movimientos" className="flex items-center gap-2">
                             <Repeat className="h-4 w-4" />
                             Movimientos Financieros
                         </TabsTrigger>
-                        {userRole === 'admin' && (
-                            <TabsTrigger value="costos" className="flex items-center gap-2">
-                                <Banknote className="h-4 w-4" />
-                                Distribuir Costos
-                            </TabsTrigger>
-                        )}
                     </TabsList>
 
-                    {/* ✅ Pestaña Movimientos - Actualizada con proveedores */}
                     <TabsContent value="movimientos" className="space-y-4">
                         <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} userRole={userRole} />
                     </TabsContent>
-
-                    {/* ✅ Pestaña Distribuir Costos - Solo Admin y Moderador */}
-                    {(userRole === 'admin' || userRole === 'moderador') && (
-                        <TabsContent value="costos" className="space-y-4">
-                            <CostosAdicionales
-                                compras={compras}
-                                cuentas={cuentasOrigen}
-                                tasaCambioActual={tasaCambioActual}
-                                monedasActivas={monedasActivas}
-                            />
-                        </TabsContent>
-                    )}
                 </Tabs>
             </div>
         </AppLayout>
