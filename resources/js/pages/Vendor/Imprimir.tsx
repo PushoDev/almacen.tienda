@@ -160,7 +160,11 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
                         ✂ 50% — línea de corte
                     </span>
-                    <div className="flex divide-x divide-dashed divide-slate-400 print:divide-slate-500">
+                    {/* mt fijo (no flex/justify-center) a propósito — ver el comentario de arriba
+                        sobre el bug de min-height en el motor de impresión: un offset fijo en mm
+                        empuja el contenido hacia abajo sin depender de que el contenedor padre
+                        calcule bien su propia altura. */}
+                    <div className="flex divide-x divide-dashed divide-slate-400 mt-[21mm] print:divide-slate-500">
                     {/* ── TICKET (angosto, para el vendedor) ── */}
                     <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
                         {/* QR movido a la Factura (2026-08-28), entre las firmas — este header
