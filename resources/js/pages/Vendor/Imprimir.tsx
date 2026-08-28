@@ -120,7 +120,13 @@ export default function Imprimir({ venta, qrCode }: Props) {
 
             <style>{`
                 @media print {
-                    @page { size: A4 portrait; margin: 10mm; }
+                    /* margin: 0 a propósito — con cualquier margen > 0 en @page, Chrome reserva esa
+                       franja para dibujar su encabezado/pie nativos (fecha/hora, título, URL, número
+                       de página) si el usuario tiene esa opción activada en el diálogo de impresión,
+                       lo que le roba espacio real a la media hoja. Con margin: 0 no hay franja donde
+                       dibujarlos y Chrome los omite — el inset visual de 10mm lo recreamos nosotros
+                       con padding en cada print-sheet (ver Página 1 y Página 2 más abajo). */
+                    @page { size: A4 portrait; margin: 0; }
                     .no-print { display: none !important; }
                     .print-sheet { box-shadow: none !important; border: none !important; }
                     body { background: white !important; }
@@ -141,8 +147,9 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </button>
                 </div>
 
-                {/* Media hoja A4 — Ticket + Factura de Venta lado a lado */}
-                <div className="print-sheet mx-auto flex max-w-4xl divide-x divide-dashed divide-slate-400 rounded-md bg-white text-slate-900 shadow-lg print:divide-slate-500 print:rounded-none print:shadow-none">
+                {/* Media hoja A4 — Ticket + Factura de Venta lado a lado.
+                    print:p-[10mm] reemplaza el margen que antes daba @page (ver arriba). */}
+                <div className="print-sheet mx-auto flex max-w-4xl divide-x divide-dashed divide-slate-400 rounded-md bg-white text-slate-900 shadow-lg print:divide-slate-500 print:rounded-none print:p-[10mm] print:shadow-none">
                     {/* ── TICKET (angosto, para el vendedor) ── */}
                     <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
                         <div className="mb-1.5 border-b border-slate-300 pb-1.5 text-center">
@@ -293,8 +300,14 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </div>
                 </div>
 
-                {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ── */}
-                <div className="print-sheet relative mx-auto mt-8 max-w-4xl overflow-hidden bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ──
+                    @page ya no da margen (ver arriba) — este print-sheet arranca justo en el borde
+                    físico de la hoja, así que su propio top ya ES el 0mm físico de esta página.
+                    print:p-[10mm] recrea el inset visual; min-h asegura que el bloque siempre
+                    represente la media hoja física completa (148.5mm = la mitad exacta de una A4),
+                    incluso si el contenido real es más corto — así la línea de corte de abajo
+                    siempre queda en la posición física correcta. */}
+                <div className="print-sheet relative mx-auto mt-8 min-h-[148.5mm] max-w-4xl overflow-hidden bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:p-[10mm] print:shadow-none print:break-before-page">
                     {/* Marca de agua central, bien sutil — el texto de garantía (31 cláusulas
                         a 7px) tiene que seguir siendo legible encima. */}
                     <img
@@ -303,30 +316,39 @@ export default function Imprimir({ venta, qrCode }: Props) {
                         aria-hidden="true"
                         className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-10 select-none"
                     />
+                    {/* Línea de corte — marca físicamente dónde cae el 50% real de la hoja A4
+                        (media hoja), para verificar que el contenido de arriba nunca la cruce. */}
+                    <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
+                    <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
+                        ✂ 50% — línea de corte
+                    </span>
                     <div className="relative">
-                    <h2 className="mb-1 text-center text-[10px] font-bold tracking-wide">TÉRMINOS Y CONDICIONES DE GARANTÍA</h2>
-                    <div className="columns-2 gap-4 text-[7px] leading-[1.15] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
+                    <div className="columns-3 gap-3 text-[9px] leading-[1.2] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
                         {CLAUSULAS_GARANTIA.map((clausula, index) => (
                             <p key={index} className="mb-0.5 break-inside-avoid">
                                 <span className="font-semibold">{index + 1}. </span>
                                 {clausula}
                             </p>
                         ))}
+
+                        {/* Aceptación fluye dentro de las mismas 3 columnas, igual que en la
+                            plantilla real — ocupa el espacio que sobra en la última columna en
+                            vez de agregar un bloque a todo el ancho debajo, que desperdicia
+                            espacio vertical.
+                            Nota de horario/dirección quitada (2026-08-28): cada almacén tiene su
+                            propia dirección, un texto fijo hardcodeado a una sola tienda era
+                            incorrecto para el resto. */}
+                        <div className="mb-1 break-inside-avoid">
+                            <div className="font-bold underline">CLÁUSULA DE ACEPTACIÓN</div>
+                            <p>
+                                La compra, recepción, uso o aceptación del producto por parte del cliente implica la aceptación total de
+                                los presentes términos y condiciones de garantía, así como de todas sus limitaciones, exclusiones y
+                                procedimientos.
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="mt-1.5 border border-slate-300 bg-slate-50 p-1 text-[7px] leading-[1.15] text-slate-700">
-                        <span className="font-semibold">Nota:</span> El horario de atención a clientes para evaluación de equipos en garantía
-                        es de 9:00 a.m. a 2:00 p.m. de lunes a sábado en la tienda ubicada en Dr. Codina 110 / Martí y Mártires de Vietnam
-                        (DIVEP).
-                    </div>
-
-                    <div className="mt-1.5 text-center text-[8px] font-bold tracking-wide">CLÁUSULA DE ACEPTACIÓN</div>
-                    <p className="text-center text-[7px] leading-[1.15] text-slate-700">
-                        La compra, recepción, uso o aceptación del producto por parte del cliente implica la aceptación total de los
-                        presentes términos y condiciones de garantía, así como de todas sus limitaciones, exclusiones y procedimientos.
-                    </p>
-
-                    <div className="mt-1.5 border border-slate-300 p-1 text-[7px] leading-[1.15] text-slate-700">
+                    <div className="mt-1.5 border border-slate-300 p-1 text-[9px] leading-[1.2] text-slate-700">
                         <span className="font-semibold">Importante:</span> El cliente debe revisar cuidadosamente el producto comprado,
                         verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
                         Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
