@@ -33,17 +33,20 @@ import {
     BoxesIcon,
     Building2,
     CreditCard,
+    Crown,
     Eye,
     Info,
     Minus,
     Plus,
     PlusCircle,
     Search,
+    ShieldCheck,
     ShoppingBag,
     ShoppingCart,
     Store,
     Trash2,
     Truck,
+    UserCheck,
     Users,
     X,
 } from 'lucide-react';
@@ -774,7 +777,10 @@ export default function PuntoVentaOficial({
             } catch (error: unknown) {
                 console.error('Error al crear cliente:', error);
                 if (axios.isAxiosError(error) && error.response?.data?.errors) {
-                    // setLocalErrors(error.response.data.errors); // Assuming setLocalErrors is local to this component or accessible
+                    const errores = error.response.data.errors as Record<string, string[]>;
+                    setLocalErrors(
+                        Object.fromEntries(Object.entries(errores).map(([campo, mensajes]) => [campo, mensajes[0]])),
+                    );
                     sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
                 } else {
                     sileo.error({ title: 'Error al crear cliente', description: 'Intenta nuevamente o contacta al administrador.' });
@@ -899,28 +905,63 @@ export default function PuntoVentaOficial({
                     </div>
 
                     {/* Info usuario */}
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                        <p>
-                            Rol Actual del Vendedor:{' '}
-                            <span className="text-primary font-medium">
-                                {meta.role_usuario === 'admin' ? 'Administrador' : meta.role_usuario === 'moderador' ? 'Moderador' : 'Vendedor'}
-                            </span>
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <Link href={route('ventas.cierres')}>
-                                <Button variant="secondary" className="flex items-center gap-2">
-                                    <BarChartIcon size={16} />
-                                    Cierres de Caja
-                                </Button>
-                            </Link>
-                            <Link href={route('ventas.listado')}>
-                                <Button variant="secondary" className="flex items-center gap-2">
-                                    <Eye size={16} />
-                                    Mis Ventas
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
+                    <Card className="border-l-4 border-emerald-500/30 py-0 shadow-sm">
+                        <CardContent className="flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center">
+                            {(() => {
+                                const rolConfig = {
+                                    admin: {
+                                        label: 'Administrador',
+                                        icon: Crown,
+                                        badge: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/20 dark:text-rose-300',
+                                    },
+                                    moderador: {
+                                        label: 'Moderador',
+                                        icon: ShieldCheck,
+                                        badge: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300',
+                                    },
+                                    vendedor: {
+                                        label: 'Vendedor',
+                                        icon: UserCheck,
+                                        badge: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
+                                    },
+                                }[meta.role_usuario as 'admin' | 'moderador' | 'vendedor'] ?? {
+                                    label: 'Vendedor',
+                                    icon: UserCheck,
+                                    badge: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
+                                };
+                                const RolIcon = rolConfig.icon;
+                                return (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <span>Rol Actual:</span>
+                                        <Badge variant="outline" className={`gap-1 ${rolConfig.badge}`}>
+                                            <RolIcon className="h-3 w-3" />
+                                            {rolConfig.label}
+                                        </Badge>
+                                    </div>
+                                );
+                            })()}
+                            <div className="flex items-center gap-2">
+                                <Link href={route('ventas.cierres')}>
+                                    <Button
+                                        variant="outline"
+                                        className="gap-2 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                                    >
+                                        <BarChartIcon size={16} />
+                                        Cierres de Caja
+                                    </Button>
+                                </Link>
+                                <Link href={route('ventas.listado')}>
+                                    <Button
+                                        variant="outline"
+                                        className="gap-2 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                                    >
+                                        <Eye size={16} />
+                                        Mis Ventas
+                                    </Button>
+                                </Link>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     <Separator />
 
@@ -1311,7 +1352,7 @@ export default function PuntoVentaOficial({
                                 <CardContent className="p-0">
                                     {carrito.length === 0 ? (
                                         <div className="flex h-48 flex-col items-center justify-center p-6 text-center">
-                                            <ShoppingCart className="mb-3 h-12 w-12 text-gray-300" />
+                                            <img src="/projects/mascota/mascota.webp" alt="Carrito vacío" className="mb-3 h-24 w-24 object-contain opacity-80" />
                                             <p className="text-gray-500">Carrito vacío</p>
                                             <p className="mt-1 text-sm text-gray-400">Agregue productos del almacén seleccionado</p>
                                         </div>
