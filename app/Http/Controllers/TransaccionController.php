@@ -2,24 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Compra;
-use App\Models\Cuenta;
 use App\Models\Cliente;
-use App\Models\Proveedor;
-use App\Models\Producto;
-use App\Models\Moneda;
+use App\Models\Compra;
 use App\Models\CostoHistorial;
+use App\Models\Cuenta;
+use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Inertia\Inertia;
-use Illuminate\Support\Facades\Log;
-use Exception;
-use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Notification;
-use App\Http\Controllers\ProductoVendedorController;
+use App\Models\Producto;
+use App\Models\Proveedor;
 use App\Notifications\MovimientoFinancieroNotification;
 use App\Services\NotificationService;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Redirect;
+use Inertia\Inertia;
 
 class TransaccionController extends Controller
 {
@@ -28,12 +27,6 @@ class TransaccionController extends Controller
      */
     public function index()
     {
-        $compras = Compra::with('productos')
-            ->orderByDesc('fecha_compra')
-            ->limit(50)
-            ->get()
-            ->each(fn ($compra) => $compra->setRelation('productos', $this->agruparProductosPorLinea($compra->productos)));
-
         // Origen: vendedor solo ve sus cuentas asignadas personales; destino: cuentas asignadas a cualquier usuario
         if (auth()->user()->role === 'vendedor') {
             $cuentasOrigen = auth()->user()->cuentas()->where('tipo_titular', 'personal')->with('moneda')->get();
@@ -46,21 +39,15 @@ class TransaccionController extends Controller
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();
 
-        // ✅ Obtener monedas activas y tasa CUP por defecto
+        // ✅ Obtener monedas activas
         $monedasActivas = Moneda::where('estado', true)->get();
-        $monedaCUP = Moneda::where('codigo_moneda', 'CUP')
-            ->where('estado', true)
-            ->orderBy('tasa_cambio', 'desc')
-            ->first();
 
         return Inertia::render('Transacciones/Index', [
-            'compras' => $compras,
             'cuentasOrigen' => $cuentasOrigen,
             'cuentasDestino' => $cuentasDestino,
             'clientes' => $clientes,
             'proveedores' => $proveedores,
             'monedasActivas' => $monedasActivas,
-            'tasaCambioActual' => $monedaCUP ? $monedaCUP->tasa_cambio : 0,
             'userRole' => auth()->user()->role ?? 'vendedor',
         ]);
     }
@@ -79,7 +66,7 @@ class TransaccionController extends Controller
                 in_array($movimiento->cuenta_destino_id, $cuentasAsignadas);
 
             // Si no es admin y no involucra sus cuentas, denegar acceso
-            if (!$involucraCuentaAsignada && auth()->user()->role !== 'admin') {
+            if (! $involucraCuentaAsignada && auth()->user()->role !== 'admin') {
                 abort(403, 'No tiene permiso para ver esta transacción.');
             }
         }
@@ -92,7 +79,7 @@ class TransaccionController extends Controller
             'cuentaDestino.moneda',
             'clienteOrigen',
             'clienteDestino',
-            'proveedorDestino'
+            'proveedorDestino',
         ]);
 
         // ✅ Calcular diferencias de saldo si los datos existen
@@ -181,19 +168,19 @@ class TransaccionController extends Controller
             // ✅ Validar que el vendedor tenga acceso a esta cuenta
             if (auth()->user()->role === 'vendedor') {
                 $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                if (!in_array($cuenta->id, $cuentasAsignadas)) {
-                    throw new \Exception('No tiene permiso para operar con esta cuenta.');
+                if (! in_array($cuenta->id, $cuentasAsignadas)) {
+                    throw new Exception('No tiene permiso para operar con esta cuenta.');
                 }
             }
 
             // Validar que la cuenta sea CUP
             if ($cuenta->moneda->codigo_moneda !== 'CUP') {
-                throw new \Exception('Solo se pueden usar cuentas en CUP para gastos de transportación.');
+                throw new Exception('Solo se pueden usar cuentas en CUP para gastos de transportación.');
             }
 
             // Validar saldo suficiente
             if ($cuenta->saldo_cuenta < $request->monto) {
-                throw new \Exception('Saldo insuficiente en la cuenta.');
+                throw new Exception('Saldo insuficiente en la cuenta.');
             }
 
             $tasa_cambio = $request->tasa_cambio_aplicada ?? $cuenta->moneda->tasa_cambio;
@@ -250,57 +237,41 @@ class TransaccionController extends Controller
 
             // Notificar a usuarios relevantes del gasto de transportación
             try {
-                $notificationService = new NotificationService();
+                $notificationService = new NotificationService;
                 $datosNotificacion = $notificationService->prepararDatosGastoTransportacion($movimiento, $cuenta->id);
                 $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
-                
+
                 // Debug: Log para verificar usuarios
-                Log::info('Usuarios para notificar (gasto transportación): ' . $usuariosParaNotificar->pluck('id')->implode(','));
-                Log::info('Total usuarios notificados: ' . $usuariosParaNotificar->count());
-                
+                Log::info('Usuarios para notificar (gasto transportación): '.$usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Total usuarios notificados: '.$usuariosParaNotificar->count());
+
                 // Cargar relaciones necesarias para la notificación
                 $movimiento->load(['user', 'cuentaOrigen']);
-                
+
                 Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'gasto'));
-                
+
                 Log::info('Notificación de gasto transportación enviada exitosamente');
-            } catch (\Exception $e) {
-                Log::error('Error enviando notificación de gasto transportación: ' . $e->getMessage());
-                Log::error('Stack trace: ' . $e->getTraceAsString());
+            } catch (Exception $e) {
+                Log::error('Error enviando notificación de gasto transportación: '.$e->getMessage());
+                Log::error('Stack trace: '.$e->getTraceAsString());
             }
 
             return Redirect::back()->with(
                 'success',
-                "✅ Gasto por transportación de {$request->monto} CUP distribuido entre " .
-                    count($distribuciones) . " productos."
+                "✅ Gasto por transportación de {$request->monto} CUP distribuido entre ".
+                    count($distribuciones).' productos.'
             );
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
-            Log::error('Error en gasto por transportación: ' . $e->getMessage());
-            return Redirect::back()->with('error', '❌ Error: ' . $e->getMessage());
+            Log::error('Error en gasto por transportación: '.$e->getMessage());
+
+            return Redirect::back()->with('error', '❌ Error: '.$e->getMessage());
         }
     }
 
     /**
      * Distribuye el monto de transportación entre productos
      */
-    /**
-     * Agrupa las líneas de compra_producto por producto (un producto puede tener varias líneas
-     * en la misma compra desde distintos almacenes/colores) sumando la cantidad, para las
-     * pantallas que reparten un gasto por producto, no por línea.
-     */
-    private function agruparProductosPorLinea($productos)
-    {
-        return $productos
-            ->groupBy('id')
-            ->map(function ($lineas) {
-                $producto = $lineas->first();
-                $producto->pivot->cantidad = $lineas->sum(fn($p) => $p->pivot->cantidad);
-                return $producto;
-            })
-            ->values();
-    }
-
     private function distribuirTransportacion(Compra $compra, float $montoTotalUSD, string $tipo, array $distribucionManual = []): array
     {
         // 'proporcional'/'igualitario' reparten por producto, no por línea — si el mismo producto
@@ -316,7 +287,7 @@ class TransaccionController extends Controller
                     $montoUSD = $montoTotalUSD * $porcentaje;
                     $distribuciones[] = [
                         'producto_id' => $producto->id,
-                        'monto_usd' => $montoUSD
+                        'monto_usd' => $montoUSD,
                     ];
                 }
                 break;
@@ -326,7 +297,7 @@ class TransaccionController extends Controller
                 foreach ($productos as $producto) {
                     $distribuciones[] = [
                         'producto_id' => $producto->id,
-                        'monto_usd' => $montoPorProducto
+                        'monto_usd' => $montoPorProducto,
                     ];
                 }
                 break;
@@ -335,12 +306,12 @@ class TransaccionController extends Controller
                 foreach ($distribucionManual as $item) {
                     $distribuciones[] = [
                         'producto_id' => $item['producto_id'],
-                        'monto_usd' => $item['monto_usd']
+                        'monto_usd' => $item['monto_usd'],
                     ];
                 }
                 $sumaManual = collect($distribucionManual)->sum('monto_usd');
                 if (abs($sumaManual - $montoTotalUSD) > 0.01) {
-                    throw new \Exception("La distribución manual no coincide con el monto total.");
+                    throw new Exception('La distribución manual no coincide con el monto total.');
                 }
                 break;
         }
