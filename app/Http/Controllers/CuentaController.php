@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\AjusteSaldoCuenta;
 use App\Models\Cuenta;
 use App\Models\Moneda;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
@@ -47,7 +49,7 @@ class CuentaController extends Controller
             $resumenPorTipo[$cuenta->tipo_cuenta] = ($resumenPorTipo[$cuenta->tipo_cuenta] ?? 0) + $equiv;
 
             $codigo = $cuenta->moneda?->codigo_moneda ?: 'N/A';
-            if (!isset($resumenPorMoneda[$codigo])) {
+            if (! isset($resumenPorMoneda[$codigo])) {
                 $resumenPorMoneda[$codigo] = [
                     'original' => 0,
                     'equivalente' => 0,
@@ -60,7 +62,7 @@ class CuentaController extends Controller
             $resumenPorMoneda[$codigo]['cantidad']++;
 
             if ($cuenta->tipo_cuenta === 'permanentes') {
-                if (!isset($resumenPorMonedaPerm[$codigo])) {
+                if (! isset($resumenPorMonedaPerm[$codigo])) {
                     $resumenPorMonedaPerm[$codigo] = [
                         'original' => 0,
                         'equivalente' => 0,
@@ -158,7 +160,7 @@ class CuentaController extends Controller
                 ->map(function ($moneda) {
                     return [
                         'id' => $moneda->id,
-                        'nombre_completo' => $moneda->nombre_moneda . ' (' . $moneda->codigo_moneda . ')',
+                        'nombre_completo' => $moneda->nombre_moneda.' ('.$moneda->codigo_moneda.')',
                         'codigo_moneda' => $moneda->codigo_moneda,
                         'simbolo_moneda' => $moneda->simbolo_moneda,
                     ];
@@ -187,10 +189,10 @@ class CuentaController extends Controller
             'tipo' => $validated['tipo'],
             'saldo_cuenta' => $validated['saldo_cuenta'] ?? 0.00,
             'moneda_id' => $validated['moneda_id'],
-            'tipo_titular' => $validated['tipo_titular'],
+            'tipo_titular' => $validated['tipo_titular'] ?? null,
             'tipo_cuenta' => $validated['tipo_cuenta'] ?? 'permanentes',
             'estado' => $validated['estado'],
-            'notas_cuenta' => $validated['notas_cuenta'],
+            'notas_cuenta' => $validated['notas_cuenta'] ?? null,
         ]);
 
         // Redirigimos al usuario a la lista de cuentas
@@ -206,7 +208,7 @@ class CuentaController extends Controller
         $esAdminOModerador = in_array($user->role, ['admin', 'moderador']);
 
         // Vendedor solo puede ver el detalle de sus propias cuentas asignadas
-        if (!$esAdminOModerador && !$user->cuentas()->where('cuentas.id', $cuenta->id)->exists()) {
+        if (! $esAdminOModerador && ! $user->cuentas()->where('cuentas.id', $cuenta->id)->exists()) {
             abort(403);
         }
 
@@ -239,7 +241,7 @@ class CuentaController extends Controller
             'historialVentas' => $this->obtenerHistorialVentas($cuenta, $request),
             'historialCompras' => $esAdminOModerador
                 ? $this->obtenerHistorialCompras($cuenta, $request)
-                : new \Illuminate\Pagination\LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
+                : new LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
             'filtros' => [
                 'transacciones' => $request->only(['q_transacciones', 'tipo_transacciones', 'desde_transacciones', 'hasta_transacciones']),
                 'ventas' => $request->only(['q_ventas', 'tipo_ventas', 'desde_ventas', 'hasta_ventas']),
@@ -285,16 +287,16 @@ class CuentaController extends Controller
         }
 
         return $query->select(
-                'mf.id as referencia_id',
-                'mf.fecha_operacion as fecha',
-                'tmf.nombre as tipo',
-                DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN (mf.saldo_posterior_origen - mf.saldo_anterior_origen) ELSE (mf.saldo_posterior_destino - mf.saldo_anterior_destino) END as monto"),
-                DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN mf.moneda_origen ELSE mf.moneda_destino END as moneda"),
-                'mf.descripcion as descripcion',
-                DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) ELSE COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) END as contraparte"),
-                'users.name as usuario',
-                DB::raw("'movimiento_financiero' as fuente")
-            )
+            'mf.id as referencia_id',
+            'mf.fecha_operacion as fecha',
+            'tmf.nombre as tipo',
+            DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN (mf.saldo_posterior_origen - mf.saldo_anterior_origen) ELSE (mf.saldo_posterior_destino - mf.saldo_anterior_destino) END as monto"),
+            DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN mf.moneda_origen ELSE mf.moneda_destino END as moneda"),
+            'mf.descripcion as descripcion',
+            DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) ELSE COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) END as contraparte"),
+            'users.name as usuario',
+            DB::raw("'movimiento_financiero' as fuente")
+        )
             ->orderByDesc('mf.fecha_operacion')
             ->paginate(15, ['*'], 'pagina_transacciones')
             ->withQueryString();
@@ -323,7 +325,7 @@ class CuentaController extends Controller
                 DB::raw("'Pago de venta' as tipo"),
                 'pv.monto as monto',
                 DB::raw("COALESCE(m.codigo_moneda, 'USD') as moneda"),
-                DB::raw("NULL as descripcion"),
+                DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
                 DB::raw("'venta_pago' as fuente")
@@ -343,7 +345,7 @@ class CuentaController extends Controller
                 DB::raw("'Comisión vendedor' as tipo"),
                 DB::raw('-(v.total_comision * v.comision_tasa) as monto'),
                 DB::raw("'CUP' as moneda"),
-                DB::raw("NULL as descripcion"),
+                DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
                 DB::raw("'venta_comision' as fuente")
@@ -362,7 +364,7 @@ class CuentaController extends Controller
                 DB::raw("'Comisión gestor' as tipo"),
                 DB::raw('-v.gestor_monto as monto'),
                 DB::raw("'CUP' as moneda"),
-                DB::raw("NULL as descripcion"),
+                DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
                 DB::raw("'venta_gestor' as fuente")
@@ -381,7 +383,7 @@ class CuentaController extends Controller
                 DB::raw("'Mensajería' as tipo"),
                 DB::raw('-COALESCE(NULLIF(v.mensajero_monto_final_cup, 0), v.mensajero_monto_original) as monto'),
                 DB::raw("'CUP' as moneda"),
-                DB::raw("NULL as descripcion"),
+                DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
                 DB::raw("'venta_mensajero' as fuente")
@@ -428,6 +430,7 @@ class CuentaController extends Controller
                 'venta_mensajero' => "Mensajería - venta #{$item->referencia_id}",
                 default => $item->descripcion,
             };
+
             return $item;
         });
 
@@ -463,22 +466,23 @@ class CuentaController extends Controller
         }
 
         $historial = $query->select(
-                'c.id as referencia_id',
-                'c.fecha_compra as fecha',
-                DB::raw("'Pago de compra' as tipo"),
-                DB::raw('-cp.monto as monto'),
-                DB::raw("'USD' as moneda"),
-                DB::raw("NULL as descripcion"),
-                DB::raw("COALESCE(p.nombre_proveedor, cl.nombre_cliente, 'Proveedor') as contraparte"),
-                DB::raw("'Sistema' as usuario"),
-                DB::raw("'compra_pago' as fuente")
-            )
+            'c.id as referencia_id',
+            'c.fecha_compra as fecha',
+            DB::raw("'Pago de compra' as tipo"),
+            DB::raw('-cp.monto as monto'),
+            DB::raw("'USD' as moneda"),
+            DB::raw('NULL as descripcion'),
+            DB::raw("COALESCE(p.nombre_proveedor, cl.nombre_cliente, 'Proveedor') as contraparte"),
+            DB::raw("'Sistema' as usuario"),
+            DB::raw("'compra_pago' as fuente")
+        )
             ->orderByDesc('c.fecha_compra')
             ->paginate(15, ['*'], 'pagina_compras')
             ->withQueryString();
 
         $historial->getCollection()->transform(function ($item) {
             $item->descripcion = "Pago de compra #{$item->referencia_id}";
+
             return $item;
         });
 
@@ -515,7 +519,7 @@ class CuentaController extends Controller
                 ->map(function ($moneda) {
                     return [
                         'id' => $moneda->id,
-                        'nombre_completo' => $moneda->nombre_moneda . ' (' . $moneda->codigo_moneda . ')',
+                        'nombre_completo' => $moneda->nombre_moneda.' ('.$moneda->codigo_moneda.')',
                         'codigo_moneda' => $moneda->codigo_moneda,
                         'simbolo_moneda' => $moneda->simbolo_moneda,
                     ];
@@ -538,7 +542,7 @@ class CuentaController extends Controller
             ]);
         }
 
-        if ($saldoCambio && !Hash::check((string) $request->input('security_password'), auth()->user()->password)) {
+        if ($saldoCambio && ! Hash::check((string) $request->input('security_password'), auth()->user()->password)) {
             return back()->withErrors([
                 'security_password' => 'Contraseña incorrecta.',
             ]);
@@ -549,7 +553,7 @@ class CuentaController extends Controller
                 'required',
                 'string',
                 'max:255',
-                'unique:cuentas,nombre_cuenta,' . $cuenta->id,
+                'unique:cuentas,nombre_cuenta,'.$cuenta->id,
             ],
             'tipo' => ['required', 'in:tarjeta,efectivo'],
             'saldo_cuenta' => ['nullable', 'numeric'],
@@ -571,7 +575,7 @@ class CuentaController extends Controller
             'tipo_titular' => $validated['tipo_titular'] ?? $cuenta->tipo_titular,
             'tipo_cuenta' => $validated['tipo_cuenta'] ?? 'permanentes',
             'estado' => $validated['estado'],
-            'notas_cuenta' => $validated['notas_cuenta'],
+            'notas_cuenta' => $validated['notas_cuenta'] ?? $cuenta->notas_cuenta,
         ]);
 
         if ($saldoCambio) {
@@ -596,7 +600,30 @@ class CuentaController extends Controller
         if (auth()->user()->role !== 'admin') {
             return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
         }
-        $cuenta->delete();
+
+        // Mismo criterio que Clientes: una cuenta con saldo distinto de cero no se
+        // puede eliminar, ni siquiera por un admin — primero hay que liquidarla.
+        if ((float) $cuenta->saldo_cuenta !== 0.0) {
+            return back()->withErrors([
+                'cuenta' => 'No se puede eliminar esta cuenta porque tiene saldo pendiente. Primero debe liquidarlo a $0.00.',
+            ]);
+        }
+
+        try {
+            $cuenta->delete();
+        } catch (QueryException $e) {
+            // Red de seguridad: una cuenta en $0.00 todavía puede tener historial de
+            // movimientos financieros apuntándole (entró y salió dinero, neto cero) —
+            // el chequeo de saldo de arriba no cubre ese caso, la FK sí lo bloquea.
+            if ((int) $e->getCode() === 23000) {
+                return back()->withErrors([
+                    'cuenta' => 'No se puede eliminar esta cuenta porque tiene movimientos financieros u operaciones asociadas.',
+                ]);
+            }
+
+            throw $e;
+        }
+
         return redirect()->route('cuentas.index')->with('success', 'Cuenta eliminada exitosamente.');
     }
 

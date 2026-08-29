@@ -108,6 +108,7 @@ export interface ProveedorProps {
     localidad_proveedor?: string;
     notas_proveedor?: string | null;
     saldo_proveedor?: number;
+    compras_count?: number;
     created_at?: string;
     updated_at?: string;
 }

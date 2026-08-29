@@ -8,7 +8,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Minus, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
+import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Lock, Minus, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -88,15 +87,44 @@ interface ResumenData {
 export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cuentas: CuentaConMoneda[]; monedaPrincipal: MonedaInfo | null; resumen: ResumenData }) {
     const { props } = usePage();
     const isAdmin = props.auth?.user?.role === 'admin';
-    const isVendedor = props.auth?.user?.role === 'vendedor';
 
     const simbolo = monedaPrincipal?.simbolo_moneda || '$';
 
+    // ── Estado para dialogs controlados (mismo patrón que Clientes/Index.tsx) ──
+    const [accessDeniedOpen, setAccessDeniedOpen] = useState(false);
+    const [cantDeleteBalanceOpen, setCantDeleteBalanceOpen] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [cuentaSeleccionada, setCuentaSeleccionada] = useState<CuentaConMoneda | null>(null);
+
     const deleteCuenta = (id: number) => {
         router.delete(route('cuentas.destroy', { cuenta: id }), {
-            onSuccess: () => sileo.success({ title: 'Cuenta eliminada', description: 'La cuenta se eliminó correctamente' }),
-            onError: () => sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' }),
+            onSuccess: () => {
+                sileo.success({ title: 'Cuenta eliminada', description: 'La cuenta se eliminó correctamente' });
+                setDeleteConfirmOpen(false);
+                setCuentaSeleccionada(null);
+            },
+            onError: (errors) => sileo.error({ title: 'Error al eliminar', description: errors.cuenta ?? 'Inténtalo nuevamente' }),
         });
+    };
+
+    const handleEditClick = (e: React.MouseEvent) => {
+        if (!isAdmin) {
+            e.preventDefault();
+            setAccessDeniedOpen(true);
+        }
+    };
+
+    const handleDeleteClick = (cuenta: CuentaConMoneda) => {
+        if (!isAdmin) {
+            setAccessDeniedOpen(true);
+            return;
+        }
+        setCuentaSeleccionada(cuenta);
+        if (Number(cuenta.saldo_cuenta ?? 0) !== 0) {
+            setCantDeleteBalanceOpen(true);
+            return;
+        }
+        setDeleteConfirmOpen(true);
     };
 
     const [filtroMoneda, setFiltroMoneda] = useState('');
@@ -390,11 +418,9 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {!isVendedor && (
-                                    <Link href={route('cuentas.create')}>
-                                        <Button className="flex cursor-pointer items-center gap-2"><Plus size={16} /> Nueva Cuenta</Button>
-                                    </Link>
-                                )}
+                                <Link href={route('cuentas.create')}>
+                                    <Button className="flex cursor-pointer items-center gap-2"><Plus size={16} /> Nueva Cuenta</Button>
+                                </Link>
                             </div>
                         </div>
                         {hasFilters && (
@@ -511,46 +537,43 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                                         <TooltipContent><p>Ver detalles</p></TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
-                                                {!isVendedor && (
-                                                    <>
-                                                        <TooltipProvider>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
-                                                                        <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-green-50 hover:text-green-600"><Edit3 size={14} /></Button>
-                                                                    </Link>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent><p>Editar cuenta</p></TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
-                                                        <AlertDialog>
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <AlertDialogTrigger asChild>
-                                                                            <Button variant="outline" size="sm"
-                                                                                className="h-8 w-8 cursor-pointer p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                                                onClick={(e) => { if (!isAdmin) { e.preventDefault(); sileo.error({ title: 'Sin permiso', description: 'No tienes acceso para esta acción' }); } }}>
-                                                                                <Trash2 size={14} />
-                                                                            </Button>
-                                                                        </AlertDialogTrigger>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent><p>Eliminar cuenta</p></TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                                                    <AlertDialogDescription>Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta acción no se puede deshacer.</AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-                                                                    <AlertDialogAction onClick={() => deleteCuenta(cuenta.id)} className="cursor-pointer bg-red-600 hover:bg-red-700">Eliminar</AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    </>
-                                                )}
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Link href={route('cuentas.edit', { cuenta: cuenta.id })} onClick={handleEditClick}>
+                                                                <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-green-50 hover:text-green-600"><Edit3 size={14} /></Button>
+                                                            </Link>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent><p>{isAdmin ? 'Editar cuenta' : 'Sin acceso — solo administradores'}</p></TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className={`h-8 w-8 cursor-pointer p-0 ${
+                                                                    isAdmin && Number(cuenta.saldo_cuenta ?? 0) === 0
+                                                                        ? 'text-red-600 hover:bg-red-50 hover:text-red-700'
+                                                                        : 'text-muted-foreground'
+                                                                }`}
+                                                                onClick={() => handleDeleteClick(cuenta)}
+                                                            >
+                                                                {isAdmin && Number(cuenta.saldo_cuenta ?? 0) !== 0 ? <Lock size={14} /> : <Trash2 size={14} />}
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>
+                                                                {!isAdmin
+                                                                    ? 'Sin acceso — solo administradores'
+                                                                    : Number(cuenta.saldo_cuenta ?? 0) !== 0
+                                                                      ? 'No eliminable — cuenta tiene saldo pendiente'
+                                                                      : 'Eliminar cuenta'}
+                                                            </p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -603,6 +626,83 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                     </div>
                 )}
             </div>
+
+            {/* ── Dialog: Sin acceso ─────────────────────────────────────── */}
+            <AlertDialog open={accessDeniedOpen} onOpenChange={setAccessDeniedOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Lock size={18} className="text-orange-500" />
+                            Acceso restringido
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            No tienes permisos para realizar esta operación. Solo los administradores pueden editar o eliminar cuentas.
+                            Si necesitas realizar un cambio, comunícate con el administrador del sistema.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setAccessDeniedOpen(false)}>Entendido</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* ── Dialog: No se puede eliminar — tiene saldo ────────────── */}
+            <AlertDialog open={cantDeleteBalanceOpen} onOpenChange={setCantDeleteBalanceOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Wallet size={18} className="text-amber-500" />
+                            No se puede eliminar esta cuenta
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-3">
+                                <p>
+                                    La cuenta <strong>{cuentaSeleccionada?.nombre_cuenta}</strong> no puede ser eliminada porque tiene un saldo
+                                    pendiente.
+                                </p>
+                                {cuentaSeleccionada && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="font-medium">Saldo actual:</span>
+                                            <span className="font-bold text-amber-700 dark:text-amber-300">
+                                                {cuentaSeleccionada.moneda?.simbolo_moneda || simbolo}{' '}
+                                                {Math.abs(Number(cuentaSeleccionada.saldo_cuenta ?? 0)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                                <p className="text-xs">Para eliminar esta cuenta, primero debe llevar su saldo a $0.00.</p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setCantDeleteBalanceOpen(false)}>Entendido</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* ── Dialog: Confirmar eliminación ─────────────────────────── */}
+            <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            ¿Estás seguro de eliminar la cuenta <strong>"{cuentaSeleccionada?.nombre_cuenta}"</strong>? Esta acción no se puede
+                            deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setCuentaSeleccionada(null)} className="cursor-pointer">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => cuentaSeleccionada && deleteCuenta(cuentaSeleccionada.id)}
+                            className="cursor-pointer bg-red-600 hover:bg-red-700"
+                        >
+                            Eliminar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <Toaster position="top-center" />
             <ScrollProgress />
         </AppLayout>

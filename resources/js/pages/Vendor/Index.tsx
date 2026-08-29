@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RolBadge } from '@/components/rol-badge';
 import PaymentForm from '@/components/ventas/PaymentForm';
 import PaymentList from '@/components/ventas/PaymentList';
 import AppLayout from '@/layouts/app-layout';
@@ -33,20 +34,17 @@ import {
     BoxesIcon,
     Building2,
     CreditCard,
-    Crown,
     Eye,
     Info,
     Minus,
     Plus,
     PlusCircle,
     Search,
-    ShieldCheck,
     ShoppingBag,
     ShoppingCart,
     Store,
     Trash2,
     Truck,
-    UserCheck,
     Users,
     X,
 } from 'lucide-react';
@@ -907,39 +905,10 @@ export default function PuntoVentaOficial({
                     {/* Info usuario */}
                     <Card className="border-l-4 border-emerald-500/30 py-0 shadow-sm">
                         <CardContent className="flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center">
-                            {(() => {
-                                const rolConfig = {
-                                    admin: {
-                                        label: 'Administrador',
-                                        icon: Crown,
-                                        badge: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/20 dark:text-rose-300',
-                                    },
-                                    moderador: {
-                                        label: 'Moderador',
-                                        icon: ShieldCheck,
-                                        badge: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300',
-                                    },
-                                    vendedor: {
-                                        label: 'Vendedor',
-                                        icon: UserCheck,
-                                        badge: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
-                                    },
-                                }[meta.role_usuario as 'admin' | 'moderador' | 'vendedor'] ?? {
-                                    label: 'Vendedor',
-                                    icon: UserCheck,
-                                    badge: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
-                                };
-                                const RolIcon = rolConfig.icon;
-                                return (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <span>Rol Actual:</span>
-                                        <Badge variant="outline" className={`gap-1 ${rolConfig.badge}`}>
-                                            <RolIcon className="h-3 w-3" />
-                                            {rolConfig.label}
-                                        </Badge>
-                                    </div>
-                                );
-                            })()}
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>Rol Actual:</span>
+                                <RolBadge role={meta.role_usuario as 'admin' | 'moderador' | 'vendedor'} />
+                            </div>
                             <div className="flex items-center gap-2">
                                 <Link href={route('ventas.cierres')}>
                                     <Button

@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Proveedor;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
+use App\Models\Proveedor;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -16,7 +17,9 @@ class ProveedorController extends Controller
      */
     public function index()
     {
-        $proveedores = Proveedor::all();
+        // withCount evita N+1 — una sola query agregada en vez de una por proveedor
+        // para mostrar cuántas compras tiene cada uno en el listado.
+        $proveedores = Proveedor::withCount('compras')->get();
 
         $totalFondo = $proveedores->where('saldo_proveedor', '>', 0)->sum('saldo_proveedor');
         $totalDeuda = $proveedores->where('saldo_proveedor', '<', 0)->sum('saldo_proveedor');
@@ -110,7 +113,7 @@ class ProveedorController extends Controller
             'cuentaDestino',
             'clienteOrigen',
             'clienteDestino',
-            'tipoMovimiento'
+            'tipoMovimiento',
         ])
             ->where('proveedor_destino_id', $proveedor->id)
             ->orderBy('fecha_operacion', 'desc')
@@ -154,17 +157,17 @@ class ProveedorController extends Controller
                 'required',
                 'string',
                 'max:255',
-                'unique:proveedors,nombre_proveedor,' . $proveedor->id
+                'unique:proveedors,nombre_proveedor,'.$proveedor->id,
             ],
             'telefono_proveedor' => [
                 'required',
                 'string',
-                'unique:proveedors,telefono_proveedor,' . $proveedor->id
+                'unique:proveedors,telefono_proveedor,'.$proveedor->id,
             ],
             'correo_proveedor' => [
                 'nullable',
                 'email',
-                'unique:proveedors,correo_proveedor,' . $proveedor->id
+                'unique:proveedors,correo_proveedor,'.$proveedor->id,
             ],
             'localidad_proveedor' => ['required', 'string'],
             'notas_proveedor' => ['nullable', 'string'],
@@ -193,7 +196,40 @@ class ProveedorController extends Controller
         if (auth()->user()->role !== 'admin') {
             return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
         }
-        $proveedor->delete();
+
+        // Mismo criterio que Clientes/Cuentas: saldo distinto de cero bloquea el borrado.
+        if ((float) $proveedor->saldo_proveedor !== 0.0) {
+            return back()->withErrors([
+                'proveedor' => 'No se puede eliminar este proveedor porque tiene saldo pendiente. Primero debe liquidarlo a $0.00.',
+            ]);
+        }
+
+        // Propio de Proveedores: compras.proveedor_id tiene onDelete('cascade') — un
+        // proveedor en $0.00 (ya liquidado) puede seguir teniendo años de historial de
+        // compras real. Sin este chequeo, borrar el proveedor borraría ese historial en
+        // cascada y en silencio, sin ningún error que lo delate.
+        $totalCompras = $proveedor->compras()->count();
+        if ($totalCompras > 0) {
+            return back()->withErrors([
+                'proveedor' => "No se puede eliminar este proveedor porque tiene {$totalCompras} ".
+                    ($totalCompras === 1 ? 'compra registrada asociada.' : 'compras registradas asociadas.'),
+            ]);
+        }
+
+        try {
+            $proveedor->delete();
+        } catch (QueryException $e) {
+            // Red de seguridad: movimientos_financieros.proveedor_destino_id no tiene
+            // cascade, así que cualquier movimiento histórico bloquea el borrado con FK.
+            if ((int) $e->getCode() === 23000) {
+                return back()->withErrors([
+                    'proveedor' => 'No se puede eliminar este proveedor porque tiene movimientos financieros asociados.',
+                ]);
+            }
+
+            throw $e;
+        }
+
         return redirect()->route('proveedores.index')->with('success', 'Proveedor eliminado exitosamente.');
     }
 
@@ -214,7 +250,7 @@ class ProveedorController extends Controller
             'message' => 'Saldo actualizado exitosamente.',
             'monto_anterior' => $montoAnterior,
             'monto_nuevo' => $proveedor->saldo_proveedor,
-            'diferencia' => $request->monto
+            'diferencia' => $request->monto,
         ]);
     }
 
@@ -248,7 +284,7 @@ class ProveedorController extends Controller
 
         return redirect()->back()->with('success', [
             'message' => 'Saldo reseteado a cero exitosamente.',
-            'saldo_anterior' => $saldoAnterior
+            'saldo_anterior' => $saldoAnterior,
         ]);
     }
 }
