@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago;
+use App\Models\Cuenta;
 use App\Models\MovimientoFinanciero;
 use App\Models\PagoVenta;
 use App\Models\User;
@@ -56,6 +58,212 @@ test('un vendedor NO puede ver el detalle de una cuenta que no tiene asignada (4
     $response = $this->get(route('cuentas.show', $cuenta->id));
 
     $response->assertStatus(403);
+});
+
+// ==========================================================================
+// EDITAR/ELIMINAR — admin-only (middleware check.cuenta.permission), CREAR —
+// abierto a cualquier rol autenticado. Cubre lo que la UI de Cuentas replica
+// del patrón ya usado en Clientes/Index.tsx.
+// ==========================================================================
+
+test('un admin puede acceder al formulario de editar cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $response = $this->get(route('cuentas.edit', $cuenta->id));
+
+    $response->assertOk();
+});
+
+test('un moderador NO puede acceder al formulario de editar cuenta (403)', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $response = $this->get(route('cuentas.edit', $cuenta->id));
+
+    $response->assertStatus(403);
+});
+
+test('un vendedor NO puede acceder al formulario de editar cuenta (403)', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
+
+    $response = $this->get(route('cuentas.edit', $cuenta->id));
+
+    $response->assertStatus(403);
+});
+
+test('un admin puede actualizar una cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => 'Cuenta Renombrada',
+        'tipo' => 'efectivo',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    expect($cuenta->fresh()->nombre_cuenta)->toBe('Cuenta Renombrada');
+});
+
+test('un moderador NO puede actualizar una cuenta (403)', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => 'Intento Moderador',
+        'tipo' => 'efectivo',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertStatus(403);
+    expect($cuenta->fresh()->nombre_cuenta)->not->toBe('Intento Moderador');
+});
+
+test('un vendedor NO puede actualizar una cuenta (403)', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, propietario: $vendedor);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => 'Intento Vendedor',
+        'tipo' => 'efectivo',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertStatus(403);
+    expect($cuenta->fresh()->nombre_cuenta)->not->toBe('Intento Vendedor');
+});
+
+test('un admin puede eliminar una cuenta en $0.00', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 0);
+
+    $response = $this->delete(route('cuentas.destroy', $cuenta->id));
+
+    $response->assertRedirect(route('cuentas.index'));
+    expect(Cuenta::find($cuenta->id))->toBeNull();
+});
+
+test('ni un admin puede eliminar una cuenta con saldo pendiente', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 500);
+
+    $response = $this->delete(route('cuentas.destroy', $cuenta->id));
+
+    $response->assertSessionHasErrors('cuenta');
+    expect(Cuenta::find($cuenta->id))->not->toBeNull();
+});
+
+test('una cuenta en $0.00 con movimientos financieros asociados no se puede eliminar (red de seguridad de la FK)', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 0);
+
+    MovimientoFinanciero::create([
+        'user_id' => $admin->id,
+        'tipo_movimiento_id' => 1,
+        'cuenta_origen_id' => $cuenta->id,
+        'monto' => 80,
+        'moneda' => 'USD',
+        'tasa_cambio_aplicada' => 1,
+        'descripcion' => 'Gasto de prueba',
+        'fecha_operacion' => now(),
+        'estado' => 'completado',
+        'saldo_anterior_origen' => 80,
+        'saldo_posterior_origen' => 0,
+        'moneda_origen' => 'USD',
+    ]);
+
+    $response = $this->delete(route('cuentas.destroy', $cuenta->id));
+
+    $response->assertSessionHasErrors('cuenta');
+    expect(Cuenta::find($cuenta->id))->not->toBeNull();
+});
+
+test('un moderador NO puede eliminar una cuenta (403)', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $response = $this->delete(route('cuentas.destroy', $cuenta->id));
+
+    $response->assertStatus(403);
+    expect(Cuenta::find($cuenta->id))->not->toBeNull();
+});
+
+test('un vendedor NO puede eliminar una cuenta (403)', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
+
+    $response = $this->delete(route('cuentas.destroy', $cuenta->id));
+
+    $response->assertStatus(403);
+    expect(Cuenta::find($cuenta->id))->not->toBeNull();
+});
+
+test('un moderador SÍ puede crear una cuenta', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $moneda = crearMonedaUsd();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Cuenta Moderador '.uniqid(),
+        'tipo' => 'efectivo',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+});
+
+test('un vendedor SÍ puede crear una cuenta', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $moneda = crearMonedaUsd();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Cuenta Vendedor '.uniqid(),
+        'tipo' => 'efectivo',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
 });
 
 // ==========================================================================
@@ -230,8 +438,8 @@ test('la búsqueda y el rango de fechas en Ventas filtran correctamente', functi
     $this->actingAs($admin);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
-    $clienteBuscado = \App\Models\Cliente::factory()->create(['nombre_cliente' => 'YALIANNIS BARROSO']);
-    $clienteOtro = \App\Models\Cliente::factory()->create(['nombre_cliente' => 'OTRO CLIENTE']);
+    $clienteBuscado = Cliente::factory()->create(['nombre_cliente' => 'YALIANNIS BARROSO']);
+    $clienteOtro = Cliente::factory()->create(['nombre_cliente' => 'OTRO CLIENTE']);
 
     $ventaBuscada = Venta::factory()->completada()->create(['cliente_id' => $clienteBuscado->id, 'created_at' => '2026-07-30']);
     PagoVenta::factory()->create(['venta_id' => $ventaBuscada->id, 'cuenta_id' => $cuenta->id, 'monto' => 100]);
