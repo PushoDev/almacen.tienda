@@ -8,7 +8,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,15 +35,18 @@ import {
     Eye,
     FileText,
     Handshake,
+    Lock,
     Mail,
     MapPin,
     Phone,
     Search,
     Sheet,
+    ShoppingBag,
     Trash2,
     TrendingDown,
     TrendingUp,
     Users,
+    Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
@@ -75,15 +77,43 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
     const { props } = usePage<PageProps>();
     const isAdmin = props.auth?.user?.role === 'admin';
 
+    // ── Estado para dialogs controlados (mismo patrón que Clientes/Cuentas) ──
+    const [accessDeniedOpen, setAccessDeniedOpen] = useState(false);
+    const [cantDeleteBalanceOpen, setCantDeleteBalanceOpen] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [proveedorSeleccionado, setProveedorSeleccionado] = useState<ProveedorProps | null>(null);
+
     const deleteProveedor = (id: number) => {
         router.delete(route('proveedores.destroy', { proveedor: id }), {
             onSuccess: () => {
                 sileo.success({ title: 'Proveedor eliminado', description: 'El proveedor se eliminó correctamente' });
+                setDeleteConfirmOpen(false);
+                setProveedorSeleccionado(null);
             },
-            onError: () => {
-                sileo.error({ title: 'Error al eliminar', description: 'Inténtalo nuevamente' });
+            onError: (errors) => {
+                sileo.error({ title: 'Error al eliminar', description: errors.proveedor ?? 'Inténtalo nuevamente' });
             },
         });
+    };
+
+    const handleEditClick = (e: React.MouseEvent) => {
+        if (!isAdmin) {
+            e.preventDefault();
+            setAccessDeniedOpen(true);
+        }
+    };
+
+    const handleDeleteClick = (proveedor: ProveedorProps) => {
+        if (!isAdmin) {
+            setAccessDeniedOpen(true);
+            return;
+        }
+        setProveedorSeleccionado(proveedor);
+        if (Number(proveedor.saldo_proveedor ?? 0) !== 0) {
+            setCantDeleteBalanceOpen(true);
+            return;
+        }
+        setDeleteConfirmOpen(true);
     };
 
     const formatearMoneda = (valor: number | null) => {
@@ -382,12 +412,21 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
                                         <TableCell className="min-w-[180px]">
                                             <div className="flex items-center gap-2">
                                                 <Building size={14} className="text-primary shrink-0" />
-                                                <Link
-                                                    href={route('proveedores.show', { proveedor: proveedor.id })}
-                                                    className="truncate font-medium hover:text-blue-600 hover:underline"
-                                                >
-                                                    {proveedor.nombre_proveedor}
-                                                </Link>
+                                                <div className="flex flex-col gap-1">
+                                                    <Link
+                                                        href={route('proveedores.show', { proveedor: proveedor.id })}
+                                                        className="truncate font-medium hover:text-blue-600 hover:underline"
+                                                    >
+                                                        {proveedor.nombre_proveedor}
+                                                    </Link>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-fit gap-1 border-sky-200 bg-sky-50 text-xs text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300"
+                                                    >
+                                                        <ShoppingBag size={11} />
+                                                        {proveedor.compras_count ?? 0} {proveedor.compras_count === 1 ? 'compra' : 'compras'}
+                                                    </Badge>
+                                                </div>
                                             </div>
                                         </TableCell>
 
@@ -464,52 +503,34 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
                                                     </Button>
                                                 </Link>
 
-                                                <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
+                                                <Link href={route('proveedores.edit', { proveedor: proveedor.id })} onClick={handleEditClick}>
                                                     <Button
                                                         variant="outline"
                                                         className="cursor-pointer hover:bg-green-900 hover:text-white dark:hover:bg-green-700"
-                                                        title="Editar proveedor"
+                                                        title={isAdmin ? 'Editar proveedor' : 'Sin acceso — solo administradores'}
                                                     >
                                                         <Edit3 size={16} />
                                                     </Button>
                                                 </Link>
 
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button
-                                                            variant="ghost"
-                                                            className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
-                                                            title="Eliminar proveedor"
-                                                            onClick={(e) => {
-                                                                if (!isAdmin) {
-                                                                    e.preventDefault();
-                                                                    sileo.error({ title: 'Sin permiso', description: 'No tienes acceso para esta acción' });
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                ¿Estás seguro de eliminar este proveedor? Esta acción es irreversible.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogAction
-                                                                onClick={() => deleteProveedor(proveedor.id)}
-                                                                className="bg-destructive cursor-pointer hover:bg-red-300"
-                                                            >
-                                                                Aceptar
-                                                            </AlertDialogAction>
-                                                            <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                                Cancelar
-                                                            </AlertDialogCancel>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
+                                                <Button
+                                                    variant="ghost"
+                                                    className={
+                                                        isAdmin && Number(proveedor.saldo_proveedor ?? 0) === 0
+                                                            ? 'hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white'
+                                                            : 'cursor-pointer text-muted-foreground'
+                                                    }
+                                                    title={
+                                                        !isAdmin
+                                                            ? 'Sin acceso — solo administradores'
+                                                            : Number(proveedor.saldo_proveedor ?? 0) !== 0
+                                                              ? 'No eliminable — proveedor tiene saldo pendiente'
+                                                              : 'Eliminar proveedor'
+                                                    }
+                                                    onClick={() => handleDeleteClick(proveedor)}
+                                                >
+                                                    {isAdmin && Number(proveedor.saldo_proveedor ?? 0) !== 0 ? <Lock size={16} /> : <Trash2 size={16} />}
+                                                </Button>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -559,6 +580,84 @@ export default function ProveedoresPage({ proveedores, resumen }: { proveedores:
                     </div>
                 )}
             </div>
+
+            {/* ── Dialog: Sin acceso ─────────────────────────────────────── */}
+            <AlertDialog open={accessDeniedOpen} onOpenChange={setAccessDeniedOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Lock size={18} className="text-orange-500" />
+                            Acceso restringido
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            No tienes permisos para realizar esta operación. Solo los administradores pueden editar o eliminar proveedores.
+                            Si necesitas realizar un cambio, comunícate con el administrador del sistema.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setAccessDeniedOpen(false)}>Entendido</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* ── Dialog: No se puede eliminar — tiene saldo ────────────── */}
+            <AlertDialog open={cantDeleteBalanceOpen} onOpenChange={setCantDeleteBalanceOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Wallet size={18} className="text-amber-500" />
+                            No se puede eliminar este proveedor
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-3">
+                                <p>
+                                    El proveedor <strong>{proveedorSeleccionado?.nombre_proveedor}</strong> no puede ser eliminado porque tiene un
+                                    saldo pendiente.
+                                </p>
+                                {proveedorSeleccionado && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="font-medium">Saldo actual:</span>
+                                            <span className="font-bold text-amber-700 dark:text-amber-300">
+                                                {Math.abs(Number(proveedorSeleccionado.saldo_proveedor ?? 0)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                                <p className="text-xs">Para eliminar este proveedor, primero debe llevar su saldo a $0.00.</p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setCantDeleteBalanceOpen(false)}>Entendido</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* ── Dialog: Confirmar eliminación ─────────────────────────── */}
+            <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            ¿Estás seguro de eliminar el proveedor <strong>"{proveedorSeleccionado?.nombre_proveedor}"</strong>? Esta acción no se
+                            puede deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setProveedorSeleccionado(null)} className="cursor-pointer">
+                            Cancelar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => proveedorSeleccionado && deleteProveedor(proveedorSeleccionado.id)}
+                            className="cursor-pointer bg-red-600 hover:bg-red-700"
+                        >
+                            Eliminar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <Toaster position="top-center" />
             <ScrollProgress />
         </AppLayout>
