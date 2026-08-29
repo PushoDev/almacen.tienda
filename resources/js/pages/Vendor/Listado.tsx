@@ -191,32 +191,32 @@ export default function ListadoVentas() {
     const getEstadoBadge = (estado: string) => {
         const config = {
             pendiente: {
-                bg: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                bg: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950/20 dark:text-yellow-300 dark:border-yellow-800',
                 icon: Clock,
                 label: 'Pendiente',
             },
             completada: {
-                bg: 'bg-green-100 text-green-800 border-green-200',
+                bg: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-950/20 dark:text-green-300 dark:border-green-800',
                 icon: BadgeCheck,
                 label: 'Completada',
             },
             cancelada: {
-                bg: 'bg-red-100 text-red-800 border-red-200',
+                bg: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-800',
                 icon: XCircle,
                 label: 'Cancelada',
             },
             solicitud_especial: {
-                bg: 'bg-amber-100 text-amber-800 border-amber-200',
+                bg: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800',
                 icon: Filter,
                 label: 'Solicitud Especial',
             },
             rechazada: {
-                bg: 'bg-red-200 text-red-900 border-red-300',
+                bg: 'bg-red-200 text-red-900 border-red-300 dark:bg-red-950/40 dark:text-red-200 dark:border-red-700',
                 icon: XCircle,
                 label: 'Rechazada',
             },
         }[estado] || {
-            bg: 'bg-gray-100 text-gray-800 border-gray-200',
+            bg: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-950/20 dark:text-gray-300 dark:border-gray-800',
             icon: Clock,
             label: estado,
         };
@@ -270,9 +270,10 @@ export default function ListadoVentas() {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                                 <div className="space-y-1">
                                     <Label htmlFor="estado" className="text-xs">Estado</Label>
-                                    <Select value={localFilters.estado || ''} onValueChange={(v) => handleFilterChange('estado', v)}>
+                                    <Select value={localFilters.estado || 'all'} onValueChange={(v) => handleFilterChange('estado', v === 'all' ? '' : v)}>
                                         <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="all">Todos</SelectItem>
                                             {estados_venta.map((e) => (<SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>))}
                                         </SelectContent>
                                     </Select>
@@ -425,7 +426,7 @@ export default function ListadoVentas() {
                                                 <div className="flex flex-col gap-1">
                                                     {getEstadoBadge(venta.estado)}
                                                     {venta.es_venta_especial && (
-                                                        <Badge variant="outline" className="w-fit border-amber-300 bg-amber-50 text-xs text-amber-700">
+                                                        <Badge variant="outline" className="w-fit border-amber-300 bg-amber-50 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                                                             Especial
                                                         </Badge>
                                                     )}
