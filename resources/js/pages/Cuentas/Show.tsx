@@ -70,6 +70,8 @@ interface HistorialItem {
     contraparte: string | null;
     usuario: string;
     fuente: string;
+    saldo_anterior: number | null;
+    saldo_posterior: number | null;
 }
 
 interface PaginationLink {
@@ -351,6 +353,11 @@ const TablaHistorial = ({
                                                     {Number(item.monto) >= 0 ? '+' : ''}
                                                     {Number(item.monto).toFixed(2)} {item.moneda}
                                                 </span>
+                                                {item.saldo_anterior !== null && item.saldo_posterior !== null && (
+                                                    <div className="text-muted-foreground text-[11px]">
+                                                        {Number(item.saldo_anterior).toFixed(2)} → {Number(item.saldo_posterior).toFixed(2)}
+                                                    </div>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {detalle && (

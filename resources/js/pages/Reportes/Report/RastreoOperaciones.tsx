@@ -78,6 +78,11 @@ interface DetalleVenta {
         fecha: string;
         almacen: string | null;
     };
+    // Solo presente cuando la venta terminó anulada (estado === 'cancelada').
+    anulacion: {
+        motivo: string | null;
+        detalle: string | null;
+    } | null;
     receptor: {
         nombre_completo: string;
         carnet_identidad: string | null;
@@ -128,6 +133,7 @@ interface DetalleVenta {
         comision_vendedor: number;
         ganancia_agencia: number | null;
     };
+    movimientos_saldo: MovimientoSaldoEntry[];
 }
 
 interface EntidadMovimiento {
@@ -136,6 +142,14 @@ interface EntidadMovimiento {
     saldo_anterior: number | null;
     saldo_posterior: number | null;
     moneda: string | null;
+}
+
+// Una "pata" de saldo tocada por Venta/Compra (pago, comisión PV, gestor, mensajero,
+// receptor) — mismo shape que EntidadMovimiento (reutiliza EntidadMovimientoCard tal cual)
+// más una etiqueta, porque acá puede haber varias entidades en una sola operación en vez de
+// un solo origen/destino fijo.
+interface MovimientoSaldoEntry extends EntidadMovimiento {
+    etiqueta: string;
 }
 
 interface DetalleMovimiento {
@@ -186,6 +200,7 @@ interface DetalleCompra {
     cliente: string | null;
     pagos: DetallePagoCompra[];
     productos: DetalleProductoCompra[];
+    movimientos_saldo: MovimientoSaldoEntry[];
 }
 
 interface Operacion {
@@ -365,6 +380,21 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
             </span>
         </div>
 
+        {/* Anulación — solo presente cuando la venta terminó cancelada */}
+        {detalle.anulacion && (
+            <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10">
+                <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-1.5 text-xs font-semibold text-red-700 uppercase dark:text-red-300">
+                        <AlertTriangle className="h-3.5 w-3.5" /> Venta Anulada
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-xs">
+                    <p><strong>Motivo:</strong> {detalle.anulacion.motivo ?? '—'}</p>
+                    {detalle.anulacion.detalle && <p><strong>Detalle:</strong> {detalle.anulacion.detalle}</p>}
+                </CardContent>
+            </Card>
+        )}
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Receptor Registrado */}
             {detalle.receptor && (
@@ -475,6 +505,17 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
                     </table>
                 </CardContent>
             </Card>
+        )}
+
+        {/* Movimientos de Saldo — saldo antes/después de cada pata que aprobarVenta() tocó
+            (pagos, comisión PV, gestor, mensajero). Ausente en ventas aprobadas antes de esta
+            función (saldo_anterior null en BD, filtrado ya en el backend). */}
+        {detalle.movimientos_saldo.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {detalle.movimientos_saldo.map((m, i) => (
+                    <EntidadMovimientoCard key={i} titulo={m.etiqueta} entidad={m} />
+                ))}
+            </div>
         )}
 
         {/* Resumen Financiero */}
@@ -727,6 +768,17 @@ const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleC
                     </table>
                 </CardContent>
             </Card>
+        )}
+
+        {/* Movimientos de Saldo — saldo antes/después del receptor (proveedor/cliente) y de
+            cada pago con cuenta/cliente. Ausente en compras registradas antes de esta función
+            (saldo_anterior null en BD, filtrado ya en el backend). */}
+        {detalle.movimientos_saldo.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {detalle.movimientos_saldo.map((m, i) => (
+                    <EntidadMovimientoCard key={i} titulo={m.etiqueta} entidad={m} />
+                ))}
+            </div>
         )}
 
         <Card className="bg-background/60">

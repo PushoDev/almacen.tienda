@@ -487,6 +487,104 @@ test('el detalle de productos de una Venta incluye marca, modelo, capacidad, col
     expect($detalleProducto['codigo'])->toBe('7501234567890');
 });
 
+test('el detalle colapsable de una Venta trae saldo antes/después de cada pago, comisión, gestor y mensajero', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $monedaUsd = crearMonedaUsd();
+    $cuentaPago = crearCuentaEnMoneda($monedaUsd);
+    $cuentaComision = crearCuentaEnMoneda(crearMoneda('CUP', 380));
+    $cuentaGestor = crearCuentaEnMoneda(crearMoneda('CUP', 380));
+    $cuentaMensajero = crearCuentaEnMoneda(crearMoneda('CUP', 380));
+
+    $venta = Venta::factory()->create([
+        'comision_cuenta_id' => $cuentaComision->id,
+        'comision_saldo_anterior' => 5000,
+        'comision_saldo_posterior' => 4000,
+        'gestor_cuenta_id' => $cuentaGestor->id,
+        'gestor_saldo_anterior' => 3000,
+        'gestor_saldo_posterior' => 2000,
+        'mensajero_cuenta_id' => $cuentaMensajero->id,
+        'mensajero_saldo_anterior' => 1800,
+        'mensajero_saldo_posterior' => 0,
+    ]);
+    PagoVenta::create([
+        'venta_id' => $venta->id,
+        'tipo_pago' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'cuenta_id' => $cuentaPago->id,
+        'monto' => 50,
+        'tasa_cambio_aplicada' => 1,
+        'monto_equivalente' => 50,
+        'saldo_anterior' => 100,
+        'saldo_posterior' => 150,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+    $movimientos = collect($fila['detalle_venta']['movimientos_saldo']);
+
+    expect($movimientos)->toHaveCount(4);
+
+    $pago = $movimientos->firstWhere('etiqueta', 'Pago 1');
+    expect($pago['tipo'])->toBe('cuenta');
+    expect($pago['nombre'])->toBe($cuentaPago->nombre_cuenta);
+    expect($pago['saldo_anterior'])->toEqual(100.0);
+    expect($pago['saldo_posterior'])->toEqual(150.0);
+
+    $comision = $movimientos->firstWhere('etiqueta', 'Comisión PV');
+    expect($comision['nombre'])->toBe($cuentaComision->nombre_cuenta);
+    expect($comision['saldo_anterior'])->toEqual(5000.0);
+    expect($comision['saldo_posterior'])->toEqual(4000.0);
+
+    $gestor = $movimientos->firstWhere('etiqueta', 'Gestor');
+    expect($gestor['nombre'])->toBe($cuentaGestor->nombre_cuenta);
+    expect($gestor['saldo_anterior'])->toEqual(3000.0);
+    expect($gestor['saldo_posterior'])->toEqual(2000.0);
+
+    $mensajero = $movimientos->firstWhere('etiqueta', 'Mensajero');
+    expect($mensajero['nombre'])->toBe($cuentaMensajero->nombre_cuenta);
+    expect($mensajero['saldo_anterior'])->toEqual(1800.0);
+    expect($mensajero['saldo_posterior'])->toEqual(0.0);
+});
+
+test('una Venta sin snapshot de saldo no manda movimientos_saldo, y detalle_venta.anulacion es null si no está cancelada', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $venta = Venta::factory()->create();
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['detalle_venta']['movimientos_saldo'])->toBe([]);
+    expect($fila['detalle_venta']['anulacion'])->toBeNull();
+});
+
+test('el detalle colapsable de una Venta anulada incluye motivo y detalle de anulación', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $venta = Venta::factory()->create([
+        'estado' => 'cancelada',
+        'motivo_anulacion' => 'error_precio',
+        'detalle_anulacion' => 'Se cargó el precio equivocado, cliente pidió reembolso.',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['detalle_venta']['anulacion'])->not->toBeNull();
+    expect($fila['detalle_venta']['anulacion']['motivo'])->toBe('error_precio');
+    expect($fila['detalle_venta']['anulacion']['detalle'])->toBe('Se cargó el precio equivocado, cliente pidió reembolso.');
+});
+
 test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por tipo', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
@@ -533,7 +631,7 @@ test('el reporte incluye Compra en el listado combinado, con proveedor, pagos y 
 
     crearTiposMovimientoFinanciero();
 
-    $proveedor = \App\Models\Proveedor::factory()->create(['nombre_proveedor' => 'Distribuidora El Sol']);
+    $proveedor = Proveedor::factory()->create(['nombre_proveedor' => 'Distribuidora El Sol']);
     $producto = Producto::factory()->create(['nombre_producto' => 'Panel Solar 620W']);
 
     $compra = Compra::factory()->create([
@@ -582,11 +680,11 @@ test('una Compra pago_cash con varios métodos de pago muestra cada uno con su c
     crearTiposMovimientoFinanciero();
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
-    $cliente = \App\Models\Cliente::factory()->create(['nombre_cliente' => 'Cliente Financia Compra']);
+    $cliente = Cliente::factory()->create(['nombre_cliente' => 'Cliente Financia Compra']);
 
     $compra = Compra::factory()->create([
         'user_id' => $admin->id,
-        'proveedor_id' => \App\Models\Proveedor::factory()->create()->id,
+        'proveedor_id' => Proveedor::factory()->create()->id,
         'cliente_id' => null,
         'cuenta_id' => $cuenta->id,
         'tipo_compra' => 'pago_cash',
@@ -616,6 +714,53 @@ test('una Compra pago_cash con varios métodos de pago muestra cada uno con su c
     expect($pagos->firstWhere('tipo_pago', 'cuenta')['monto'])->toEqual(60.0);
     expect($pagos->firstWhere('tipo_pago', 'cliente')['origen'])->toBe('Cliente Financia Compra');
     expect($pagos->firstWhere('tipo_pago', 'cliente')['monto'])->toEqual(40.0);
+});
+
+test('el detalle colapsable de una Compra trae saldo antes/después del receptor y de cada pago', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $proveedor = Proveedor::factory()->create(['nombre_proveedor' => 'Proveedor Con Saldo']);
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $compra = Compra::factory()->create([
+        'user_id' => $admin->id,
+        'proveedor_id' => $proveedor->id,
+        'cliente_id' => null,
+        'cuenta_id' => $cuenta->id,
+        'tipo_compra' => 'pago_cash',
+        'total_compra' => 100,
+        'receptor_saldo_anterior' => 500,
+        'receptor_saldo_posterior' => 400,
+    ]);
+    CompraPago::create([
+        'compra_id' => $compra->id,
+        'cuenta_id' => $cuenta->id,
+        'cliente_id' => null,
+        'monto' => 100,
+        'tipo_pago' => 'cuenta',
+        'saldo_anterior' => 300,
+        'saldo_posterior' => 200,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $compra->id);
+    $movimientos = collect($fila['detalle_compra']['movimientos_saldo']);
+
+    expect($movimientos)->toHaveCount(2);
+
+    $receptor = $movimientos->firstWhere('etiqueta', 'Receptor');
+    expect($receptor['tipo'])->toBe('proveedor');
+    expect($receptor['nombre'])->toBe('Proveedor Con Saldo');
+    expect($receptor['saldo_anterior'])->toEqual(500.0);
+    expect($receptor['saldo_posterior'])->toEqual(400.0);
+
+    $pago = $movimientos->firstWhere('etiqueta', 'Pago 1');
+    expect($pago['nombre'])->toBe($cuenta->nombre_cuenta);
+    expect($pago['saldo_anterior'])->toEqual(300.0);
+    expect($pago['saldo_posterior'])->toEqual(200.0);
 });
 
 test('Compra es visible solo para admin/moderador — vendedor no la ve ni puede forzarla con ?tipo=Compra', function () {

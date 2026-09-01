@@ -17,6 +17,13 @@ class Compra extends Model
         'fecha_compra',
         'total_compra',
         'tipo_compra',
+        'receptor_saldo_anterior',
+        'receptor_saldo_posterior',
+    ];
+
+    protected $casts = [
+        'receptor_saldo_anterior' => 'double',
+        'receptor_saldo_posterior' => 'double',
     ];
 
     // Relación con el usuario que registró la compra (nullable — compras

@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\PagoVenta;
 
 class Cliente extends Model
 {
@@ -27,7 +26,7 @@ class Cliente extends Model
 
     public function setDeudaPagoClienteAttribute($value)
     {
-        if (!is_null($value) && (!is_numeric($value) || $value < -9999999 || $value > 9999999)) {
+        if (! is_null($value) && (! is_numeric($value) || $value < -9999999 || $value > 9999999)) {
             throw new \InvalidArgumentException('El valor de deuda debe estar entre -9999999 y 9999999');
         }
         $this->attributes['deuda_pago_cliente'] = $value;
@@ -38,7 +37,7 @@ class Cliente extends Model
     {
         return $this->belongsToMany(Compra::class, 'compra_pago', 'cliente_id', 'compra_id')
             ->wherePivot('tipo_pago', 'cliente')
-            ->withPivot('monto', 'tipo_pago')
+            ->withPivot('monto', 'tipo_pago', 'saldo_anterior', 'saldo_posterior')
             ->withTimestamps();
     }
 

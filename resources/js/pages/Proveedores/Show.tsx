@@ -391,7 +391,14 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                                         )}
                                                                     </div>
                                                                 </TableCell>
-                                                                <TableCell className="font-medium">{formatearMoneda(compra.total_compra)}</TableCell>
+                                                                <TableCell className="font-medium">
+                                                                    {formatearMoneda(compra.total_compra)}
+                                                                    {compra.receptor_saldo_anterior !== null && compra.receptor_saldo_posterior !== null && (
+                                                                        <div className="text-muted-foreground text-[11px] font-normal">
+                                                                            {formatearMoneda(compra.receptor_saldo_anterior)} → {formatearMoneda(compra.receptor_saldo_posterior)}
+                                                                        </div>
+                                                                    )}
+                                                                </TableCell>
                                                             </TableRow>
                                                             {expandida && (
                                                                 <TableRow>
@@ -646,6 +653,11 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                                 <TableCell className="max-w-[200px] truncate">{transaccion.descripcion}</TableCell>
                                                                 <TableCell className="font-medium text-green-600">
                                                                     +{formatearMoneda(transaccion.monto)}
+                                                                    {transaccion.saldo_anterior_destino !== null && transaccion.saldo_posterior_destino !== null && (
+                                                                        <div className="text-muted-foreground text-[11px] font-normal">
+                                                                            {formatearMoneda(transaccion.saldo_anterior_destino)} → {formatearMoneda(transaccion.saldo_posterior_destino)}
+                                                                        </div>
+                                                                    )}
                                                                 </TableCell>
                                                                 <TableCell>
                                                                     <Badge variant="outline">{transaccion.moneda}</Badge>

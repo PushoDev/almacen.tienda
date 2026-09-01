@@ -362,6 +362,14 @@ test('aprobarVenta con gestor descuenta SOLO la cuenta del gestor, nunca la de c
         'id' => $cuentaComision->id,
         'saldo_cuenta' => 5000,
     ]);
+
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'gestor_saldo_anterior' => 5000,
+        'gestor_saldo_posterior' => 4000,
+        'comision_saldo_anterior' => null,
+        'comision_saldo_posterior' => null,
+    ]);
 });
 
 test('aprobarVenta sin gestor descuenta la comisión del vendedor de su cuenta CUP', function () {
@@ -391,6 +399,12 @@ test('aprobarVenta sin gestor descuenta la comisión del vendedor de su cuenta C
     $this->assertDatabaseHas('cuentas', [
         'id' => $cuentaComision->id,
         'saldo_cuenta' => 5000 - (10 * 365), // 5000 - 3650
+    ]);
+
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'comision_saldo_anterior' => 5000,
+        'comision_saldo_posterior' => 5000 - (10 * 365),
     ]);
 });
 
@@ -443,7 +457,7 @@ test('aprobarVenta acredita el saldo de la cuenta cuando el pago coincide en mon
         'moneda_id' => $monedaUsd->id, 'total' => 50,
     ]);
     crearDestinatario($venta);
-    $venta->pagos()->create([
+    $pago = $venta->pagos()->create([
         'tipo_pago' => 'efectivo', 'moneda_id' => $monedaUsd->id,
         'cuenta_id' => $cuenta->id, 'monto' => 50,
         'tasa_cambio_aplicada' => 1, 'monto_equivalente' => 50,
@@ -453,6 +467,11 @@ test('aprobarVenta acredita el saldo de la cuenta cuando el pago coincide en mon
 
     $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 150]);
     $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'completada']);
+    $this->assertDatabaseHas('pago_ventas', [
+        'id' => $pago->id,
+        'saldo_anterior' => 100,
+        'saldo_posterior' => 150,
+    ]);
 });
 
 test('aprobarVenta acumula deuda de cliente cuando el pago tiene cliente_id en vez de cuenta', function () {
@@ -468,7 +487,7 @@ test('aprobarVenta acumula deuda de cliente cuando el pago tiene cliente_id en v
         'moneda_id' => $monedaUsd->id, 'total' => 50,
     ]);
     crearDestinatario($venta);
-    $venta->pagos()->create([
+    $pago = $venta->pagos()->create([
         'tipo_pago' => 'efectivo', 'moneda_id' => $monedaUsd->id,
         'cliente_id' => $cliente->id, 'monto' => 50,
         'tasa_cambio_aplicada' => 1, 'monto_equivalente' => 50,
@@ -477,6 +496,11 @@ test('aprobarVenta acumula deuda de cliente cuando el pago tiene cliente_id en v
     $this->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
 
     $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 70]);
+    $this->assertDatabaseHas('pago_ventas', [
+        'id' => $pago->id,
+        'saldo_anterior' => 20,
+        'saldo_posterior' => 70,
+    ]);
 });
 
 test('no se puede aprobar una venta sin destinatario', function () {
@@ -545,6 +569,11 @@ test('aprobarVenta con mensajero externo descuenta el monto final CUP de la cuen
     $this->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
 
     $this->assertDatabaseHas('cuentas', ['id' => $cuentaMensajero->id, 'saldo_cuenta' => 10000 - 1800]);
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'mensajero_saldo_anterior' => 10000,
+        'mensajero_saldo_posterior' => 10000 - 1800,
+    ]);
 });
 
 test('el mensajero no se incluye en el cálculo de ganancia cambiaria (pass-through)', function () {

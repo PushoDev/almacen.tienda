@@ -295,7 +295,9 @@ class CuentaController extends Controller
             'mf.descripcion as descripcion',
             DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) ELSE COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) END as contraparte"),
             'users.name as usuario',
-            DB::raw("'movimiento_financiero' as fuente")
+            DB::raw("'movimiento_financiero' as fuente"),
+            DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN mf.saldo_anterior_origen ELSE mf.saldo_anterior_destino END as saldo_anterior"),
+            DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN mf.saldo_posterior_origen ELSE mf.saldo_posterior_destino END as saldo_posterior")
         )
             ->orderByDesc('mf.fecha_operacion')
             ->paginate(15, ['*'], 'pagina_transacciones')
@@ -328,7 +330,9 @@ class CuentaController extends Controller
                 DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
-                DB::raw("'venta_pago' as fuente")
+                DB::raw("'venta_pago' as fuente"),
+                'pv.saldo_anterior as saldo_anterior',
+                'pv.saldo_posterior as saldo_posterior'
             );
 
         $comisionesPV = DB::table('ventas as v')
@@ -348,7 +352,9 @@ class CuentaController extends Controller
                 DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
-                DB::raw("'venta_comision' as fuente")
+                DB::raw("'venta_comision' as fuente"),
+                'v.comision_saldo_anterior as saldo_anterior',
+                'v.comision_saldo_posterior as saldo_posterior'
             );
 
         $comisionesGestor = DB::table('ventas as v')
@@ -367,7 +373,9 @@ class CuentaController extends Controller
                 DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
-                DB::raw("'venta_gestor' as fuente")
+                DB::raw("'venta_gestor' as fuente"),
+                'v.gestor_saldo_anterior as saldo_anterior',
+                'v.gestor_saldo_posterior as saldo_posterior'
             );
 
         $mensajeria = DB::table('ventas as v')
@@ -386,7 +394,9 @@ class CuentaController extends Controller
                 DB::raw('NULL as descripcion'),
                 DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
                 'users.name as usuario',
-                DB::raw("'venta_mensajero' as fuente")
+                DB::raw("'venta_mensajero' as fuente"),
+                'v.mensajero_saldo_anterior as saldo_anterior',
+                'v.mensajero_saldo_posterior as saldo_posterior'
             );
 
         $query = $pagosVenta->unionAll($comisionesPV)
@@ -474,7 +484,9 @@ class CuentaController extends Controller
             DB::raw('NULL as descripcion'),
             DB::raw("COALESCE(p.nombre_proveedor, cl.nombre_cliente, 'Proveedor') as contraparte"),
             DB::raw("'Sistema' as usuario"),
-            DB::raw("'compra_pago' as fuente")
+            DB::raw("'compra_pago' as fuente"),
+            'cp.saldo_anterior as saldo_anterior',
+            'cp.saldo_posterior as saldo_posterior'
         )
             ->orderByDesc('c.fecha_compra')
             ->paginate(15, ['*'], 'pagina_compras')

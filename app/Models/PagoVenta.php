@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class PagoVenta extends Model
 {
@@ -19,13 +19,17 @@ class PagoVenta extends Model
         'monto',
         'tasa_cambio_aplicada',
         'monto_equivalente',
-        'referencia'
+        'referencia',
+        'saldo_anterior',
+        'saldo_posterior',
     ];
 
     protected $casts = [
         'tasa_cambio_aplicada' => 'decimal:2',
         'monto' => 'decimal:2',
         'monto_equivalente' => 'decimal:2',
+        'saldo_anterior' => 'double',
+        'saldo_posterior' => 'double',
     ];
 
     public function venta()

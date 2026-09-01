@@ -91,6 +91,7 @@ class RastreoOperacionesController extends Controller
             ->when($clienteIds, function ($q) use ($clienteIds, $clienteDireccion) {
                 if ($clienteDireccion === 'envia') {
                     $q->whereRaw('1 = 0');
+
                     return;
                 }
                 $q->where(function ($qq) use ($clienteIds) {
@@ -110,6 +111,7 @@ class RastreoOperacionesController extends Controller
             ->when($cuentaIds, function ($q) use ($cuentaIds, $cuentaDireccion) {
                 if ($cuentaDireccion === 'envia') {
                     $q->whereRaw('1 = 0');
+
                     return;
                 }
                 $q->whereExists(function ($sub) use ($cuentaIds) {
@@ -179,9 +181,9 @@ class RastreoOperacionesController extends Controller
             'usuario',
             'almacen',
             'destinatario',
-            'comisionCuenta',
+            'comisionCuenta.moneda',
             'gestorCuenta.moneda',
-            'mensajeroCuenta',
+            'mensajeroCuenta.moneda',
             'pagos.cuenta',
             'pagos.cliente',
             'pagos.moneda',
@@ -303,6 +305,7 @@ class RastreoOperacionesController extends Controller
             ->when($proveedorIds, function ($q) use ($proveedorIds, $proveedorDireccion) {
                 if ($proveedorDireccion === 'envia') {
                     $q->whereRaw('1 = 0');
+
                     return;
                 }
                 $q->whereIn('proveedor_destino.id', $proveedorIds);
@@ -362,6 +365,7 @@ class RastreoOperacionesController extends Controller
             ->when($proveedorIds, function ($q) use ($proveedorIds, $proveedorDireccion) {
                 if ($proveedorDireccion === 'envia') {
                     $q->whereRaw('1 = 0');
+
                     return;
                 }
                 $q->whereIn('compras.proveedor_id', $proveedorIds);
@@ -373,6 +377,7 @@ class RastreoOperacionesController extends Controller
             ->when($cuentaIds, function ($q) use ($cuentaIds, $cuentaDireccion) {
                 if ($cuentaDireccion === 'recibe') {
                     $q->whereRaw('1 = 0');
+
                     return;
                 }
                 $q->whereExists(function ($sub) use ($cuentaIds) {
@@ -463,6 +468,56 @@ class RastreoOperacionesController extends Controller
             fn ($d) => (float) $d->ganancia - ((float) $d->comision_unitaria * $d->cantidad)
         ), 2);
 
+        // Saldo antes/después de cada "pata" de la venta que aprobarVenta() tocó — mismo
+        // shape que ya usa entidadMovimiento() para Gasto/Ingreso/Transferencia, con una
+        // etiqueta extra porque acá pueden ser hasta 5 entidades en vez de solo origen/destino.
+        // Ventas viejas (antes de esta función) tienen saldo_anterior null — se omiten en vez
+        // de mostrar una tarjeta vacía.
+        $movimientosSaldo = [];
+        foreach ($venta->pagos as $i => $pago) {
+            if ($pago->saldo_anterior === null) {
+                continue;
+            }
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Pago '.($i + 1),
+                'tipo' => $pago->cuenta_id ? 'cuenta' : 'cliente',
+                'nombre' => $pago->cuenta?->nombre_cuenta ?? $pago->cliente?->nombre_cliente ?? '—',
+                'saldo_anterior' => (float) $pago->saldo_anterior,
+                'saldo_posterior' => (float) $pago->saldo_posterior,
+                'moneda' => $pago->cuenta_id ? ($pago->moneda?->codigo_moneda ?? null) : 'USD',
+            ];
+        }
+        if ($venta->comision_saldo_anterior !== null) {
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Comisión PV',
+                'tipo' => 'cuenta',
+                'nombre' => $venta->comisionCuenta?->nombre_cuenta ?? '—',
+                'saldo_anterior' => (float) $venta->comision_saldo_anterior,
+                'saldo_posterior' => (float) $venta->comision_saldo_posterior,
+                'moneda' => $venta->comisionCuenta?->moneda?->codigo_moneda ?? 'CUP',
+            ];
+        }
+        if ($venta->gestor_saldo_anterior !== null) {
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Gestor',
+                'tipo' => 'cuenta',
+                'nombre' => $venta->gestorCuenta?->nombre_cuenta ?? '—',
+                'saldo_anterior' => (float) $venta->gestor_saldo_anterior,
+                'saldo_posterior' => (float) $venta->gestor_saldo_posterior,
+                'moneda' => $venta->gestorCuenta?->moneda?->codigo_moneda ?? 'CUP',
+            ];
+        }
+        if ($venta->mensajero_saldo_anterior !== null) {
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Mensajero',
+                'tipo' => 'cuenta',
+                'nombre' => $venta->mensajeroCuenta?->nombre_cuenta ?? '—',
+                'saldo_anterior' => (float) $venta->mensajero_saldo_anterior,
+                'saldo_posterior' => (float) $venta->mensajero_saldo_posterior,
+                'moneda' => $venta->mensajeroCuenta?->moneda?->codigo_moneda ?? 'CUP',
+            ];
+        }
+
         return [
             'id' => $venta->id,
             'fecha' => $venta->created_at,
@@ -478,8 +533,14 @@ class RastreoOperacionesController extends Controller
                     'fecha' => $venta->created_at,
                     'almacen' => $venta->almacen?->nombre_almacen,
                 ],
+                // Solo presente cuando la venta terminó anulada — motivo es obligatorio en
+                // anularVenta(), detalle es opcional (ver VentaController::anularVenta()).
+                'anulacion' => $venta->estado === 'cancelada' ? [
+                    'motivo' => $venta->motivo_anulacion,
+                    'detalle' => $venta->detalle_anulacion,
+                ] : null,
                 'receptor' => $venta->destinatario ? [
-                    'nombre_completo' => trim($venta->destinatario->nombre . ' ' . $venta->destinatario->apellidos),
+                    'nombre_completo' => trim($venta->destinatario->nombre.' '.$venta->destinatario->apellidos),
                     'carnet_identidad' => $venta->destinatario->carnet_identidad,
                     'telefono' => $venta->destinatario->telefono_contacto,
                     'direccion' => $venta->destinatario->direccion_residencia,
@@ -538,7 +599,7 @@ class RastreoOperacionesController extends Controller
                     'tasa_cambio_principal' => (float) $venta->tasa_cambio_principal,
                 ],
                 'productos' => $venta->detalles->map(fn ($d) => [
-                    'producto' => $d->producto?->nombre_producto ?? 'Producto #' . $d->producto_id,
+                    'producto' => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
                     'imagen_url' => $d->producto?->imagen_url,
                     'marca' => $d->producto?->marca_producto,
                     'modelo' => $d->producto?->modelo_producto,
@@ -558,6 +619,7 @@ class RastreoOperacionesController extends Controller
                     'comision_vendedor' => (float) $venta->total_comision,
                     'ganancia_agencia' => $puedeVerCosto ? $gananciaAgencia : null,
                 ],
+                'movimientos_saldo' => $movimientosSaldo,
             ],
             'detalle_movimiento' => null,
         ];
@@ -572,6 +634,36 @@ class RastreoOperacionesController extends Controller
      */
     private function transformarCompra(Compra $compra): array
     {
+        // Mismo criterio que en transformarVenta(): receptor (proveedor o cliente que recibió
+        // el pago) + cada fila de compra_pago con cuenta/cliente real (se omite la fila
+        // 'deuda_proveedor', esa no mueve el saldo de ninguna cuenta/cliente que pagó — el
+        // saldo del receptor ya se cubre aparte arriba). Compras viejas tienen saldo_anterior
+        // null — se omiten en vez de mostrar una tarjeta vacía.
+        $movimientosSaldo = [];
+        if ($compra->receptor_saldo_anterior !== null) {
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Receptor',
+                'tipo' => $compra->proveedor_id ? 'proveedor' : 'cliente',
+                'nombre' => $compra->proveedor?->nombre_proveedor ?? $compra->cliente?->nombre_cliente ?? '—',
+                'saldo_anterior' => (float) $compra->receptor_saldo_anterior,
+                'saldo_posterior' => (float) $compra->receptor_saldo_posterior,
+                'moneda' => 'USD',
+            ];
+        }
+        foreach ($compra->pagos as $i => $pago) {
+            if ($pago->saldo_anterior === null) {
+                continue;
+            }
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Pago '.($i + 1),
+                'tipo' => $pago->cuenta_id ? 'cuenta' : 'cliente',
+                'nombre' => $pago->cuenta?->nombre_cuenta ?? $pago->cliente?->nombre_cliente ?? '—',
+                'saldo_anterior' => (float) $pago->saldo_anterior,
+                'saldo_posterior' => (float) $pago->saldo_posterior,
+                'moneda' => 'USD',
+            ];
+        }
+
         return [
             'id' => $compra->id,
             'fecha' => $compra->fecha_compra,
@@ -622,6 +714,7 @@ class RastreoOperacionesController extends Controller
                     'precio' => (float) $p->pivot->precio,
                     'subtotal' => round((float) $p->pivot->cantidad * (float) $p->pivot->precio, 2),
                 ])->values(),
+                'movimientos_saldo' => $movimientosSaldo,
             ],
         ];
     }

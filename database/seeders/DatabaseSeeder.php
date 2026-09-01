@@ -2,15 +2,14 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use App\Models\Almacen;
-use App\Models\Cliente;
 use App\Models\Cuenta;
-use App\Models\Moneda; // AGREGAR ESTA LÍNEA
+use App\Models\Moneda;
+use App\Models\User; // AGREGAR ESTA LÍNEA
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -40,7 +39,7 @@ class DatabaseSeeder extends Seeder
             'role' => 'admin',
         ]);
         User::factory()->create([
-            'name' => 'Auditoria Glorieta',
+            'name' => 'Gestion 1',
             'email' => 'soporte.general@glorietashop.com',
             'password' => Hash::make('auditoria2025'),
             'role' => 'admin',
@@ -75,6 +74,18 @@ class DatabaseSeeder extends Seeder
             'email' => 'manzanillo2.pventa@glorietashop.com',
             'password' => Hash::make('manzanillo22025'),
             'role' => 'vendedor',
+        ]);
+        User::factory()->create([
+            'name' => 'Venta Oficina',
+            'email' => 'oficina.vendor@glorietashop.com',
+            'password' => Hash::make('oficina2025'),
+            'role' => 'vendedor',
+        ]);
+        User::factory()->create([
+            'name' => 'Gestion 2',
+            'email' => 'gestion2.general@glorietashop.com',
+            'password' => Hash::make('gestion22025'),
+            'role' => 'moderador',
         ]);
 
         // ========== AGREGAR MONEDA POR DEFECTO ==========
@@ -117,7 +128,7 @@ class DatabaseSeeder extends Seeder
                 'commission' => 0,
                 'estado' => true,
                 'principal' => false,
-            ]
+            ],
         ];
 
         foreach ($monedas as $moneda) {
@@ -149,7 +160,6 @@ class DatabaseSeeder extends Seeder
                     [
                         'saldo_cuenta' => 0,
                         'tipo_moneda' => $codigo,
-                        'deuda' => 0,
                         'tipo_cuenta' => 'permanentes',
                         'moneda_id' => $moneda->id,
                         'notas_cuenta' => null,
@@ -161,19 +171,7 @@ class DatabaseSeeder extends Seeder
         }
         // ========== FIN CUENTAS MONETARIAS POR DEFECTO ==========
 
-        // Crear el almacén predeterminado
-        Almacen::firstOrCreate(
-            ['nombre_almacen' => 'ALMACEN ROTURAS'],
-            [
-                'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 5423017',
-                'correo_almacen' => 'conservasindistro@glorieta.com',
-                'provincia_almacen' => 'Mayabeque',
-                'ciudad_almacen' => 'Mariel',
-                'notas_almacen' => 'Este es el almacén predeterminado para roturas u otras funciones.',
-            ]
-        );
-        // Nuevos almacenes
+        // Almacenes reales (sincronizado con producción — ver Fase de limpieza 2026-09-01)
         $almacenes = [
             [
                 'nombre_almacen' => 'ALMACEN MANZANILLO',
@@ -203,7 +201,7 @@ class DatabaseSeeder extends Seeder
                 'notas_almacen' => 'Punto de venta en Manzanillo, En el frente al telecentro de TV Golfovision',
             ],
             [
-                'nombre_almacen' => 'ALMACEN BEJUCAL',
+                'nombre_almacen' => 'BEJUCAL ALMACEN',
                 'tipo_almacen' => 'almacen',
                 'telefono_almacen' => '+53 5 5555555',
                 'correo_almacen' => 'quivican@glorieta.com',
@@ -212,68 +210,13 @@ class DatabaseSeeder extends Seeder
                 'notas_almacen' => 'Almacén regional de Quivicán',
             ],
             [
-                'nombre_almacen' => 'TIENDA QUIVICAN',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 5555556',
-                'correo_almacen' => 'quivican@glorietashop.com',
-                'provincia_almacen' => 'Mayabeque',
-                'ciudad_almacen' => 'Quivicán',
-                'notas_almacen' => 'Punto de Venta en Quivicán',
-            ],
-            [
-                'nombre_almacen' => 'TIENDA FLORIDA',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 5555557',
-                'correo_almacen' => 'tendaflorida@glorietashop.com',
-                'provincia_almacen' => 'Camaguey',
-                'ciudad_almacen' => 'Florida',
-                'notas_almacen' => 'Punto de Venta en Florida',
-            ],
-            [
-                'nombre_almacen' => 'TIENDA LA SALUO',
+                'nombre_almacen' => 'LA SALUD ALMACEN',
                 'tipo_almacen' => 'punto_venta',
                 'telefono_almacen' => '+53 53564121',
                 'correo_almacen' => 'tiendalasalud@glorietashop.com',
                 'provincia_almacen' => 'Mayabeque',
                 'ciudad_almacen' => 'Cotorro',
                 'notas_almacen' => 'Punto de venta en El Cotorro',
-            ],
-            // === Inventario por almacén (docs/inventario_por_almacen) ===
-            [
-                'nombre_almacen' => 'ALMACEN DAILY',
-                'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 6000001',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
-                'ciudad_almacen' => null,
-                'notas_almacen' => 'Almacén (según inventario_por_almacen).',
-            ],
-            [
-                'nombre_almacen' => 'ALMACEN DESTINY',
-                'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 6000002',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
-                'ciudad_almacen' => null,
-                'notas_almacen' => 'Almacén (según inventario_por_almacen).',
-            ],
-            [
-                'nombre_almacen' => 'ALMACEN ELDY',
-                'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 6000003',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
-                'ciudad_almacen' => null,
-                'notas_almacen' => 'Almacén (según inventario_por_almacen).',
-            ],
-            [
-                'nombre_almacen' => 'ALMACEN PANAMA',
-                'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 6000004',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
-                'ciudad_almacen' => null,
-                'notas_almacen' => 'Almacén (según inventario_por_almacen).',
             ],
             [
                 'nombre_almacen' => 'ALMACEN SACO',
@@ -285,148 +228,166 @@ class DatabaseSeeder extends Seeder
                 'notas_almacen' => 'Almacén (según inventario_por_almacen).',
             ],
             [
-                'nombre_almacen' => 'ALMACEN TITO',
+                'nombre_almacen' => 'TIENDA SAN JOSE',
+                'tipo_almacen' => 'punto_venta',
+                'telefono_almacen' => '123456788',
+                'correo_almacen' => 'sanjose.tienda@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
+                'ciudad_almacen' => 'SAN JOSE',
+                'notas_almacen' => null,
+            ],
+            [
+                'nombre_almacen' => 'ALMACEN ALI EXPRESS',
                 'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 6000006',
-                'correo_almacen' => null,
+                'telefono_almacen' => '+56789456231',
+                'correo_almacen' => 'ali.express@almacen.com',
                 'provincia_almacen' => null,
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Almacén (según inventario_por_almacen).',
+                'notas_almacen' => null,
             ],
             [
-                'nombre_almacen' => 'ALMACEN YADIER',
+                'nombre_almacen' => 'AMAZON ALMACEN',
                 'tipo_almacen' => 'almacen',
-                'telefono_almacen' => '+53 5 6000007',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'telefono_almacen' => '+6789123456',
+                'correo_almacen' => 'amazon.almacen@glorietashop.com',
+                'provincia_almacen' => 'USA',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Almacén (según inventario_por_almacen).',
+                'notas_almacen' => null,
             ],
             [
-                'nombre_almacen' => 'ALMACEN DAYLIN',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000001',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'CHINA ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+7891234567',
+                'correo_almacen' => 'china.almacen@glorietashop.com',
+                'provincia_almacen' => 'CHINA',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'CHINA ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN EDNEY',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000002',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'DANIEL ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+8912345678',
+                'correo_almacen' => 'daniel.almacen@glorietashop.com',
+                'provincia_almacen' => 'USA',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => null,
             ],
             [
-                'nombre_almacen' => 'ALMACEN JUGUETERIA MANZANILLO',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000003',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'DAYLIN ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+9123456789',
+                'correo_almacen' => 'daylin.almacen@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'DAYLIN ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN LA SALUD',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000004',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'DESTINY ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+1234567892',
+                'correo_almacen' => 'destiny.almacen@glorietashop.com',
+                'provincia_almacen' => 'USA',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'DESTINY ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN MANZA TIANDA',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000005',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'EBAY ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+23456789122',
+                'correo_almacen' => 'ebay.almacen@glorietashop.com',
+                'provincia_almacen' => 'USA',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'EBAY ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN MECO TIA',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000006',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'EDNEY ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+34567891233',
+                'correo_almacen' => 'ednay.almacen@glorietashop.com',
+                'provincia_almacen' => 'USA',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'EDNEY ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN OFICINA',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000007',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
-                'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'nombre_almacen' => 'COTORRO ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+567891234566',
+                'correo_almacen' => 'cotorro.almacen@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
+                'ciudad_almacen' => 'COTORRO',
+                'notas_almacen' => null,
             ],
             [
-                'nombre_almacen' => 'ALMACEN QUIVICAN TIENDA',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000008',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'MECO ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+789134567',
+                'correo_almacen' => 'meco.almacen@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'MECO ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN RIGO COTORRO',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000009',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'OFICINA ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+234567891232',
+                'correo_almacen' => 'oficina.almacen@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'OFICINA ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN ROSY ELECTRICO',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000010',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'SAN ANTONIO ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+561234567896',
+                'correo_almacen' => 'sanantonio@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'SAN ANTONIO ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN SAN ANTONIO',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000011',
-                'correo_almacen' => null,
+                'nombre_almacen' => 'CARLITIN ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+5612345665789',
+                'correo_almacen' => 'carlitin.almacen@glorietashop.com',
                 'provincia_almacen' => null,
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'CARLITIN ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN TELEFONOS Y COVERS',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000012',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'TALLER BEJUCAL ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+1231234567',
+                'correo_almacen' => 'taller.ejucal@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => 'TALLER BEJUCAL ALMACEN',
             ],
             [
-                'nombre_almacen' => 'ALMACEN YUSI',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000013',
-                'correo_almacen' => null,
-                'provincia_almacen' => null,
+                'nombre_almacen' => 'QUIVICAN ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+123123456745',
+                'correo_almacen' => 'quivican.almacen@glorietashop.com',
+                'provincia_almacen' => 'MAYABEQUE',
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => null,
             ],
             [
-                'nombre_almacen' => 'DAILY PANAMA',
-                'tipo_almacen' => 'punto_venta',
-                'telefono_almacen' => '+53 5 7000014',
+                'nombre_almacen' => 'ROTURA ALMACEN',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+66556532',
+                'correo_almacen' => 'roturas.almacen@glorietashop.com',
+                'provincia_almacen' => null,
+                'ciudad_almacen' => null,
+                'notas_almacen' => 'ESTE ES EL ALMACEN DON SE IMPORTAN Y SE ENVIAN PRODUCTOS CON DEFECTOS',
+            ],
+            [
+                'nombre_almacen' => 'CONTENEDOR 1',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '12345789',
                 'correo_almacen' => null,
                 'provincia_almacen' => null,
                 'ciudad_almacen' => null,
-                'notas_almacen' => 'Punto de venta (según inventario_por_almacen).',
+                'notas_almacen' => null,
             ],
         ];
 
@@ -437,7 +398,7 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        // Insertar categorías
+        // Insertar categorías (sincronizado con producción — ver Fase de limpieza 2026-09-01)
         DB::table('categorias')->insert([
             [
                 'nombre_categoria' => 'COCINA',
@@ -475,13 +436,6 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'AUDIOVISUALES',
-                'descripcion_categoria' => 'Smartv, Cajitas, Equipos audiovisuales',
-                'activar_categoria' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
                 'nombre_categoria' => 'TRANSPORTE',
                 'descripcion_categoria' => 'Bicicletas, Motorinas, Equipos para transporte',
                 'activar_categoria' => true,
@@ -510,20 +464,47 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'ÚTILES DEL HOGAR',
-                'descripcion_categoria' => 'Adornos para el hogar',
+                'nombre_categoria' => 'CELULAR',
+                'descripcion_categoria' => 'Importado desde Excel',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'USO PERSONAL',
-                'descripcion_categoria' => 'Aseos, Relojes, Gafas, Perfumes, etc',
+                'nombre_categoria' => 'AUDIO-VISUALES',
+                'descripcion_categoria' => 'Importado desde Excel',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
-
+            [
+                'nombre_categoria' => 'UTILES DEL HOGAR',
+                'descripcion_categoria' => 'Importado desde Excel',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'OTROS',
+                'descripcion_categoria' => 'Importado desde Excel',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'JUGUETERIA',
+                'descripcion_categoria' => 'Importado desde Excel',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'TRASPORTE',
+                'descripcion_categoria' => 'Importado desde Excel',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ]);
 
         // Datos Movimientos financieros
@@ -561,66 +542,5 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
         ]);
-
-        // Clientes Asociados al Sistema por default
-        $clientes = [
-            [
-                'nombre_cliente' => 'ALBERTO CLIENTE',
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+1 5 8000001',
-                'direccion_cliente' => null,
-                'ciudad_cliente' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'nombre_cliente' => 'DESTINY CLIENTE',
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 8000002',
-                'direccion_cliente' => null,
-                'ciudad_cliente' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'nombre_cliente' => 'JOSEITO CLIENTE',
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 8000003',
-                'direccion_cliente' => null,
-                'ciudad_cliente' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'nombre_cliente' => 'FORTE CLIENTE',
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 8000004',
-                'direccion_cliente' => null,
-                'ciudad_cliente' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'nombre_cliente' => 'JUAN CLIENTE',
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 8000005',
-                'direccion_cliente' => null,
-                'ciudad_cliente' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ];
-
-        foreach ($clientes as $cliente) {
-            Cliente::firstOrCreate(
-                ['nombre_cliente' => $cliente['nombre_cliente']],
-                $cliente
-            );
-        }
     }
 }

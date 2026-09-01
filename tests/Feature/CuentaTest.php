@@ -301,6 +301,8 @@ test('el historial incluye un gasto (movimiento_financiero) con signo negativo',
     expect($item)->not->toBeNull();
     expect((float) $item['monto'])->toBe(-80.0);
     expect($item['moneda'])->toBe('USD');
+    expect((float) $item['saldo_anterior'])->toBe(500.0);
+    expect((float) $item['saldo_posterior'])->toBe(420.0);
 });
 
 test('el historial incluye un pago de venta completada, pero no de una venta pendiente', function () {
@@ -314,6 +316,8 @@ test('el historial incluye un pago de venta completada, pero no de una venta pen
         'venta_id' => $ventaCompletada->id,
         'cuenta_id' => $cuenta->id,
         'monto' => 150,
+        'saldo_anterior' => 0,
+        'saldo_posterior' => 150,
     ]);
 
     $ventaPendiente = Venta::factory()->create(); // estado 'pendiente' por defecto
@@ -332,6 +336,10 @@ test('el historial incluye un pago de venta completada, pero no de una venta pen
 
     expect($montos)->toContain(150.0);
     expect($montos)->not->toContain(999.0);
+
+    $item = collect($response->json('props.historialVentas.data'))->firstWhere('fuente', 'venta_pago');
+    expect((float) $item['saldo_anterior'])->toBe(0.0);
+    expect((float) $item['saldo_posterior'])->toBe(150.0);
 });
 
 test('el historial incluye comisión de vendedor, comisión de gestor y mensajería como salidas', function () {
@@ -345,12 +353,16 @@ test('el historial incluye comisión de vendedor, comisión de gestor y mensajer
         'es_venta_gestor' => false,
         'total_comision' => 20,
         'comision_tasa' => 25,
+        'comision_saldo_anterior' => 1000,
+        'comision_saldo_posterior' => 500,
     ]);
 
     Venta::factory()->completada()->create([
         'gestor_cuenta_id' => $cuenta->id,
         'es_venta_gestor' => true,
         'gestor_monto' => 300,
+        'gestor_saldo_anterior' => 800,
+        'gestor_saldo_posterior' => 500,
     ]);
 
     Venta::factory()->completada()->create([
@@ -359,6 +371,8 @@ test('el historial incluye comisión de vendedor, comisión de gestor y mensajer
         'mensajero_monto' => 100,
         'mensajero_monto_original' => 900,
         'mensajero_monto_final_cup' => 950,
+        'mensajero_saldo_anterior' => 2000,
+        'mensajero_saldo_posterior' => 1050,
     ]);
 
     $response = $this->get(route('cuentas.show', $cuenta->id), ['X-Inertia' => 'true']);
@@ -371,6 +385,13 @@ test('el historial incluye comisión de vendedor, comisión de gestor y mensajer
     expect((float) $comisionPV['monto'])->toBe(-500.0); // 20 * 25
     expect((float) $comisionGestor['monto'])->toBe(-300.0);
     expect((float) $mensajeria['monto'])->toBe(-950.0); // usa el CUP final, no el original
+
+    expect((float) $comisionPV['saldo_anterior'])->toBe(1000.0);
+    expect((float) $comisionPV['saldo_posterior'])->toBe(500.0);
+    expect((float) $comisionGestor['saldo_anterior'])->toBe(800.0);
+    expect((float) $comisionGestor['saldo_posterior'])->toBe(500.0);
+    expect((float) $mensajeria['saldo_anterior'])->toBe(2000.0);
+    expect((float) $mensajeria['saldo_posterior'])->toBe(1050.0);
 });
 
 test('el historial incluye pagos de compra para admin, pero se ocultan para vendedor', function () {
@@ -385,6 +406,8 @@ test('el historial incluye pagos de compra para admin, pero se ocultan para vend
         'cuenta_id' => $cuenta->id,
         'monto' => 75,
         'tipo_pago' => 'cuenta',
+        'saldo_anterior' => 200,
+        'saldo_posterior' => 125,
     ]);
 
     $this->actingAs($admin);
@@ -397,6 +420,10 @@ test('el historial incluye pagos de compra para admin, pero se ocultan para vend
 
     expect($historialCompraAdmin->contains('referencia_id', $compra->id))->toBeTrue();
     expect($historialCompraVendedor)->toBeEmpty();
+
+    $item = $historialCompraAdmin->firstWhere('referencia_id', $compra->id);
+    expect((float) $item['saldo_anterior'])->toBe(200.0);
+    expect((float) $item['saldo_posterior'])->toBe(125.0);
 });
 
 // ==========================================================================

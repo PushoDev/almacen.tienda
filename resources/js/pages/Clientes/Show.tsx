@@ -59,7 +59,7 @@ interface CompraCliente {
         cuenta?: { id: number; nombre_cuenta: string };
         cliente?: { id: number; nombre_cliente: string };
     }>;
-    pivot: { monto: number; tipo_pago: string };
+    pivot: { monto: number; tipo_pago: string; saldo_anterior: number | null; saldo_posterior: number | null };
 }
 
 interface TipoMovimientoFinanciero {
@@ -87,6 +87,10 @@ interface MovimientoFinanciero {
     descripcion: string;
     fecha_operacion: string;
     estado: string;
+    saldo_anterior_origen: number | null;
+    saldo_posterior_origen: number | null;
+    saldo_anterior_destino: number | null;
+    saldo_posterior_destino: number | null;
 }
 
 interface VentaCliente {
@@ -155,6 +159,8 @@ interface PagoVentaRecibido {
     monto_equivalente: number | null;
     referencia: string | null;
     created_at: string;
+    saldo_anterior: number | null;
+    saldo_posterior: number | null;
     moneda: { id: number; codigo_moneda: string; nombre_moneda: string } | null;
     venta: {
         id: number;
@@ -291,6 +297,18 @@ const TablaTransacciones = ({
                                                     <p>
                                                         <strong>Tasa:</strong> {mov.tasa_cambio_aplicada}
                                                     </p>
+                                                    {(() => {
+                                                        const saldoAnterior = dir === 'origen' ? mov.saldo_anterior_origen : mov.saldo_anterior_destino;
+                                                        const saldoPosterior = dir === 'origen' ? mov.saldo_posterior_origen : mov.saldo_posterior_destino;
+                                                        return (
+                                                            saldoAnterior !== null &&
+                                                            saldoPosterior !== null && (
+                                                                <p>
+                                                                    <strong>Saldo:</strong> {formatearMoneda(saldoAnterior)} → {formatearMoneda(saldoPosterior)}
+                                                                </p>
+                                                            )
+                                                        );
+                                                    })()}
                                                     {mov.cuenta_origen && (
                                                         <p>
                                                             <strong>Cta. Origen:</strong> {mov.cuenta_origen.nombre_cuenta}
@@ -596,6 +614,11 @@ const TablaPagosRecibidos = ({
                                 </TableCell>
                                 <TableCell>
                                     <span className="font-semibold text-emerald-600">{formatearMoneda(pago.monto)}</span>
+                                    {pago.saldo_anterior !== null && pago.saldo_posterior !== null && (
+                                        <div className="text-muted-foreground text-[11px]">
+                                            {formatearMoneda(pago.saldo_anterior)} → {formatearMoneda(pago.saldo_posterior)}
+                                        </div>
+                                    )}
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant="secondary">{pago.moneda?.codigo_moneda ?? 'USD'}</Badge>
@@ -1143,6 +1166,11 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                                     Aportó: {formatearMoneda(compra.pivot.monto)}
                                                                                 </span>
                                                                             </div>
+                                                                            {compra.pivot.saldo_anterior !== null && compra.pivot.saldo_posterior !== null && (
+                                                                                <p className="text-muted-foreground text-xs">
+                                                                                    Saldo: {formatearMoneda(compra.pivot.saldo_anterior)} → {formatearMoneda(compra.pivot.saldo_posterior)}
+                                                                                </p>
+                                                                            )}
                                                                         </div>
                                                                         <Badge
                                                                             variant="outline"
@@ -1227,6 +1255,11 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                         <span className="font-semibold text-green-600">
                                                                             {formatearMoneda(compra.pivot.monto)}
                                                                         </span>
+                                                                        {compra.pivot.saldo_anterior !== null && compra.pivot.saldo_posterior !== null && (
+                                                                            <div className="text-muted-foreground text-[11px]">
+                                                                                {formatearMoneda(compra.pivot.saldo_anterior)} → {formatearMoneda(compra.pivot.saldo_posterior)}
+                                                                            </div>
+                                                                        )}
                                                                     </TableCell>
                                                                     <TableCell>
                                                                         <Tooltip>
