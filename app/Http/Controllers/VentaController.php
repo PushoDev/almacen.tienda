@@ -1432,8 +1432,13 @@ class VentaController extends Controller
 
                     // Verificar que el cliente destino existe y es físico
                     if ($clienteDestino && $clienteDestino->tipo_cliente === 'fisico') {
+                        $saldoAnteriorPago = (float) $clienteDestino->deuda_pago_cliente;
                         // ✅ Incrementar la deuda del cliente destino
                         $clienteDestino->increment('deuda_pago_cliente', $pago->monto);
+                        $pago->update([
+                            'saldo_anterior' => $saldoAnteriorPago,
+                            'saldo_posterior' => $saldoAnteriorPago + (float) $pago->monto,
+                        ]);
 
                         // ✅ IMPORTANTE: Saltar al siguiente pago, NO procesar cuenta
                         continue;
@@ -1450,7 +1455,12 @@ class VentaController extends Controller
                 $codigoPago = $pago->moneda?->codigo_moneda;
 
                 if ($codigoPago === $codigoCuenta) {
+                    $saldoAnteriorPago = (float) $cuenta->saldo_cuenta;
                     $cuenta->increment('saldo_cuenta', $pago->monto);
+                    $pago->update([
+                        'saldo_anterior' => $saldoAnteriorPago,
+                        'saldo_posterior' => $saldoAnteriorPago + (float) $pago->monto,
+                    ]);
                 }
                 // Si no coinciden, por seguridad no acumulamos
             }
@@ -1486,7 +1496,12 @@ class VentaController extends Controller
                         throw new \Exception('La cuenta del gestor no tiene saldo suficiente para cubrir la comisión');
                     }
 
+                    $gestorSaldoAnterior = (float) $cuentaGestor->saldo_cuenta;
                     $cuentaGestor->decrement('saldo_cuenta', $venta->gestor_monto);
+                    $venta->update([
+                        'gestor_saldo_anterior' => $gestorSaldoAnterior,
+                        'gestor_saldo_posterior' => $gestorSaldoAnterior - (float) $venta->gestor_monto,
+                    ]);
                 }
             }
 
@@ -1514,7 +1529,12 @@ class VentaController extends Controller
 
                     // EXTERNO: sale de la cuenta del POS para pagar al mensajero (pago físico)
                     if ($venta->mensajero_tipo === 'externo') {
+                        $mensajeroSaldoAnterior = (float) $cuentaMensajero->saldo_cuenta;
                         $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                        $venta->update([
+                            'mensajero_saldo_anterior' => $mensajeroSaldoAnterior,
+                            'mensajero_saldo_posterior' => $mensajeroSaldoAnterior - $montoFinal,
+                        ]);
                     }
                 }
             }
@@ -1532,7 +1552,12 @@ class VentaController extends Controller
                         );
                     }
 
+                    $comisionSaldoAnterior = (float) $cuentaComision->saldo_cuenta;
                     $cuentaComision->decrement('saldo_cuenta', $montoCUP);
+                    $venta->update([
+                        'comision_saldo_anterior' => $comisionSaldoAnterior,
+                        'comision_saldo_posterior' => $comisionSaldoAnterior - $montoCUP,
+                    ]);
                 }
             }
         });

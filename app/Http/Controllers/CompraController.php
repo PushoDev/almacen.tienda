@@ -10,18 +10,22 @@ use App\Models\Compra;
 use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
 use App\Models\Producto;
+use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class CompraController extends Controller
 {
     /**
      * Devuelve una lista de proveedores y clientes tipo fisico combinados.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getProveedor()
     {
@@ -43,30 +47,31 @@ class CompraController extends Controller
     /**
      * Devuelve una lista solo de proveedores.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getSoloProveedores()
     {
         $proveedores = Proveedor::select('id', 'nombre_proveedor')->get();
+
         return response()->json($proveedores);
     }
 
     /**
      * Devuelve una lista de categorías.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getCategorias()
     {
         $categorias = Categoria::select('id', 'nombre_categoria')->get();
+
         return response()->json($categorias);
     }
 
     /**
      * Devuelve una lista de clientes físicos con opción de búsqueda.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getClientesFisicos(Request $request)
     {
@@ -74,11 +79,11 @@ class CompraController extends Controller
             ->select('id', 'nombre_cliente', 'deuda_pago_cliente', 'telefono_cliente');
 
         // Agregar búsqueda si se proporciona
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
-                $q->where('nombre_cliente', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('telefono_cliente', 'like', '%' . $searchTerm . '%');
+                $q->where('nombre_cliente', 'like', '%'.$searchTerm.'%')
+                    ->orWhere('telefono_cliente', 'like', '%'.$searchTerm.'%');
             });
         }
 
@@ -94,7 +99,7 @@ class CompraController extends Controller
      * Devuelve una lista de cuentas permanentes SOLO EN USD.
      * ('temporales' se unificó en 'permanentes' el 2026-07-28, ya no existe como tipo aparte)
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getCuentas()
     {
@@ -113,8 +118,7 @@ class CompraController extends Controller
      * Busca productos existentes por nombre/marca/modelo/código para autocompletar el
      * formulario de alta de compra, mostrando stock y costo actual antes de sobreescribirlo.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function buscarProductosExistentes(Request $request)
     {
@@ -139,12 +143,12 @@ class CompraController extends Controller
                     // Stock desglosado por almacén: el costo es un solo dato por producto,
                     // pero el stock sí es específico de cada almacén.
                     'stock_por_almacen' => $producto->almacenes
-                        ->map(fn($almacen) => [
+                        ->map(fn ($almacen) => [
                             'almacen_id' => $almacen->id,
                             'nombre_almacen' => $almacen->nombre_almacen,
                             'cantidad' => (int) $almacen->pivot->cantidad,
                         ])
-                        ->filter(fn($item) => $item['cantidad'] > 0)
+                        ->filter(fn ($item) => $item['cantidad'] > 0)
                         ->values(),
                 ];
             });
@@ -156,19 +160,18 @@ class CompraController extends Controller
      * Busca clientes rápidamente por nombre o teléfono.
      * Usado para verificación en tiempo real en el frontend.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function buscarClienteRapido(Request $request)
     {
         $request->validate([
-            'search' => 'required|string|min:2'
+            'search' => 'required|string|min:2',
         ]);
 
         $clientes = Cliente::where('tipo_cliente', 'fisico')
             ->where(function ($query) use ($request) {
-                $query->where('nombre_cliente', 'like', '%' . $request->search . '%')
-                    ->orWhere('telefono_cliente', 'like', '%' . $request->search . '%');
+                $query->where('nombre_cliente', 'like', '%'.$request->search.'%')
+                    ->orWhere('telefono_cliente', 'like', '%'.$request->search.'%');
             })
             ->select('id', 'nombre_cliente', 'telefono_cliente', 'deuda_pago_cliente')
             ->limit(10)
@@ -180,7 +183,7 @@ class CompraController extends Controller
     /**
      * Muestra la vista de creación de compra.
      *
-     * @return \Inertia\Response
+     * @return Response
      */
     public function index()
     {
@@ -195,22 +198,22 @@ class CompraController extends Controller
             ->latest()
             ->take(15)
             ->get()
-            ->map(fn($c) => [
-                'id'           => $c->id,
+            ->map(fn ($c) => [
+                'id' => $c->id,
                 'fecha_compra' => $c->fecha_compra,
                 'total_compra' => $c->total_compra,
-                'tipo_compra'  => $c->tipo_compra,
-                'proveedor'    => $c->proveedor?->nombre_proveedor,
-                'cliente'      => $c->cliente?->nombre_cliente,
-                'es_parcial'   => $c->es_parcial,
+                'tipo_compra' => $c->tipo_compra,
+                'proveedor' => $c->proveedor?->nombre_proveedor,
+                'cliente' => $c->cliente?->nombre_cliente,
+                'es_parcial' => $c->es_parcial,
             ]);
 
         return Inertia::render('Comprar/Index', [
-            'cuentas'           => $cuentasUSD,
-            'almacenes'         => Almacen::all(),
-            'proveedores'       => Proveedor::all(),
-            'categorias'        => Categoria::all(),
-            'clientes'          => Cliente::where('tipo_cliente', 'fisico')->get(),
+            'cuentas' => $cuentasUSD,
+            'almacenes' => Almacen::all(),
+            'proveedores' => Proveedor::all(),
+            'categorias' => Categoria::all(),
+            'clientes' => Cliente::where('tipo_cliente', 'fisico')->get(),
             'compras_recientes' => $comprasRecientes,
         ]);
     }
@@ -218,8 +221,7 @@ class CompraController extends Controller
     /**
      * Procesa y almacena una nueva compra.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\RedirectResponse|\Inertia\Response
+     * @return RedirectResponse|Response
      */
     public function store(Request $request)
     {
@@ -268,7 +270,7 @@ class CompraController extends Controller
                 ]);
             }
 
-            $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
+            $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
 
             $compraData = [
                 'user_id' => $request->user()->id,
@@ -284,17 +286,23 @@ class CompraController extends Controller
 
             if ($validated['compra'] === 'deuda_proveedor') {
                 if ($tipoProveedor === 'proveedor') {
+                    $receptorSaldoAnterior = (float) $proveedor->saldo_proveedor;
                     $proveedor->decrement('saldo_proveedor', $total);
+                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
                 } else {
+                    $receptorSaldoAnterior = (float) $cliente->deuda_pago_cliente;
                     $cliente->increment('deuda_pago_cliente', $total);
+                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $total;
                 }
                 $compraData['cuenta_id'] = null;
-            } else if ($validated['compra'] === 'pago_cash') {
+            } elseif ($validated['compra'] === 'pago_cash') {
                 $pagos = $validated['pagos'] ?? [];
                 $pagosClientes = $validated['pagos_clientes'] ?? [];
 
                 if (empty($pagos) && empty($pagosClientes)) {
-                    throw new \Exception("Debe especificar al menos un método de pago (cuenta o cliente).");
+                    throw new \Exception('Debe especificar al menos un método de pago (cuenta o cliente).');
                 }
 
                 $sumaTotalPagos = collect($pagos)->sum('monto') + collect($pagosClientes)->sum('monto');
@@ -306,7 +314,7 @@ class CompraController extends Controller
 
                 $montoFaltante = round($total - $sumaTotalPagos, 2);
 
-                if ($montoFaltante > 0.01 && !$permitirDeudaParcial) {
+                if ($montoFaltante > 0.01 && ! $permitirDeudaParcial) {
                     throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
                 }
 
@@ -317,16 +325,22 @@ class CompraController extends Controller
                     // del foreach de pagosClientes de abajo, que reutiliza (y reasigna) esta misma
                     // variable $cliente para el cliente que está pagando, no el dueño de la compra.
                     if ($tipoProveedor === 'proveedor') {
+                        $receptorSaldoAnterior = (float) $proveedor->saldo_proveedor;
                         $proveedor->decrement('saldo_proveedor', $montoFaltante);
+                        $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                        $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
                     } else {
+                        $receptorSaldoAnterior = (float) $cliente->deuda_pago_cliente;
                         $cliente->increment('deuda_pago_cliente', $montoFaltante);
+                        $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                        $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $montoFaltante;
                     }
                 } else {
                     $montoFaltante = 0;
                 }
 
                 // ✅ VALIDAR Y PROCESAR PAGOS CON CUENTAS
-                foreach ($pagos as $pago) {
+                foreach ($pagos as $idx => $pago) {
                     $cuenta = Cuenta::with('moneda')->findOrFail($pago['cuenta_id']);
 
                     if ($cuenta->moneda->codigo_moneda !== 'USD') {
@@ -336,16 +350,22 @@ class CompraController extends Controller
                     if ($cuenta->saldo_cuenta < $pago['monto']) {
                         throw new \Exception("Saldo insuficiente en la cuenta: {$cuenta->nombre_cuenta}");
                     }
+                    $saldoAnteriorPago = (float) $cuenta->saldo_cuenta;
                     $cuenta->decrement('saldo_cuenta', $pago['monto']);
+                    $pagos[$idx]['saldo_anterior'] = $saldoAnteriorPago;
+                    $pagos[$idx]['saldo_posterior'] = $saldoAnteriorPago - $pago['monto'];
                 }
 
                 // ✅ PROCESAR PAGOS CON CLIENTES (deuda)
-                foreach ($pagosClientes as $pagoCliente) {
+                foreach ($pagosClientes as $idx => $pagoCliente) {
                     $cliente = Cliente::findOrFail($pagoCliente['cliente_id']);
+                    $saldoAnteriorPago = (float) $cliente->deuda_pago_cliente;
                     $cliente->decrement('deuda_pago_cliente', $pagoCliente['monto']);
+                    $pagosClientes[$idx]['saldo_anterior'] = $saldoAnteriorPago;
+                    $pagosClientes[$idx]['saldo_posterior'] = $saldoAnteriorPago - $pagoCliente['monto'];
                 }
 
-                $compraData['cuenta_id'] = !empty($pagos) ? $pagos[0]['cuenta_id'] : null;
+                $compraData['cuenta_id'] = ! empty($pagos) ? $pagos[0]['cuenta_id'] : null;
             }
 
             $compra = Compra::create($compraData);
@@ -360,7 +380,7 @@ class CompraController extends Controller
                     'monto' => $total,
                     'tipo_pago' => 'deuda_proveedor',
                 ]);
-            } else if ($validated['compra'] === 'pago_cash') {
+            } elseif ($validated['compra'] === 'pago_cash') {
                 // Registrar pagos con cuentas
                 foreach ($pagos as $pago) {
                     CompraPago::create([
@@ -369,6 +389,8 @@ class CompraController extends Controller
                         'cliente_id' => null,
                         'monto' => $pago['monto'],
                         'tipo_pago' => 'cuenta',
+                        'saldo_anterior' => $pago['saldo_anterior'],
+                        'saldo_posterior' => $pago['saldo_posterior'],
                     ]);
                 }
 
@@ -380,6 +402,8 @@ class CompraController extends Controller
                         'cliente_id' => $pagoCliente['cliente_id'],
                         'monto' => $pagoCliente['monto'],
                         'tipo_pago' => 'cliente',
+                        'saldo_anterior' => $pagoCliente['saldo_anterior'],
+                        'saldo_posterior' => $pagoCliente['saldo_posterior'],
                     ]);
                 }
 
@@ -418,10 +442,10 @@ class CompraController extends Controller
                 $producto = Producto::where($searchAttributes)
                     ->where('precio_compra_producto', $item['precio'])
                     ->first();
-                $isNew = !$producto;
+                $isNew = ! $producto;
 
                 if ($isNew) {
-                    $producto = new Producto();
+                    $producto = new Producto;
                 }
 
                 $producto->fill([
@@ -439,30 +463,30 @@ class CompraController extends Controller
                 // Manejo de Códigos de Barras
                 $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
                 if ($codigoBarrasInput !== '') {
-                    $esPrimerCodigo = !\App\Models\ProductoCodigo::where('producto_id', $producto->id)->exists();
-                    $productoCodigo = \App\Models\ProductoCodigo::firstOrNew([
+                    $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
+                    $productoCodigo = ProductoCodigo::firstOrNew([
                         'producto_id' => $producto->id,
                         'codigo_barras' => $codigoBarrasInput,
                     ]);
                     $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $item['cantidad'];
-                    if (!$productoCodigo->exists) {
+                    if (! $productoCodigo->exists) {
                         $productoCodigo->es_default = $esPrimerCodigo;
                         try {
-                            $productoCodigo->imagen_barcode = \App\Models\ProductoCodigo::generarImagenBarcode($codigoBarrasInput);
+                            $productoCodigo->imagen_barcode = ProductoCodigo::generarImagenBarcode($codigoBarrasInput);
                         } catch (\Exception $e) {
-                            logger()->warning('No se pudo generar barcode para ' . $codigoBarrasInput . ': ' . $e->getMessage());
+                            logger()->warning('No se pudo generar barcode para '.$codigoBarrasInput.': '.$e->getMessage());
                         }
                     }
                     $productoCodigo->save();
                 } else {
-                    $defaultCodigo = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
+                    $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
                         ->where('es_default', true)
                         ->first();
-                    
+
                     if ($defaultCodigo) {
                         $defaultCodigo->increment('cantidad', $item['cantidad']);
                     } else {
-                        \App\Models\ProductoCodigo::generarYGuardarDefault($producto, $item['cantidad']);
+                        ProductoCodigo::generarYGuardarDefault($producto, $item['cantidad']);
                     }
                 }
 
@@ -484,7 +508,7 @@ class CompraController extends Controller
                 // Actualizar inventario en el almacén específico
                 $almacenProducto = AlmacenProducto::firstOrNew([
                     'almacen_id' => $almacenId,
-                    'producto_id' => $producto->id
+                    'producto_id' => $producto->id,
                 ]);
 
                 // Asegurar que la cantidad no sea negativa (aunque en compras normalmente aumenta)
@@ -517,11 +541,12 @@ class CompraController extends Controller
             return Inertia::render('Comprar/Show', [
                 'compra' => $this->shapeCompraParaVista($compra),
                 'productos' => $productosConAlmacen,
-                'success' => 'Compra registrada y productos actualizados correctamente'
+                'success' => 'Compra registrada y productos actualizados correctamente',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);
+
+            return back()->withErrors(['error' => 'Error al procesar la compra: '.$e->getMessage()]);
         }
     }
 
@@ -542,16 +567,16 @@ class CompraController extends Controller
                     : null;
 
                 return [
-                    'nombre_producto'    => $producto->nombre_producto,
-                    'marca_producto'     => $producto->marca_producto,
-                    'modelo_producto'    => $producto->modelo_producto,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
                     'capacidad_producto' => $producto->capacidad_producto,
-                    'color_producto'     => $producto->color_producto,
-                    'codigo_producto'    => $producto->codigo_producto,
-                    'categoria'          => $producto->categoria?->nombre_categoria,
+                    'color_producto' => $producto->color_producto,
+                    'codigo_producto' => $producto->codigo_producto,
+                    'categoria' => $producto->categoria?->nombre_categoria,
                     'pivot' => [
                         'cantidad' => $producto->pivot->cantidad,
-                        'precio'   => $producto->pivot->precio,
+                        'precio' => $producto->pivot->precio,
                     ],
                     'almacen' => [
                         'nombre_almacen' => $almacen?->nombre_almacen ?? 'N/A',
@@ -577,24 +602,24 @@ class CompraController extends Controller
     private function shapeCompraParaVista(Compra $compra): array
     {
         return [
-            'id'           => $compra->id,
+            'id' => $compra->id,
             'fecha_compra' => $compra->fecha_compra,
             'total_compra' => (float) $compra->total_compra,
-            'tipo_compra'  => $compra->tipo_compra,
-            'es_parcial'   => $compra->es_parcial,
-            'proveedor'    => $compra->proveedor
+            'tipo_compra' => $compra->tipo_compra,
+            'es_parcial' => $compra->es_parcial,
+            'proveedor' => $compra->proveedor
                 ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]
                 : null,
-            'cliente'      => $compra->cliente
+            'cliente' => $compra->cliente
                 ? ['id' => $compra->cliente->id, 'nombre_cliente' => $compra->cliente->nombre_cliente]
                 : null,
             'pagos' => $compra->pagos->map(fn ($pago) => [
                 'tipo_pago' => $pago->tipo_pago,
-                'monto'     => (float) $pago->monto,
-                'cuenta'    => $pago->cuenta
+                'monto' => (float) $pago->monto,
+                'cuenta' => $pago->cuenta
                     ? ['id' => $pago->cuenta->id, 'nombre_cuenta' => $pago->cuenta->nombre_cuenta]
                     : null,
-                'cliente'   => $pago->cliente
+                'cliente' => $pago->cliente
                     ? ['id' => $pago->cliente->id, 'nombre_cliente' => $pago->cliente->nombre_cliente]
                     : null,
             ])->values(),
@@ -604,8 +629,7 @@ class CompraController extends Controller
     /**
      * Store a newly created cliente for use during compra process.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function storeClienteForCompra(Request $request)
     {
@@ -619,12 +643,12 @@ class CompraController extends Controller
             return response()->json([
                 'message' => 'Cliente ya existe en el sistema. Usando cliente existente.',
                 'cliente' => $clienteExistente,
-                'existe' => true
+                'existe' => true,
             ], 200);
         }
 
         // Validación de datos
-        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), [
             'nombre_cliente' => ['required', 'string'],
             'tipo_cliente' => ['required', 'in:fisico,asociado'],
             'telefono_cliente' => ['required', 'string'],
@@ -649,7 +673,7 @@ class CompraController extends Controller
         return response()->json([
             'message' => 'Cliente creado exitosamente para la compra.',
             'cliente' => $cliente,
-            'existe' => false
+            'existe' => false,
         ], 201);
     }
 
@@ -657,13 +681,13 @@ class CompraController extends Controller
      * Devuelve los productos asociados a un almacén.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getProductos($id)
     {
         $almacen = Almacen::with('productos')->find($id);
 
-        if (!$almacen) {
+        if (! $almacen) {
             return response()->json(['message' => 'Almacén no encontrado'], 404);
         }
 
@@ -685,19 +709,18 @@ class CompraController extends Controller
     /**
      * Devuelve una lista de almacenes con opción de búsqueda.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getAlmacenes(Request $request)
     {
         $query = Almacen::select('id', 'nombre_almacen', 'tipo_almacen');
 
         // Agregar búsqueda si se proporciona
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
-                $q->where('nombre_almacen', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('tipo_almacen', 'like', '%' . $searchTerm . '%');
+                $q->where('nombre_almacen', 'like', '%'.$searchTerm.'%')
+                    ->orWhere('tipo_almacen', 'like', '%'.$searchTerm.'%');
             });
         }
 
@@ -712,8 +735,7 @@ class CompraController extends Controller
     /**
      * Store a newly created almacen for use during compra process.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function storeAlmacenForCompra(Request $request)
     {
@@ -727,12 +749,12 @@ class CompraController extends Controller
             return response()->json([
                 'message' => 'Almacén ya existe en el sistema. Usando almacén existente.',
                 'almacen' => $almacenExistente,
-                'existe' => true
+                'existe' => true,
             ], 200);
         }
 
         // Validación de datos
-        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), [
             'nombre_almacen' => ['required', 'string', 'unique:almacens,nombre_almacen'],
             'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'],
             'telefono_almacen' => ['required', 'string', 'unique:almacens,telefono_almacen'],
@@ -756,15 +778,14 @@ class CompraController extends Controller
         return response()->json([
             'message' => 'Almacén creado exitosamente.',
             'almacen' => $almacen,
-            'existe' => false
+            'existe' => false,
         ], 201);
     }
 
     /**
      * Crea o busca un proveedor/cliente para uso durante el proceso de compra.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function storeProveedor(Request $request)
     {
@@ -779,7 +800,7 @@ class CompraController extends Controller
                     'message' => 'Ya existe como proveedor.',
                     'data' => $existente,
                     'tipo' => 'proveedor',
-                    'existe' => true
+                    'existe' => true,
                 ], 200);
             }
         }
@@ -791,7 +812,7 @@ class CompraController extends Controller
                 'message' => 'Ya existe como cliente.',
                 'data' => $existenteCliente,
                 'tipo' => 'cliente',
-                'existe' => true
+                'existe' => true,
             ], 200);
         }
 
@@ -818,14 +839,14 @@ class CompraController extends Controller
                 'message' => 'Proveedor creado exitosamente.',
                 'data' => $proveedor,
                 'tipo' => 'proveedor',
-                'existe' => false
+                'existe' => false,
             ], 201);
         } else {
             // Para clientes, el teléfono es obligatorio
             $telefono = $request->telefono_cliente ?? null;
             if (empty($telefono)) {
                 return response()->json([
-                    'errors' => ['telefono_cliente' => 'El teléfono es requerido para clientes.']
+                    'errors' => ['telefono_cliente' => 'El teléfono es requerido para clientes.'],
                 ], 422);
             }
 
@@ -836,7 +857,7 @@ class CompraController extends Controller
                     'message' => 'Ya existe un cliente con ese teléfono.',
                     'data' => $clienteExistentePorTelefono,
                     'tipo' => 'cliente',
-                    'existe' => true
+                    'existe' => true,
                 ], 200);
             }
 
@@ -853,7 +874,7 @@ class CompraController extends Controller
                 'message' => 'Cliente creado exitosamente.',
                 'data' => $cliente,
                 'tipo' => 'cliente',
-                'existe' => false
+                'existe' => false,
             ], 201);
         }
     }
@@ -861,8 +882,7 @@ class CompraController extends Controller
     /**
      * Store a newly created categoria for use during compra process.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function storeCategoria(Request $request)
     {
@@ -882,7 +902,7 @@ class CompraController extends Controller
 
         return response()->json([
             'message' => 'Categoría creada exitosamente.',
-            'categoria' => $categoria
+            'categoria' => $categoria,
         ], 201);
     }
 }

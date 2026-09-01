@@ -5,6 +5,42 @@ use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
 use App\Models\User;
 
+test('el detalle de un proveedor trae saldo anterior/posterior de sus compras y transacciones', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 140]);
+
+    $compra = Compra::factory()->create([
+        'proveedor_id' => $proveedor->id,
+        'tipo_compra' => 'deuda_proveedor',
+        'receptor_saldo_anterior' => 200,
+        'receptor_saldo_posterior' => 140,
+    ]);
+
+    $ingreso = MovimientoFinanciero::factory()->ingreso()->create([
+        'proveedor_destino_id' => $proveedor->id,
+        'monto' => 60,
+        'moneda' => 'USD',
+        'saldo_anterior_destino' => 140,
+        'saldo_posterior_destino' => 200,
+        'moneda_destino' => 'USD',
+    ]);
+
+    $response = $this->get(route('proveedores.show', $proveedor->id), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    $compraProps = collect($response->json('props.compras'))->firstWhere('id', $compra->id);
+    expect((float) $compraProps['receptor_saldo_anterior'])->toBe(200.0);
+    expect((float) $compraProps['receptor_saldo_posterior'])->toBe(140.0);
+
+    $transaccionProps = collect($response->json('props.transacciones'))->firstWhere('id', $ingreso->id);
+    expect((float) $transaccionProps['saldo_anterior_destino'])->toBe(140.0);
+    expect((float) $transaccionProps['saldo_posterior_destino'])->toBe(200.0);
+});
+
 // ==========================================================================
 // EDITAR/ELIMINAR — admin-only (middleware admin.only), CREAR — abierto a
 // cualquier rol autenticado. Mismo patrón replicado desde CuentaTest.php.

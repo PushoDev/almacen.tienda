@@ -1,16 +1,17 @@
 <?php
 
-use App\Models\User;
 use App\Models\Almacen;
-use App\Models\Categoria;
-use App\Models\Cuenta;
-use App\Models\Moneda;
-use App\Models\Proveedor;
-use App\Models\Compra;
-use App\Models\CompraPago;
 use App\Models\AlmacenProducto;
+use App\Models\Categoria;
+use App\Models\Cliente;
+use App\Models\Compra;
+use App\Models\CompraProducto;
+use App\Models\Cuenta;
 use App\Models\HistorialPrecioCosto;
+use App\Models\Moneda;
 use App\Models\Producto;
+use App\Models\Proveedor;
+use App\Models\User;
 
 test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', function () {
     $user = User::factory()->admin()->create();
@@ -77,6 +78,8 @@ test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', funct
         'cuenta_id' => $cuenta->id,
         'monto' => 1.00,
         'tipo_pago' => 'cuenta',
+        'saldo_anterior' => 100.00,
+        'saldo_posterior' => 99.00,
     ]);
 
     $this->assertDatabaseHas('cuentas', [
@@ -123,6 +126,12 @@ test('puede crear compra como deuda a proveedor con precio 0.50', function () {
     $this->assertDatabaseHas('proveedors', [
         'id' => $proveedor->id,
         'saldo_proveedor' => 497.50,
+    ]);
+
+    $this->assertDatabaseHas('compras', [
+        'id' => Compra::first()->id,
+        'receptor_saldo_anterior' => 500,
+        'receptor_saldo_posterior' => 497.50,
     ]);
 });
 
@@ -260,7 +269,7 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
 
     // El precio es parte de la identidad: al no coincidir (10 vs 12), son dos fichas
     // de Producto distintas, cada una con su propia línea de pivot — no una fusionada.
-    $fichas = \App\Models\Producto::where('nombre_producto', 'Producto Repetido')->get();
+    $fichas = Producto::where('nombre_producto', 'Producto Repetido')->get();
     expect($fichas)->toHaveCount(2);
 
     $productoA = $fichas->firstWhere('precio_compra_producto', '10.00');
@@ -268,8 +277,8 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
     expect($productoA)->not->toBeNull();
     expect($productoB)->not->toBeNull();
 
-    expect(\App\Models\CompraProducto::where('producto_id', $productoA->id)->count())->toBe(1);
-    expect(\App\Models\CompraProducto::where('producto_id', $productoB->id)->count())->toBe(1);
+    expect(CompraProducto::where('producto_id', $productoA->id)->count())->toBe(1);
+    expect(CompraProducto::where('producto_id', $productoB->id)->count())->toBe(1);
 
     $this->assertDatabaseHas('compra_producto', [
         'producto_id' => $productoA->id,
@@ -616,6 +625,13 @@ test('pago_cash con permitir_deuda_parcial y pagos insuficientes: completa la co
     // El faltante (10 - 6 = 4) queda como deuda del proveedor.
     $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 496]);
 
+    // La compra guarda el snapshot del saldo del receptor (proveedor) antes/después del faltante.
+    $this->assertDatabaseHas('compras', [
+        'id' => $compra->id,
+        'receptor_saldo_anterior' => 500,
+        'receptor_saldo_posterior' => 496,
+    ]);
+
     // Y queda registrado como un pago más, mismo tipo que una compra 100% a deuda.
     $this->assertDatabaseHas('compra_pago', [
         'compra_id' => $compra->id,
@@ -629,6 +645,8 @@ test('pago_cash con permitir_deuda_parcial y pagos insuficientes: completa la co
         'cuenta_id' => $cuenta->id,
         'monto' => 6,
         'tipo_pago' => 'cuenta',
+        'saldo_anterior' => 100,
+        'saldo_posterior' => 94,
     ]);
 });
 
@@ -650,8 +668,8 @@ test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante
     // Dos clientes distintos: uno es "el proveedor" de esta compra (a quien se le compra), el otro
     // es quien además pone plata como método de pago — este test existe justo para confirmar que la
     // reasignación de $cliente dentro del foreach de pagosClientes no pisa a quién se le carga la deuda.
-    $clienteProveedor = \App\Models\Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
-    $clientePagador = \App\Models\Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
+    $clienteProveedor = Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
+    $clientePagador = Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
@@ -673,6 +691,21 @@ test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante
     // El que pagó se descuenta solo por lo que pagó (-3, comportamiento preexistente de "pagos con
     // clientes" — no relacionado con este cambio), nunca por el faltante que le tocó al otro cliente.
     $this->assertDatabaseHas('clientes', ['id' => $clientePagador->id, 'deuda_pago_cliente' => -3]);
+
+    $compra = Compra::where('cliente_id', $clienteProveedor->id)->firstOrFail();
+    $this->assertDatabaseHas('compras', [
+        'id' => $compra->id,
+        'receptor_saldo_anterior' => 0,
+        'receptor_saldo_posterior' => 4,
+    ]);
+    $this->assertDatabaseHas('compra_pago', [
+        'compra_id' => $compra->id,
+        'cliente_id' => $clientePagador->id,
+        'monto' => 3,
+        'tipo_pago' => 'cliente',
+        'saldo_anterior' => 0,
+        'saldo_posterior' => -3,
+    ]);
 });
 
 test('el historial de compras marca es_parcial solo en la compra que quedó con deuda parcial, no en las demás', function () {

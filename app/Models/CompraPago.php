@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class CompraPago extends Model
 {
-
     // Tabla en Singular
     protected $table = 'compra_pago';
 
@@ -15,14 +14,19 @@ class CompraPago extends Model
         'cuenta_id',
         'cliente_id',
         'monto',
-        'tipo_pago'
+        'tipo_pago',
+        'saldo_anterior',
+        'saldo_posterior',
     ];
 
+    protected $casts = [
+        'saldo_anterior' => 'double',
+        'saldo_posterior' => 'double',
+    ];
 
     /**
      * Relaciones
      */
-
     public function compra()
     {
         return $this->belongsTo(Compra::class);

@@ -688,6 +688,8 @@ export interface CompraProveedor {
     total_compra: number;
     productos: ProductoCompra[];
     proveedor_id: number;
+    receptor_saldo_anterior: number | null;
+    receptor_saldo_posterior: number | null;
     pagos?: Array<{
         id: number;
         monto: number;
@@ -715,6 +717,8 @@ export interface TransaccionProveedor {
         nombre_cliente: string;
     };
     proveedor_destino_id: number;
+    saldo_anterior_destino: number | null;
+    saldo_posterior_destino: number | null;
 }
 
 // Interface para Estadísticas del Proveedor

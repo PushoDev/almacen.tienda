@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Venta extends Model
 {
@@ -54,6 +54,13 @@ class Venta extends Model
         'comision_tasa',
         // MENSAJERO ORIGEN
         'mensajero_cuenta_origen_id',
+        // SALDO ANTERIOR/POSTERIOR (auditoría, ver Rastreo de Operaciones)
+        'comision_saldo_anterior',
+        'comision_saldo_posterior',
+        'gestor_saldo_anterior',
+        'gestor_saldo_posterior',
+        'mensajero_saldo_anterior',
+        'mensajero_saldo_posterior',
     ];
 
     protected $casts = [
@@ -67,14 +74,20 @@ class Venta extends Model
         'tasa_aplicada_venta' => 'decimal:2',
         'monto_diferencia_cambiaria' => 'decimal:2',
         'tasa_aplicada_gestor' => 'decimal:2',
-        'es_venta_especial'   => 'boolean',
+        'es_venta_especial' => 'boolean',
         'decision_notificada' => 'boolean',
-        'mensajero_monto'          => 'decimal:2',
-        'mensajero_monto_final_cup'=> 'decimal:2',
-        'mensajero_tasa'           => 'decimal:4',
+        'mensajero_monto' => 'decimal:2',
+        'mensajero_monto_final_cup' => 'decimal:2',
+        'mensajero_tasa' => 'decimal:4',
         'mensajero_monto_original' => 'decimal:4',
-        'mensajero_tasa_entrada'   => 'decimal:4',
-        'comision_tasa'            => 'decimal:4',
+        'mensajero_tasa_entrada' => 'decimal:4',
+        'comision_tasa' => 'decimal:4',
+        'comision_saldo_anterior' => 'double',
+        'comision_saldo_posterior' => 'double',
+        'gestor_saldo_anterior' => 'double',
+        'gestor_saldo_posterior' => 'double',
+        'mensajero_saldo_anterior' => 'double',
+        'mensajero_saldo_posterior' => 'double',
     ];
 
     public function usuario()
