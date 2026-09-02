@@ -759,6 +759,7 @@ export default function PuntoVentaOficial({
                 } else {
                     sileo.success({ title: message, description: 'Cliente creado exitosamente.' });
                     setClientes((prev) => [...prev, cliente]);
+                    setClientesFisicos((prev) => [...prev, cliente]);
                 }
 
                 setClienteSeleccionado(cliente.id.toString());
