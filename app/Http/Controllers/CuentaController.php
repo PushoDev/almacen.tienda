@@ -3,8 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\AjusteSaldoCuenta;
+use App\Models\Compra;
 use App\Models\Cuenta;
 use App\Models\Moneda;
+use App\Models\MovimientoFinanciero;
+use App\Models\Venta;
+use App\Services\DetalleOperacionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -14,6 +18,8 @@ use Inertia\Inertia;
 
 class CuentaController extends Controller
 {
+    public function __construct(private DetalleOperacionService $detalleOperacionService) {}
+
     /**
      * Display a listing of the resource.
      * Listado de Cuentas
@@ -238,14 +244,18 @@ class CuentaController extends Controller
             ],
             'puedeEditar' => $esAdminOModerador,
             'historialTransacciones' => $this->obtenerHistorialTransacciones($cuenta, $request),
-            'historialVentas' => $this->obtenerHistorialVentas($cuenta, $request),
+            'historialVentas' => $this->obtenerHistorialVentas($cuenta, $request, $esAdminOModerador),
             'historialCompras' => $esAdminOModerador
                 ? $this->obtenerHistorialCompras($cuenta, $request)
+                : new LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
+            'historialAjustes' => $esAdminOModerador
+                ? $this->obtenerHistorialAjustes($cuenta, $request)
                 : new LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
             'filtros' => [
                 'transacciones' => $request->only(['q_transacciones', 'tipo_transacciones', 'desde_transacciones', 'hasta_transacciones']),
                 'ventas' => $request->only(['q_ventas', 'tipo_ventas', 'desde_ventas', 'hasta_ventas']),
                 'compras' => $request->only(['q_compras', 'desde_compras', 'hasta_compras']),
+                'ajustes' => $request->only(['q_ajustes', 'desde_ajustes', 'hasta_ajustes']),
             ],
         ]);
     }
@@ -286,7 +296,7 @@ class CuentaController extends Controller
             $query->whereDate('mf.fecha_operacion', '<=', $hasta);
         }
 
-        return $query->select(
+        $historial = $query->select(
             'mf.id as referencia_id',
             'mf.fecha_operacion as fecha',
             'tmf.nombre as tipo',
@@ -302,6 +312,22 @@ class CuentaController extends Controller
             ->orderByDesc('mf.fecha_operacion')
             ->paginate(15, ['*'], 'pagina_transacciones')
             ->withQueryString();
+
+        // Detalle rico (entidades origen/destino, tasa de cambio) para la fila colapsable —
+        // solo se cargan los movimientos de la página actual (máx. 15), no toda la tabla.
+        $movimientos = MovimientoFinanciero::with(['user', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino'])
+            ->whereIn('id', $historial->pluck('referencia_id'))
+            ->get()
+            ->keyBy('id');
+
+        $historial->getCollection()->transform(function ($item) use ($movimientos) {
+            $mov = $movimientos->get($item->referencia_id);
+            $item->detalle = $mov ? $this->detalleOperacionService->detalleMovimiento($mov) : null;
+
+            return $item;
+        });
+
+        return $historial;
     }
 
     /**
@@ -310,7 +336,7 @@ class CuentaController extends Controller
      * estas 4 queda registrada en `movimientos_financieros` — VentaController
      * mueve `saldo_cuenta` directo en `aprobarVenta()` sin loguearlo ahí.
      */
-    private function obtenerHistorialVentas(Cuenta $cuenta, Request $request)
+    private function obtenerHistorialVentas(Cuenta $cuenta, Request $request, bool $puedeVerCosto)
     {
         $cuentaId = $cuenta->id;
 
@@ -432,7 +458,18 @@ class CuentaController extends Controller
 
         $historial = $finalQuery->orderByDesc('fecha')->paginate(15, ['*'], 'pagina_ventas')->withQueryString();
 
-        $historial->getCollection()->transform(function ($item) {
+        // Varias filas (pago/comisión/gestor/mensajero) pueden apuntar a la misma venta —
+        // se carga una sola vez por id, no una vez por fila.
+        $ventas = Venta::with([
+            'pagos.cuenta', 'pagos.cliente', 'pagos.moneda',
+            'detalles.producto', 'destinatario', 'almacen', 'usuario',
+            'comisionCuenta.moneda', 'gestorCuenta.moneda', 'mensajeroCuenta',
+        ])
+            ->whereIn('id', $historial->pluck('referencia_id')->unique())
+            ->get()
+            ->keyBy('id');
+
+        $historial->getCollection()->transform(function ($item) use ($ventas, $puedeVerCosto) {
             $item->descripcion = match ($item->fuente) {
                 'venta_pago' => "Pago de venta #{$item->referencia_id}",
                 'venta_comision' => "Comisión de venta #{$item->referencia_id}",
@@ -440,6 +477,9 @@ class CuentaController extends Controller
                 'venta_mensajero' => "Mensajería - venta #{$item->referencia_id}",
                 default => $item->descripcion,
             };
+
+            $venta = $ventas->get($item->referencia_id);
+            $item->detalle = $venta ? $this->detalleOperacionService->detalleVenta($venta, $puedeVerCosto) : null;
 
             return $item;
         });
@@ -492,8 +532,69 @@ class CuentaController extends Controller
             ->paginate(15, ['*'], 'pagina_compras')
             ->withQueryString();
 
-        $historial->getCollection()->transform(function ($item) {
+        // Varios pagos (compra_pago) pueden apuntar a la misma compra — se carga una
+        // sola vez por id, no una vez por fila.
+        $compras = Compra::with(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente', 'productos'])
+            ->whereIn('id', $historial->pluck('referencia_id')->unique())
+            ->get()
+            ->keyBy('id');
+
+        $historial->getCollection()->transform(function ($item) use ($compras) {
             $item->descripcion = "Pago de compra #{$item->referencia_id}";
+            $compra = $compras->get($item->referencia_id);
+            $item->detalle = $compra ? $this->detalleOperacionService->detalleCompra($compra) : null;
+
+            return $item;
+        });
+
+        return $historial;
+    }
+
+    /**
+     * Historial de ajustes manuales de saldo (edición directa desde
+     * Cuentas/Edit) — quedaban registrados en `ajustes_saldo_cuenta` para
+     * auditoría desde el fix de seguridad de 2026-08-19, pero nunca se
+     * leían de vuelta en ningún lado.
+     */
+    private function obtenerHistorialAjustes(Cuenta $cuenta, Request $request)
+    {
+        $query = DB::table('ajustes_saldo_cuenta as a')
+            ->join('users', 'a.user_id', '=', 'users.id')
+            ->where('a.cuenta_id', $cuenta->id);
+
+        if ($busqueda = $request->query('q_ajustes')) {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('a.motivo', 'like', "%{$busqueda}%")
+                    ->orWhere('users.name', 'like', "%{$busqueda}%");
+            });
+        }
+        if ($desde = $request->query('desde_ajustes')) {
+            $query->whereDate('a.created_at', '>=', $desde);
+        }
+        if ($hasta = $request->query('hasta_ajustes')) {
+            $query->whereDate('a.created_at', '<=', $hasta);
+        }
+
+        $historial = $query->select(
+            'a.id as referencia_id',
+            'a.created_at as fecha',
+            DB::raw("'Ajuste Manual' as tipo"),
+            DB::raw('(a.saldo_nuevo - a.saldo_anterior) as monto'),
+            DB::raw('NULL as moneda'),
+            'a.motivo as descripcion',
+            DB::raw('NULL as contraparte'),
+            'users.name as usuario',
+            DB::raw("'ajuste_saldo' as fuente"),
+            'a.saldo_anterior as saldo_anterior',
+            'a.saldo_nuevo as saldo_posterior'
+        )
+            ->orderByDesc('a.created_at')
+            ->paginate(15, ['*'], 'pagina_ajustes')
+            ->withQueryString();
+
+        $codigoMoneda = $cuenta->moneda->codigo_moneda ?? '';
+        $historial->getCollection()->transform(function ($item) use ($codigoMoneda) {
+            $item->moneda = $codigoMoneda;
 
             return $item;
         });

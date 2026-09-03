@@ -1,5 +1,7 @@
 # Patrón: Card con header en degradado de color
 
+> **Versión offline (NativePHP):** este patrón aplica igual ahí — ver `docs/nativephp-offline-design-consistency.md` antes de construir cualquier Card con header en esa versión.
+
 > Origen del lenguaje visual: `Comprar/Index.tsx`, los `AlertDialogHeader` de "Procesar Pago"/"Generar Deuda"/"Pagar Ahora" (fondo degradado, ícono en círculo con blur, texto blanco). Adaptado el 2026-08-12 a un `Card` normal (no un diálogo) para las dos tarjetas de resumen de `dashboard.tsx` ("Tabla 1: Resumen Financiero", "Tabla 2: Comparación Mensual"), a pedido explícito del cliente. Quedan otros lugares del proyecto pendientes de recibir el mismo tratamiento — no se tocaron todavía, solo se documenta el patrón para reutilizarlo.
 
 ## Cuándo usar este patrón

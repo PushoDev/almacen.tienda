@@ -21,6 +21,7 @@ test('el detalle de un proveedor trae saldo anterior/posterior de sus compras y 
     ]);
 
     $ingreso = MovimientoFinanciero::factory()->ingreso()->create([
+        'cuenta_destino_id' => null,
         'proveedor_destino_id' => $proveedor->id,
         'monto' => 60,
         'moneda' => 'USD',
@@ -35,10 +36,15 @@ test('el detalle de un proveedor trae saldo anterior/posterior de sus compras y 
     $compraProps = collect($response->json('props.compras'))->firstWhere('id', $compra->id);
     expect((float) $compraProps['receptor_saldo_anterior'])->toBe(200.0);
     expect((float) $compraProps['receptor_saldo_posterior'])->toBe(140.0);
+    expect($compraProps['detalle'])->not->toBeNull();
+    expect($compraProps['detalle']['movimientos_saldo'])->toHaveCount(1);
 
     $transaccionProps = collect($response->json('props.transacciones'))->firstWhere('id', $ingreso->id);
     expect((float) $transaccionProps['saldo_anterior_destino'])->toBe(140.0);
     expect((float) $transaccionProps['saldo_posterior_destino'])->toBe(200.0);
+    expect($transaccionProps['detalle'])->not->toBeNull();
+    expect($transaccionProps['detalle']['destino']['tipo'])->toBe('proveedor');
+    expect((float) $transaccionProps['detalle']['destino']['saldo_anterior'])->toBe(140.0);
 });
 
 // ==========================================================================

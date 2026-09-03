@@ -1,4 +1,12 @@
 import HeadingSmall from '@/components/heading-small';
+import {
+    DetalleCompra,
+    DetalleCompraExpandido,
+    DetalleMovimiento,
+    DetalleMovimientoExpandido,
+    DetalleVenta,
+    DetalleVentaExpandido,
+} from '@/components/detalle-operacion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,11 +23,12 @@ import {
     Banknote,
     Calendar,
     CheckCircle,
+    ChevronDown,
+    ChevronRight,
     Coins,
     CreditCard,
     DollarSign,
     Edit3,
-    ExternalLink,
     FileText,
     Handshake,
     History,
@@ -36,7 +45,7 @@ import {
     Wallet,
     X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 interface MonedaInfo {
     id: number;
@@ -72,6 +81,10 @@ interface HistorialItem {
     fuente: string;
     saldo_anterior: number | null;
     saldo_posterior: number | null;
+    // Detalle rico para la fila colapsable — mismo shape que arma
+    // App\Services\DetalleOperacionService, null para ajustes de saldo (el motivo ya
+    // es todo el detalle que existe) o filas de datos históricos sin snapshot.
+    detalle: DetalleVenta | DetalleMovimiento | DetalleCompra | null;
 }
 
 interface PaginationLink {
@@ -100,11 +113,13 @@ interface ShowCuentasPageProps {
     historialTransacciones: HistorialPaginado;
     historialVentas: HistorialPaginado;
     historialCompras: HistorialPaginado;
+    historialAjustes: HistorialPaginado;
     puedeEditar: boolean;
     filtros: {
         transacciones: { q_transacciones?: string; tipo_transacciones?: string; desde_transacciones?: string; hasta_transacciones?: string };
         ventas: { q_ventas?: string; tipo_ventas?: string; desde_ventas?: string; hasta_ventas?: string };
         compras: { q_compras?: string; desde_compras?: string; hasta_compras?: string };
+        ajustes: { q_ajustes?: string; desde_ajustes?: string; hasta_ajustes?: string };
     };
 }
 
@@ -129,6 +144,8 @@ const getFuenteIcono = (item: HistorialItem) => {
             return Truck;
         case 'compra_pago':
             return ShoppingCart;
+        case 'ajuste_saldo':
+            return Edit3;
         default:
             return DollarSign;
     }
@@ -139,25 +156,7 @@ const getFuenteColorClase = (monto: number) =>
         ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
         : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300';
 
-// Enlace al registro real de origen (venta / movimiento financiero / compra) —
-// sin esto no había forma de "entrar" a ver la venta o transacción completa.
-const getRutaDetalle = (item: HistorialItem): { href: string; etiqueta: string } | null => {
-    switch (item.fuente) {
-        case 'movimiento_financiero':
-            return { href: route('transacciones.show', { movimiento: item.referencia_id }), etiqueta: 'Ver transacción completa' };
-        case 'venta_pago':
-        case 'venta_comision':
-        case 'venta_gestor':
-        case 'venta_mensajero':
-            return { href: route('ventas.show', { id: item.referencia_id }), etiqueta: 'Ver venta completa' };
-        case 'compra_pago':
-            return { href: route('comprar.show', { comprar: item.referencia_id }), etiqueta: 'Ver compra completa' };
-        default:
-            return null;
-    }
-};
-
-// ─── Componente: TablaHistorial (reutilizado por las 3 Cards) ───────────────
+// ─── Componente: TablaHistorial (reutilizado por las 4 Cards) ───────────────
 
 const TablaHistorial = ({
     titulo,
@@ -174,7 +173,7 @@ const TablaHistorial = ({
     Icono: LucideIcon;
     historial: HistorialPaginado;
     emptyTexto: string;
-    filtroKey: 'transacciones' | 'ventas' | 'compras';
+    filtroKey: 'transacciones' | 'ventas' | 'compras' | 'ajustes';
     tiposFiltro?: { value: string; label: string }[];
     filtrosIniciales: FiltrosCard;
 }) => {
@@ -182,6 +181,7 @@ const TablaHistorial = ({
     const [desde, setDesde] = useState(filtrosIniciales.desde ?? '');
     const [hasta, setHasta] = useState(filtrosIniciales.hasta ?? '');
     const tipoActivo = filtrosIniciales.tipo ?? '';
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     const irAPagina = (url: string | null) => {
         if (!url) return;
@@ -315,7 +315,6 @@ const TablaHistorial = ({
                                 <TableHead>Contraparte</TableHead>
                                 <TableHead>Usuario</TableHead>
                                 <TableHead className="text-right">Monto</TableHead>
-                                <TableHead className="text-right">Detalle</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -323,68 +322,107 @@ const TablaHistorial = ({
                                 historial.data.map((item, idx) => {
                                     const ItemIcono = getFuenteIcono(item);
                                     const colorClase = getFuenteColorClase(Number(item.monto));
-                                    const detalle = getRutaDetalle(item);
+                                    const rowKey = `${item.fuente}-${item.referencia_id}-${idx}`;
+                                    // Colapsable si hay saldo capturado (Transacciones/Ajustes) O detalle rico cargado
+                                    // (Ventas/Compras) — son independientes: una venta puede tener toda su info
+                                    // (productos, pagos, tasa) disponible aunque ese pago en particular sea de antes
+                                    // del fix de saldo_anterior/posterior y por eso no tenga snapshot.
+                                    const esColapsable = (item.saldo_anterior !== null && item.saldo_posterior !== null) || item.detalle !== null;
+                                    const expandida = expandedRow === rowKey;
                                     return (
-                                        <TableRow key={`${item.fuente}-${item.referencia_id}-${idx}`} className="hover:bg-muted/50">
-                                            <TableCell>
-                                                <div className="flex items-center gap-1">
-                                                    <Calendar size={12} className="text-muted-foreground" />
-                                                    <span className="text-sm">
-                                                        {new Date(item.fecha).toLocaleString('es-ES', {
-                                                            dateStyle: 'short',
-                                                            timeStyle: 'short',
-                                                        })}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className={`flex w-fit items-center gap-1 ${colorClase}`}>
-                                                    <ItemIcono size={12} />
-                                                    {item.tipo}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="max-w-[220px] truncate text-sm" title={item.descripcion ?? ''}>
-                                                {item.descripcion || <span className="text-muted-foreground italic">—</span>}
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground text-sm">{item.contraparte || '—'}</TableCell>
-                                            <TableCell className="text-sm">{item.usuario}</TableCell>
-                                            <TableCell className="text-right font-mono text-sm">
-                                                <span className={Number(item.monto) >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                                                    {Number(item.monto) >= 0 ? '+' : ''}
-                                                    {Number(item.monto).toFixed(2)} {item.moneda}
-                                                </span>
-                                                {item.saldo_anterior !== null && item.saldo_posterior !== null && (
-                                                    <div className="text-muted-foreground text-[11px]">
-                                                        {Number(item.saldo_anterior).toFixed(2)} → {Number(item.saldo_posterior).toFixed(2)}
+                                        <Fragment key={rowKey}>
+                                            <TableRow
+                                                className={`hover:bg-muted/50 ${esColapsable ? 'cursor-pointer' : ''}`}
+                                                onClick={() => esColapsable && setExpandedRow(expandida ? null : rowKey)}
+                                            >
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1">
+                                                        {esColapsable ? (
+                                                            expandida ? (
+                                                                <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                            ) : (
+                                                                <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                            )
+                                                        ) : (
+                                                            <span className="w-3.5 shrink-0" />
+                                                        )}
+                                                        <Calendar size={12} className="text-muted-foreground" />
+                                                        <span className="text-sm">
+                                                            {new Date(item.fecha).toLocaleString('es-ES', {
+                                                                dateStyle: 'short',
+                                                                timeStyle: 'short',
+                                                            })}
+                                                        </span>
                                                     </div>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {detalle && (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Link href={detalle.href}>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="h-7 w-7 p-0 text-blue-600 hover:border-blue-300 hover:bg-blue-50"
-                                                                >
-                                                                    <ExternalLink size={12} />
-                                                                </Button>
-                                                            </Link>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="left">
-                                                            <p className="text-xs">{detalle.etiqueta}</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className={`flex w-fit items-center gap-1 ${colorClase}`}>
+                                                        <ItemIcono size={12} />
+                                                        {item.tipo}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="max-w-[220px] truncate text-sm" title={item.descripcion ?? ''}>
+                                                    {item.descripcion || <span className="text-muted-foreground italic">—</span>}
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground text-sm">{item.contraparte || '—'}</TableCell>
+                                                <TableCell className="text-sm">{item.usuario}</TableCell>
+                                                <TableCell className="text-right font-mono text-sm">
+                                                    <span className={Number(item.monto) >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                                                        {Number(item.monto) >= 0 ? '+' : ''}
+                                                        {Number(item.monto).toFixed(2)} {item.moneda}
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                            {esColapsable && expandida && (
+                                                <TableRow className="hover:bg-transparent">
+                                                    <TableCell colSpan={6} className="bg-muted/30 px-6 py-3">
+                                                        {item.fuente === 'movimiento_financiero' && item.detalle ? (
+                                                            <DetalleMovimientoExpandido
+                                                                detalle={item.detalle as DetalleMovimiento}
+                                                                monto={Number(item.monto)}
+                                                                moneda={item.moneda}
+                                                                descripcion={item.descripcion ?? ''}
+                                                                usuario={item.usuario}
+                                                            />
+                                                        ) : (item.fuente === 'venta_pago' ||
+                                                              item.fuente === 'venta_comision' ||
+                                                              item.fuente === 'venta_gestor' ||
+                                                              item.fuente === 'venta_mensajero') &&
+                                                          item.detalle ? (
+                                                            <DetalleVentaExpandido detalle={item.detalle as DetalleVenta} />
+                                                        ) : item.fuente === 'compra_pago' && item.detalle ? (
+                                                            <DetalleCompraExpandido
+                                                                detalle={item.detalle as DetalleCompra}
+                                                                monto={Number(item.monto)}
+                                                                usuario={item.usuario}
+                                                            />
+                                                        ) : (
+                                                            // Ajustes de saldo (y cualquier fila sin detalle rico cargado) — el
+                                                            // motivo ya se ve en la columna Descripción, acá solo el salto de saldo.
+                                                            <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs">
+                                                                <div>
+                                                                    <span className="text-muted-foreground">Saldo Anterior: </span>
+                                                                    <span className="font-mono font-medium">
+                                                                        {Number(item.saldo_anterior).toFixed(2)} {item.moneda}
+                                                                    </span>
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-muted-foreground">Saldo Posterior: </span>
+                                                                    <span className="font-mono font-medium">
+                                                                        {Number(item.saldo_posterior).toFixed(2)} {item.moneda}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </Fragment>
                                     );
                                 })
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-muted-foreground py-10 text-center">
+                                    <TableCell colSpan={6} className="text-muted-foreground py-10 text-center">
                                         <div className="flex flex-col items-center gap-2">
                                             <IconoCard size={32} className="opacity-40" />
                                             <p className="font-medium">{hayFiltrosActivos ? 'Sin resultados con los filtros aplicados' : 'Sin operaciones registradas'}</p>
@@ -436,6 +474,7 @@ export default function ShowCuentasPage({
     historialTransacciones,
     historialVentas,
     historialCompras,
+    historialAjustes,
     puedeEditar,
     filtros,
 }: ShowCuentasPageProps) {
@@ -454,7 +493,7 @@ export default function ShowCuentasPage({
               : { texto: 'Neutro', color: 'gray', icon: CheckCircle };
     const EstadoIcon = estadoFinanciero.icon;
 
-    const totalOperaciones = historialTransacciones.total + historialVentas.total + historialCompras.total;
+    const totalOperaciones = historialTransacciones.total + historialVentas.total + historialCompras.total + historialAjustes.total;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs(cuenta.nombre_cuenta)}>
@@ -659,7 +698,7 @@ export default function ShowCuentasPage({
                                             <div className="mt-2 text-xl font-bold text-blue-600">{totalOperaciones}</div>
                                             <p className="text-muted-foreground mt-1 text-xs">
                                                 {historialVentas.total} ventas · {historialTransacciones.total} transacciones
-                                                {puedeEditar ? ` · ${historialCompras.total} compras` : ''}
+                                                {puedeEditar ? ` · ${historialCompras.total} compras · ${historialAjustes.total} ajustes` : ''}
                                             </p>
                                         </CardContent>
                                     </Card>
@@ -682,7 +721,7 @@ export default function ShowCuentasPage({
                         </Card>
                     </div>
 
-                    {/* Historial — separado por Card: Compras, Ventas, Transacciones */}
+                    {/* Historial — separado por Card: Compras, Ajustes, Ventas, Transacciones */}
                     {puedeEditar && (
                         <TablaHistorial
                             titulo="Compras"
@@ -692,6 +731,18 @@ export default function ShowCuentasPage({
                             emptyTexto="Los pagos de compra hechos desde esta cuenta aparecerán aquí"
                             filtroKey="compras"
                             filtrosIniciales={{ q: filtros.compras.q_compras, desde: filtros.compras.desde_compras, hasta: filtros.compras.hasta_compras }}
+                        />
+                    )}
+
+                    {puedeEditar && (
+                        <TablaHistorial
+                            titulo="Ajustes de Saldo"
+                            descripcion="Correcciones manuales del saldo hechas desde Editar Cuenta"
+                            Icono={Edit3}
+                            historial={historialAjustes}
+                            emptyTexto="Los ajustes manuales de saldo de esta cuenta aparecerán aquí"
+                            filtroKey="ajustes"
+                            filtrosIniciales={{ q: filtros.ajustes.q_ajustes, desde: filtros.ajustes.desde_ajustes, hasta: filtros.ajustes.hasta_ajustes }}
                         />
                     )}
 

@@ -1,3 +1,4 @@
+import type { DetalleCompra, DetalleMovimiento } from '@/components/detalle-operacion';
 import { LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
 
@@ -697,6 +698,8 @@ export interface CompraProveedor {
         cuenta?: { id: number; nombre_cuenta: string };
         cliente?: { id: number; nombre_cliente: string };
     }>;
+    usuario?: { id: number; name: string } | null;
+    detalle: DetalleCompra | null;
 }
 
 // Interface para Transacciones del Proveedor
@@ -719,6 +722,8 @@ export interface TransaccionProveedor {
     proveedor_destino_id: number;
     saldo_anterior_destino: number | null;
     saldo_posterior_destino: number | null;
+    user?: { id: number; name: string } | null;
+    detalle: DetalleMovimiento | null;
 }
 
 // Interface para Estadísticas del Proveedor

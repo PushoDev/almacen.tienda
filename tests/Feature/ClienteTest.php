@@ -28,6 +28,7 @@ test('el detalle de un cliente trae saldo anterior/posterior de sus pagos de ven
     ]);
 
     $ingreso = MovimientoFinanciero::factory()->ingreso()->create([
+        'cuenta_destino_id' => null,
         'cliente_destino_id' => $cliente->id,
         'monto' => 100,
         'moneda' => 'USD',
@@ -52,12 +53,19 @@ test('el detalle de un cliente trae saldo anterior/posterior de sus pagos de ven
     $pagoVenta = collect($response->json('props.cliente.pagos_venta'))->firstWhere('id', PagoVenta::first()->id);
     expect((float) $pagoVenta['saldo_anterior'])->toBe(20.0);
     expect((float) $pagoVenta['saldo_posterior'])->toBe(70.0);
+    expect($pagoVenta['detalle'])->not->toBeNull();
+    expect($pagoVenta['detalle']['pagos'])->toHaveCount(1);
 
     $movimiento = collect($response->json('props.cliente.movimientos_como_destino'))->firstWhere('id', $ingreso->id);
     expect((float) $movimiento['saldo_anterior_destino'])->toBe(70.0);
     expect((float) $movimiento['saldo_posterior_destino'])->toBe(170.0);
+    expect($movimiento['detalle'])->not->toBeNull();
+    expect($movimiento['detalle']['destino']['tipo'])->toBe('cliente');
+    expect((float) $movimiento['detalle']['destino']['saldo_anterior'])->toBe(70.0);
 
     $compraPagador = collect($response->json('props.cliente.compras_como_pagador'))->firstWhere('id', $compra->id);
     expect((float) $compraPagador['pivot']['saldo_anterior'])->toBe(170.0);
     expect((float) $compraPagador['pivot']['saldo_posterior'])->toBe(140.0);
+    expect($compraPagador['detalle'])->not->toBeNull();
+    expect($compraPagador['detalle']['pagos'])->toHaveCount(1);
 });

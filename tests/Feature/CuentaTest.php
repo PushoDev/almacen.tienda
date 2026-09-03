@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AjusteSaldoCuenta;
 use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago;
@@ -303,6 +304,11 @@ test('el historial incluye un gasto (movimiento_financiero) con signo negativo',
     expect($item['moneda'])->toBe('USD');
     expect((float) $item['saldo_anterior'])->toBe(500.0);
     expect((float) $item['saldo_posterior'])->toBe(420.0);
+
+    expect($item['detalle'])->not->toBeNull();
+    expect($item['detalle']['origen']['nombre'])->toBe($cuenta->nombre_cuenta);
+    expect((float) $item['detalle']['origen']['saldo_anterior'])->toBe(500.0);
+    expect($item['detalle']['destino'])->toBeNull();
 });
 
 test('el historial incluye un pago de venta completada, pero no de una venta pendiente', function () {
@@ -340,6 +346,36 @@ test('el historial incluye un pago de venta completada, pero no de una venta pen
     $item = collect($response->json('props.historialVentas.data'))->firstWhere('fuente', 'venta_pago');
     expect((float) $item['saldo_anterior'])->toBe(0.0);
     expect((float) $item['saldo_posterior'])->toBe(150.0);
+
+    expect($item['detalle'])->not->toBeNull();
+    expect($item['detalle']['pagos'])->toHaveCount(1);
+    expect((float) $item['detalle']['pagos'][0]['monto_original'])->toBe(150.0);
+    expect($item['detalle'])->toHaveKey('productos');
+});
+
+test('un pago de venta sin snapshot de saldo (venta anterior al fix) igual trae detalle completo', function () {
+    // La mayoría de los datos reales del sistema son de antes de que Fase 1/2 de
+    // saldo_anterior/posterior existiera — sin este caso cubierto, esas filas se ven
+    // atrapadas sin poder desplegarse en Cuentas/Show.tsx (bug real encontrado 2026-09-03:
+    // el frontend gateaba "es colapsable" solo por saldo, no por si había detalle rico).
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $venta = Venta::factory()->completada()->create();
+    PagoVenta::factory()->create([
+        'venta_id' => $venta->id,
+        'cuenta_id' => $cuenta->id,
+        'monto' => 60,
+        // sin saldo_anterior/saldo_posterior — null por default de la factory
+    ]);
+
+    $response = $this->get(route('cuentas.show', $cuenta->id), ['X-Inertia' => 'true']);
+    $item = collect($response->json('props.historialVentas.data'))->firstWhere('fuente', 'venta_pago');
+
+    expect($item['saldo_anterior'])->toBeNull();
+    expect($item['detalle'])->not->toBeNull();
+    expect($item['detalle']['pagos'])->toHaveCount(1);
 });
 
 test('el historial incluye comisión de vendedor, comisión de gestor y mensajería como salidas', function () {
@@ -424,6 +460,45 @@ test('el historial incluye pagos de compra para admin, pero se ocultan para vend
     $item = $historialCompraAdmin->firstWhere('referencia_id', $compra->id);
     expect((float) $item['saldo_anterior'])->toBe(200.0);
     expect((float) $item['saldo_posterior'])->toBe(125.0);
+
+    expect($item['detalle'])->not->toBeNull();
+    expect($item['detalle']['pagos'])->toHaveCount(1);
+    expect((float) $item['detalle']['pagos'][0]['monto'])->toBe(75.0);
+    expect($item['detalle']['pagos'][0]['origen'])->toBe($cuenta->nombre_cuenta);
+});
+
+test('el historial incluye ajustes manuales de saldo para admin, pero se ocultan para vendedor', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
+
+    $ajuste = AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuenta->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 300,
+        'saldo_nuevo' => 450,
+        'motivo' => 'Corrección por error de digitación',
+    ]);
+
+    $this->actingAs($admin);
+    $responseAdmin = $this->get(route('cuentas.show', $cuenta->id), ['X-Inertia' => 'true']);
+    $historialAjustesAdmin = collect($responseAdmin->json('props.historialAjustes.data'));
+
+    $this->actingAs($vendedor);
+    $responseVendedor = $this->get(route('cuentas.show', $cuenta->id), ['X-Inertia' => 'true']);
+    $historialAjustesVendedor = collect($responseVendedor->json('props.historialAjustes.data'));
+
+    expect($historialAjustesAdmin->contains('referencia_id', $ajuste->id))->toBeTrue();
+    expect($historialAjustesVendedor)->toBeEmpty();
+
+    $item = $historialAjustesAdmin->firstWhere('referencia_id', $ajuste->id);
+    expect((float) $item['saldo_anterior'])->toBe(300.0);
+    expect((float) $item['saldo_posterior'])->toBe(450.0);
+    expect((float) $item['monto'])->toBe(150.0);
+    expect($item['descripcion'])->toBe('Corrección por error de digitación');
+    expect($item['usuario'])->toBe($admin->name);
+    expect($item['fuente'])->toBe('ajuste_saldo');
 });
 
 // ==========================================================================

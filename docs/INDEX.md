@@ -143,6 +143,7 @@
 ### Otros
 | Documento | Contenido |
 |---|---|
+| [nativephp-offline-design-consistency.md](nativephp-offline-design-consistency.md) | **Leer antes de tocar UI en la versión offline (NativePHP)**: usar el mismo sistema de diseño de la app web (Cards, headers, degradados, bleed) — no rediseñar |
 | [cambios-cliente-proveedor.md](cambios-cliente-proveedor.md) | Cambios en el módulo de clientes/proveedores |
 | [newforsale.md](newforsale.md) | Nuevas features para ventas |
 | [arreglos-pendientes/Propuesta-CierreCaja.md](arreglos-pendientes/Propuesta-CierreCaja.md) | Propuesta original que originó los cambios de Cierre de Caja del 2026-07-30 |

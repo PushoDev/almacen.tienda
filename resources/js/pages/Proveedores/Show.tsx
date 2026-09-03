@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { DetalleCompraExpandido, DetalleMovimientoExpandido } from '@/components/detalle-operacion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,8 +28,6 @@ import {
     Phone,
     TrendingDown,
     TrendingUp,
-    Wallet,
-    User,
 } from 'lucide-react';
 import React, { useState } from 'react';
 
@@ -402,150 +401,15 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                             </TableRow>
                                                             {expandida && (
                                                                 <TableRow>
-                                                                    <TableCell colSpan={4} className="bg-sidebar-accent/20 space-y-3 p-4">
-                                                                        <Card className="bg-background/60">
-                                                                            <CardHeader className="pb-2">
-                                                                                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase">
-                                                                                    <Package className="h-3.5 w-3.5" />
-                                                                                    Productos
-                                                                                </CardTitle>
-                                                                            </CardHeader>
-                                                                            <CardContent className="p-0">
-                                                                                <table className="min-w-full text-xs">
-                                                                                    <thead>
-                                                                                        <tr className="text-muted-foreground">
-                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                Producto
-                                                                                            </th>
-                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                Categoría
-                                                                                            </th>
-                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                Cantidad
-                                                                                            </th>
-                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                Precio Unitario
-                                                                                            </th>
-                                                                                            <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                Subtotal
-                                                                                            </th>
-                                                                                        </tr>
-                                                                                    </thead>
-                                                                                    <tbody className="divide-y divide-sidebar-border/40">
-                                                                                        {compra.productos.map((producto) => (
-                                                                                            <tr key={producto.id}>
-                                                                                                <td className="px-4 py-1.5">
-                                                                                                    <div className="font-medium">
-                                                                                                        {producto.nombre_producto}
-                                                                                                    </div>
-                                                                                                    {producto.marca_producto && (
-                                                                                                        <div className="text-muted-foreground text-[11px]">
-                                                                                                            Marca: {producto.marca_producto}
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                    {producto.codigo_producto && (
-                                                                                                        <div className="text-muted-foreground font-mono text-[10px]">
-                                                                                                            {producto.codigo_producto}
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                </td>
-                                                                                                <td className="px-4 py-1.5">
-                                                                                                    {producto.categoria?.nombre_categoria}
-                                                                                                </td>
-                                                                                                <td className="px-4 py-1.5">{producto.pivot.cantidad}</td>
-                                                                                                <td className="px-4 py-1.5 font-mono">
-                                                                                                    {formatearMoneda(producto.pivot.precio)}
-                                                                                                </td>
-                                                                                                <td className="px-4 py-1.5 font-mono">
-                                                                                                    {formatearMoneda(
-                                                                                                        producto.pivot.cantidad * producto.pivot.precio,
-                                                                                                    )}
-                                                                                                </td>
-                                                                                            </tr>
-                                                                                        ))}
-                                                                                    </tbody>
-                                                                                </table>
-                                                                            </CardContent>
-                                                                        </Card>
-
-                                                                        {compra.pagos && compra.pagos.length > 0 && (
-                                                                            <Card className="bg-background/60">
-                                                                                <CardHeader className="pb-2">
-                                                                                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase">
-                                                                                        <CreditCard className="h-3.5 w-3.5" />
-                                                                                        Pagos realizados
-                                                                                    </CardTitle>
-                                                                                </CardHeader>
-                                                                                <CardContent className="p-0">
-                                                                                    <table className="min-w-full text-xs">
-                                                                                        <thead>
-                                                                                            <tr className="text-muted-foreground">
-                                                                                                <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                    Tipo
-                                                                                                </th>
-                                                                                                <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                    Origen
-                                                                                                </th>
-                                                                                                <th className="px-4 py-1.5 text-left font-medium uppercase">
-                                                                                                    Monto
-                                                                                                </th>
-                                                                                            </tr>
-                                                                                        </thead>
-                                                                                        <tbody className="divide-y divide-sidebar-border/40">
-                                                                                            {compra.pagos.map((pago) => (
-                                                                                                <tr key={pago.id}>
-                                                                                                    <td className="px-4 py-1.5">
-                                                                                                        <Badge
-                                                                                                            variant="outline"
-                                                                                                            className={cn(
-                                                                                                                'font-normal',
-                                                                                                                pago.tipo_pago === 'cuenta'
-                                                                                                                    ? 'border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                                                                                                                    : pago.tipo_pago === 'cliente'
-                                                                                                                      ? 'border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900 dark:text-green-300'
-                                                                                                                      : 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900 dark:text-amber-300',
-                                                                                                            )}
-                                                                                                        >
-                                                                                                            {pago.tipo_pago === 'cuenta'
-                                                                                                                ? 'Cuenta'
-                                                                                                                : pago.tipo_pago === 'cliente'
-                                                                                                                  ? 'Cliente'
-                                                                                                                  : 'Crédito'}
-                                                                                                        </Badge>
-                                                                                                    </td>
-                                                                                                    <td className="px-4 py-1.5">
-                                                                                                        {pago.cuenta && (
-                                                                                                            <span className="flex items-center gap-1">
-                                                                                                                <Wallet className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                                                                                                                {pago.cuenta.nombre_cuenta}
-                                                                                                            </span>
-                                                                                                        )}
-                                                                                                        {pago.cliente && (
-                                                                                                            <span className="flex items-center gap-1">
-                                                                                                                <User className="h-3 w-3 text-green-600 dark:text-green-400" />
-                                                                                                                {pago.cliente.nombre_cliente}
-                                                                                                            </span>
-                                                                                                        )}
-                                                                                                        {!pago.cuenta && !pago.cliente && (
-                                                                                                            <span className="text-muted-foreground">—</span>
-                                                                                                        )}
-                                                                                                    </td>
-                                                                                                    <td
-                                                                                                        className={cn(
-                                                                                                            'px-4 py-1.5 font-mono font-medium',
-                                                                                                            pago.tipo_pago === 'deuda_proveedor'
-                                                                                                                ? 'text-red-600 dark:text-red-400'
-                                                                                                                : 'text-emerald-600 dark:text-emerald-400',
-                                                                                                        )}
-                                                                                                    >
-                                                                                                        {formatearMoneda(pago.monto)}
-                                                                                                    </td>
-                                                                                                </tr>
-                                                                                            ))}
-                                                                                        </tbody>
-                                                                                    </table>
-                                                                                </CardContent>
-                                                                            </Card>
+                                                                    <TableCell colSpan={4} className="bg-sidebar-accent/20 p-4">
+                                                                        {compra.detalle ? (
+                                                                            <DetalleCompraExpandido
+                                                                                detalle={compra.detalle}
+                                                                                monto={Number(compra.total_compra)}
+                                                                                usuario={compra.usuario?.name ?? '—'}
+                                                                            />
+                                                                        ) : (
+                                                                            <p className="text-muted-foreground text-xs">Sin detalle disponible.</p>
                                                                         )}
                                                                     </TableCell>
                                                                 </TableRow>
@@ -600,15 +464,7 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                 {transacciones.map((transaccion) => {
                                                     const rowKey = `transaccion-${transaccion.id}`;
                                                     const expandida = expandedRow === rowKey;
-                                                    // Solo colapsable si hay algo que no esté ya visible en la fila
-                                                    // compacta — tasa_cambio_aplicada es el único dato que hoy no
-                                                    // se muestra en ningún lado (existe en TransaccionProveedor
-                                                    // pero solo aparece en Transferencias con conversión de moneda).
-                                                    // Colapsable si hay algo que la fila compacta no muestra entero: la
-                                                    // Descripción va truncada ahí (max-w-[200px] truncate) — si es larga,
-                                                    // hoy no hay forma de leerla completa en ningún lado — o si existe
-                                                    // tasa_cambio_aplicada (solo en Transferencias con conversión).
-                                                    const esColapsable = transaccion.descripcion.length > 40 || transaccion.tasa_cambio_aplicada != null;
+                                                    const esColapsable = transaccion.detalle !== null;
                                                     return (
                                                         <React.Fragment key={transaccion.id}>
                                                             <TableRow
@@ -678,23 +534,16 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                                                     )}
                                                                 </TableCell>
                                                             </TableRow>
-                                                            {esColapsable && expandida && (
+                                                            {esColapsable && expandida && transaccion.detalle && (
                                                                 <TableRow>
                                                                     <TableCell colSpan={6} className="bg-sidebar-accent/20 p-4">
-                                                                        <Card className="bg-background/60">
-                                                                            <CardContent className="space-y-1 p-3 text-xs">
-                                                                                <p>
-                                                                                    <strong className="text-foreground">Descripción:</strong>{' '}
-                                                                                    {transaccion.descripcion}
-                                                                                </p>
-                                                                                {transaccion.tasa_cambio_aplicada != null && (
-                                                                                    <p>
-                                                                                        <strong className="text-foreground">Tasa de cambio aplicada:</strong>{' '}
-                                                                                        {transaccion.tasa_cambio_aplicada}
-                                                                                    </p>
-                                                                                )}
-                                                                            </CardContent>
-                                                                        </Card>
+                                                                        <DetalleMovimientoExpandido
+                                                                            detalle={transaccion.detalle}
+                                                                            monto={transaccion.monto}
+                                                                            moneda={transaccion.moneda}
+                                                                            descripcion={transaccion.descripcion}
+                                                                            usuario={transaccion.user?.name ?? '—'}
+                                                                        />
                                                                     </TableCell>
                                                                 </TableRow>
                                                             )}

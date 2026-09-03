@@ -3,13 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cliente;
-use App\Models\MovimientoFinanciero;
+use App\Services\DetalleOperacionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class ClienteController extends Controller
 {
+    public function __construct(private DetalleOperacionService $detalleOperacionService) {}
+
     /**
      * Mostrar una lista de todos los clientes.
      */
@@ -79,18 +81,25 @@ class ClienteController extends Controller
      */
     public function show(Cliente $cliente)
     {
+        $puedeVerCosto = in_array(auth()->user()->role, ['admin', 'moderador']);
+
         // ✅ CARGAR LAS COMPRAS DONDE ESTE CLIENTE PARTICIPÓ COMO PAGADOR
         $cliente->load(['comprasComoPagador' => function ($query) {
             $query->with([
                 'proveedor',
+                'cliente',
                 'productos' => function ($productQuery) {
                     $productQuery->withPivot('cantidad', 'precio', 'almacen_id');
                 },
                 'pagos' => function ($pagoQuery) {
                     $pagoQuery->with(['cuenta', 'cliente']);
-                }
+                },
             ])->orderBy('fecha_compra', 'desc');
         }]);
+        // Detalle rico para la fila colapsable — mismo shape que usa Cuentas/Show y Rastreo.
+        $cliente->comprasComoPagador->each(function ($compra) {
+            $compra->detalle = $this->detalleOperacionService->detalleCompra($compra);
+        });
 
         // ✅ CARGAR LAS VENTAS DONDE ESTE CLIENTE ES EL COMPRADOR
         $cliente->load(['ventas' => function ($query) {
@@ -102,7 +111,7 @@ class ClienteController extends Controller
                 'almacen',
                 'usuario',
                 'moneda',
-                'gestorCuenta'
+                'gestorCuenta',
             ])->orderBy('created_at', 'desc');
         }]);
 
@@ -111,21 +120,32 @@ class ClienteController extends Controller
             'movimientosComoOrigen' => function ($query) {
                 $query->with([
                     'tipoMovimiento',
+                    'user',
                     'cuentaOrigen',
+                    'clienteOrigen',
                     'cuentaDestino',
                     'clienteDestino',
-                    'proveedorDestino'
+                    'proveedorDestino',
                 ])->orderBy('created_at', 'desc');
             },
             'movimientosComoDestino' => function ($query) {
                 $query->with([
                     'tipoMovimiento',
+                    'user',
                     'cuentaOrigen',
                     'clienteOrigen',
-                    'cuentaDestino'
+                    'cuentaDestino',
+                    'clienteDestino',
+                    'proveedorDestino',
                 ])->orderBy('created_at', 'desc');
-            }
+            },
         ]);
+        $cliente->movimientosComoOrigen->each(function ($mov) {
+            $mov->detalle = $this->detalleOperacionService->detalleMovimiento($mov);
+        });
+        $cliente->movimientosComoDestino->each(function ($mov) {
+            $mov->detalle = $this->detalleOperacionService->detalleMovimiento($mov);
+        });
 
         // ✅ CARGAR LOS PAGOS DE VENTAS RECIBIDOS POR EL CLIENTE
         $cliente->load(['pagosVenta' => function ($query) {
@@ -134,9 +154,20 @@ class ClienteController extends Controller
                 'venta.usuario',
                 'venta.cliente',
                 'venta.moneda',
-                'moneda'
+                'venta.destinatario',
+                'venta.detalles.producto',
+                'venta.pagos.cuenta',
+                'venta.pagos.cliente',
+                'venta.pagos.moneda',
+                'venta.comisionCuenta.moneda',
+                'venta.gestorCuenta.moneda',
+                'venta.mensajeroCuenta',
+                'moneda',
             ])->orderBy('created_at', 'desc');
         }]);
+        $cliente->pagosVenta->each(function ($pago) use ($puedeVerCosto) {
+            $pago->detalle = $pago->venta ? $this->detalleOperacionService->detalleVenta($pago->venta, $puedeVerCosto) : null;
+        });
 
         return Inertia::render('Clientes/Show', [
             'cliente' => $cliente,
@@ -160,10 +191,10 @@ class ClienteController extends Controller
     {
         // Validación de datos
         $validator = Validator::make($request->all(), [
-            'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente,' . $cliente->id],
+            'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente,'.$cliente->id],
             'tipo_cliente' => ['required', 'in:fisico,asociado'],
             'deuda_pago_cliente' => ['nullable', 'numeric', 'between:-9999999,9999999.99'],
-            'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente,' . $cliente->id],
+            'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente,'.$cliente->id],
             'direccion_cliente' => ['nullable', 'string'],
             'ciudad_cliente' => ['nullable', 'string'],
         ]);
