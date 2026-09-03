@@ -353,6 +353,31 @@ test('el historial incluye un pago de venta completada, pero no de una venta pen
     expect($item['detalle'])->toHaveKey('productos');
 });
 
+test('un pago de venta sin snapshot de saldo (venta anterior al fix) igual trae detalle completo', function () {
+    // La mayoría de los datos reales del sistema son de antes de que Fase 1/2 de
+    // saldo_anterior/posterior existiera — sin este caso cubierto, esas filas se ven
+    // atrapadas sin poder desplegarse en Cuentas/Show.tsx (bug real encontrado 2026-09-03:
+    // el frontend gateaba "es colapsable" solo por saldo, no por si había detalle rico).
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $venta = Venta::factory()->completada()->create();
+    PagoVenta::factory()->create([
+        'venta_id' => $venta->id,
+        'cuenta_id' => $cuenta->id,
+        'monto' => 60,
+        // sin saldo_anterior/saldo_posterior — null por default de la factory
+    ]);
+
+    $response = $this->get(route('cuentas.show', $cuenta->id), ['X-Inertia' => 'true']);
+    $item = collect($response->json('props.historialVentas.data'))->firstWhere('fuente', 'venta_pago');
+
+    expect($item['saldo_anterior'])->toBeNull();
+    expect($item['detalle'])->not->toBeNull();
+    expect($item['detalle']['pagos'])->toHaveCount(1);
+});
+
 test('el historial incluye comisión de vendedor, comisión de gestor y mensajería como salidas', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

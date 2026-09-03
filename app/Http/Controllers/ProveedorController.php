@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
+use App\Services\DetalleOperacionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class ProveedorController extends Controller
 {
+    public function __construct(private DetalleOperacionService $detalleOperacionService) {}
+
     /**
      * Display a listing of the resource.
      * Listado de Proveedores
@@ -90,6 +93,9 @@ class ProveedorController extends Controller
     {
         // Cargar compras del proveedor con relaciones
         $compras = Compra::with([
+            'proveedor',
+            'cliente',
+            'usuario',
             'productos' => function ($query) {
                 $query->withPivot('cantidad', 'precio', 'almacen_id');
             },
@@ -105,19 +111,27 @@ class ProveedorController extends Controller
         // viaje en el toArray()/JSON de Inertia sin necesitar $appends en el modelo (eso
         // dispararía el accessor, y por tanto la relación 'pagos', en otros controladores que
         // serializan Compra sin precargarla — ver DistribucionCostosController/ReporteController).
-        $compras->each(fn (Compra $compra) => $compra->setAttribute('es_parcial', $compra->es_parcial));
+        $compras->each(function (Compra $compra) {
+            $compra->setAttribute('es_parcial', $compra->es_parcial);
+            $compra->detalle = $this->detalleOperacionService->detalleCompra($compra);
+        });
 
         // Cargar transacciones financieras relacionadas con el proveedor (SOLO como destino)
         $transacciones = MovimientoFinanciero::with([
+            'user',
             'cuentaOrigen',
             'cuentaDestino',
             'clienteOrigen',
             'clienteDestino',
+            'proveedorDestino',
             'tipoMovimiento',
         ])
             ->where('proveedor_destino_id', $proveedor->id)
             ->orderBy('fecha_operacion', 'desc')
             ->get();
+        $transacciones->each(function (MovimientoFinanciero $mov) {
+            $mov->detalle = $this->detalleOperacionService->detalleMovimiento($mov);
+        });
 
         // Calcular estadísticas
         $estadisticas = [

@@ -1,4 +1,12 @@
 import HeadingSmall from '@/components/heading-small';
+import {
+    DetalleCompra,
+    DetalleCompraExpandido,
+    DetalleMovimiento,
+    DetalleMovimientoExpandido,
+    DetalleVenta,
+    DetalleVentaExpandido,
+} from '@/components/detalle-operacion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +25,8 @@ import {
     Building,
     Calendar,
     CheckCircle,
-    CreditCard,
+    ChevronDown,
+    ChevronRight,
     DollarSign,
     Edit3,
     ExternalLink,
@@ -36,7 +45,7 @@ import {
     Users,
     Wallet,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 
@@ -60,6 +69,7 @@ interface CompraCliente {
         cliente?: { id: number; nombre_cliente: string };
     }>;
     pivot: { monto: number; tipo_pago: string; saldo_anterior: number | null; saldo_posterior: number | null };
+    detalle: DetalleCompra | null;
 }
 
 interface TipoMovimientoFinanciero {
@@ -91,6 +101,8 @@ interface MovimientoFinanciero {
     saldo_posterior_origen: number | null;
     saldo_anterior_destino: number | null;
     saldo_posterior_destino: number | null;
+    detalle: DetalleMovimiento | null;
+    user: { id: number; name: string } | null;
 }
 
 interface VentaCliente {
@@ -161,6 +173,7 @@ interface PagoVentaRecibido {
     created_at: string;
     saldo_anterior: number | null;
     saldo_posterior: number | null;
+    detalle: DetalleVenta | null;
     moneda: { id: number; codigo_moneda: string; nombre_moneda: string } | null;
     venta: {
         id: number;
@@ -219,6 +232,7 @@ const TablaTransacciones = ({
             default: return 'text-gray-600 bg-gray-50 border-gray-200';
         }
     };
+    const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
     return (
         <ScrollArea className="h-[420px]">
@@ -231,7 +245,6 @@ const TablaTransacciones = ({
                         <TableHead>Monto</TableHead>
                         <TableHead>Moneda</TableHead>
                         <TableHead>Dirección</TableHead>
-                        <TableHead className="text-right">Info</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -240,110 +253,76 @@ const TablaTransacciones = ({
                             const Icon = getMovimientoIcon(mov.tipo_movimiento_id);
                             const colorClase = getMovimientoColor(mov.tipo_movimiento_id);
                             const dir = mov.cliente_origen_id === cliente.id ? 'origen' : 'destino';
+                            const expandida = expandedRow === mov.id;
                             return (
-                                <TableRow key={mov.id} className="hover:bg-muted/50">
-                                    <TableCell>
-                                        <div className="flex items-center gap-1">
-                                            <Calendar size={12} className="text-muted-foreground" />
-                                            <span className="text-sm">{formatearFecha(mov.fecha_operacion)}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className={`flex w-28 items-center gap-1 ${colorClase}`}>
-                                            <Icon size={12} />
-                                            {mov.tipo_movimiento.nombre}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="max-w-[180px] truncate text-sm">{mov.descripcion}</TableCell>
-                                    <TableCell>
-                                        <span
-                                            className={`font-medium ${
-                                                mov.tipo_movimiento_id === 1
-                                                    ? 'text-red-600'
-                                                    : mov.tipo_movimiento_id === 2
-                                                      ? 'text-green-600'
-                                                      : 'text-blue-600'
-                                            }`}
-                                        >
-                                            {formatearMoneda(mov.monto)}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="secondary">{mov.moneda}</Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className={dir === 'origen' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}
-                                        >
-                                            {dir === 'origen' ? 'Salida' : 'Entrada'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                                    <Eye size={13} />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="left">
-                                                <div className="space-y-1 text-xs">
-                                                    <p>
-                                                        <strong>Tipo:</strong> {mov.tipo_movimiento.nombre}
-                                                    </p>
-                                                    <p>
-                                                        <strong>Monto:</strong> {formatearMoneda(mov.monto)} {mov.moneda}
-                                                    </p>
-                                                    <p>
-                                                        <strong>Tasa:</strong> {mov.tasa_cambio_aplicada}
-                                                    </p>
-                                                    {(() => {
-                                                        const saldoAnterior = dir === 'origen' ? mov.saldo_anterior_origen : mov.saldo_anterior_destino;
-                                                        const saldoPosterior = dir === 'origen' ? mov.saldo_posterior_origen : mov.saldo_posterior_destino;
-                                                        return (
-                                                            saldoAnterior !== null &&
-                                                            saldoPosterior !== null && (
-                                                                <p>
-                                                                    <strong>Saldo:</strong> {formatearMoneda(saldoAnterior)} → {formatearMoneda(saldoPosterior)}
-                                                                </p>
-                                                            )
-                                                        );
-                                                    })()}
-                                                    {mov.cuenta_origen && (
-                                                        <p>
-                                                            <strong>Cta. Origen:</strong> {mov.cuenta_origen.nombre_cuenta}
-                                                        </p>
-                                                    )}
-                                                    {mov.cliente_origen && mov.cliente_origen.id !== cliente.id && (
-                                                        <p>
-                                                            <strong>Cliente Origen:</strong> {mov.cliente_origen.nombre_cliente}
-                                                        </p>
-                                                    )}
-                                                    {mov.cuenta_destino && (
-                                                        <p>
-                                                            <strong>Cta. Destino:</strong> {mov.cuenta_destino.nombre_cuenta}
-                                                        </p>
-                                                    )}
-                                                    {mov.cliente_destino && mov.cliente_destino.id !== cliente.id && (
-                                                        <p>
-                                                            <strong>Cliente Destino:</strong> {mov.cliente_destino.nombre_cliente}
-                                                        </p>
-                                                    )}
-                                                    {mov.proveedor_destino && (
-                                                        <p>
-                                                            <strong>Proveedor:</strong> {mov.proveedor_destino.nombre_proveedor}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TableCell>
-                                </TableRow>
+                                <Fragment key={mov.id}>
+                                    <TableRow className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandida ? null : mov.id)}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                {expandida ? (
+                                                    <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                ) : (
+                                                    <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                )}
+                                                <Calendar size={12} className="text-muted-foreground" />
+                                                <span className="text-sm">{formatearFecha(mov.fecha_operacion)}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={`flex w-28 items-center gap-1 ${colorClase}`}>
+                                                <Icon size={12} />
+                                                {mov.tipo_movimiento.nombre}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-[180px] truncate text-sm">{mov.descripcion}</TableCell>
+                                        <TableCell>
+                                            <span
+                                                className={`font-medium ${
+                                                    mov.tipo_movimiento_id === 1
+                                                        ? 'text-red-600'
+                                                        : mov.tipo_movimiento_id === 2
+                                                          ? 'text-green-600'
+                                                          : 'text-blue-600'
+                                                }`}
+                                            >
+                                                {formatearMoneda(mov.monto)}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">{mov.moneda}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant="outline"
+                                                className={dir === 'origen' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}
+                                            >
+                                                {dir === 'origen' ? 'Salida' : 'Entrada'}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                    {expandida && (
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableCell colSpan={6} className="bg-muted/30 px-6 py-3">
+                                                {mov.detalle ? (
+                                                    <DetalleMovimientoExpandido
+                                                        detalle={mov.detalle}
+                                                        monto={mov.monto}
+                                                        moneda={mov.moneda}
+                                                        descripcion={mov.descripcion}
+                                                        usuario={mov.user?.name ?? '—'}
+                                                    />
+                                                ) : (
+                                                    <p className="text-muted-foreground text-xs">Sin detalle disponible.</p>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </Fragment>
                             );
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={7} className="text-muted-foreground py-10 text-center">
+                            <TableCell colSpan={6} className="text-muted-foreground py-10 text-center">
                                 <div className="flex flex-col items-center gap-2">
                                     <ArrowRightLeft size={32} className="opacity-40" />
                                     <p className="font-medium">Sin transacciones financieras</p>
@@ -574,6 +553,7 @@ const TablaPagosRecibidos = ({
             default: return 'bg-gray-100 text-gray-800 border-gray-200';
         }
     };
+    const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
     return (
         <ScrollArea className="h-[420px]">
@@ -587,85 +567,85 @@ const TablaPagosRecibidos = ({
                         <TableHead>Moneda</TableHead>
                         <TableHead>Vía de Pago</TableHead>
                         <TableHead>Estado Venta</TableHead>
-                        <TableHead className="text-right">Ir a Venta</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {pagos.length > 0 ? (
-                        pagos.map((pago) => (
-                            <TableRow key={pago.id} className="hover:bg-muted/50">
-                                <TableCell>
-                                    <div className="flex items-center gap-1">
-                                        <Calendar size={12} className="text-muted-foreground" />
-                                        <span className="text-sm">{formatearFecha(pago.created_at)}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    {pago.venta ? (
-                                        <Badge variant="outline" className="font-mono">
-                                            #{pago.venta.id}
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-muted-foreground text-xs">—</span>
+                        pagos.map((pago) => {
+                            const expandida = expandedRow === pago.id;
+                            return (
+                                <Fragment key={pago.id}>
+                                    <TableRow className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandida ? null : pago.id)}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                {expandida ? (
+                                                    <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                ) : (
+                                                    <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                )}
+                                                <Calendar size={12} className="text-muted-foreground" />
+                                                <span className="text-sm">{formatearFecha(pago.created_at)}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {pago.venta ? (
+                                                <Badge variant="outline" className="font-mono">
+                                                    #{pago.venta.id}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">—</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="text-sm">{pago.venta?.almacen?.nombre_almacen ?? '—'}</span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="font-semibold text-emerald-600">{formatearMoneda(pago.monto)}</span>
+                                            {pago.saldo_anterior !== null && pago.saldo_posterior !== null && (
+                                                <div className="text-muted-foreground text-[11px]">
+                                                    {formatearMoneda(pago.saldo_anterior)} → {formatearMoneda(pago.saldo_posterior)}
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">{pago.moneda?.codigo_moneda ?? 'USD'}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {pago.via_pago ? (
+                                                <Badge variant="outline" className="text-xs capitalize">
+                                                    {pago.via_pago}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">—</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {pago.venta ? (
+                                                <Badge variant="outline" className={`text-xs ${getEstadoVentaColor(pago.venta.estado)}`}>
+                                                    {pago.venta.estado.charAt(0).toUpperCase() + pago.venta.estado.slice(1)}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">—</span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                    {expandida && (
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableCell colSpan={7} className="bg-muted/30 px-6 py-3">
+                                                {pago.detalle ? (
+                                                    <DetalleVentaExpandido detalle={pago.detalle} />
+                                                ) : (
+                                                    <p className="text-muted-foreground text-xs">Sin detalle disponible.</p>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
                                     )}
-                                </TableCell>
-                                <TableCell>
-                                    <span className="text-sm">{pago.venta?.almacen?.nombre_almacen ?? '—'}</span>
-                                </TableCell>
-                                <TableCell>
-                                    <span className="font-semibold text-emerald-600">{formatearMoneda(pago.monto)}</span>
-                                    {pago.saldo_anterior !== null && pago.saldo_posterior !== null && (
-                                        <div className="text-muted-foreground text-[11px]">
-                                            {formatearMoneda(pago.saldo_anterior)} → {formatearMoneda(pago.saldo_posterior)}
-                                        </div>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant="secondary">{pago.moneda?.codigo_moneda ?? 'USD'}</Badge>
-                                </TableCell>
-                                <TableCell>
-                                    {pago.via_pago ? (
-                                        <Badge variant="outline" className="text-xs capitalize">
-                                            {pago.via_pago}
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-muted-foreground text-xs">—</span>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    {pago.venta ? (
-                                        <Badge variant="outline" className={`text-xs ${getEstadoVentaColor(pago.venta.estado)}`}>
-                                            {pago.venta.estado.charAt(0).toUpperCase() + pago.venta.estado.slice(1)}
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-muted-foreground text-xs">—</span>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    {pago.venta && (
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Link href={route('ventas.show', { id: pago.venta.id })}>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50"
-                                                    >
-                                                        <ExternalLink size={12} />
-                                                    </Button>
-                                                </Link>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="left">
-                                                <p className="text-xs">Ver venta de origen</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        ))
+                                </Fragment>
+                            );
+                        })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={8} className="text-muted-foreground py-10 text-center">
+                            <TableCell colSpan={7} className="text-muted-foreground py-10 text-center">
                                 <div className="flex flex-col items-center gap-2">
                                     <Wallet size={32} className="opacity-40" />
                                     <p className="font-medium">Sin pagos recibidos por ventas</p>
@@ -685,6 +665,7 @@ const TablaPagosRecibidos = ({
 export default function ShowClientePage({ cliente }: ShowClientePageProps) {
     const [activeVentasFilter, setActiveVentasFilter] = useState('todas');
     const [activeTransFilter, setActiveTransFilter] = useState('todas');
+    const [expandedCompraRow, setExpandedCompraRow] = useState<number | null>(null);
 
     const formatearMoneda = (valor: number | null | undefined) => {
         if (valor === null || valor === undefined) return '$0.00';
@@ -1219,126 +1200,83 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                             <TableHead>Proveedor</TableHead>
                                                             <TableHead>Total Compra</TableHead>
                                                             <TableHead>Monto Aportado</TableHead>
-                                                            <TableHead>Productos</TableHead>
-                                                            <TableHead>Pagos</TableHead>
-                                                            <TableHead>Info</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
                                                         {compras.length > 0 ? (
-                                                            compras.map((compra) => (
-                                                                <TableRow key={compra.id} className="hover:bg-muted/50">
-                                                                    <TableCell>
-                                                                        <Badge variant="outline">#{compra.id}</Badge>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <div className="flex items-center gap-1">
-                                                                            <Calendar size={12} className="text-muted-foreground" />
-                                                                            <span className="text-sm">{formatearFecha(compra.fecha_compra)}</span>
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        {compra.proveedor ? (
-                                                                            <Link href={route('proveedores.show', { proveedor: compra.proveedor.id })}>
-                                                                                <Button variant="link" className="h-auto p-0 text-sm font-medium">
-                                                                                    {compra.proveedor.nombre_proveedor}
-                                                                                </Button>
-                                                                            </Link>
-                                                                        ) : (
-                                                                            <span className="text-muted-foreground text-xs">—</span>
-                                                                        )}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <span className="font-medium">{formatearMoneda(compra.total_compra)}</span>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <span className="font-semibold text-green-600">
-                                                                            {formatearMoneda(compra.pivot.monto)}
-                                                                        </span>
-                                                                        {compra.pivot.saldo_anterior !== null && compra.pivot.saldo_posterior !== null && (
-                                                                            <div className="text-muted-foreground text-[11px]">
-                                                                                {formatearMoneda(compra.pivot.saldo_anterior)} → {formatearMoneda(compra.pivot.saldo_posterior)}
-                                                                            </div>
-                                                                        )}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                                                                    <Package size={13} />
-                                                                                </Button>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent>
-                                                                                <div className="space-y-1 text-xs">
-                                                                                    {compra.productos.map((p) => (
-                                                                                        <div key={p.id} className="flex justify-between gap-3">
-                                                                                            <span>{p.nombre_producto}</span>
-                                                                                            <span>
-                                                                                                {p.pivot.cantidad} x {formatearMoneda(p.pivot.precio)}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    ))}
-                                                                                </div>
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                                                                    <CreditCard size={13} />
-                                                                                </Button>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent>
-                                                                                <div className="space-y-1 text-xs">
-                                                                                    {compra.pagos.map((pago) => (
-                                                                                        <div key={pago.id} className="flex justify-between gap-3">
-                                                                                            {pago.tipo_pago === 'cliente' ? (
-                                                                                                <span>Cliente: {pago.cliente?.nombre_cliente}</span>
-                                                                                            ) : pago.tipo_pago === 'cuenta' ? (
-                                                                                                <span>Cuenta: {pago.cuenta?.nombre_cuenta}</span>
-                                                                                            ) : (
-                                                                                                <span>Deuda Proveedor</span>
-                                                                                            )}
-                                                                                            <span>{formatearMoneda(pago.monto)}</span>
-                                                                                        </div>
-                                                                                    ))}
-                                                                                </div>
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                                                                                    <Eye size={13} />
-                                                                                </Button>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent>
-                                                                                <div className="space-y-1 text-xs">
-                                                                                    <p>
-                                                                                        <strong>Tipo:</strong> {compra.tipo_compra}
-                                                                                    </p>
-                                                                                    {compra.proveedor && (
-                                                                                        <p>
-                                                                                            <strong>Proveedor:</strong> {compra.proveedor.nombre_proveedor}
-                                                                                        </p>
+                                                            compras.map((compra) => {
+                                                                const expandida = expandedCompraRow === compra.id;
+                                                                return (
+                                                                    <Fragment key={compra.id}>
+                                                                        <TableRow
+                                                                            className="hover:bg-muted/50 cursor-pointer"
+                                                                            onClick={() => setExpandedCompraRow(expandida ? null : compra.id)}
+                                                                        >
+                                                                            <TableCell>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    {expandida ? (
+                                                                                        <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                                                    ) : (
+                                                                                        <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                                                                                     )}
-                                                                                    <p>
-                                                                                        <strong>Total:</strong> {formatearMoneda(compra.total_compra)}
-                                                                                    </p>
-                                                                                    <p>
-                                                                                        <strong>Aportado:</strong> {formatearMoneda(compra.pivot.monto)}
-                                                                                    </p>
+                                                                                    <Badge variant="outline">#{compra.id}</Badge>
                                                                                 </div>
-                                                                            </TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <Calendar size={12} className="text-muted-foreground" />
+                                                                                    <span className="text-sm">{formatearFecha(compra.fecha_compra)}</span>
+                                                                                </div>
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                {compra.proveedor ? (
+                                                                                    <Link
+                                                                                        href={route('proveedores.show', { proveedor: compra.proveedor.id })}
+                                                                                        onClick={(e) => e.stopPropagation()}
+                                                                                    >
+                                                                                        <Button variant="link" className="h-auto p-0 text-sm font-medium">
+                                                                                            {compra.proveedor.nombre_proveedor}
+                                                                                        </Button>
+                                                                                    </Link>
+                                                                                ) : (
+                                                                                    <span className="text-muted-foreground text-xs">—</span>
+                                                                                )}
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <span className="font-medium">{formatearMoneda(compra.total_compra)}</span>
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <span className="font-semibold text-green-600">
+                                                                                    {formatearMoneda(compra.pivot.monto)}
+                                                                                </span>
+                                                                                {compra.pivot.saldo_anterior !== null && compra.pivot.saldo_posterior !== null && (
+                                                                                    <div className="text-muted-foreground text-[11px]">
+                                                                                        {formatearMoneda(compra.pivot.saldo_anterior)} → {formatearMoneda(compra.pivot.saldo_posterior)}
+                                                                                    </div>
+                                                                                )}
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                        {expandida && (
+                                                                            <TableRow className="hover:bg-transparent">
+                                                                                <TableCell colSpan={5} className="bg-muted/30 px-6 py-3">
+                                                                                    {compra.detalle ? (
+                                                                                        <DetalleCompraExpandido
+                                                                                            detalle={compra.detalle}
+                                                                                            monto={Number(compra.total_compra)}
+                                                                                            usuario="—"
+                                                                                        />
+                                                                                    ) : (
+                                                                                        <p className="text-muted-foreground text-xs">Sin detalle disponible.</p>
+                                                                                    )}
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        )}
+                                                                    </Fragment>
+                                                                );
+                                                            })
                                                         ) : (
                                                             <TableRow>
-                                                                <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
+                                                                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
                                                                     <div className="flex flex-col items-center gap-2">
                                                                         <ShoppingCart size={32} className="opacity-40" />
                                                                         <p>No hay compras registradas como método de pago</p>

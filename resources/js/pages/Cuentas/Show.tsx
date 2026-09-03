@@ -323,7 +323,11 @@ const TablaHistorial = ({
                                     const ItemIcono = getFuenteIcono(item);
                                     const colorClase = getFuenteColorClase(Number(item.monto));
                                     const rowKey = `${item.fuente}-${item.referencia_id}-${idx}`;
-                                    const esColapsable = item.saldo_anterior !== null && item.saldo_posterior !== null;
+                                    // Colapsable si hay saldo capturado (Transacciones/Ajustes) O detalle rico cargado
+                                    // (Ventas/Compras) — son independientes: una venta puede tener toda su info
+                                    // (productos, pagos, tasa) disponible aunque ese pago en particular sea de antes
+                                    // del fix de saldo_anterior/posterior y por eso no tenga snapshot.
+                                    const esColapsable = (item.saldo_anterior !== null && item.saldo_posterior !== null) || item.detalle !== null;
                                     const expandida = expandedRow === rowKey;
                                     return (
                                         <Fragment key={rowKey}>
