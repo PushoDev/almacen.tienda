@@ -1,5 +1,7 @@
 # Patrón: Mascota con efecto "bleed" (sobresale del contenedor)
 
+> **Versión offline (NativePHP):** este patrón aplica igual ahí — ver `docs/nativephp-offline-design-consistency.md` antes de usar la mascota o cualquier imagen protagonista en esa versión.
+
 > Origen: `Vendor/Imprimir.tsx` (2026-08-27, marca de agua de la mascota en el ticket impreso) y `dashboard.tsx` (mismo día, reemplazo del ícono decorativo del banner "Opciones Generales del Sistema" por la mascota, parada sobre el borde superior). Asset fuente: `public/projects/mascota/mascota.webp` (1302×1208px, alta resolución — no usar `/imgs/logo.png`, que es un recorte de 235×222px pensado para el logo chico del sidebar/tickets, no para este efecto).
 
 **Nombre del efecto, para pedirlo directo:** *bleed* / *breakout* — un elemento (acá, la mascota) que sobresale intencionalmente del borde de su contenedor en vez de quedar recortado adentro. En diseño editorial se le dice "sangrado". Frase de referencia: *"poné la mascota con efecto bleed/breakout en [tal card], que sobresalga por [arriba/abajo]"*.

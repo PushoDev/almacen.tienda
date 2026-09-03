@@ -1,5 +1,7 @@
 # Header Structure
 
+> **Versión offline (NativePHP):** este patrón aplica igual ahí — ver `docs/nativephp-offline-design-consistency.md` antes de construir cualquier header en esa versión.
+
 > **REGLA CRÍTICA (2026-08-15, confirmada explícitamente por el cliente):** el banner superior de página (ver "Banner superior de página", debajo) es la estructura **identificativa de todo el proyecto** — se repite igual en Dashboard, Compras, y el resto de los módulos. **NUNCA** se le aplica el patrón de degradado de `docs/patron-card-header-degradado.md` (ese es solo para `Card`/`CardHeader`, no para este banner), y no se propone "arreglarlo" ni cambiarle el estilo salvo que el cliente lo pida explícitamente para ESE banner puntual. Ya pasó una vez (intentando "arreglar" un degradado roto en el banner de `Comprar/Show.tsx`) — el cliente lo frenó ahí mismo. No repetir esa confusión entre "banner de página" y "Card".
 
 ## Banner superior de página

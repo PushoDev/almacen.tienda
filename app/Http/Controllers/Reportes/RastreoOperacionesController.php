@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Reportes;
 
 use App\Http\Controllers\Controller;
+use App\Models\AjusteSaldoCuenta;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
 use App\Models\Venta;
@@ -27,7 +28,7 @@ class RastreoOperacionesController extends Controller
         $request->validate([
             'fecha' => 'nullable|date',
             'user_id' => 'nullable|exists:users,id',
-            'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia,Compra',
+            'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia,Compra,Ajuste',
             'buscar' => 'nullable|string|max:255',
             'cliente_ids' => 'nullable|array',
             'cliente_ids.*' => 'integer|exists:clientes,id',
@@ -148,6 +149,12 @@ class RastreoOperacionesController extends Controller
         // así ?tipo=Compra por URL directa devuelve vacío en vez de filtrar nada.
         $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion) : null;
 
+        // Ajuste manual de saldo — solo toca Cuentas, nunca Cliente/Proveedor (ver
+        // construirSubqueryAjuste). Disponible para todos los roles, igual que Gasto/
+        // Ingreso/Transferencia: no es dato de costo como Compra, y el userIdFiltro de
+        // vendedor ya lo deja vacío en la práctica (los ajustes los hace admin/moderador).
+        $ajustesSub = $this->construirSubqueryAjuste($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $cuentaDireccion);
+
         // Conteo por tipo para los widgets sobre el filtro — respeta fecha/usuario/buscar
         // pero NO el filtro de tipo (si no, al filtrar por "Venta" los otros 3 se irían a
         // cero y dejarían de servir como resumen). Clonamos cada subquery ANTES de
@@ -158,12 +165,13 @@ class RastreoOperacionesController extends Controller
             'Gasto' => (clone $gastosSub)->distinct()->count('mf.id'),
             'Ingreso' => (clone $ingresosSub)->distinct()->count('mf.id'),
             'Transferencia' => (clone $transferenciasSub)->distinct()->count('mf.id'),
+            'Ajuste' => (clone $ajustesSub)->distinct()->count('a.id'),
         ];
         if ($comprasSub) {
             $conteoPorTipo['Compra'] = (clone $comprasSub)->distinct()->count('compras.id');
         }
 
-        $unionQuery = $ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub);
+        $unionQuery = $ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub)->unionAll($ajustesSub);
         if ($comprasSub) {
             $unionQuery->unionAll($comprasSub);
         }
@@ -178,7 +186,8 @@ class RastreoOperacionesController extends Controller
         $filas = collect($pagina->items());
         $ventaIds = $filas->where('tipo', 'Venta')->pluck('id')->all();
         $compraIds = $filas->where('tipo', 'Compra')->pluck('id')->all();
-        $movimientoIds = $filas->whereNotIn('tipo', ['Venta', 'Compra'])->pluck('id')->all();
+        $ajusteIds = $filas->where('tipo', 'Ajuste')->pluck('id')->all();
+        $movimientoIds = $filas->whereNotIn('tipo', ['Venta', 'Compra', 'Ajuste'])->pluck('id')->all();
 
         $ventasPorId = Venta::with([
             'usuario',
@@ -211,13 +220,19 @@ class RastreoOperacionesController extends Controller
             'pagos.cliente',
         ])->whereIn('id', $compraIds)->get()->keyBy('id');
 
-        $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $comprasPorId, $puedeVerCosto) {
+        $ajustesPorId = AjusteSaldoCuenta::with(['user', 'cuenta.moneda'])->whereIn('id', $ajusteIds)->get()->keyBy('id');
+
+        $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $comprasPorId, $ajustesPorId, $puedeVerCosto) {
             if ($fila->tipo === 'Venta') {
                 return $this->transformarVenta($ventasPorId[$fila->id], $puedeVerCosto);
             }
 
             if ($fila->tipo === 'Compra') {
                 return $this->transformarCompra($comprasPorId[$fila->id]);
+            }
+
+            if ($fila->tipo === 'Ajuste') {
+                return $this->transformarAjuste($ajustesPorId[$fila->id]);
             }
 
             return $this->transformarMovimiento($movimientosPorId[$fila->id], $fila->tipo);
@@ -392,6 +407,47 @@ class RastreoOperacionesController extends Controller
             });
     }
 
+    /**
+     * Subquery de ajustes manuales de saldo (ajustes_saldo_cuenta) — solo toca una cuenta,
+     * nunca cliente/proveedor, así que esos dos filtros simplemente no aplican (cero
+     * resultados si están activos, mismo criterio que Venta con proveedor_ids).
+     */
+    private function construirSubqueryAjuste(
+        Request $request,
+        ?string $buscar,
+        ?int $buscarId,
+        $userIdFiltro,
+        array $clienteIds,
+        array $proveedorIds,
+        array $cuentaIds,
+        string $cuentaDireccion,
+    ) {
+        return DB::table('ajustes_saldo_cuenta as a')
+            ->leftJoin('users', 'users.id', '=', 'a.user_id')
+            ->leftJoin('cuentas', 'cuentas.id', '=', 'a.cuenta_id')
+            ->select('a.id', 'a.created_at as fecha', DB::raw("'Ajuste' as tipo"))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('a.created_at', $request->input('fecha')))
+            ->when($userIdFiltro, fn ($q) => $q->where('a.user_id', $userIdFiltro))
+            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
+                $qq->where('a.motivo', 'like', "%{$buscar}%")
+                    ->orWhere('users.name', 'like', "%{$buscar}%")
+                    ->orWhere('cuentas.nombre_cuenta', 'like', "%{$buscar}%")
+                    ->when($buscarId, fn ($q2) => $q2->orWhere('a.id', $buscarId));
+            }))
+            ->when($clienteIds, fn ($q) => $q->whereRaw('1 = 0'))
+            ->when($proveedorIds, fn ($q) => $q->whereRaw('1 = 0'))
+            // La cuenta ajustada siempre "recibe" el ajuste (mismo criterio que Venta con
+            // su cuenta de cobro) — direccion=envia no tiene nada que calzar.
+            ->when($cuentaIds, function ($q) use ($cuentaIds, $cuentaDireccion) {
+                if ($cuentaDireccion === 'envia') {
+                    $q->whereRaw('1 = 0');
+
+                    return;
+                }
+                $q->whereIn('a.cuenta_id', $cuentaIds);
+            });
+    }
+
     private function transformarMovimiento(MovimientoFinanciero $mov, string $tipo): array
     {
         return [
@@ -457,6 +513,24 @@ class RastreoOperacionesController extends Controller
             'detalle_venta' => null,
             'detalle_movimiento' => null,
             'detalle_compra' => $this->detalleOperacionService->detalleCompra($compra),
+        ];
+    }
+
+    private function transformarAjuste(AjusteSaldoCuenta $ajuste): array
+    {
+        return [
+            'id' => $ajuste->id,
+            'fecha' => $ajuste->created_at,
+            'tipo' => 'Ajuste',
+            'monto' => (float) $ajuste->saldo_nuevo - (float) $ajuste->saldo_anterior,
+            'moneda' => $ajuste->cuenta?->moneda?->codigo_moneda ?? '',
+            'usuario' => $ajuste->user?->name ?? '—',
+            'user_id' => $ajuste->user_id,
+            'referencia' => "Ajuste #{$ajuste->id}",
+            'descripcion' => $ajuste->motivo,
+            'detalle_venta' => null,
+            'detalle_compra' => null,
+            'detalle_movimiento' => $this->detalleOperacionService->detalleAjuste($ajuste),
         ];
     }
 }

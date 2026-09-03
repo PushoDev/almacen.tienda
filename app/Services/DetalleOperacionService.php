@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AjusteSaldoCuenta;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
 use App\Models\Venta;
@@ -73,6 +74,33 @@ class DetalleOperacionService
                 $mov->saldo_anterior_destino,
                 $mov->saldo_posterior_destino,
                 $mov->moneda_destino,
+            ),
+        ];
+    }
+
+    /**
+     * Shape de `detalle_movimiento` reusado para un Ajuste manual de saldo — un ajuste
+     * solo toca una cuenta (nunca cliente/proveedor, nunca dos lados), así que se modela
+     * como un movimiento con "destino" nada más y "origen" null, igual que ya hace
+     * Ingreso. Esto evita un shape/componente nuevo solo para Ajustes.
+     */
+    public function detalleAjuste(AjusteSaldoCuenta $ajuste): array
+    {
+        return [
+            'info_general' => [
+                'fecha' => $ajuste->created_at,
+                'estado' => 'Ajuste manual',
+                'tasa_cambio_aplicada' => null,
+                'monto_destino' => null,
+            ],
+            'origen' => null,
+            'destino' => $this->entidadMovimiento(
+                $ajuste->cuenta,
+                null,
+                null,
+                $ajuste->saldo_anterior,
+                $ajuste->saldo_nuevo,
+                $ajuste->cuenta?->moneda?->codigo_moneda,
             ),
         ];
     }

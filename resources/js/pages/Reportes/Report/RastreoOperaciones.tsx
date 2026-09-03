@@ -40,7 +40,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -112,6 +112,7 @@ interface RastreoOperacionesPageProps {
         Gasto: number;
         Ingreso: number;
         Transferencia: number;
+        Ajuste: number;
         // Ausente por completo para vendedor (Compra es admin/moderador-only) — nunca 0
         // implícito, la clave simplemente no viene en el payload.
         Compra?: number;
@@ -132,6 +133,8 @@ const colorTipo = (tipo: string) => {
             return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300';
         case 'Compra':
             return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300';
+        case 'Ajuste':
+            return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300';
         default:
             return 'border-border bg-muted text-foreground';
     }
@@ -208,6 +211,7 @@ const resumenTipos = [
     { tipo: 'Ingreso' as const, label: 'Ingresos', icon: TrendingUp, iconClass: 'bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400' },
     { tipo: 'Transferencia' as const, label: 'Transferencias', icon: ArrowLeftRight, iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' },
     { tipo: 'Compra' as const, label: 'Compras', icon: PackagePlus, iconClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400' },
+    { tipo: 'Ajuste' as const, label: 'Ajustes', icon: Edit3, iconClass: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400' },
 ];
 
 // ─── Componente: ComboboxFiltro (multiselect con chips, para Cliente/Proveedor/Cuenta) ──
@@ -358,35 +362,99 @@ export default function RastreoOperacionesPage({
         return pages;
     };
 
+    // Mismas 5 columnas de dinero que la tabla en pantalla (Cuenta Envía/Monto/Cuenta que
+    // Recibe/Monto/Tasa), aplanadas a texto plano porque el PDF no puede mostrar los badges
+    // por pago — se listan separados por coma, mismo orden que sus badges de color.
+    const textoCuentaEnvia = (op: Operacion): string => {
+        if (op.tipo === 'Compra') {
+            const pagos = pagosCompraConOrigen(op);
+
+            return pagos.length > 0 ? pagos.map((p) => p.origen).join(', ') : '—';
+        }
+
+        return cuentaEnvia(op);
+    };
+
+    const textoMontoEnvia = (op: Operacion): string => {
+        if (op.tipo === 'Compra') {
+            const partes = pagosCompraConOrigen(op).map((p) => formatMonto(p.monto, 'USD'));
+            const pendiente = montoPendienteCompra(op);
+            if (pendiente > 0) partes.push(`Deuda pendiente: ${formatMonto(pendiente, 'USD')}`);
+
+            return partes.length > 0 ? partes.join(', ') : '—';
+        }
+
+        return montoEnvia(op);
+    };
+
+    const textoCuentaRecibe = (op: Operacion): string => {
+        if (op.tipo === 'Venta') {
+            return op.detalle_venta?.pagos.map((p) => p.destino).join(', ') || '—';
+        }
+        if (op.tipo === 'Compra') {
+            return cuentaRecibeCompra(op);
+        }
+
+        return cuentaRecibeMovimiento(op);
+    };
+
+    const textoMontoRecibe = (op: Operacion): string => {
+        if (op.tipo === 'Venta') {
+            return (
+                op.detalle_venta?.pagos.map((p) => (p.moneda ? formatMonto(p.monto_original, p.moneda) : fmt(p.monto_original))).join(', ') || '—'
+            );
+        }
+        if (op.tipo === 'Compra') {
+            return formatMonto(op.monto, op.moneda);
+        }
+
+        return montoRecibeMovimiento(op);
+    };
+
+    const textoTasa = (op: Operacion): string => {
+        if (op.tipo === 'Venta') {
+            return op.detalle_venta?.pagos.map((p) => String(p.tasa_cambio)).join(', ') || '—';
+        }
+
+        return String(tasaOperacion(op));
+    };
+
     const exportToPDF = async () => {
         try {
             const { jsPDF } = await import('jspdf');
-            await import('jspdf-autotable');
-            const doc = new jsPDF();
+            // jspdf-autotable v5 dejó de enganchar doc.autoTable() como efecto secundario del
+            // import (así funcionaba en v3/v4) — ahora exporta una función aparte que recibe
+            // el doc como primer argumento. Sin este cambio, doc.autoTable() no existe y el
+            // botón tira "TypeError: doc.autoTable is not a function" sin generar nada.
+            const { default: autoTable } = await import('jspdf-autotable');
+            const doc = new jsPDF({ orientation: 'landscape' });
 
             doc.setFontSize(18);
-            doc.text('REPORTE GENERAL DE OPERACIONES', 105, 20, { align: 'center' });
+            doc.text('REPORTE GENERAL DE OPERACIONES', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
 
             doc.setFontSize(10);
-            doc.text(`Generado el: ${new Date().toLocaleString()}`, 20, 30);
+            doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 30);
             if (fecha) {
-                doc.text(`Fecha: ${fecha}`, 20, 35);
+                doc.text(`Fecha: ${fecha}`, 14, 35);
             }
 
             const tableData = operaciones.data.map((op) => [
                 new Date(op.fecha).toLocaleString(),
-                op.tipo,
                 op.referencia,
+                textoCuentaEnvia(op),
+                textoMontoEnvia(op),
+                textoCuentaRecibe(op),
+                textoMontoRecibe(op),
+                textoTasa(op),
                 op.usuario,
-                formatMonto(parseFloat(op.monto.toString()), op.moneda),
                 op.descripcion || '-',
             ]);
 
-            (doc as any).autoTable({
+            autoTable(doc, {
                 startY: 45,
-                head: [['Fecha', 'Tipo', 'Referencia', 'Usuario', 'Monto', 'Detalles']],
+                head: [['Fecha', 'Referencia', 'Cuenta Envía', 'Monto', 'Cuenta que Recibe', 'Monto', 'Tasa', 'Usuario', 'Detalles']],
                 body: tableData,
-                styles: { fontSize: 8 },
+                styles: { fontSize: 7 },
                 headStyles: { fillColor: [71, 85, 105] },
             });
 
@@ -427,7 +495,7 @@ export default function RastreoOperacionesPage({
                     admin/moderador — conteoPorTipo.Compra ni viene en el payload para
                     vendedor (ver RastreoOperacionesController), mismo gate que el resto de
                     los datos de Compra en este reporte. */}
-                <div className={`grid grid-cols-2 gap-4 md:grid-cols-4 ${puedeVerCosto ? 'lg:grid-cols-5' : ''}`}>
+                <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${puedeVerCosto ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
                     {resumenTipos.filter(({ tipo }) => tipo !== 'Compra' || puedeVerCosto).map(({ tipo, label, icon: Icon, iconClass }) => (
                         <Card key={tipo}>
                             <CardContent className="flex items-center gap-3 p-4">
@@ -481,6 +549,7 @@ export default function RastreoOperacionesPage({
                                         <SelectItem value="Gasto">Gasto</SelectItem>
                                         <SelectItem value="Ingreso">Ingreso</SelectItem>
                                         <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                        <SelectItem value="Ajuste">Ajuste</SelectItem>
                                         {puedeVerCosto && <SelectItem value="Compra">Compra</SelectItem>}
                                     </SelectContent>
                                 </Select>

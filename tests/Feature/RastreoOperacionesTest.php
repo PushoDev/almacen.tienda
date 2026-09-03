@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AjusteSaldoCuenta;
 use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago;
@@ -600,6 +601,13 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
+    AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuentaUsd->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 100,
+        'saldo_nuevo' => 150,
+        'motivo' => 'Corrección de prueba',
+    ]);
 
     $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
     expect($response->json('props.conteoPorTipo'))->toBe([
@@ -607,12 +615,13 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'Gasto' => 1,
         'Ingreso' => 2,
         'Transferencia' => 1,
+        'Ajuste' => 1,
         // Admin ve la clave Compra aunque no haya ninguna — a diferencia de vendedor, que
         // no la ve en absoluto (ver test de acceso de Compra más abajo).
         'Compra' => 0,
     ]);
 
-    // Filtrar por tipo=Venta no debe "colapsar" el conteo de los otros 3 tipos a cero —
+    // Filtrar por tipo=Venta no debe "colapsar" el conteo de los otros tipos a cero —
     // los widgets siguen siendo un resumen de todo lo que hay bajo fecha/usuario/buscar.
     $responseFiltrada = $this->get(route('reportes.rastreo_operaciones', ['tipo' => 'Venta']), ['X-Inertia' => 'true']);
     expect($responseFiltrada->json('props.conteoPorTipo'))->toBe([
@@ -620,9 +629,62 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'Gasto' => 1,
         'Ingreso' => 2,
         'Transferencia' => 1,
+        'Ajuste' => 1,
         'Compra' => 0,
     ]);
     expect(collect($responseFiltrada->json('props.operaciones.data')))->toHaveCount(3);
+});
+
+test('el detalle colapsable de un Ajuste trae la cuenta ajustada, su saldo antes/después y el motivo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $ajuste = AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuenta->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 300,
+        'saldo_nuevo' => 450,
+        'motivo' => 'Corrección por error de digitación',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $ajuste->id);
+
+    expect($fila)->not->toBeNull();
+    expect($fila['tipo'])->toBe('Ajuste');
+    expect($fila['referencia'])->toBe("Ajuste #{$ajuste->id}");
+    expect($fila['descripcion'])->toBe('Corrección por error de digitación');
+    expect((float) $fila['monto'])->toBe(150.0);
+    expect($fila['detalle_venta'])->toBeNull();
+    expect($fila['detalle_compra'])->toBeNull();
+    expect($fila['detalle_movimiento'])->not->toBeNull();
+    expect($fila['detalle_movimiento']['origen'])->toBeNull();
+    expect($fila['detalle_movimiento']['destino']['tipo'])->toBe('cuenta');
+    expect($fila['detalle_movimiento']['destino']['nombre'])->toBe($cuenta->nombre_cuenta);
+    expect((float) $fila['detalle_movimiento']['destino']['saldo_anterior'])->toBe(300.0);
+    expect((float) $fila['detalle_movimiento']['destino']['saldo_posterior'])->toBe(450.0);
+});
+
+test('un vendedor no ve los Ajustes hechos por admin/moderador (userIdFiltro lo deja fuera)', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $ajuste = AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuenta->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 100,
+        'saldo_nuevo' => 120,
+        'motivo' => 'Ajuste de admin',
+    ]);
+
+    $this->actingAs($vendedor);
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+
+    expect(collect($response->json('props.operaciones.data'))->contains('id', $ajuste->id))->toBeFalse();
+    expect($response->json('props.conteoPorTipo.Ajuste'))->toBe(0);
 });
 
 test('el reporte incluye Compra en el listado combinado, con proveedor, pagos y productos en el detalle', function () {
