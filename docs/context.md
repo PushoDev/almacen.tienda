@@ -325,7 +325,7 @@ El reporte prioritario del cliente dentro del módulo Reportes (los otros 14 rep
 - Filtros: fecha, tipo, usuario, búsqueda de texto libre, búsqueda exacta por número de referencia (`34` encuentra `Venta #34`/`Gasto #34` sin saber el tipo), y tres combobox multiselect con chips (Cliente/Proveedor/Cuenta) — cada uno aplica solo a los tipos donde el dato tiene sentido (p. ej. Proveedor nunca aplica a Venta).
 - Costo/margen y widgets KPI gateados por rol; vendedor scoped a sus propias operaciones.
 - **Pendiente conocido:** el botón "Exportar PDF" (`exportToPDF` en el mismo `.tsx`) sigue generando el set de columnas viejo (`Fecha, Tipo, Referencia, Usuario, Monto, Detalles`), desincronizado de la tabla en pantalla desde que esta se rediseñó.
-- Ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md` para el plan de fases completo y `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md` para el resto del módulo Reportes (14 reportes aún sin trabajar, ordenados por el cliente uno a uno).
+- Ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md` para el plan de fases completo y `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md` para el resto del módulo Reportes (14 reportes aún sin trabajar, ordenados por el cliente uno a uno). **Prioridad baja desde 2026-09-05** — el cliente confirmó que estos se trabajan solo bajo petición explícita, no proactivamente.
 
 ---
 
@@ -418,7 +418,15 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 
 ## Branch Actual
 
-`feature/desarrollo-caliente` — Trabajo activo (2026-09-01):
+`feature/desarrollo-caliente` — Trabajo activo (2026-09-05):
+
+1. **Impresión de venta por duplicado**: `Vendor/Imprimir.tsx` imprimía Ticket(interno, se queda en el punto de venta)/Factura+Garantía(se la lleva el cliente) en la mitad superior de la hoja A4, dejando la mitad inferior en blanco. A pedido del cliente, ahora se repite el mismo contenido (Ticket+Factura y las 31 cláusulas de garantía) en ambas mitades — al cortar por la línea ya marcada salen dos copias físicas idénticas. Contenido extraído a variables reutilizables, cada copia anclada por offset fijo en mm (no por alto renderizado) para evitar el bug de Chrome ya documentado. Verificado en navegador y **confirmado por el cliente en PDF real**.
+2. **`exportToPDF` de Rastreo de Operaciones corregido**: generaba un PDF con 9 columnas viejas (incluía `Fecha`/`Usuario`, retirados de la tabla en pantalla desde agosto) — ahora exporta exactamente las 7 columnas reales.
+3. **Prioridad de Reportes bajada explícitamente**: los 14 reportes del módulo `/reportes/*` aún sin trabajar (incluido `ProductosMasVendidos.tsx`, archivo vacío) quedan en prioridad baja — se trabajan solo bajo petición explícita del cliente.
+
+Detalle completo en `docs/arreglos-pendientes/resumen-cambios-2026-09-05.md` y memoria `project_venta_recibo_impresion`/`project_reportes_module`.
+
+Track anterior (2026-09-01):
 
 1. **Saldo anterior/posterior en Venta y Compra, 4 fases**: Gasto/Ingreso/Transferencia ya mostraban el saldo antes/después de cada cuenta en Rastreo de Operaciones; Venta y Compra no capturaban nada, y ni Cuentas/Clientes/Proveedores mostraban lo que sí existía. Columnas nuevas en `pago_ventas`/`ventas`/`compra_pago`/`compras`, capturadas en `VentaController::aprobarVenta()`/`CompraController::store()`, mostradas en Rastreo de Operaciones (reutilizando `EntidadMovimientoCard`, más una tarjeta nueva de motivo de anulación) y en el historial propio de `Cuentas`/`Clientes`/`Proveedores`. Verificado en navegador con operaciones reales aisladas, rastro de prueba borrado al final. 258/258 tests. Detalle en `docs/arreglos-pendientes/resumen-cambios-2026-09-01.md` y memoria `project_saldo_anterior_posterior_operaciones`.
 2. **`DatabaseSeeder.php` sincronizado con producción** para el `migrate:fresh --seed` que el cliente corre mañana (11 usuarios/24 almacenes/15 categorías reales, clientes de ejemplo quitados, cuentas base sin cambios). **Bug real crítico encontrado y corregido**: el seeder tenía un campo (`deuda`) de una columna ya eliminada — invisible en uso normal, pero `php artisan db:seed` desactiva la protección de mass-assignment globalmente, así que se hubiera caído a mitad de camino. Cubierto con `tests/Feature/DatabaseSeederTest.php` nuevo. Detalle en memoria `project_seeder_limpieza_produccion_2026_09_01`.
