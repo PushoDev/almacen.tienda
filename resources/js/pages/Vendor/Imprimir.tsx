@@ -112,6 +112,199 @@ export default function Imprimir({ venta, qrCode }: Props) {
 
     const ubicacionAlmacen = [venta.almacen.ciudad, venta.almacen.provincia].filter(Boolean).join(', ');
 
+    // Ticket + Factura se repiten dos veces en la misma hoja (una para el cliente, otra
+    // para que se quede en el punto de venta como comprobante/garantía) — mismo contenido,
+    // sin variar por copia, así que se arma una sola vez acá y se reutiliza abajo.
+    const contenidoTicketFactura = (
+        <div className="flex divide-x divide-dashed divide-slate-400 print:divide-slate-500">
+            {/* ── TICKET (angosto, resumen rápido) ── */}
+            <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
+                {/* QR movido a la Factura (2026-08-28), entre las firmas — este header
+                    vuelve a ser texto centrado simple, sin necesitar el espacio de balance
+                    que pedía la columna del QR. */}
+                <div className="mb-1.5 border-b border-slate-300 pb-1.5 text-center">
+                    <div className="mb-0.5 flex justify-center [&_img]:!h-9 [&_img]:!w-9">
+                        <AppLogoIcon />
+                    </div>
+                    <p className="text-xs font-bold">{venta.almacen.nombre}</p>
+                    {ubicacionAlmacen && <p className="text-slate-500">{ubicacionAlmacen}</p>}
+                    <p className="mt-0.5">No. Factura: {venta.id}</p>
+                    <p>{formatFecha(venta.fecha)}</p>
+                    <p>Vendedor: {venta.usuario.nombre}</p>
+                </div>
+
+                {/* Datos del cliente — con guiones bajos para llenar a mano cuando no hay
+                    destinatario capturado. */}
+                <div className="mb-1.5 border-b border-slate-300 pb-1.5">
+                    <p>Cliente: {venta.destinatario ? `${venta.destinatario.nombre} ${venta.destinatario.apellidos}` : '_'.repeat(20)}</p>
+                    <p>CI: {venta.destinatario?.carnet_identidad || '_'.repeat(12)}</p>
+                    <p>Tel: {venta.destinatario?.telefono_contacto || '_'.repeat(12)}</p>
+                </div>
+
+                <div className="mb-1.5 min-h-[32mm] border-b border-slate-300 pb-1.5">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b border-slate-300">
+                                <th className="text-left font-semibold">Producto</th>
+                                <th className="text-center font-semibold">Cant</th>
+                                <th className="text-right font-semibold">Precio</th>
+                                <th className="text-right font-semibold">Sub.Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {venta.items.map((item, index) => (
+                                <tr key={index}>
+                                    <td className="text-left">{item.producto.nombre}</td>
+                                    <td className="text-center">{item.cantidad}</td>
+                                    <td className="text-right">{formatMonto(item.subtotal / item.cantidad)}</td>
+                                    <td className="text-right">{formatMonto(item.subtotal)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    <div className="flex justify-between font-bold">
+                        <span>Total:</span>
+                        <span>{formatMonto(venta.total)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>Pagado:</span>
+                        <span>{formatMonto(venta.total_pagado)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>Restante:</span>
+                        <span>{formatMonto(venta.restante)}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── FACTURA DE VENTA (formal, con la garantía en la Página 2) ──
+                Header (mascota/título/almacén/fecha/no.factura) quitado (2026-08-28) — esa
+                identificación ya está completa en el Ticket de al lado, y sacarla de acá le
+                da todo ese margen a la tabla. La marca de agua SÍ se restauró (pedido
+                explícito) — sigue detrás de la tabla, sin ocupar espacio real del layout. */}
+            <div className={`relative flex-1 p-3 leading-snug ${tallaFactura}`}>
+                {/* Marca de agua — va primero en el DOM y sin z-index propio, así el
+                    contenido real (envuelto abajo en un `relative`) siempre pinta encima. */}
+                <img
+                    src="/projects/mascota/mascota.webp"
+                    alt=""
+                    aria-hidden="true"
+                    className="pointer-events-none absolute right-2 bottom-2 h-48 w-48 opacity-25 select-none"
+                />
+                <div className="relative">
+                    {/* Precio/Sub.Total quitados (2026-08-28) — ya están en el Ticket. Modelo
+                    queda en blanco como Días Garantía/No.Serie/Sello (llenado a mano); ese
+                    espacio liberado se usa para ensanchar No. Serie y Sello, que a menudo
+                    llevan datos/escritura larga. table-fixed + colgroup para que los anchos
+                    se respeten de verdad. */}
+                    <table className={`mb-1.5 min-h-[32mm] w-full table-fixed border-collapse border border-slate-400 align-top ${tallaTablaFactura}`}>
+                        <colgroup>
+                            <col className="w-[7%]" />
+                            <col className="w-[33%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[20%]" />
+                            <col className="w-[18%]" />
+                        </colgroup>
+                        <thead>
+                            <tr className="border-y border-slate-400">
+                                <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Cant</th>
+                                <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Descripción del equipo</th>
+                                <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Días Garantía</th>
+                                <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Modelo</th>
+                                <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>No. Serie</th>
+                                <th className={`text-center font-semibold ${filaFactura}`}>Sello</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {venta.items.map((item, index) => (
+                                <tr key={index} className="border-b border-slate-200">
+                                    <td className={`border-r border-slate-200 text-center ${filaFactura}`}>{item.cantidad}</td>
+                                    <td className={`border-r border-slate-200 ${filaFactura}`}>
+                                        {item.producto.nombre}
+                                        {(item.producto.marca || item.producto.modelo) && (
+                                            <div className="text-slate-500">
+                                                ({[item.producto.marca, item.producto.modelo].filter(Boolean).join(' · ')})
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                    <td className={`border-r border-slate-200 ${filaFactura}`}></td>
+                                    <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
+                                    <td className={`text-center ${filaFactura}`}></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot>
+                            <tr className="border-t border-slate-400">
+                                <td colSpan={6} className={`text-right font-bold ${filaFactura}`}>
+                                    TOTAL: {formatMonto(venta.total)}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <div className="mt-24 flex items-end justify-around text-center">
+                        <div>
+                            <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA VENDEDOR</div>
+                        </div>
+                        {/* QR movido acá (2026-08-28) — antes vivía en el header del Ticket,
+                            quedaba descentrado; en el medio de las firmas deja el header del
+                            Ticket volver a ser texto simple centrado. */}
+                        <div className="flex flex-col items-center gap-0.5">
+                            <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
+                            <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
+                        </div>
+                        <div>
+                            <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    // Las 31 cláusulas de garantía se repiten igual que el Ticket/Factura — misma copia
+    // arriba y abajo, para que cada mitad de la hoja tenga su propio reverso completo.
+    const contenidoGarantia = (
+        <div className="relative">
+            <div className="columns-3 gap-3 text-[9px] leading-[1.2] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
+                {CLAUSULAS_GARANTIA.map((clausula, index) => (
+                    <p key={index} className="mb-0.5 break-inside-avoid">
+                        <span className="font-semibold">{index + 1}. </span>
+                        {clausula}
+                    </p>
+                ))}
+
+                {/* Aceptación fluye dentro de las mismas 3 columnas, igual que en la
+                plantilla real — ocupa el espacio que sobra en la última columna en
+                vez de agregar un bloque a todo el ancho debajo, que desperdicia
+                espacio vertical.
+                Nota de horario/dirección quitada (2026-08-28): cada almacén tiene su
+                propia dirección, un texto fijo hardcodeado a una sola tienda era
+                incorrecto para el resto. */}
+                <div className="mb-1 break-inside-avoid">
+                    <div className="font-bold underline">CLÁUSULA DE ACEPTACIÓN</div>
+                    <p>
+                        La compra, recepción, uso o aceptación del producto por parte del cliente implica la aceptación total de
+                        los presentes términos y condiciones de garantía, así como de todas sus limitaciones, exclusiones y
+                        procedimientos.
+                    </p>
+                </div>
+            </div>
+
+            <div className="mt-1.5 border border-slate-300 p-1 text-[9px] leading-[1.2] text-slate-700">
+                <span className="font-semibold">Importante:</span> El cliente debe revisar cuidadosamente el producto comprado,
+                verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
+                Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
+                conceptos ni por considerar que el equipo no cumple con sus expectativas.
+            </div>
+        </div>
+    );
+
     return (
         <>
             <Head title={`Imprimir Venta #${venta.id}`} />
@@ -145,233 +338,72 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </button>
                 </div>
 
-                {/* Media hoja A4 — Ticket + Factura de Venta lado a lado.
-                    print:p-[10mm] reemplaza el margen que antes daba @page (ver arriba).
-                    La línea de corte (abajo) quedaba recortada en el PDF real aunque en pantalla se
-                    viera bien — quitamos `overflow-hidden` de este contenedor (y del de Página 2) a
-                    propósito: si `min-h-[148.5mm]` no termina de aplicarse igual en el motor de
-                    impresión de Chrome que en pantalla, la línea (posicionada a 148.5mm desde el
-                    tope de este div, que sí coincide con el tope real de la hoja) ya no depende de
-                    que la caja alcance esa altura para poder pintarse — nunca se recorta. */}
-                <div className="print-sheet relative mx-auto min-h-[148.5mm] max-w-4xl rounded-md bg-white text-slate-900 shadow-lg print:rounded-none print:p-[10mm] print:shadow-none">
-                    {/* Línea de corte — misma marca que la Página 2, ver ese comentario para el
-                        porqué del cálculo (148.5mm = mitad física de una hoja A4). */}
+                {/* Hoja A4 completa — Ticket + Factura repetidos dos veces, una copia arriba
+                    y otra abajo, para que al cortar por la línea del medio salgan dos copias
+                    idénticas: una se la lleva el cliente, la otra se queda en el punto de venta
+                    como comprobante/garantía (pedido explícito del cliente 2026-09-05).
+                    Cada copia va con position:absolute + un offset fijo en mm desde el tope de
+                    este contenedor — no en flujo normal apilado una debajo de la otra — así
+                    ninguna depende de que la copia de arriba realmente termine midiendo 148.5mm
+                    en el motor de impresión real de Chrome (ver [[reference_chrome_print_minheight_overflow_bug]]:
+                    un contenedor flex con min-height puede salir más corto en el PDF real que en
+                    pantalla). Ancladas por posición y no por altura medida, la copia de abajo
+                    siempre cae exactamente en la mitad física de la hoja, sin importar si la de
+                    arriba se quedó corta. */}
+                <div className="print-sheet relative mx-auto min-h-[297mm] max-w-4xl rounded-md bg-white text-slate-900 shadow-lg print:rounded-none print:shadow-none">
+                    {/* Línea de corte física, a la mitad exacta de la hoja A4 — separa las dos
+                        copias idénticas de arriba y de abajo. */}
                     <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
                     <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
-                        ✂ 50% — línea de corte
+                        ✂ línea de corte — cliente arriba, punto de venta abajo
                     </span>
-                    {/* mt fijo (no flex/justify-center) a propósito — ver el comentario de arriba
-                        sobre el bug de min-height en el motor de impresión: un offset fijo en mm
-                        empuja el contenido hacia abajo sin depender de que el contenedor padre
-                        calcule bien su propia altura. */}
-                    <div className="flex divide-x divide-dashed divide-slate-400 mt-[21mm] print:divide-slate-500">
-                    {/* ── TICKET (angosto, para el vendedor) ── */}
-                    <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
-                        {/* QR movido a la Factura (2026-08-28), entre las firmas — este header
-                            vuelve a ser texto centrado simple, sin necesitar el espacio de balance
-                            que pedía la columna del QR. */}
-                        <div className="mb-1.5 border-b border-slate-300 pb-1.5 text-center">
-                            <div className="mb-0.5 flex justify-center [&_img]:!h-9 [&_img]:!w-9">
-                                <AppLogoIcon />
-                            </div>
-                            <p className="text-xs font-bold">{venta.almacen.nombre}</p>
-                            {ubicacionAlmacen && <p className="text-slate-500">{ubicacionAlmacen}</p>}
-                            <p className="mt-0.5">No. Factura: {venta.id}</p>
-                            <p>{formatFecha(venta.fecha)}</p>
-                            <p>Vendedor: {venta.usuario.nombre}</p>
-                        </div>
 
-                        {/* Datos del cliente — vive acá (copia de la tienda) y no en la Factura
-                            (copia del cliente, que ya sabe quién es), para que el vendedor pueda
-                            identificar la venta en sus registros. Con guiones bajos para llenar a
-                            mano cuando no hay destinatario capturado, igual que hacía la Factura. */}
-                        <div className="mb-1.5 border-b border-slate-300 pb-1.5">
-                            <p>Cliente: {venta.destinatario ? `${venta.destinatario.nombre} ${venta.destinatario.apellidos}` : '_'.repeat(20)}</p>
-                            <p>CI: {venta.destinatario?.carnet_identidad || '_'.repeat(12)}</p>
-                            <p>Tel: {venta.destinatario?.telefono_contacto || '_'.repeat(12)}</p>
-                        </div>
-
-                        <div className="mb-1.5 min-h-[32mm] border-b border-slate-300 pb-1.5">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-slate-300">
-                                        <th className="text-left font-semibold">Producto</th>
-                                        <th className="text-center font-semibold">Cant</th>
-                                        <th className="text-right font-semibold">Precio</th>
-                                        <th className="text-right font-semibold">Sub.Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {venta.items.map((item, index) => (
-                                        <tr key={index}>
-                                            <td className="text-left">{item.producto.nombre}</td>
-                                            <td className="text-center">{item.cantidad}</td>
-                                            <td className="text-right">{formatMonto(item.subtotal / item.cantidad)}</td>
-                                            <td className="text-right">{formatMonto(item.subtotal)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div>
-                            <div className="flex justify-between font-bold">
-                                <span>Total:</span>
-                                <span>{formatMonto(venta.total)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span>Pagado:</span>
-                                <span>{formatMonto(venta.total_pagado)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span>Restante:</span>
-                                <span>{formatMonto(venta.restante)}</span>
-                            </div>
-                        </div>
+                    {/* Copia 1 — para el cliente */}
+                    <div className="absolute inset-x-0 top-0 h-[148.5mm] print:p-[10mm]">
+                        <div className="mt-[21mm]">{contenidoTicketFactura}</div>
                     </div>
 
-                    {/* ── FACTURA DE VENTA (formal, para el cliente) ──
-                        Header (mascota/título/almacén/fecha/no.factura) quitado (2026-08-28) — esa
-                        identificación ya está completa en el Ticket de al lado, y sacarla de acá le
-                        da todo ese margen a la tabla. La marca de agua SÍ se restauró (pedido
-                        explícito) — sigue detrás de la tabla, sin ocupar espacio real del layout. */}
-                    <div className={`relative flex-1 p-3 leading-snug ${tallaFactura}`}>
-                        {/* Marca de agua — va primero en el DOM y sin z-index propio, así el
-                            contenido real (envuelto abajo en un `relative`) siempre pinta encima. */}
+                    {/* Copia 2 — para el punto de venta */}
+                    <div className="absolute inset-x-0 top-[148.5mm] h-[148.5mm] print:p-[10mm]">
+                        <div className="mt-[21mm]">{contenidoTicketFactura}</div>
+                    </div>
+                </div>
+
+                {/* ── PÁGINA 2 — Reverso: garantía, también repetida dos veces (misma razón
+                    que la Página 1: cada copia física — cliente arriba, punto de venta abajo —
+                    necesita su propio reverso completo, no solo la de arriba). @page ya no da
+                    margen (ver arriba) — este print-sheet arranca justo en el borde físico de la
+                    hoja, así que su propio top ya ES el 0mm físico de esta página. */}
+                <div className="print-sheet relative mx-auto mt-8 min-h-[297mm] max-w-4xl bg-white text-slate-900 shadow-lg print:mt-0 print:rounded-none print:shadow-none print:break-before-page">
+                    {/* Línea de corte — misma posición y misma razón que en la Página 1. */}
+                    <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
+                    <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
+                        ✂ línea de corte — cliente arriba, punto de venta abajo
+                    </span>
+
+                    {/* Copia 1 — reverso de la copia del cliente */}
+                    <div className="absolute inset-x-0 top-0 h-[148.5mm] print:p-[10mm]">
+                        {/* Marca de agua central — opacity-20 (2026-08-28, antes 10) porque en la
+                            impresión real casi no se veía; el texto de garantía tiene que seguir
+                            siendo legible encima. */}
                         <img
                             src="/projects/mascota/mascota.webp"
                             alt=""
                             aria-hidden="true"
-                            className="pointer-events-none absolute right-2 bottom-2 h-48 w-48 opacity-25 select-none"
+                            className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-20 select-none"
                         />
-                        <div className="relative">
-                            {/* Precio/Sub.Total quitados (2026-08-28) — ya están en el Ticket. Modelo
-                            queda en blanco como Días Garantía/No.Serie/Sello (llenado a mano); ese
-                            espacio liberado se usa para ensanchar No. Serie y Sello, que a menudo
-                            llevan datos/escritura larga. table-fixed + colgroup para que los anchos
-                            se respeten de verdad. */}
-                            <table className={`mb-1.5 min-h-[32mm] w-full table-fixed border-collapse border border-slate-400 align-top ${tallaTablaFactura}`}>
-                                <colgroup>
-                                    <col className="w-[7%]" />
-                                    <col className="w-[33%]" />
-                                    <col className="w-[10%]" />
-                                    <col className="w-[12%]" />
-                                    <col className="w-[20%]" />
-                                    <col className="w-[18%]" />
-                                </colgroup>
-                                <thead>
-                                    <tr className="border-y border-slate-400">
-                                        <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Cant</th>
-                                        <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Descripción del equipo</th>
-                                        <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>Días Garantía</th>
-                                        <th className={`border-r border-slate-300 text-left font-semibold ${filaFactura}`}>Modelo</th>
-                                        <th className={`border-r border-slate-300 text-center font-semibold ${filaFactura}`}>No. Serie</th>
-                                        <th className={`text-center font-semibold ${filaFactura}`}>Sello</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {venta.items.map((item, index) => (
-                                        <tr key={index} className="border-b border-slate-200">
-                                            <td className={`border-r border-slate-200 text-center ${filaFactura}`}>{item.cantidad}</td>
-                                            <td className={`border-r border-slate-200 ${filaFactura}`}>
-                                                {item.producto.nombre}
-                                                {(item.producto.marca || item.producto.modelo) && (
-                                                    <div className="text-slate-500">
-                                                        ({[item.producto.marca, item.producto.modelo].filter(Boolean).join(' · ')})
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
-                                            <td className={`border-r border-slate-200 ${filaFactura}`}></td>
-                                            <td className={`border-r border-slate-200 text-center ${filaFactura}`}></td>
-                                            <td className={`text-center ${filaFactura}`}></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot>
-                                    <tr className="border-t border-slate-400">
-                                        <td colSpan={6} className={`text-right font-bold ${filaFactura}`}>
-                                            TOTAL: {formatMonto(venta.total)}
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-
-                            <div className="mt-24 flex items-end justify-around text-center">
-                                <div>
-                                    <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA VENDEDOR</div>
-                                </div>
-                                {/* QR movido acá (2026-08-28) — antes vivía en el header del Ticket,
-                                    quedaba descentrado; en el medio de las firmas deja el header del
-                                    Ticket volver a ser texto simple centrado. */}
-                                <div className="flex flex-col items-center gap-0.5">
-                                    <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
-                                    <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
-                                </div>
-                                <div>
-                                    <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
-                                </div>
-                            </div>
-                        </div>
+                        {contenidoGarantia}
                     </div>
-                    </div>
-                </div>
 
-                {/* ── PÁGINA 2 — Reverso: garantía (fija, misma para toda la empresa) ──
-                    @page ya no da margen (ver arriba) — este print-sheet arranca justo en el borde
-                    físico de la hoja, así que su propio top ya ES el 0mm físico de esta página.
-                    print:p-[10mm] recrea el inset visual; min-h asegura que el bloque siempre
-                    represente la media hoja física completa (148.5mm = la mitad exacta de una A4),
-                    incluso si el contenido real es más corto — así la línea de corte de abajo
-                    siempre queda en la posición física correcta. */}
-                <div className="print-sheet relative mx-auto mt-8 min-h-[148.5mm] max-w-4xl bg-white p-2 text-slate-900 shadow-lg print:mt-0 print:rounded-none print:p-[10mm] print:shadow-none print:break-before-page">
-                    {/* Marca de agua central — subida a opacity-20 (2026-08-28, antes 10) porque
-                        en la impresión real casi no se veía; el texto de garantía tiene que
-                        seguir siendo legible encima. */}
-                    <img
-                        src="/projects/mascota/mascota.webp"
-                        alt=""
-                        aria-hidden="true"
-                        className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-20 select-none"
-                    />
-                    {/* Línea de corte — marca físicamente dónde cae el 50% real de la hoja A4
-                        (media hoja), para verificar que el contenido de arriba nunca la cruce. */}
-                    <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
-                    <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
-                        ✂ 50% — línea de corte
-                    </span>
-                    <div className="relative">
-                        <div className="columns-3 gap-3 text-[9px] leading-[1.2] text-slate-700 [column-rule:1px_solid_#e2e8f0]">
-                            {CLAUSULAS_GARANTIA.map((clausula, index) => (
-                                <p key={index} className="mb-0.5 break-inside-avoid">
-                                    <span className="font-semibold">{index + 1}. </span>
-                                    {clausula}
-                                </p>
-                            ))}
-
-                            {/* Aceptación fluye dentro de las mismas 3 columnas, igual que en la
-                            plantilla real — ocupa el espacio que sobra en la última columna en
-                            vez de agregar un bloque a todo el ancho debajo, que desperdicia
-                            espacio vertical.
-                            Nota de horario/dirección quitada (2026-08-28): cada almacén tiene su
-                            propia dirección, un texto fijo hardcodeado a una sola tienda era
-                            incorrecto para el resto. */}
-                            <div className="mb-1 break-inside-avoid">
-                                <div className="font-bold underline">CLÁUSULA DE ACEPTACIÓN</div>
-                                <p>
-                                    La compra, recepción, uso o aceptación del producto por parte del cliente implica la aceptación total de
-                                    los presentes términos y condiciones de garantía, así como de todas sus limitaciones, exclusiones y
-                                    procedimientos.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="mt-1.5 border border-slate-300 p-1 text-[9px] leading-[1.2] text-slate-700">
-                            <span className="font-semibold">Importante:</span> El cliente debe revisar cuidadosamente el producto comprado,
-                            verificando que no presente golpes, rayones, plásticos partidos, falta de componentes o accesorios, entre otros.
-                            Una vez retirado de la tienda o aceptada su entrega a domicilio, no se aceptarán reclamos relacionados con estos
-                            conceptos ni por considerar que el equipo no cumple con sus expectativas.
-                        </div>
+                    {/* Copia 2 — reverso de la copia del punto de venta */}
+                    <div className="absolute inset-x-0 top-[148.5mm] h-[148.5mm] print:p-[10mm]">
+                        <img
+                            src="/projects/mascota/mascota.webp"
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 opacity-20 select-none"
+                        />
+                        {contenidoGarantia}
                     </div>
                 </div>
             </div>
