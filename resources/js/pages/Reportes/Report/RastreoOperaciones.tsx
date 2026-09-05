@@ -439,20 +439,18 @@ export default function RastreoOperacionesPage({
             }
 
             const tableData = operaciones.data.map((op) => [
-                new Date(op.fecha).toLocaleString(),
                 op.referencia,
                 textoCuentaEnvia(op),
                 textoMontoEnvia(op),
                 textoCuentaRecibe(op),
                 textoMontoRecibe(op),
                 textoTasa(op),
-                op.usuario,
                 op.descripcion || '-',
             ]);
 
             autoTable(doc, {
                 startY: 45,
-                head: [['Fecha', 'Referencia', 'Cuenta Envía', 'Monto', 'Cuenta que Recibe', 'Monto', 'Tasa', 'Usuario', 'Detalles']],
+                head: [['Referencia', 'Cuenta Envía', 'Monto', 'Cuenta que Recibe', 'Monto', 'Tasa de la Operación', 'Detalles']],
                 body: tableData,
                 styles: { fontSize: 7 },
                 headStyles: { fillColor: [71, 85, 105] },
