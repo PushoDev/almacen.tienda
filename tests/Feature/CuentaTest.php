@@ -157,6 +157,173 @@ test('un vendedor NO puede actualizar una cuenta (403)', function () {
     expect($cuenta->fresh()->nombre_cuenta)->not->toBe('Intento Vendedor');
 });
 
+// ==========================================================================
+// AJUSTE DE SALDO — cambiar saldo_cuenta requiere admin + contraseña + motivo
+// ==========================================================================
+
+test('admin cambia el saldo con contraseña correcta y motivo: se actualiza y se audita en ajustes_saldo_cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, saldo: 300);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 450,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'security_password' => 'password',
+        'motivo_ajuste_saldo' => 'Corrección por error de digitación',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    expect($cuenta->fresh()->saldo_cuenta)->toBe(450.0);
+
+    $ajuste = AjusteSaldoCuenta::where('cuenta_id', $cuenta->id)->first();
+    expect($ajuste)->not->toBeNull();
+    expect($ajuste->user_id)->toBe($admin->id);
+    expect($ajuste->saldo_anterior)->toBe(300.0);
+    expect($ajuste->saldo_nuevo)->toBe(450.0);
+    expect($ajuste->motivo)->toBe('Corrección por error de digitación');
+});
+
+test('admin intenta cambiar el saldo con contraseña incorrecta: rechazado, saldo no cambia, no se crea ajuste', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, saldo: 300);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 450,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'security_password' => 'contraseña-incorrecta',
+        'motivo_ajuste_saldo' => 'Corrección por error de digitación',
+    ]);
+
+    $response->assertSessionHasErrors('security_password');
+    expect($cuenta->fresh()->saldo_cuenta)->toBe(300.0);
+    expect(AjusteSaldoCuenta::where('cuenta_id', $cuenta->id)->count())->toBe(0);
+});
+
+test('admin intenta cambiar el saldo sin escribir un motivo: falla validación', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, saldo: 300);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 450,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'security_password' => 'password',
+    ]);
+
+    $response->assertSessionHasErrors('motivo_ajuste_saldo');
+    expect($cuenta->fresh()->saldo_cuenta)->toBe(300.0);
+    expect(AjusteSaldoCuenta::where('cuenta_id', $cuenta->id)->count())->toBe(0);
+});
+
+test('moderador intenta cambiar el saldo: bloqueado (403) por el middleware check.cuenta.permission, nunca llega al controlador', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, saldo: 300);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 450,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertStatus(403);
+    expect($cuenta->fresh()->saldo_cuenta)->toBe(300.0);
+    expect(AjusteSaldoCuenta::where('cuenta_id', $cuenta->id)->count())->toBe(0);
+});
+
+test('vendedor intenta cambiar el saldo de su propia cuenta asignada: igual bloqueado (403), el middleware no distingue dueño', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, saldo: 300, propietario: $vendedor);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 450,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertStatus(403);
+    expect($cuenta->fresh()->saldo_cuenta)->toBe(300.0);
+    expect(AjusteSaldoCuenta::where('cuenta_id', $cuenta->id)->count())->toBe(0);
+});
+
+test('admin actualiza la cuenta sin tocar el saldo: no pide contraseña ni motivo, no crea ajuste', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($moneda, saldo: 300);
+
+    $response = $this->put(route('cuentas.update', $cuenta->id), [
+        'nombre_cuenta' => 'Cuenta Renombrada Sin Tocar Saldo',
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 300,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    expect($cuenta->fresh()->nombre_cuenta)->toBe('Cuenta Renombrada Sin Tocar Saldo');
+    expect($cuenta->fresh()->saldo_cuenta)->toBe(300.0);
+    expect(AjusteSaldoCuenta::where('cuenta_id', $cuenta->id)->count())->toBe(0);
+});
+
+// ==========================================================================
+// ESTADO FINANCIERO — saldo negativo se interpreta como deuda (index)
+// ==========================================================================
+
+test('el resumen de Cuentas clasifica con_fondo/en_deuda/neutro según el signo del saldo, con en_deuda como valor absoluto', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    crearCuentaEnMoneda($moneda, saldo: 200);
+    crearCuentaEnMoneda($moneda, saldo: 100);
+    crearCuentaEnMoneda($moneda, saldo: -50);
+    crearCuentaEnMoneda($moneda, saldo: 0);
+
+    $response = $this->get(route('cuentas.index'), ['X-Inertia' => 'true']);
+
+    $estadoFinanciero = $response->json('props.resumen.estado_financiero');
+
+    expect($estadoFinanciero['con_fondo']['cantidad'])->toBe(2);
+    expect((float) $estadoFinanciero['con_fondo']['saldo'])->toBe(300.0);
+    expect($estadoFinanciero['en_deuda']['cantidad'])->toBe(1);
+    expect((float) $estadoFinanciero['en_deuda']['saldo'])->toBe(50.0);
+    expect($estadoFinanciero['neutro']['cantidad'])->toBe(1);
+});
+
 test('un admin puede eliminar una cuenta en $0.00', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

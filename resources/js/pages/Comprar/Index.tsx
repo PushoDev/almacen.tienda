@@ -47,6 +47,7 @@ import {
     AlertTriangle,
     CalendarIcon,
     CheckCircle,
+    Clock,
     CreditCard,
     DollarSign,
     Edit2,
@@ -65,6 +66,7 @@ import {
     Wallet,
     Warehouse,
     X,
+    XCircle,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -78,10 +80,17 @@ interface CompraReciente {
     fecha_compra: string;
     total_compra: number;
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
+    estado: 'pendiente' | 'aprobada' | 'anulada';
     proveedor: string | null;
     cliente: string | null;
     es_parcial: boolean;
 }
+
+const ESTADO_COMPRA_CONFIG = {
+    pendiente: { label: 'Pendiente', className: 'bg-amber-500 text-white hover:opacity-90', icon: Clock },
+    aprobada: { label: 'Aprobada', className: 'bg-emerald-600 text-white hover:opacity-90', icon: CheckCircle },
+    anulada: { label: 'Anulada', className: 'bg-red-500 text-white hover:opacity-90', icon: XCircle },
+} as const;
 
 interface ProductoExistente {
     id: number;
@@ -2881,6 +2890,7 @@ export default function ComprarPage() {
                                         <TableHead>Fecha</TableHead>
                                         <TableHead>Proveedor / Cliente</TableHead>
                                         <TableHead>Tipo</TableHead>
+                                        <TableHead>Estado</TableHead>
                                         <TableHead className="text-right">Total</TableHead>
                                         <TableHead className="text-center">Acciones</TableHead>
                                     </TableRow>
@@ -2917,6 +2927,17 @@ export default function ComprarPage() {
                                                     )}
                                                     {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : compra.es_parcial ? 'Parcial' : 'Contado'}
                                                 </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {(() => {
+                                                    const EstadoIcon = ESTADO_COMPRA_CONFIG[compra.estado].icon;
+                                                    return (
+                                                        <Badge className={ESTADO_COMPRA_CONFIG[compra.estado].className}>
+                                                            <EstadoIcon className="h-3 w-3" />
+                                                            {ESTADO_COMPRA_CONFIG[compra.estado].label}
+                                                        </Badge>
+                                                    );
+                                                })()}
                                             </TableCell>
                                             <TableCell className="text-right font-bold text-emerald-600">
                                                 ${compra.total_compra.toLocaleString('es-MX', { minimumFractionDigits: 2 })}

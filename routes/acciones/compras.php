@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CompraController;
+use App\Http\Controllers\LoteStockController;
 use Illuminate\Support\Facades\Route;
 
 // 'admin.only' (EnsureUserIsAdminOnly) — a diferencia del alias 'admin' usado en Reportes,
@@ -11,6 +12,14 @@ Route::middleware(['auth', 'verified', 'admin.only'])->group(
          * Iniciar Compra
          */
         Route::resource('comprar', CompraController::class);
+
+        // Flujo de estados de una compra pendiente (dinero ya movido en store(), stock diferido)
+        Route::post('/comprar/{comprar}/actualizar', [CompraController::class, 'actualizar'])->name('comprar.actualizar');
+        Route::post('/comprar/{comprar}/aprobar', [CompraController::class, 'aprobar'])->name('comprar.aprobar');
+        Route::post('/comprar/{comprar}/anular', [CompraController::class, 'anular'])->name('comprar.anular');
+
+        // Lotes de stock (trazabilidad: qué compra/línea trajo cada tanda) — solo el código es editable.
+        Route::post('/lotes-stock/{lote}/codigo', [LoteStockController::class, 'actualizarCodigo'])->name('lotes-stock.actualizar-codigo');
 
         /**
          * Interactuar Api para los Select
