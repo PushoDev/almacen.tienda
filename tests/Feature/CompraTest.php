@@ -943,7 +943,14 @@ test('anular con reversión una compra deuda_proveedor pura: la deuda vuelve a 0
     expect($compra->fresh()->estado)->toBe('anulada');
     expect($compra->fresh()->tipo_anulacion)->toBe('reversion');
     expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
-    expect(CompraPago::where('compra_id', $compra->id)->count())->toBe(0);
+
+    // La fila de compra_pago NO se borra al anular — queda como registro de qué se pagó
+    // originalmente, para que el detalle de la compra anulada lo pueda mostrar.
+    $this->assertDatabaseHas('compra_pago', [
+        'compra_id' => $compra->id,
+        'monto' => 50,
+        'tipo_pago' => 'deuda_proveedor',
+    ]);
 });
 
 test('anular con reversión una compra pago_cash: la cuenta recupera exactamente lo descontado', function () {
@@ -1058,6 +1065,15 @@ test('anular como fondo una compra pago_cash completa: la cuenta NO recupera el 
     expect($proveedor->fresh()->saldo_proveedor)->toEqual('30.00');
     expect($compra->fresh()->estado)->toBe('anulada');
     expect($compra->fresh()->tipo_anulacion)->toBe('fondo');
+
+    // La fila de compra_pago tampoco se borra en la variante fondo — el detalle sigue
+    // mostrando de dónde salió el dinero originalmente.
+    $this->assertDatabaseHas('compra_pago', [
+        'compra_id' => $compra->id,
+        'cuenta_id' => $cuenta->id,
+        'monto' => 30,
+        'tipo_pago' => 'cuenta',
+    ]);
 });
 
 test('anular como fondo una compra pago_cash parcial: la porción de deuda se revierte a 0, solo la porción pagada se convierte en fondo', function () {

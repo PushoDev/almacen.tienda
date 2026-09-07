@@ -206,6 +206,46 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
     const estadoInfo = ESTADO_CONFIG[compra.estado];
     const EstadoIcon = estadoInfo.icon;
 
+    // Resumen narrativo de qué pasó con cada fuente de dinero al anular — con nombres y montos
+    // reales, no solo "quedó como fondo" genérico. La porción de deuda siempre se cancela, elija
+    // lo que elija el usuario; solo cuenta/cliente cambian según 'reversion' vs 'fondo'.
+    const resumenAnulacion = (): string[] => {
+        if (compra.estado !== 'anulada') return [];
+
+        const lineas: string[] = [];
+        const pagoDeuda = compra.pagos.find((p) => p.tipo_pago === 'deuda_proveedor');
+        const pagosReales = compra.pagos.filter((p) => p.tipo_pago !== 'deuda_proveedor');
+
+        if (compra.tipo_anulacion === 'reversion') {
+            pagosReales.forEach((p) => {
+                const nombre = p.tipo_pago === 'cuenta' ? (p.cuenta?.nombre_cuenta ?? 'la cuenta') : (p.cliente?.nombre_cliente ?? 'el cliente');
+                lineas.push(`${formatCurrency(p.monto)} volvieron a ${nombre}.`);
+            });
+            if (pagoDeuda) {
+                lineas.push(`La deuda de ${formatCurrency(pagoDeuda.monto)} con ${nombrePersona} se canceló.`);
+            }
+        } else if (compra.tipo_anulacion === 'fondo') {
+            const totalFondo = pagosReales.reduce((acc, p) => acc + p.monto, 0);
+            if (totalFondo > 0) {
+                lineas.push(`${formatCurrency(totalFondo)} quedaron como fondo a favor con ${nombrePersona}.`);
+            }
+            pagosReales.forEach((p) => {
+                if (p.tipo_pago === 'cliente') {
+                    lineas.push(
+                        `${p.cliente?.nombre_cliente ?? 'El cliente'} sigue con una deuda de ${formatCurrency(p.monto)} — no se le revirtió.`,
+                    );
+                } else {
+                    lineas.push(`La cuenta ${p.cuenta?.nombre_cuenta ?? ''} no recuperó los ${formatCurrency(p.monto)} pagados.`);
+                }
+            });
+            if (pagoDeuda) {
+                lineas.push(`La deuda original de ${formatCurrency(pagoDeuda.monto)} con ${nombrePersona} se canceló (esa parte nunca se convierte en fondo).`);
+            }
+        }
+
+        return lineas;
+    };
+
     // ── Aprobar ──────────────────────────────────────────────────────────
     const [showAprobarDialog, setShowAprobarDialog] = useState(false);
     const [aprobando, setAprobando] = useState(false);
@@ -380,9 +420,16 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                 {compra.estado === 'aprobada' && 'El stock ya está disponible en los almacenes indicados.'}
                                 {compra.estado === 'anulada' &&
                                     (compra.tipo_anulacion === 'fondo'
-                                        ? 'El dinero pagado quedó como fondo a favor con el proveedor/cliente.'
+                                        ? 'El dinero pagado quedó como fondo a favor — no todo volvió a su origen.'
                                         : 'El dinero volvió exactamente a donde salió.')}
                             </p>
+                            {compra.estado === 'anulada' && resumenAnulacion().length > 0 && (
+                                <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm opacity-90">
+                                    {resumenAnulacion().map((linea, i) => (
+                                        <li key={i}>{linea}</li>
+                                    ))}
+                                </ul>
+                            )}
                             {compra.estado === 'anulada' && compra.motivo_anulacion && (
                                 <p className="mt-1 text-sm italic opacity-80">"{compra.motivo_anulacion}"</p>
                             )}
@@ -614,7 +661,9 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                     </CardContent>
                 </Card>
 
-                {/* Detalles de Pago — cuentas/clientes de donde salió el dinero y cuánto puso cada uno */}
+                {/* Detalles de Pago — cuentas/clientes de donde salió el dinero y cuánto puso cada uno.
+                    Si la compra está anulada, estas mismas filas se conservan a propósito (no se
+                    borran al anular) para poder mostrar qué pasó con cada fuente. */}
                 {compra.pagos.length > 0 && (
                     <Card className="overflow-hidden border-0 pt-0 shadow-lg">
                         <CardHeader className="bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-5 text-white">
@@ -623,7 +672,9 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                     <Wallet className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <CardTitle className="text-base font-semibold text-white">Detalles de Pago</CardTitle>
+                                    <CardTitle className="text-base font-semibold text-white">
+                                        {compra.estado === 'anulada' ? 'Detalles de Pago (original) — qué pasó con cada fuente' : 'Detalles de Pago'}
+                                    </CardTitle>
                                     <CardDescription className="text-xs text-sky-100">
                                         {compra.pagos.length} {compra.pagos.length === 1 ? 'fuente de pago' : 'fuentes de pago'}
                                     </CardDescription>
@@ -640,9 +691,19 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                               ? (pago.cliente?.nombre_cliente ?? 'Cliente')
                                               : 'Deuda con proveedor';
 
+                                    // Qué pasó con esta fuente si la compra terminó anulada. La porción de
+                                    // deuda siempre se revierte a 0, haya elegido el usuario 'reversion' o
+                                    // 'fondo' — solo cuenta/cliente cambian según la variante elegida.
+                                    const estadoAnulacion =
+                                        compra.estado === 'anulada'
+                                            ? pago.tipo_pago === 'deuda_proveedor' || compra.tipo_anulacion === 'reversion'
+                                                ? { label: 'Revertido', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' }
+                                                : { label: 'Convertido en fondo', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' }
+                                            : null;
+
                                     return (
                                         <div key={index} className="flex items-center justify-between rounded-lg border p-3">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
                                                 {pago.tipo_pago === 'cuenta' ? (
                                                     <Wallet className="h-4 w-4 text-blue-600" />
                                                 ) : pago.tipo_pago === 'cliente' ? (
@@ -664,6 +725,11 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                                 >
                                                     {pago.tipo_pago === 'cuenta' ? 'Cuenta' : pago.tipo_pago === 'cliente' ? 'Cliente' : 'Crédito'}
                                                 </Badge>
+                                                {estadoAnulacion && (
+                                                    <Badge variant="outline" className={cn('text-xs', estadoAnulacion.className)}>
+                                                        {estadoAnulacion.label}
+                                                    </Badge>
+                                                )}
                                             </div>
                                             <span
                                                 className={cn(

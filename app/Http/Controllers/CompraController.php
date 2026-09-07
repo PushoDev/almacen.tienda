@@ -591,8 +591,12 @@ class CompraController extends Controller
      * Revierte los efectos monetarios de una compra pendiente: cuentas y clientes-pagadores
      * recuperan exactamente lo que se les descontó, y la deuda con el proveedor/cliente-fuente
      * (total o parcial) se cancela a 0. No toca stock — una compra pendiente nunca lo tuvo.
-     * La usan actualizar() (para "empezar de cero" antes de reprocesar con los datos nuevos) y
-     * anular() (para la variante de reversión total).
+     *
+     * NO borra las filas de `compra_pago` — eso queda a cargo del caller. La usan actualizar()
+     * (que sí las borra después, para "empezar de cero" antes de reprocesar con los datos nuevos)
+     * y anular() en su variante de reversión total (que las deja intactas a propósito: son el
+     * único registro de qué cuenta/cliente pagó qué, y sin ellas la vista de detalle de una
+     * compra anulada quedaría sin nada que mostrar en "Detalles de Pago").
      */
     private function revertirEfectosMonetarios(Compra $compra): void
     {
@@ -611,8 +615,6 @@ class CompraController extends Controller
                 }
             }
         }
-
-        CompraPago::where('compra_id', $compra->id)->delete();
     }
 
     /**
@@ -749,8 +751,9 @@ class CompraController extends Controller
                         $comprar->cliente->increment('deuda_pago_cliente', $montoRealPagado);
                     }
                 }
-
-                CompraPago::where('compra_id', $comprar->id)->delete();
+                // Las filas de compra_pago NO se borran — quedan como el registro de qué cuenta/
+                // cliente puso cada monto originalmente, para que el detalle de la compra anulada
+                // lo pueda mostrar (ver shapeCompraParaVista() y el frontend).
             }
 
             $comprar->update([
@@ -797,6 +800,9 @@ class CompraController extends Controller
             $entidad = $comprar->proveedor_id ? $comprar->proveedor : $comprar->cliente;
 
             $this->revertirEfectosMonetarios($comprar);
+            // A diferencia de anular(), aquí sí se borran — se está reemplazando todo por datos
+            // nuevos, no dejando un registro histórico de una compra que queda cerrada.
+            CompraPago::where('compra_id', $comprar->id)->delete();
             $comprar->productos()->detach();
 
             $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
