@@ -7,8 +7,10 @@ use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Compra;
+use App\Models\CompraEdicion;
 use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
+use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
@@ -203,6 +205,7 @@ class CompraController extends Controller
                 'fecha_compra' => $c->fecha_compra,
                 'total_compra' => $c->total_compra,
                 'tipo_compra' => $c->tipo_compra,
+                'estado' => $c->estado,
                 'proveedor' => $c->proveedor?->nombre_proveedor,
                 'cliente' => $c->cliente?->nombre_cliente,
                 'es_parcial' => $c->es_parcial,
@@ -220,17 +223,77 @@ class CompraController extends Controller
 
     /**
      * Procesa y almacena una nueva compra.
-     *
-     * @return RedirectResponse|Response
      */
-    public function store(Request $request)
+    public function store(Request $request): Response|RedirectResponse
     {
-        // 1. Validar la entrada
-        $validated = $request->validate([
-            'compra' => 'required|in:deuda_proveedor,pago_cash',
-            'proveedor' => 'required|string|max:255',
-            'tipo_proveedor' => 'required|in:proveedor,cliente',
-            'fecha' => 'required|date',
+        $validated = $request->validate($this->reglasProductosYPagos());
+
+        $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
+
+        DB::beginTransaction();
+
+        try {
+            $tipoProveedor = $validated['tipo_proveedor'];
+            $nombreProveedor = $validated['proveedor'];
+
+            if ($tipoProveedor === 'proveedor') {
+                $entidad = Proveedor::firstOrCreate(['nombre_proveedor' => $nombreProveedor]);
+            } else {
+                $entidad = Cliente::firstOrCreate([
+                    'nombre_cliente' => $nombreProveedor,
+                    'tipo_cliente' => 'fisico',
+                ]);
+            }
+
+            $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
+
+            $resultadoPagos = $this->procesarPagos($validated['compra'], $tipoProveedor, $entidad, $total, $validated, $permitirDeudaParcial);
+
+            $compraData = $resultadoPagos['compraData'] + [
+                'user_id' => $request->user()->id,
+                'proveedor_id' => $tipoProveedor === 'proveedor' ? $entidad->id : null,
+                'cliente_id' => $tipoProveedor === 'cliente' ? $entidad->id : null,
+                'fecha_compra' => $validated['fecha'],
+                'total_compra' => $total,
+                'tipo_compra' => $validated['compra'],
+                // Nace pendiente: el dinero ya se movió (arriba), pero el stock (ProductoCodigo /
+                // AlmacenProducto) queda diferido hasta aprobar() — ver ese método.
+                'estado' => 'pendiente',
+            ];
+
+            $compra = Compra::create($compraData);
+
+            $this->crearRegistrosPago($compra, $validated['compra'], $resultadoPagos);
+
+            $productosConAlmacen = $this->procesarLineasProducto($compra, $validated['productos']);
+
+            DB::commit();
+
+            $compra->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
+
+            return Inertia::render('Comprar/Show', [
+                'compra' => $this->shapeCompraParaVista($compra),
+                'productos' => $productosConAlmacen,
+                'success' => 'Compra registrada correctamente — queda pendiente de aprobación.',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return back()->withErrors(['error' => 'Error al procesar la compra: '.$e->getMessage()]);
+        }
+    }
+
+    /**
+     * Reglas de validación compartidas por store() y actualizar() para el carrito de productos y
+     * los métodos de pago. `$incluirProveedor` se apaga en actualizar(): el proveedor/cliente y el
+     * tipo de compra (deuda_proveedor|pago_cash) de una compra pendiente no son editables, solo
+     * sus líneas de producto y los pagos que las cubren.
+     *
+     * @return array<string, string>
+     */
+    private function reglasProductosYPagos(bool $incluirProveedor = true): array
+    {
+        $reglas = [
             'productos' => 'required|array|min:1',
             'productos.*.almacen_id' => 'required|integer|exists:almacens,id',
             'productos.*.producto' => 'required|string|max:255',
@@ -250,225 +313,341 @@ class CompraController extends Controller
             'pagos_clientes.*.cliente_id' => 'required|exists:clientes,id',
             'pagos_clientes.*.monto' => 'required|numeric|min:0.01',
             'permitir_deuda_parcial' => 'nullable|boolean',
-        ]);
+        ];
 
-        $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
+        if ($incluirProveedor) {
+            $reglas = [
+                'compra' => 'required|in:deuda_proveedor,pago_cash',
+                'proveedor' => 'required|string|max:255',
+                'tipo_proveedor' => 'required|in:proveedor,cliente',
+                'fecha' => 'required|date',
+            ] + $reglas;
+        }
 
-        DB::beginTransaction();
+        return $reglas;
+    }
 
-        try {
-            // Lógica de proveedor/cliente y cálculo total
-            $tipoProveedor = $validated['tipo_proveedor'];
-            $nombreProveedor = $validated['proveedor'];
+    /**
+     * Procesa la lógica de pago/deuda de una compra (crear o editar) contra el proveedor/cliente
+     * ya resuelto por el caller. No toca `compra_producto` ni el stock — de eso se encarga
+     * procesarLineasProducto().
+     *
+     * @return array{compraData: array<string, mixed>, pagosCuenta: array<int, array<string, mixed>>, pagosClientes: array<int, array<string, mixed>>, montoFaltante: float}
+     */
+    private function procesarPagos(
+        string $tipoCompra,
+        string $tipoProveedor,
+        Proveedor|Cliente $entidad,
+        float $total,
+        array $validated,
+        bool $permitirDeudaParcial
+    ): array {
+        $compraData = [];
+        $montoFaltante = 0;
+        $pagos = [];
+        $pagosClientes = [];
 
+        if ($tipoCompra === 'deuda_proveedor') {
             if ($tipoProveedor === 'proveedor') {
-                $proveedor = Proveedor::firstOrCreate(['nombre_proveedor' => $nombreProveedor]);
+                $receptorSaldoAnterior = (float) $entidad->saldo_proveedor;
+                $entidad->decrement('saldo_proveedor', $total);
+                $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
             } else {
-                $cliente = Cliente::firstOrCreate([
-                    'nombre_cliente' => $nombreProveedor,
-                    'tipo_cliente' => 'fisico',
-                ]);
+                $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
+                $entidad->increment('deuda_pago_cliente', $total);
+                $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $total;
+            }
+            $compraData['cuenta_id'] = null;
+        } elseif ($tipoCompra === 'pago_cash') {
+            $pagos = $validated['pagos'] ?? [];
+            $pagosClientes = $validated['pagos_clientes'] ?? [];
+
+            if (empty($pagos) && empty($pagosClientes)) {
+                throw new \Exception('Debe especificar al menos un método de pago (cuenta o cliente).');
             }
 
-            $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
+            $sumaTotalPagos = collect($pagos)->sum('monto') + collect($pagosClientes)->sum('monto');
 
-            $compraData = [
-                'user_id' => $request->user()->id,
-                'proveedor_id' => $tipoProveedor === 'proveedor' ? $proveedor->id : null,
-                'cliente_id' => $tipoProveedor === 'cliente' ? $cliente->id : null,
-                'fecha_compra' => $validated['fecha'],
-                'total_compra' => $total,
-                'tipo_compra' => $validated['compra'],
+            // Pagar de más nunca se permite, con o sin deuda parcial habilitada.
+            if ($sumaTotalPagos - $total > 0.01) {
+                throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) supera el total de la compra ({$total}).");
+            }
+
+            $montoFaltante = round($total - $sumaTotalPagos, 2);
+
+            if ($montoFaltante > 0.01 && ! $permitirDeudaParcial) {
+                throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
+            }
+
+            if ($montoFaltante > 0.01) {
+                // El usuario habilitó completar con deuda: el resto no cubierto por cuentas/clientes
+                // se suma como deuda al proveedor/cliente de la compra — misma lógica que
+                // tipo_compra=deuda_proveedor, pero solo por la parte que faltó. Tiene que ir ANTES
+                // del foreach de pagosClientes de abajo, que usa un Cliente propio para el cliente
+                // que está pagando, no el dueño de la compra.
+                if ($tipoProveedor === 'proveedor') {
+                    $receptorSaldoAnterior = (float) $entidad->saldo_proveedor;
+                    $entidad->decrement('saldo_proveedor', $montoFaltante);
+                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
+                } else {
+                    $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
+                    $entidad->increment('deuda_pago_cliente', $montoFaltante);
+                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $montoFaltante;
+                }
+            } else {
+                $montoFaltante = 0;
+            }
+
+            // ✅ VALIDAR Y PROCESAR PAGOS CON CUENTAS
+            foreach ($pagos as $idx => $pago) {
+                $cuenta = Cuenta::with('moneda')->findOrFail($pago['cuenta_id']);
+
+                if ($cuenta->moneda->codigo_moneda !== 'USD') {
+                    throw new \Exception("La cuenta {$cuenta->nombre_cuenta} no es una cuenta en USD. Solo se permiten cuentas en USD para compras.");
+                }
+
+                if ($cuenta->saldo_cuenta < $pago['monto']) {
+                    throw new \Exception("Saldo insuficiente en la cuenta: {$cuenta->nombre_cuenta}");
+                }
+                $saldoAnteriorPago = (float) $cuenta->saldo_cuenta;
+                $cuenta->decrement('saldo_cuenta', $pago['monto']);
+                $pagos[$idx]['saldo_anterior'] = $saldoAnteriorPago;
+                $pagos[$idx]['saldo_posterior'] = $saldoAnteriorPago - $pago['monto'];
+            }
+
+            // ✅ PROCESAR PAGOS CON CLIENTES (deuda)
+            foreach ($pagosClientes as $idx => $pagoCliente) {
+                $clientePagador = Cliente::findOrFail($pagoCliente['cliente_id']);
+                $saldoAnteriorPago = (float) $clientePagador->deuda_pago_cliente;
+                $clientePagador->decrement('deuda_pago_cliente', $pagoCliente['monto']);
+                $pagosClientes[$idx]['saldo_anterior'] = $saldoAnteriorPago;
+                $pagosClientes[$idx]['saldo_posterior'] = $saldoAnteriorPago - $pagoCliente['monto'];
+            }
+
+            $compraData['cuenta_id'] = ! empty($pagos) ? $pagos[0]['cuenta_id'] : null;
+        }
+
+        return [
+            'compraData' => $compraData,
+            'pagosCuenta' => $pagos,
+            'pagosClientes' => $pagosClientes,
+            'montoFaltante' => $montoFaltante,
+        ];
+    }
+
+    /**
+     * Crea las filas de `compra_pago` a partir del resultado de procesarPagos().
+     *
+     * @param  array{pagosCuenta: array<int, array<string, mixed>>, pagosClientes: array<int, array<string, mixed>>, montoFaltante: float}  $resultadoPagos
+     */
+    private function crearRegistrosPago(Compra $compra, string $tipoCompra, array $resultadoPagos): void
+    {
+        if ($tipoCompra === 'deuda_proveedor') {
+            CompraPago::create([
+                'compra_id' => $compra->id,
+                'cuenta_id' => null,
+                'cliente_id' => null,
+                'monto' => $compra->total_compra,
+                'tipo_pago' => 'deuda_proveedor',
+            ]);
+
+            return;
+        }
+
+        foreach ($resultadoPagos['pagosCuenta'] as $pago) {
+            CompraPago::create([
+                'compra_id' => $compra->id,
+                'cuenta_id' => $pago['cuenta_id'],
+                'cliente_id' => null,
+                'monto' => $pago['monto'],
+                'tipo_pago' => 'cuenta',
+                'saldo_anterior' => $pago['saldo_anterior'],
+                'saldo_posterior' => $pago['saldo_posterior'],
+            ]);
+        }
+
+        foreach ($resultadoPagos['pagosClientes'] as $pagoCliente) {
+            CompraPago::create([
+                'compra_id' => $compra->id,
+                'cuenta_id' => null,
+                'cliente_id' => $pagoCliente['cliente_id'],
+                'monto' => $pagoCliente['monto'],
+                'tipo_pago' => 'cliente',
+                'saldo_anterior' => $pagoCliente['saldo_anterior'],
+                'saldo_posterior' => $pagoCliente['saldo_posterior'],
+            ]);
+        }
+
+        // Registrar el faltante (si el usuario habilitó completar con deuda) como un pago más,
+        // mismo tipo que usa una compra 100% a deuda — así "Detalles de Pago" lo muestra junto
+        // a los demás sin necesitar ningún cambio en el frontend.
+        if ($resultadoPagos['montoFaltante'] > 0) {
+            CompraPago::create([
+                'compra_id' => $compra->id,
+                'cuenta_id' => null,
+                'cliente_id' => null,
+                'monto' => $resultadoPagos['montoFaltante'],
+                'tipo_pago' => 'deuda_proveedor',
+            ]);
+        }
+    }
+
+    /**
+     * Procesa las líneas de producto del carrito: crea/matchea la ficha de Producto (identidad =
+     * atributos + precio, sin margen de tolerancia) y registra la línea en `compra_producto`,
+     * incluido el código de barras tal cual se escribió. NO toca ProductoCodigo ni
+     * AlmacenProducto — ambos quedan diferidos hasta aprobar() (ver ese método), para que una
+     * compra pendiente nunca afecte el stock real ni el inventario de códigos de barras. Esto es
+     * lo que hace trivial a actualizar(): como nada de esto se tocó, editar solo implica volver a
+     * llamar este método con la lista nueva, sin revertir nada aquí.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function procesarLineasProducto(Compra $compra, array $productos): array
+    {
+        $productosConAlmacen = [];
+
+        foreach ($productos as $item) {
+            $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
+
+            $searchAttributes = [
+                'nombre_producto' => $item['producto'],
+                'categoria_id' => $categoria->id,
+                'marca_producto' => $item['marca'] ?? null,
+                'modelo_producto' => $item['modelo'] ?? null,
+                'capacidad_producto' => $item['capacidad'] ?? null,
             ];
 
-            // 2. Lógica de Pagos y Deuda
-            $montoFaltante = 0;
+            // El precio de costo es parte de la identidad del producto: si el mismo
+            // producto (mismo nombre+categoría+marca+modelo+capacidad) se compra a un
+            // precio distinto — misma compra para llenar un contenedor, compra separada,
+            // u otro proveedor — es legalmente otro producto. No se pisa el costo del
+            // existente: se crea una ficha aparte. Comparación exacta, sin margen de
+            // tolerancia (decisión explícita del cliente).
+            $producto = Producto::where($searchAttributes)
+                ->where('precio_compra_producto', $item['precio'])
+                ->first();
+            $isNew = ! $producto;
 
-            if ($validated['compra'] === 'deuda_proveedor') {
-                if ($tipoProveedor === 'proveedor') {
-                    $receptorSaldoAnterior = (float) $proveedor->saldo_proveedor;
-                    $proveedor->decrement('saldo_proveedor', $total);
-                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
-                } else {
-                    $receptorSaldoAnterior = (float) $cliente->deuda_pago_cliente;
-                    $cliente->increment('deuda_pago_cliente', $total);
-                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $total;
-                }
-                $compraData['cuenta_id'] = null;
-            } elseif ($validated['compra'] === 'pago_cash') {
-                $pagos = $validated['pagos'] ?? [];
-                $pagosClientes = $validated['pagos_clientes'] ?? [];
-
-                if (empty($pagos) && empty($pagosClientes)) {
-                    throw new \Exception('Debe especificar al menos un método de pago (cuenta o cliente).');
-                }
-
-                $sumaTotalPagos = collect($pagos)->sum('monto') + collect($pagosClientes)->sum('monto');
-
-                // Pagar de más nunca se permite, con o sin deuda parcial habilitada.
-                if ($sumaTotalPagos - $total > 0.01) {
-                    throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) supera el total de la compra ({$total}).");
-                }
-
-                $montoFaltante = round($total - $sumaTotalPagos, 2);
-
-                if ($montoFaltante > 0.01 && ! $permitirDeudaParcial) {
-                    throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
-                }
-
-                if ($montoFaltante > 0.01) {
-                    // El usuario habilitó completar con deuda: el resto no cubierto por cuentas/clientes
-                    // se suma como deuda al proveedor/cliente de la compra — misma lógica que
-                    // tipo_compra=deuda_proveedor, pero solo por la parte que faltó. Tiene que ir ANTES
-                    // del foreach de pagosClientes de abajo, que reutiliza (y reasigna) esta misma
-                    // variable $cliente para el cliente que está pagando, no el dueño de la compra.
-                    if ($tipoProveedor === 'proveedor') {
-                        $receptorSaldoAnterior = (float) $proveedor->saldo_proveedor;
-                        $proveedor->decrement('saldo_proveedor', $montoFaltante);
-                        $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                        $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
-                    } else {
-                        $receptorSaldoAnterior = (float) $cliente->deuda_pago_cliente;
-                        $cliente->increment('deuda_pago_cliente', $montoFaltante);
-                        $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                        $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $montoFaltante;
-                    }
-                } else {
-                    $montoFaltante = 0;
-                }
-
-                // ✅ VALIDAR Y PROCESAR PAGOS CON CUENTAS
-                foreach ($pagos as $idx => $pago) {
-                    $cuenta = Cuenta::with('moneda')->findOrFail($pago['cuenta_id']);
-
-                    if ($cuenta->moneda->codigo_moneda !== 'USD') {
-                        throw new \Exception("La cuenta {$cuenta->nombre_cuenta} no es una cuenta en USD. Solo se permiten cuentas en USD para compras.");
-                    }
-
-                    if ($cuenta->saldo_cuenta < $pago['monto']) {
-                        throw new \Exception("Saldo insuficiente en la cuenta: {$cuenta->nombre_cuenta}");
-                    }
-                    $saldoAnteriorPago = (float) $cuenta->saldo_cuenta;
-                    $cuenta->decrement('saldo_cuenta', $pago['monto']);
-                    $pagos[$idx]['saldo_anterior'] = $saldoAnteriorPago;
-                    $pagos[$idx]['saldo_posterior'] = $saldoAnteriorPago - $pago['monto'];
-                }
-
-                // ✅ PROCESAR PAGOS CON CLIENTES (deuda)
-                foreach ($pagosClientes as $idx => $pagoCliente) {
-                    $cliente = Cliente::findOrFail($pagoCliente['cliente_id']);
-                    $saldoAnteriorPago = (float) $cliente->deuda_pago_cliente;
-                    $cliente->decrement('deuda_pago_cliente', $pagoCliente['monto']);
-                    $pagosClientes[$idx]['saldo_anterior'] = $saldoAnteriorPago;
-                    $pagosClientes[$idx]['saldo_posterior'] = $saldoAnteriorPago - $pagoCliente['monto'];
-                }
-
-                $compraData['cuenta_id'] = ! empty($pagos) ? $pagos[0]['cuenta_id'] : null;
+            if ($isNew) {
+                $producto = new Producto;
             }
 
-            $compra = Compra::create($compraData);
+            $producto->fill([
+                'nombre_producto' => $item['producto'],
+                'marca_producto' => $item['marca'] ?? null,
+                'modelo_producto' => $item['modelo'] ?? null,
+                'capacidad_producto' => $item['capacidad'] ?? null,
+                'color_producto' => $item['color'] ?? null,
+                'categoria_id' => $categoria->id,
+                'precio_compra_producto' => $item['precio'],
+                'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
+            ]);
+            $producto->save();
 
-            // ✅ REGISTRAR TODOS LOS MÉTODOS DE PAGO EN COMPRA_PAGO
-            if ($validated['compra'] === 'deuda_proveedor') {
-                // Registrar pago como deuda con proveedor
-                CompraPago::create([
-                    'compra_id' => $compra->id,
-                    'cuenta_id' => null,
-                    'cliente_id' => null,
-                    'monto' => $total,
-                    'tipo_pago' => 'deuda_proveedor',
-                ]);
-            } elseif ($validated['compra'] === 'pago_cash') {
-                // Registrar pagos con cuentas
-                foreach ($pagos as $pago) {
-                    CompraPago::create([
-                        'compra_id' => $compra->id,
-                        'cuenta_id' => $pago['cuenta_id'],
-                        'cliente_id' => null,
-                        'monto' => $pago['monto'],
-                        'tipo_pago' => 'cuenta',
-                        'saldo_anterior' => $pago['saldo_anterior'],
-                        'saldo_posterior' => $pago['saldo_posterior'],
-                    ]);
-                }
+            // Castear almacen_id a integer
+            $almacenId = (int) $item['almacen_id'];
+            $lineaCantidad = (int) $item['cantidad'];
+            $lineaPrecio = (float) $item['precio'];
+            $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
 
-                // Registrar pagos con clientes
-                foreach ($pagosClientes as $pagoCliente) {
-                    CompraPago::create([
-                        'compra_id' => $compra->id,
-                        'cuenta_id' => null,
-                        'cliente_id' => $pagoCliente['cliente_id'],
-                        'monto' => $pagoCliente['monto'],
-                        'tipo_pago' => 'cliente',
-                        'saldo_anterior' => $pagoCliente['saldo_anterior'],
-                        'saldo_posterior' => $pagoCliente['saldo_posterior'],
-                    ]);
-                }
+            // Cada línea del carrito queda como su propia fila en compra_producto — si el mismo
+            // producto aparece dos veces en esta compra (distinto almacén y/o color), son dos
+            // líneas reales, no se fusionan ni se promedia el precio entre ellas.
+            $compra->productos()->attach($producto->id, [
+                'cantidad' => $lineaCantidad,
+                'precio' => $lineaPrecio,
+                'almacen_id' => $almacenId,
+                'es_producto_nuevo' => $isNew,
+                'codigo_barras' => $codigoBarrasInput !== '' ? $codigoBarrasInput : null,
+            ]);
 
-                // Registrar el faltante (si el usuario habilitó completar con deuda) como un pago más,
-                // mismo tipo que usa una compra 100% a deuda — así "Detalles de Pago" lo muestra junto
-                // a los demás sin necesitar ningún cambio en el frontend.
-                if ($montoFaltante > 0) {
-                    CompraPago::create([
-                        'compra_id' => $compra->id,
-                        'cuenta_id' => null,
-                        'cliente_id' => null,
-                        'monto' => $montoFaltante,
-                        'tipo_pago' => 'deuda_proveedor',
-                    ]);
+            // Preparar datos para la vista
+            $productosConAlmacen[] = [
+                'nombre_producto' => $producto->nombre_producto,
+                'marca_producto' => $producto->marca_producto,
+                'modelo_producto' => $producto->modelo_producto,
+                'capacidad_producto' => $producto->capacidad_producto,
+                'color_producto' => $producto->color_producto,
+                'codigo_producto' => $producto->codigo_producto,
+                'categoria' => $categoria->nombre_categoria,
+                'pivot' => [
+                    'cantidad' => $item['cantidad'],
+                    'precio' => $item['precio'],
+                ],
+                'almacen' => Almacen::find($almacenId),
+                'es_producto_nuevo' => $isNew,
+            ];
+        }
+
+        return $productosConAlmacen;
+    }
+
+    /**
+     * Revierte los efectos monetarios de una compra pendiente: cuentas y clientes-pagadores
+     * recuperan exactamente lo que se les descontó, y la deuda con el proveedor/cliente-fuente
+     * (total o parcial) se cancela a 0. No toca stock — una compra pendiente nunca lo tuvo.
+     *
+     * NO borra las filas de `compra_pago` — eso queda a cargo del caller. La usan actualizar()
+     * (que sí las borra después, para "empezar de cero" antes de reprocesar con los datos nuevos)
+     * y anular() en su variante de reversión total (que las deja intactas a propósito: son el
+     * único registro de qué cuenta/cliente pagó qué, y sin ellas la vista de detalle de una
+     * compra anulada quedaría sin nada que mostrar en "Detalles de Pago").
+     */
+    private function revertirEfectosMonetarios(Compra $compra): void
+    {
+        $compra->loadMissing(['pagos.cuenta', 'pagos.cliente', 'proveedor', 'cliente']);
+
+        foreach ($compra->pagos as $pago) {
+            if ($pago->tipo_pago === 'cuenta' && $pago->cuenta) {
+                $pago->cuenta->increment('saldo_cuenta', $pago->monto);
+            } elseif ($pago->tipo_pago === 'cliente' && $pago->cliente) {
+                $pago->cliente->increment('deuda_pago_cliente', $pago->monto);
+            } elseif ($pago->tipo_pago === 'deuda_proveedor') {
+                if ($compra->proveedor) {
+                    $compra->proveedor->increment('saldo_proveedor', $pago->monto);
+                } elseif ($compra->cliente) {
+                    $compra->cliente->decrement('deuda_pago_cliente', $pago->monto);
                 }
             }
+        }
+    }
 
-            $productosConAlmacen = [];
-            foreach ($validated['productos'] as $item) {
-                $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
+    /**
+     * Aprueba una compra pendiente: recién en este momento se suma el stock real —
+     * ProductoCodigo (código de barras) y AlmacenProducto (inventario por almacén). Antes de
+     * aprobar, la compra es solo una intención financiera (el dinero ya se movió en
+     * store()/actualizar()) sin ningún efecto sobre el inventario. Una vez aprobada, la compra
+     * queda inmutable — no se puede editar ni anular, fluye normal como cualquier compra
+     * histórica (mismo comportamiento que ya existía antes de este estado).
+     */
+    public function aprobar(Compra $comprar): RedirectResponse
+    {
+        if ($comprar->estado !== 'pendiente') {
+            return back()->withErrors(['error' => 'Solo se puede aprobar una compra pendiente.']);
+        }
 
-                $searchAttributes = [
-                    'nombre_producto' => $item['producto'],
-                    'categoria_id' => $categoria->id,
-                    'marca_producto' => $item['marca'] ?? null,
-                    'modelo_producto' => $item['modelo'] ?? null,
-                    'capacidad_producto' => $item['capacidad'] ?? null,
-                ];
+        DB::transaction(function () use ($comprar) {
+            $numeroLinea = 0;
 
-                // El precio de costo es parte de la identidad del producto: si el mismo
-                // producto (mismo nombre+categoría+marca+modelo+capacidad) se compra a un
-                // precio distinto — misma compra para llenar un contenedor, compra separada,
-                // u otro proveedor — es legalmente otro producto. No se pisa el costo del
-                // existente: se crea una ficha aparte. Comparación exacta, sin margen de
-                // tolerancia (decisión explícita del cliente).
-                $producto = Producto::where($searchAttributes)
-                    ->where('precio_compra_producto', $item['precio'])
-                    ->first();
-                $isNew = ! $producto;
+            foreach ($comprar->productos as $producto) {
+                $numeroLinea++;
 
-                if ($isNew) {
-                    $producto = new Producto;
-                }
+                $cantidad = (int) $producto->pivot->cantidad;
+                $almacenId = (int) $producto->pivot->almacen_id;
+                $codigoBarrasInput = trim((string) ($producto->pivot->codigo_barras ?? ''));
 
-                $producto->fill([
-                    'nombre_producto' => $item['producto'],
-                    'marca_producto' => $item['marca'] ?? null,
-                    'modelo_producto' => $item['modelo'] ?? null,
-                    'capacidad_producto' => $item['capacidad'] ?? null,
-                    'color_producto' => $item['color'] ?? null,
-                    'categoria_id' => $categoria->id,
-                    'precio_compra_producto' => $item['precio'],
-                    'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
-                ]);
-                $producto->save();
-
-                // Manejo de Códigos de Barras
-                $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
                 if ($codigoBarrasInput !== '') {
                     $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
                     $productoCodigo = ProductoCodigo::firstOrNew([
                         'producto_id' => $producto->id,
                         'codigo_barras' => $codigoBarrasInput,
                     ]);
-                    $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $item['cantidad'];
+                    $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
                     if (! $productoCodigo->exists) {
                         $productoCodigo->es_default = $esPrimerCodigo;
                         try {
@@ -484,69 +663,179 @@ class CompraController extends Controller
                         ->first();
 
                     if ($defaultCodigo) {
-                        $defaultCodigo->increment('cantidad', $item['cantidad']);
+                        $defaultCodigo->increment('cantidad', $cantidad);
                     } else {
-                        ProductoCodigo::generarYGuardarDefault($producto, $item['cantidad']);
+                        ProductoCodigo::generarYGuardarDefault($producto, $cantidad);
                     }
                 }
 
-                // Castear almacen_id a integer
-                $almacenId = (int) $item['almacen_id'];
-                $lineaCantidad = (int) $item['cantidad'];
-                $lineaPrecio = (float) $item['precio'];
-
-                // Cada línea del carrito queda como su propia fila en compra_producto — si el mismo
-                // producto aparece dos veces en esta compra (distinto almacén y/o color), son dos
-                // líneas reales, no se fusionan ni se promedia el precio entre ellas.
-                $compra->productos()->attach($producto->id, [
-                    'cantidad' => $lineaCantidad,
-                    'precio' => $lineaPrecio,
-                    'almacen_id' => $almacenId,
-                    'es_producto_nuevo' => $isNew,
-                ]);
-
-                // Actualizar inventario en el almacén específico
                 $almacenProducto = AlmacenProducto::firstOrNew([
                     'almacen_id' => $almacenId,
                     'producto_id' => $producto->id,
                 ]);
-
-                // Asegurar que la cantidad no sea negativa (aunque en compras normalmente aumenta)
-                $nuevaCantidad = max(0, ($almacenProducto->cantidad ?? 0) + $item['cantidad']);
-                $almacenProducto->cantidad = $nuevaCantidad;
+                $almacenProducto->cantidad = max(0, ($almacenProducto->cantidad ?? 0) + $cantidad);
                 $almacenProducto->save();
 
-                // Preparar datos para la vista
-                $productosConAlmacen[] = [
-                    'nombre_producto' => $producto->nombre_producto,
-                    'marca_producto' => $producto->marca_producto,
-                    'modelo_producto' => $producto->modelo_producto,
-                    'capacidad_producto' => $producto->capacidad_producto,
-                    'color_producto' => $producto->color_producto,
-                    'codigo_producto' => $producto->codigo_producto,
-                    'categoria' => $categoria->nombre_categoria,
-                    'pivot' => [
-                        'cantidad' => $item['cantidad'],
-                        'precio' => $item['precio'],
-                    ],
-                    'almacen' => Almacen::find($almacenId),
-                    'es_producto_nuevo' => $isNew,
-                ];
+                // Registro de trazabilidad: qué línea de qué compra trajo esta tanda de stock.
+                // No reemplaza AlmacenProducto (el total real) ni implica ningún consumo por
+                // lote todavía — es historial aditivo hacia atrás.
+                LoteStock::create([
+                    'codigo' => LoteStock::generarCodigo($comprar->id, $numeroLinea),
+                    'compra_producto_id' => $producto->pivot->id,
+                    'producto_id' => $producto->id,
+                    'almacen_id' => $almacenId,
+                    'cantidad' => $cantidad,
+                    'precio_costo' => $producto->pivot->precio,
+                ]);
             }
+
+            $comprar->update(['estado' => 'aprobada']);
+        });
+
+        return redirect()->route('comprar.show', $comprar->id)->with('success', 'Compra aprobada — stock actualizado.');
+    }
+
+    /**
+     * Anula una compra pendiente. Como el stock nunca se tocó (se difiere hasta aprobar()), la
+     * anulación es puramente financiera. Dos variantes, elegidas por el usuario:
+     * - 'reversion': todo el dinero vuelve exactamente a donde salió.
+     * - 'fondo': el dinero que sí se pagó (cuentas/clientes) no vuelve — se convierte en crédito
+     *   a favor con el proveedor/cliente-fuente (mismo mecanismo que ya usan Proveedores/Clientes
+     *   para clasificar un saldo positivo como "Con Fondo"). Solo disponible si hubo pago real:
+     *   una compra 100% deuda_proveedor (sin pago real) nunca puede terminar en fondo, solo
+     *   revertirse — no hay dinero real que convertir. La porción de deuda de una compra parcial
+     *   sigue la misma regla y siempre se revierte a 0, aunque el resto sí se convierta en fondo.
+     */
+    public function anular(Request $request, Compra $comprar): RedirectResponse
+    {
+        if ($comprar->estado !== 'pendiente') {
+            return back()->withErrors(['error' => 'Solo se puede anular una compra pendiente.']);
+        }
+
+        $validated = $request->validate([
+            'tipo_anulacion' => 'required|in:reversion,fondo',
+            'motivo_anulacion' => 'required|string|max:500',
+        ]);
+
+        if ($comprar->tipo_compra === 'deuda_proveedor' && $validated['tipo_anulacion'] === 'fondo') {
+            return back()->withErrors([
+                'tipo_anulacion' => 'Esta compra fue 100% a deuda (sin pago real) — solo se puede anular revirtiendo la deuda, no puede convertirse en fondo.',
+            ]);
+        }
+
+        $comprar->loadMissing(['pagos.cuenta', 'pagos.cliente', 'proveedor', 'cliente']);
+
+        DB::transaction(function () use ($comprar, $validated) {
+            if ($validated['tipo_anulacion'] === 'reversion') {
+                $this->revertirEfectosMonetarios($comprar);
+            } else {
+                // La porción de deuda (si la hubo, ej. compra parcial) siempre se revierte a 0 —
+                // nunca se convierte en fondo, haya habido pago real en el resto o no.
+                $pagoDeuda = $comprar->pagos->firstWhere('tipo_pago', 'deuda_proveedor');
+                if ($pagoDeuda) {
+                    if ($comprar->proveedor) {
+                        $comprar->proveedor->increment('saldo_proveedor', $pagoDeuda->monto);
+                    } elseif ($comprar->cliente) {
+                        $comprar->cliente->decrement('deuda_pago_cliente', $pagoDeuda->monto);
+                    }
+                }
+
+                // El dinero que sí se pagó (cuentas + clientes-pagadores) no vuelve a su origen —
+                // se convierte en crédito a favor con el proveedor/cliente-fuente de esta compra.
+                $montoRealPagado = $comprar->pagos->whereIn('tipo_pago', ['cuenta', 'cliente'])->sum('monto');
+
+                if ($montoRealPagado > 0) {
+                    if ($comprar->proveedor) {
+                        $comprar->proveedor->increment('saldo_proveedor', $montoRealPagado);
+                    } elseif ($comprar->cliente) {
+                        $comprar->cliente->increment('deuda_pago_cliente', $montoRealPagado);
+                    }
+                }
+                // Las filas de compra_pago NO se borran — quedan como el registro de qué cuenta/
+                // cliente puso cada monto originalmente, para que el detalle de la compra anulada
+                // lo pueda mostrar (ver shapeCompraParaVista() y el frontend).
+            }
+
+            $comprar->update([
+                'estado' => 'anulada',
+                'tipo_anulacion' => $validated['tipo_anulacion'],
+                'motivo_anulacion' => $validated['motivo_anulacion'],
+            ]);
+        });
+
+        return redirect()->route('comprar.index')->with('success', 'Compra anulada correctamente.');
+    }
+
+    /**
+     * Edita una compra pendiente. El producto puede cambiar por completo (agregar/quitar líneas,
+     * cambiar cantidades) — en vez de calcular un diff, se trata como si fuera una compra nueva:
+     * se revierten todos los efectos monetarios y se sueltan las líneas de producto actuales, y
+     * se vuelve a procesar todo desde cero con los datos nuevos, sobre la misma fila de Compra.
+     * Como el stock nunca se tocó mientras está pendiente, no hay nada que revertir ahí — por
+     * eso editar es seguro incluso si cambian por completo los productos. Proveedor/cliente y
+     * tipo de compra NO son editables aquí, solo productos y sus pagos (ver reglasProductosYPagos).
+     *
+     * Toda edición exige un motivo — una compra pendiente puede editarse más de una vez, así que
+     * queda auditada en `compra_ediciones` (mismo patrón que `ajustes_saldo_cuenta` en Cuentas)
+     * en vez de pisar un solo campo en `compras`.
+     */
+    public function actualizar(Request $request, Compra $comprar): Response|RedirectResponse
+    {
+        if ($comprar->estado !== 'pendiente') {
+            return back()->withErrors(['error' => 'Solo se puede editar una compra pendiente.']);
+        }
+
+        $validated = $request->validate($this->reglasProductosYPagos(incluirProveedor: false) + [
+            'nota' => 'required|string|max:500',
+        ]);
+
+        $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
+        $totalAnterior = (float) $comprar->total_compra;
+
+        DB::beginTransaction();
+
+        try {
+            $comprar->loadMissing(['proveedor', 'cliente']);
+            $tipoProveedor = $comprar->proveedor_id ? 'proveedor' : 'cliente';
+            $entidad = $comprar->proveedor_id ? $comprar->proveedor : $comprar->cliente;
+
+            $this->revertirEfectosMonetarios($comprar);
+            // A diferencia de anular(), aquí sí se borran — se está reemplazando todo por datos
+            // nuevos, no dejando un registro histórico de una compra que queda cerrada.
+            CompraPago::where('compra_id', $comprar->id)->delete();
+            $comprar->productos()->detach();
+
+            $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
+
+            $resultadoPagos = $this->procesarPagos($comprar->tipo_compra, $tipoProveedor, $entidad, $total, $validated, $permitirDeudaParcial);
+
+            $comprar->update($resultadoPagos['compraData'] + ['total_compra' => $total]);
+
+            $this->crearRegistrosPago($comprar, $comprar->tipo_compra, $resultadoPagos);
+
+            $productosConAlmacen = $this->procesarLineasProducto($comprar, $validated['productos']);
+
+            CompraEdicion::create([
+                'compra_id' => $comprar->id,
+                'user_id' => $request->user()->id,
+                'total_anterior' => $totalAnterior,
+                'total_nuevo' => $total,
+                'motivo' => $validated['nota'],
+            ]);
 
             DB::commit();
 
-            $compra->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
+            $comprar->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
-                'compra' => $this->shapeCompraParaVista($compra),
+                'compra' => $this->shapeCompraParaVista($comprar),
                 'productos' => $productosConAlmacen,
-                'success' => 'Compra registrada y productos actualizados correctamente',
+                'success' => 'Compra editada correctamente.',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return back()->withErrors(['error' => 'Error al procesar la compra: '.$e->getMessage()]);
+            return back()->withErrors(['error' => 'Error al editar la compra: '.$e->getMessage()]);
         }
     }
 
@@ -606,6 +895,9 @@ class CompraController extends Controller
             'fecha_compra' => $compra->fecha_compra,
             'total_compra' => (float) $compra->total_compra,
             'tipo_compra' => $compra->tipo_compra,
+            'estado' => $compra->estado,
+            'tipo_anulacion' => $compra->tipo_anulacion,
+            'motivo_anulacion' => $compra->motivo_anulacion,
             'es_parcial' => $compra->es_parcial,
             'proveedor' => $compra->proveedor
                 ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]

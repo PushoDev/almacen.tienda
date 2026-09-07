@@ -19,6 +19,9 @@ class Compra extends Model
         'tipo_compra',
         'receptor_saldo_anterior',
         'receptor_saldo_posterior',
+        'estado',
+        'tipo_anulacion',
+        'motivo_anulacion',
     ];
 
     protected $casts = [
@@ -62,7 +65,7 @@ class Compra extends Model
     public function productos()
     {
         return $this->belongsToMany(Producto::class, 'compra_producto')
-            ->withPivot('cantidad', 'precio', 'almacen_id', 'es_producto_nuevo');
+            ->withPivot('id', 'cantidad', 'precio', 'almacen_id', 'es_producto_nuevo', 'codigo_barras');
     }
 
     // Relación con todos los pagos de la compra
