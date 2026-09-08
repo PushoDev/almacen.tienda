@@ -64,6 +64,8 @@ interface CuentaShowProps {
     tipo_titular?: string | null;
     estado: string;
     notas_cuenta: string;
+    imagen: string | null;
+    banco: { slug: string; nombre: string; imagen_url: string } | null;
     created_at: string;
     updated_at: string;
     moneda: MonedaInfo | null;
@@ -501,16 +503,35 @@ export default function ShowCuentasPage({
             <TooltipProvider>
                 <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-4">
                     {/* Header */}
-                    <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
+                    <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-6">
                         <HeadingSmall
                             title={`Cuenta: ${cuenta.nombre_cuenta}`}
                             description="Detalles de la cuenta y su historial de operaciones."
                         />
-                        <Handshake
-                            size={70}
-                            color="#d6d3d1"
-                            className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
-                        />
+                        {cuenta.tipo === 'efectivo' ? (
+                            // Efectivo no tiene banco — mismo ícono genérico de siempre.
+                            <Handshake
+                                size={70}
+                                color="#d6d3d1"
+                                className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
+                            />
+                        ) : cuenta.banco ? (
+                            // Tarjeta con banco asignado — efecto bleed (docs/patron-mascota-bleed.md
+                            // Variante A), sin overflow-hidden en el contenedor para que sobresalga
+                            // por el borde superior.
+                            <img
+                                src={cuenta.banco.imagen_url}
+                                alt=""
+                                aria-hidden="true"
+                                className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                            />
+                        ) : (
+                            // Tarjeta sin banco todavía.
+                            <div className="pointer-events-none absolute top-1/2 right-4 flex -translate-y-1/2 flex-col items-center gap-1 opacity-40">
+                                <CreditCard size={44} color="#d6d3d1" />
+                                <span className="text-[10px] font-medium whitespace-nowrap text-[#d6d3d1]">Sin banco asignado</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Navegación */}
@@ -567,6 +588,22 @@ export default function ShowCuentasPage({
                                         {cuenta.tipo}
                                     </Badge>
                                 </div>
+                                {cuenta.tipo === 'tarjeta' && (
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <CreditCard className="text-muted-foreground h-4 w-4" />
+                                            <span className="text-sm font-medium">Banco:</span>
+                                        </div>
+                                        {cuenta.banco ? (
+                                            <span className="flex items-center gap-1.5 text-sm font-medium">
+                                                <img src={cuenta.banco.imagen_url} alt="" className="h-4 w-6 object-contain" />
+                                                {cuenta.banco.nombre}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">Sin asignar</span>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <Coins className="text-muted-foreground h-4 w-4" />

@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { SelectorBancoTarjeta, type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { Banknote, Eye, EyeOff, Landmark, ShieldAlert } from 'lucide-react';
+import { Banknote, CreditCard, Eye, EyeOff, Landmark, ShieldAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -47,6 +48,7 @@ interface CuentaEditProps {
     tipo_titular?: string | null;
     estado: string;
     notas_cuenta: string;
+    imagen: string | null;
     moneda: {
         id: number;
         nombre_moneda: string;
@@ -58,9 +60,10 @@ interface CuentaEditProps {
 interface EditarCuentasPageProps {
     cuenta: CuentaEditProps;
     monedas: MonedaOption[];
+    catalogoTarjetas: CatalogoTarjetas;
 }
 
-export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPageProps) {
+export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }: EditarCuentasPageProps) {
     const { props } = usePage() as any;
     const isAdmin = props?.auth?.user?.role === 'admin';
 
@@ -73,9 +76,17 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
         tipo_titular: cuenta.tipo_titular || '',
         estado: cuenta.estado as 'activa' | 'inactiva',
         notas_cuenta: cuenta.notas_cuenta || '',
+        imagen: cuenta.imagen,
         security_password: '',
         motivo_ajuste_saldo: '',
     });
+
+    // Banco elegido en vivo (reacciona a cada cambio en el selector, antes de guardar) —
+    // se usa para mostrar la tarjeta real en el header en vez del ícono genérico.
+    const bancoSeleccionado = useMemo(() => {
+        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa];
+        return todos.find((b) => b.slug === data.imagen) ?? null;
+    }, [catalogoTarjetas, data.imagen]);
 
     const [showSecurityPassword, setShowSecurityPassword] = useState(false);
     const [isSaldoDialogOpen, setIsSaldoDialogOpen] = useState(false);
@@ -124,9 +135,32 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
             <Head title="Editar Cuenta" />
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Editar Cuenta" description="Actualice los detalles de la cuenta para su negocio" />
-                    <Landmark size={70} color="#d6d3d1" className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40" />
+                    {data.tipo === 'efectivo' ? (
+                        // Efectivo no tiene banco — mismo ícono genérico de siempre.
+                        <Landmark
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    ) : bancoSeleccionado ? (
+                        // Tarjeta con banco elegido — efecto bleed (docs/patron-mascota-bleed.md
+                        // Variante A), reacciona en vivo al selector, sin overflow-hidden en el
+                        // contenedor para que pueda sobresalir por el borde superior.
+                        <img
+                            src={bancoSeleccionado.imagen_url}
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                        />
+                    ) : (
+                        // Tarjeta sin banco todavía — recordatorio sutil para que lo elija abajo.
+                        <div className="pointer-events-none absolute right-4 bottom-2 flex flex-col items-center gap-1 opacity-60">
+                            <CreditCard size={44} color="#d6d3d1" className="animate-pulse" />
+                            <span className="text-[10px] font-medium whitespace-nowrap text-[#d6d3d1] animate-pulse">Elige un banco ↓</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Formulario de Edición */}
@@ -155,7 +189,13 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                         <Label htmlFor="tipo">Tipo de Activo *</Label>
                                         <Select
                                             value={data.tipo}
-                                            onValueChange={(value: 'tarjeta' | 'efectivo') => setData('tipo', value)}
+                                            onValueChange={(value: 'tarjeta' | 'efectivo') => {
+                                                setData('tipo', value);
+                                                // Efectivo no lleva banco/diseño de tarjeta.
+                                                if (value === 'efectivo') {
+                                                    setData('imagen', null);
+                                                }
+                                            }}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
@@ -167,6 +207,19 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                         </Select>
                                         <InputError message={errors.tipo} />
                                     </div>
+
+                                    {/* Campo Banco / Diseño de tarjeta — solo aplica cuando tipo=tarjeta */}
+                                    {data.tipo === 'tarjeta' && (
+                                        <div className="space-y-2">
+                                            <Label>Banco / Diseño de tarjeta</Label>
+                                            <SelectorBancoTarjeta
+                                                catalogo={catalogoTarjetas}
+                                                value={data.imagen}
+                                                onChange={(slug) => setData('imagen', slug)}
+                                            />
+                                            <InputError message={errors.imagen} />
+                                        </div>
+                                    )}
 
                                     {/* Campo Saldo de la Cuenta */}
                                     <div className="space-y-2">

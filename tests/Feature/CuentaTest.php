@@ -448,6 +448,124 @@ test('un vendedor SÍ puede crear una cuenta', function () {
 });
 
 // ==========================================================================
+// CATÁLOGO DE TARJETAS ("Atendido por" / bancos — feature Cuentas → tarjetas)
+// ==========================================================================
+
+test('store() guarda un slug de banco válido en imagen', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $nombre = 'Cuenta BANDEC '.uniqid();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => $nombre,
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'imagen' => 'bandec',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    $this->assertDatabaseHas('cuentas', ['nombre_cuenta' => $nombre, 'imagen' => 'bandec']);
+});
+
+test('store() rechaza un slug de banco que no existe en el catálogo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Cuenta Banco Falso '.uniqid(),
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'imagen' => 'banco-inventado',
+    ]);
+
+    $response->assertSessionHasErrors('imagen');
+});
+
+test('store() no exige imagen — una cuenta tarjeta puede quedar sin banco asignado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $nombre = 'Cuenta Sin Banco '.uniqid();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => $nombre,
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    $this->assertDatabaseHas('cuentas', ['nombre_cuenta' => $nombre, 'imagen' => null]);
+});
+
+test('update() cambia el banco asignado a una cuenta existente', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta a editar '.uniqid(),
+        'tipo' => 'tarjeta',
+        'saldo_cuenta' => 0,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response = $this->put(route('cuentas.update', $cuenta), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'imagen' => 'visa',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'imagen' => 'visa']);
+});
+
+test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/externas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $responseCreate = $this->get(route('cuentas.create'));
+    $responseCreate->assertInertia(fn ($page) => $page
+        ->has('catalogoTarjetas.interna', 5)
+        ->has('catalogoTarjetas.externa', 4)
+        ->where('catalogoTarjetas.interna.0.slug', 'bandec')
+        ->where('catalogoTarjetas.externa.0.slug', 'visa')
+    );
+
+    $moneda = crearMonedaUsd();
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta catalogo edit '.uniqid(),
+        'tipo' => 'tarjeta',
+        'saldo_cuenta' => 0,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'imagen' => 'zelle',
+    ]);
+
+    $responseEdit = $this->get(route('cuentas.edit', $cuenta));
+    $responseEdit->assertInertia(fn ($page) => $page
+        ->has('catalogoTarjetas.externa', 4)
+        ->where('cuenta.imagen', 'zelle')
+    );
+});
+
+// ==========================================================================
 // HISTORIAL — Fase 2 (unifica movimientos_financieros + pagos/comisiones de
 // venta + pagos de compra, ninguno de los cuales vive en una sola tabla)
 // ==========================================================================

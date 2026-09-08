@@ -8,6 +8,7 @@ use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\Venta;
+use App\Services\CatalogoTarjetasService;
 use App\Services\DetalleOperacionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -144,12 +145,15 @@ class CuentaController extends Controller
                     ] : null,
                     'estado' => $cuenta->estado,
                     'notas_cuenta' => $cuenta->notas_cuenta,
+                    'imagen' => $cuenta->imagen,
+                    'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                     'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
                 ];
             }),
             'monedaPrincipal' => $monedaPrincipal,
             'resumen' => $resumen,
+            'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
         ]);
     }
 
@@ -171,6 +175,7 @@ class CuentaController extends Controller
                         'simbolo_moneda' => $moneda->simbolo_moneda,
                     ];
                 }),
+            'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
         ]);
     }
 
@@ -188,6 +193,10 @@ class CuentaController extends Controller
             'tipo_cuenta' => ['required', 'in:permanentes'],
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
+            // Banco/diseño de tarjeta elegido (catálogo en código, ver
+            // CatalogoTarjetasService) — opcional siempre, incluso para tipo=tarjeta: una
+            // cuenta puede quedar sin banco asignado hasta que se edite más tarde.
+            'imagen' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::slugsValidos())],
         ]);
 
         Cuenta::create([
@@ -199,6 +208,7 @@ class CuentaController extends Controller
             'tipo_cuenta' => $validated['tipo_cuenta'] ?? 'permanentes',
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'] ?? null,
+            'imagen' => $validated['imagen'] ?? null,
         ]);
 
         // Redirigimos al usuario a la lista de cuentas
@@ -239,6 +249,8 @@ class CuentaController extends Controller
                 'tipo_titular' => $cuenta->tipo_titular,
                 'estado' => $cuenta->estado,
                 'notas_cuenta' => $cuenta->notas_cuenta,
+                'imagen' => $cuenta->imagen,
+                'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                 'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
             ],
@@ -625,6 +637,7 @@ class CuentaController extends Controller
                 'tipo_titular' => $cuenta->tipo_titular,
                 'estado' => $cuenta->estado,
                 'notas_cuenta' => $cuenta->notas_cuenta,
+                'imagen' => $cuenta->imagen,
             ],
             'monedas' => Moneda::where('estado', true)
                 ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda')
@@ -637,6 +650,7 @@ class CuentaController extends Controller
                         'simbolo_moneda' => $moneda->simbolo_moneda,
                     ];
                 }),
+            'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
         ]);
     }
 
@@ -676,6 +690,7 @@ class CuentaController extends Controller
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
             'motivo_ajuste_saldo' => [$saldoCambio ? 'required' : 'nullable', 'string', 'max:500'],
+            'imagen' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::slugsValidos())],
         ]);
 
         $saldoAnterior = $cuenta->saldo_cuenta;
@@ -689,6 +704,7 @@ class CuentaController extends Controller
             'tipo_cuenta' => $validated['tipo_cuenta'] ?? 'permanentes',
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'] ?? $cuenta->notas_cuenta,
+            'imagen' => $validated['imagen'] ?? null,
         ]);
 
         if ($saldoCambio) {
