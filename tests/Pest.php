@@ -43,8 +43,20 @@ expect()->extend('toBeOne', function () {
 
 use App\Models\Cuenta;
 use App\Models\Moneda;
+use App\Models\TurnoVendedor;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+
+/**
+ * Da a un usuario un turno activo "de hoy" (feature "Atendido por" / Turnos) — necesario
+ * para que un moderador/vendedor pase el middleware `requiere.turno` antes de cualquier
+ * escritura (POST/PUT/PATCH/DELETE). Los tests de admin no lo necesitan (nunca requiere
+ * captura, ver User::requiereCapturaTurno()).
+ */
+function crearTurnoActivo(User $user): TurnoVendedor
+{
+    return TurnoVendedor::factory()->for($user)->create(['iniciado_en' => now()]);
+}
 
 /**
  * Crea (o reutiliza) una Moneda activa con el código y tasa dados.
@@ -70,7 +82,7 @@ function crearMonedaUsd(): Moneda
 function crearCuentaEnMoneda(Moneda $moneda, float $saldo = 1000, ?User $propietario = null): Cuenta
 {
     $cuenta = Cuenta::create([
-        'nombre_cuenta' => 'Cuenta ' . uniqid(),
+        'nombre_cuenta' => 'Cuenta '.uniqid(),
         'saldo_cuenta' => $saldo,
         'tipo_cuenta' => 'permanentes',
         'tipo' => 'banco',

@@ -725,7 +725,9 @@ test('no se puede anular una venta ya anulada', function () {
 
 test('un vendedor no puede aprobar la venta de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
@@ -740,6 +742,7 @@ test('un vendedor no puede aprobar la venta de otro vendedor', function () {
 
 test('un vendedor puede aprobar su propia venta', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $venta = Venta::factory()->create(['user_id' => $vendedor->id, 'estado' => 'pendiente']);
@@ -753,7 +756,9 @@ test('un vendedor puede aprobar su propia venta', function () {
 
 test('un vendedor no puede anular la venta de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
@@ -767,7 +772,9 @@ test('un vendedor no puede anular la venta de otro vendedor', function () {
 
 test('un moderador puede anular la venta de cualquier vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
@@ -780,7 +787,9 @@ test('un moderador puede anular la venta de cualquier vendedor', function () {
 
 test('un vendedor no puede editar la venta pendiente de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
@@ -793,7 +802,9 @@ test('un vendedor no puede editar la venta pendiente de otro vendedor', function
 
 test('un vendedor no puede guardar el destinatario de la venta pendiente de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente']);
@@ -809,7 +820,9 @@ test('un vendedor no puede guardar el destinatario de la venta pendiente de otro
 
 test('un vendedor no puede marcar como notificada la decisión de la venta especial de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'decision_notificada' => false]);
@@ -823,7 +836,9 @@ test('un vendedor no puede marcar como notificada la decisión de la venta espec
 
 test('un vendedor no puede ver el detalle de la venta de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id]);
@@ -835,6 +850,7 @@ test('un vendedor no puede ver el detalle de la venta de otro vendedor', functio
 
 test('un vendedor puede ver el detalle de su propia venta', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $venta = Venta::factory()->create(['user_id' => $vendedor->id]);
@@ -846,7 +862,9 @@ test('un vendedor puede ver el detalle de su propia venta', function () {
 
 test('un moderador puede ver el detalle de la venta de cualquier vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id]);
@@ -894,7 +912,9 @@ test('guardarDistribucion solo permite modificar ventas pendientes', function ()
 
 test('un vendedor no puede guardar la distribución de la venta pendiente de otro vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $venta = Venta::factory()->create(['user_id' => $dueño->id, 'estado' => 'pendiente', 'total' => 100]);
@@ -979,6 +999,7 @@ test('aprobarSolicitudEspecial pasa la venta de solicitud_especial a pendiente',
 
 test('el vendedor dueño de la venta NO puede aprobar su propia solicitud especial — solo admin/moderador', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $venta = Venta::factory()->especial()->create(['user_id' => $vendedor->id]);
@@ -992,6 +1013,7 @@ test('el vendedor dueño de la venta NO puede aprobar su propia solicitud especi
 
 test('el vendedor dueño de la venta NO puede rechazar su propia solicitud especial — solo admin/moderador', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $venta = Venta::factory()->especial()->create(['user_id' => $vendedor->id]);
@@ -1005,7 +1027,9 @@ test('el vendedor dueño de la venta NO puede rechazar su propia solicitud espec
 
 test('un moderador puede aprobar la solicitud especial de cualquier vendedor', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $venta = Venta::factory()->especial()->create(['user_id' => $vendedor->id]);
@@ -1022,6 +1046,7 @@ test('un moderador puede aprobar la solicitud especial de cualquier vendedor', f
 
 test('un vendedor no puede crear una venta en un almacén que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $almacen = Almacen::factory()->puntoVenta()->create(); // no asignado al vendedor
@@ -1299,6 +1324,7 @@ test('actualizarTasaReporte funciona en una venta ya completada porque solo afec
 
 test('un vendedor no recibe la ganancia de la agencia en el listado, pero sí su propia comisión', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     Venta::factory()->completada()->create([

@@ -3,13 +3,14 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -56,6 +57,7 @@ class User extends Authenticatable
     /**
      * Undocumented function
      * ✅ Relación muchos a muchos con Almacen
+     *
      * @return void
      */
     public function almacenes()
@@ -67,6 +69,7 @@ class User extends Authenticatable
     /**
      * Undocumented function
      * Relación con productos y precios personalizados
+     *
      * @return void
      */
     public function productos()
@@ -79,6 +82,7 @@ class User extends Authenticatable
     /**
      * Undocumented function
      * ✅ Relación muchos a muchos con Cuentas
+     *
      * @return void
      */
     public function cuentas()
@@ -88,9 +92,10 @@ class User extends Authenticatable
 
     public function getAvatarUrlAttribute(): ?string
     {
-        if (!$this->avatar) {
+        if (! $this->avatar) {
             return null;
         }
+
         return asset($this->avatar);
     }
 
@@ -107,5 +112,37 @@ class User extends Authenticatable
     public function isModerator(): bool
     {
         return $this->role === 'moderador';
+    }
+
+    /**
+     * Log append-only de quién atendió bajo esta cuenta (feature "Atendido por" / Turnos).
+     */
+    public function turnosVendedor()
+    {
+        return $this->hasMany(TurnoVendedor::class);
+    }
+
+    /**
+     * Fila más reciente de turnosVendedor() para este usuario, o null si nunca capturó ninguna.
+     */
+    public function turnoActivo(): ?TurnoVendedor
+    {
+        return $this->turnosVendedor()->latest('iniciado_en')->first();
+    }
+
+    /**
+     * true si este usuario necesita capturar/confirmar el turno hoy: solo aplica a
+     * moderador/vendedor (admin nunca), y solo si el turno activo no es de hoy (cada día
+     * exige al menos una confirmación, aunque sea repitiendo el mismo nombre de ayer).
+     */
+    public function requiereCapturaTurno(): bool
+    {
+        if (! in_array($this->role, ['moderador', 'vendedor'])) {
+            return false;
+        }
+
+        $activo = $this->turnoActivo();
+
+        return $activo === null || ! $activo->iniciado_en->isToday();
     }
 }

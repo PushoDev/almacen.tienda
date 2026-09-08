@@ -53,6 +53,7 @@ function payloadStoreCierre(array $overrides = []): array
 
 test('el saldo esperado suma los pagos de venta que fueron a una cuenta', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $almacen = Almacen::factory()->puntoVenta()->create();
@@ -73,6 +74,7 @@ test('el saldo esperado suma los pagos de venta que fueron a una cuenta', functi
 
 test('el saldo esperado NO incluye pagos de venta que fueron a deuda de cliente', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $almacen = Almacen::factory()->puntoVenta()->create();
@@ -93,6 +95,7 @@ test('el saldo esperado NO incluye pagos de venta que fueron a deuda de cliente'
 test('un gasto resta del saldo esperado del turno, sin importar el total_gastos enviado por el cliente', function () {
     crearTiposMovimientoFinanciero();
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMonedaUsd();
@@ -125,6 +128,7 @@ test('un gasto resta del saldo esperado del turno, sin importar el total_gastos 
 test('un ingreso extra suma al saldo esperado del turno', function () {
     crearTiposMovimientoFinanciero();
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMonedaUsd();
@@ -155,6 +159,7 @@ test('un ingreso extra suma al saldo esperado del turno', function () {
 test('una transferencia saliente hacia una cuenta externa resta del saldo esperado', function () {
     crearTiposMovimientoFinanciero();
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMonedaUsd();
@@ -189,6 +194,7 @@ test('una transferencia saliente hacia una cuenta externa resta del saldo espera
 
 test('una comisión de gestor resta del saldo esperado y se registra en comisiones_gestor', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $almacen = Almacen::factory()->puntoVenta()->create();
@@ -218,6 +224,7 @@ test('una comisión de gestor resta del saldo esperado y se registra en comision
 
 test('el mensajero se excluye del saldo esperado (pass-through) pero se reporta aparte', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $almacen = Almacen::factory()->puntoVenta()->create();
@@ -260,6 +267,7 @@ test('el mensajero se excluye del saldo esperado (pass-through) pero se reporta 
 
 test('store() persiste un snapshot con el saldo actual de las cuentas del vendedor', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMonedaUsd();
@@ -281,6 +289,7 @@ test('store() persiste un snapshot con el saldo actual de las cuentas del vended
 
 test('store() persiste un snapshot con la deuda actual de los clientes', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 80]);
@@ -300,6 +309,7 @@ test('store() persiste un snapshot con la deuda actual de los clientes', functio
 
 test('aprobar() cambia el estado a aprobado y registra al revisor', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -325,7 +335,9 @@ test('aprobar() cambia el estado a aprobado y registra al revisor', function () 
 
 test('un vendedor no puede ver el cierre de otro vendedor (403)', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $otroVendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($otroVendedor);
     $this->actingAs($otroVendedor);
 
     $cierre = CierreCaja::create([
@@ -341,6 +353,7 @@ test('un vendedor no puede ver el cierre de otro vendedor (403)', function () {
 
 test('un admin sí puede ver el cierre de cualquier vendedor', function () {
     $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -357,8 +370,10 @@ test('un admin sí puede ver el cierre de cualquier vendedor', function () {
 
 test('index() solo muestra al vendedor sus propios cierres, pero el admin ve todos', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $otroVendedor = User::factory()->vendedor()->create();
 
+    crearTurnoActivo($otroVendedor);
     $cierrePropio = CierreCaja::create(['user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_cierre' => now()]);
     $cierreAjeno = CierreCaja::create(['user_id' => $otroVendedor->id, 'estado' => 'aprobado', 'fecha_cierre' => now()]);
 

@@ -65,6 +65,7 @@ test('un admin puede acceder al formulario de editar proveedor', function () {
 
 test('un moderador NO puede acceder al formulario de editar proveedor (403)', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $proveedor = Proveedor::factory()->create();
@@ -76,6 +77,7 @@ test('un moderador NO puede acceder al formulario de editar proveedor (403)', fu
 
 test('un vendedor NO puede acceder al formulario de editar proveedor (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $proveedor = Proveedor::factory()->create();
@@ -104,6 +106,7 @@ test('un admin puede actualizar un proveedor', function () {
 
 test('un moderador NO puede actualizar un proveedor (403)', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $proveedor = Proveedor::factory()->create();
@@ -121,6 +124,7 @@ test('un moderador NO puede actualizar un proveedor (403)', function () {
 
 test('un vendedor NO puede actualizar un proveedor (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $proveedor = Proveedor::factory()->create();
@@ -138,6 +142,7 @@ test('un vendedor NO puede actualizar un proveedor (403)', function () {
 
 test('un moderador NO puede eliminar un proveedor (403)', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
@@ -150,6 +155,7 @@ test('un moderador NO puede eliminar un proveedor (403)', function () {
 
 test('un vendedor NO puede eliminar un proveedor (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
@@ -162,6 +168,7 @@ test('un vendedor NO puede eliminar un proveedor (403)', function () {
 
 test('un moderador SÍ puede crear un proveedor', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $response = $this->post(route('proveedores.store'), [
@@ -175,6 +182,7 @@ test('un moderador SÍ puede crear un proveedor', function () {
 
 test('un vendedor SÍ puede crear un proveedor', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $response = $this->post(route('proveedores.store'), [

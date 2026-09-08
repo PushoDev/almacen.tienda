@@ -1046,6 +1046,7 @@ class VentaController extends Controller
             // Crear la venta
             $venta = Venta::create([
                 'user_id' => $user->id,
+                'turno_vendedor_id' => $user->turnoActivo()?->id,
                 'almacen_id' => $validatedData['almacen_id'],
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],

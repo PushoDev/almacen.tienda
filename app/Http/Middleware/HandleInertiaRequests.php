@@ -47,19 +47,54 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
-            'ziggy' => fn(): array => [
+            'ziggy' => fn (): array => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'flash' => [
-                'success' => fn() => $request->session()->get('success'),
-                'error' => fn() => $request->session()->get('error'),
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
-            'tasas' => fn() => Moneda::where('estado', true)
+            'tasas' => fn () => Moneda::where('estado', true)
                 ->orderBy('principal', 'desc')
                 ->orderBy('codigo_moneda')
                 ->get(['codigo_moneda', 'nombre_moneda', 'tasa_cambio', 'principal']),
+            'turno' => fn () => $this->turnoCompartido($request),
+        ];
+    }
+
+    /**
+     * Feature "Atendido por" / Turnos: null para admin y para invitados (nunca capturan
+     * turno). Para moderador/vendedor, arma lo que necesita el diálogo bloqueante global
+     * y el indicador del header — ver App\Models\User::requiereCapturaTurno()/turnoActivo().
+     *
+     * @return array{requiereCaptura: bool, nombreVendedor: ?string, sugerido: ?string, historial: array<int, string>}|null
+     */
+    private function turnoCompartido(Request $request): ?array
+    {
+        $user = $request->user();
+
+        if (! $user || ! in_array($user->role, ['moderador', 'vendedor'])) {
+            return null;
+        }
+
+        $activo = $user->turnoActivo();
+
+        return [
+            'requiereCaptura' => $user->requiereCapturaTurno(),
+            'nombreVendedor' => $activo?->nombre_vendedor,
+            'sugerido' => $activo?->nombre_vendedor,
+            // Distinct sin ORDER BY en la misma query (MySQL error 3065 con DISTINCT+ORDER BY
+            // sobre columna no seleccionada) — se deduplica en PHP conservando el orden.
+            'historial' => $user->turnosVendedor()
+                ->latest('iniciado_en')
+                ->limit(50)
+                ->pluck('nombre_vendedor')
+                ->unique()
+                ->values()
+                ->take(10)
+                ->all(),
         ];
     }
 }

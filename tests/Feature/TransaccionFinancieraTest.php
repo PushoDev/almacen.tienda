@@ -2,7 +2,6 @@
 
 use App\Models\Cliente;
 use App\Models\Cuenta;
-use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
 use App\Models\User;
@@ -83,6 +82,7 @@ test('un gasto rechaza si la moneda de la cuenta no coincide con la moneda de la
 
 test('un vendedor no puede gastar desde una cuenta que no tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -101,6 +101,7 @@ test('un vendedor no puede gastar desde una cuenta que no tiene asignada', funct
 
 test('un vendedor no puede gastar desde una cuenta asignada pero de tipo_titular externa', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -121,6 +122,7 @@ test('un vendedor no puede gastar desde una cuenta asignada pero de tipo_titular
 test('un vendedor sí puede gastar desde su cuenta personal asignada', function () {
     crearTiposMovimientoFinanciero();
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -202,6 +204,7 @@ test('un ingreso a un proveedor suma su saldo_proveedor', function () {
 
 test('un vendedor no puede ingresar a una cuenta que no tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -318,6 +321,7 @@ test('no se puede transferir de una cuenta a sí misma', function () {
 
 test('un vendedor no puede transferir desde una cuenta que no tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -337,7 +341,9 @@ test('un vendedor no puede transferir desde una cuenta que no tiene asignada', f
 test('un vendedor no puede transferir a una cuenta asignada a otro vendedor', function () {
     crearTiposMovimientoFinanciero();
     $vendedorA = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedorA);
     $vendedorB = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedorB);
     $this->actingAs($vendedorA);
 
     $monedaUsd = crearMoneda('USD', 1, true);

@@ -30,6 +30,7 @@ test('un admin puede ver el detalle de cualquier cuenta', function () {
 
 test('un moderador puede ver el detalle de cualquier cuenta', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
@@ -41,6 +42,7 @@ test('un moderador puede ver el detalle de cualquier cuenta', function () {
 
 test('un vendedor puede ver el detalle de una cuenta que tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
@@ -52,6 +54,7 @@ test('un vendedor puede ver el detalle de una cuenta que tiene asignada', functi
 
 test('un vendedor NO puede ver el detalle de una cuenta que no tiene asignada (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
@@ -80,6 +83,7 @@ test('un admin puede acceder al formulario de editar cuenta', function () {
 
 test('un moderador NO puede acceder al formulario de editar cuenta (403)', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
@@ -91,6 +95,7 @@ test('un moderador NO puede acceder al formulario de editar cuenta (403)', funct
 
 test('un vendedor NO puede acceder al formulario de editar cuenta (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
@@ -121,6 +126,7 @@ test('un admin puede actualizar una cuenta', function () {
 
 test('un moderador NO puede actualizar una cuenta (403)', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $moneda = crearMonedaUsd();
@@ -140,6 +146,7 @@ test('un moderador NO puede actualizar una cuenta (403)', function () {
 
 test('un vendedor NO puede actualizar una cuenta (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $moneda = crearMonedaUsd();
@@ -237,6 +244,7 @@ test('admin intenta cambiar el saldo sin escribir un motivo: falla validación',
 
 test('moderador intenta cambiar el saldo: bloqueado (403) por el middleware check.cuenta.permission, nunca llega al controlador', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $moneda = crearMonedaUsd();
@@ -258,6 +266,7 @@ test('moderador intenta cambiar el saldo: bloqueado (403) por el middleware chec
 
 test('vendedor intenta cambiar el saldo de su propia cuenta asignada: igual bloqueado (403), el middleware no distingue dueño', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $moneda = crearMonedaUsd();
@@ -378,6 +387,7 @@ test('una cuenta en $0.00 con movimientos financieros asociados no se puede elim
 
 test('un moderador NO puede eliminar una cuenta (403)', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
@@ -390,6 +400,7 @@ test('un moderador NO puede eliminar una cuenta (403)', function () {
 
 test('un vendedor NO puede eliminar una cuenta (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
@@ -402,6 +413,7 @@ test('un vendedor NO puede eliminar una cuenta (403)', function () {
 
 test('un moderador SÍ puede crear una cuenta', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $moneda = crearMonedaUsd();
@@ -419,6 +431,7 @@ test('un moderador SÍ puede crear una cuenta', function () {
 
 test('un vendedor SÍ puede crear una cuenta', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $moneda = crearMonedaUsd();
@@ -601,6 +614,7 @@ test('el historial incluye pagos de compra para admin, pero se ocultan para vend
     $admin = User::factory()->admin()->create();
     $vendedor = User::factory()->vendedor()->create();
 
+    crearTurnoActivo($vendedor);
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
 
     $compra = Compra::factory()->create();
@@ -638,6 +652,7 @@ test('el historial incluye ajustes manuales de saldo para admin, pero se ocultan
     $admin = User::factory()->admin()->create();
     $vendedor = User::factory()->vendedor()->create();
 
+    crearTurnoActivo($vendedor);
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
 
     $ajuste = AjusteSaldoCuenta::create([
