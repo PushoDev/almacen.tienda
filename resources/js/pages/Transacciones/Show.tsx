@@ -44,6 +44,14 @@ interface MovimientoFinanciero {
         email: string;
         role: string;
     };
+    // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de `user`
+    // (la cuenta de punto de venta). Null en movimientos anteriores a esta feature o
+    // creados por admin (nunca captura turno). Laravel serializa la relación
+    // `turnoVendedor()` en snake_case ($snakeAttributes por defecto), de ahí el nombre
+    // de la prop acá — no es un typo.
+    turno_vendedor?: {
+        nombre_vendedor: string;
+    } | null;
     tipoMovimiento?: {
         id: number;
         nombre_tipo: string;
@@ -382,6 +390,14 @@ export default function VerDetalleTransacciones({ movimiento, detallesOrigen, de
                                         <p className="text-muted-foreground text-sm font-medium">Usuario</p>
                                         <p className="font-medium">{movimiento.user?.name || 'No especificado'}</p>
                                         <p className="text-muted-foreground text-sm">{movimiento.user?.email || 'No disponible'}</p>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-muted-foreground text-sm font-medium">Atendido por</p>
+                                        {/* Cae al nombre de la cuenta cuando no hay turno (admin, que nunca
+                                            captura uno, o movimientos anteriores a esta feature) — para admin
+                                            la cuenta ya es la persona real. */}
+                                        <p className="font-medium">{movimiento.turno_vendedor?.nombre_vendedor ?? movimiento.user?.name ?? 'No especificado'}</p>
                                     </div>
 
                                     <div>

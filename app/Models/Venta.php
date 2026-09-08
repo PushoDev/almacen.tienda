@@ -11,6 +11,7 @@ class Venta extends Model
 
     protected $fillable = [
         'user_id',
+        'turno_vendedor_id',
         'almacen_id',
         'cliente_id',
         'total',
@@ -93,6 +94,11 @@ class Venta extends Model
     public function usuario()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function turnoVendedor()
+    {
+        return $this->belongsTo(TurnoVendedor::class);
     }
 
     public function almacen()

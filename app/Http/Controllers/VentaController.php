@@ -514,6 +514,7 @@ class VentaController extends Controller
             'cliente',
             'almacen.mensajeroCuenta',
             'usuario',
+            'turnoVendedor',
             'moneda',
             'monedaCobro',
             'gestorCuenta.moneda',
@@ -596,6 +597,11 @@ class VentaController extends Controller
                 'email' => $venta->usuario->email,
                 'rol' => $venta->usuario->role,
             ],
+            // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+            // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin, que
+            // nunca captura uno, o ventas anteriores a esta feature): ahí se cae al nombre
+            // de la cuenta, que para admin ya es la persona real.
+            'atendido_por' => $venta->turnoVendedor?->nombre_vendedor ?? $venta->usuario->name,
             'pagos' => $venta->pagos->map(function ($pago) {
                 // ✅ DETERMINAR TIPO DE DESTINO
                 $destinoTipo = $pago->cliente_id ? 'cliente' : 'cuenta';
@@ -738,6 +744,7 @@ class VentaController extends Controller
             'destinatario',
             'detalles.producto.categoria',
             'usuario',
+            'turnoVendedor',
             'almacen',
             'moneda',
         ]);
@@ -767,6 +774,11 @@ class VentaController extends Controller
                 'usuario' => [
                     'nombre' => $venta->usuario->name,
                 ],
+                // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+                // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin,
+                // que nunca captura uno, o ventas anteriores a esta feature): ahí se cae al
+                // nombre de la cuenta, que para admin ya es la persona real.
+                'atendido_por' => $venta->turnoVendedor?->nombre_vendedor ?? $venta->usuario->name,
                 'destinatario' => $venta->destinatario ? [
                     'nombre' => $venta->destinatario->nombre,
                     'apellidos' => $venta->destinatario->apellidos,
@@ -1046,6 +1058,7 @@ class VentaController extends Controller
             // Crear la venta
             $venta = Venta::create([
                 'user_id' => $user->id,
+                'turno_vendedor_id' => $user->turnoActivo()?->id,
                 'almacen_id' => $validatedData['almacen_id'],
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],

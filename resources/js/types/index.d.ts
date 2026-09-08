@@ -34,6 +34,17 @@ export interface TasaMoneda {
     principal: boolean;
 }
 
+/**
+ * Feature "Atendido por" / Turnos — prop compartida solo para moderador/vendedor (null
+ * para admin e invitados, ver HandleInertiaRequests::turnoCompartido()).
+ */
+export interface TurnoCompartido {
+    requiereCaptura: boolean;
+    nombreVendedor: string | null;
+    sugerido: string | null;
+    historial: string[];
+}
+
 export interface SharedData {
     name: string;
     quote: { message: string; author: string };
@@ -45,6 +56,7 @@ export interface SharedData {
         error?: string;
     };
     tasas: TasaMoneda[];
+    turno: TurnoCompartido | null;
     [key: string]: unknown;
 }
 

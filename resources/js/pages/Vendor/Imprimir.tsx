@@ -33,6 +33,7 @@ interface VentaImprimir {
     usuario: {
         nombre: string;
     };
+    atendido_por: string | null;
     destinatario: DestinatarioImprimir | null;
     items: ItemImprimir[];
     total: number;
@@ -131,6 +132,10 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     <p className="mt-0.5">No. Factura: {venta.id}</p>
                     <p>{formatFecha(venta.fecha)}</p>
                     <p>Vendedor: {venta.usuario.nombre}</p>
+                    {/* Mayúscula a propósito (pedido explícito): evita que una escritura
+                        descuidada al capturar el nombre del turno se vea inconsistente
+                        impresa — mejor prevenir que lidiar con eso después. */}
+                    {venta.atendido_por && <p>Atendido por: {venta.atendido_por.toUpperCase()}</p>}
                 </div>
 
                 {/* Datos del cliente — con guiones bajos para llenar a mano cuando no hay

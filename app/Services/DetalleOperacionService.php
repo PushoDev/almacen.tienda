@@ -48,6 +48,12 @@ class DetalleOperacionService
             'info_general' => [
                 'fecha' => $mov->fecha_operacion,
                 'estado' => $mov->estado,
+                // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+                // `usuario`/"Registrado por" (cuenta de punto de venta), salvo cuando no hay
+                // turno (admin, que nunca captura uno, o movimientos anteriores a esta
+                // feature): ahí se cae al nombre de la cuenta, que para admin ya es la
+                // persona real (las cuentas admin son de una persona, no de un punto de venta).
+                'atendido_por' => $mov->turnoVendedor?->nombre_vendedor ?? $mov->user?->name,
                 'tasa_cambio_aplicada' => $hayConversion ? (float) $mov->tasa_cambio_aplicada : null,
                 // Cuánto llegó realmente al destino en su propia moneda (ej. 78000 CUP
                 // salen del origen, pero al destino en USD llegan 111.43) — se deriva del
@@ -175,6 +181,11 @@ class DetalleOperacionService
             'info_general' => [
                 'fecha' => $venta->created_at,
                 'almacen' => $venta->almacen?->nombre_almacen,
+                // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+                // `usuario` (la cuenta de punto de venta usada), salvo cuando no hay turno
+                // (admin, que nunca captura uno, o ventas anteriores a esta feature): ahí se
+                // cae al nombre de la cuenta, que para admin ya es la persona real.
+                'atendido_por' => $venta->turnoVendedor?->nombre_vendedor ?? $venta->usuario?->name,
             ],
             // Solo presente cuando la venta terminó anulada — motivo es obligatorio en
             // anularVenta(), detalle es opcional (ver VentaController::anularVenta()).

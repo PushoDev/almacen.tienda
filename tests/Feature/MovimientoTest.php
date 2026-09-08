@@ -97,6 +97,7 @@ test('store() rechaza el movimiento si no hay stock disponible en el almacén or
 
 test('un vendedor no puede crear un movimiento desde un almacén que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $origen = Almacen::factory()->almacen()->create(); // no asignado al vendedor
@@ -212,6 +213,7 @@ test('no se puede editar un movimiento que ya está en tránsito', function () {
 
 test('un vendedor no puede editar un movimiento de un almacén origen que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $origen = Almacen::factory()->almacen()->create(); // no asignado al vendedor
     $destino = Almacen::factory()->almacen()->create();
     $producto = Producto::factory()->create();
@@ -430,6 +432,7 @@ test('no se puede recibir un movimiento que no está en tránsito', function () 
 
 test('un vendedor no puede recibir en un almacén destino que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $origen = Almacen::factory()->almacen()->create();
@@ -455,6 +458,7 @@ test('un vendedor no puede recibir en un almacén destino que no tiene asignado'
 
 test('un vendedor sí puede recibir en un almacén destino que tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $origen = Almacen::factory()->almacen()->create();
@@ -572,6 +576,7 @@ test('show() permite ver el detalle de un movimiento recibido completo', functio
 
 test('un moderador puede crear un movimiento desde cualquier almacén, igual que admin', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $origen = Almacen::factory()->almacen()->create(); // no asignado al moderador
@@ -587,6 +592,7 @@ test('un moderador puede crear un movimiento desde cualquier almacén, igual que
 
 test('un moderador puede recibir en cualquier almacén destino, igual que admin', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $origen = Almacen::factory()->almacen()->create();
@@ -612,6 +618,7 @@ test('un moderador puede recibir en cualquier almacén destino, igual que admin'
 
 test('un vendedor no puede ver productos de un almacén que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $almacen = Almacen::factory()->almacen()->create();

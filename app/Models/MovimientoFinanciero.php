@@ -14,6 +14,7 @@ class MovimientoFinanciero extends Model
 
     protected $fillable = [
         'user_id',
+        'turno_vendedor_id',
         'tipo_movimiento_id',
         'cuenta_origen_id',
         'cliente_origen_id',
@@ -55,6 +56,11 @@ class MovimientoFinanciero extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function turnoVendedor(): BelongsTo
+    {
+        return $this->belongsTo(TurnoVendedor::class);
     }
 
     // -------------------------
@@ -111,7 +117,7 @@ class MovimientoFinanciero extends Model
         return $this->belongsTo(Proveedor::class, 'proveedor_destino_id');
     }
 
-     // -------------------------
+    // -------------------------
     // --- Métodos Auxiliares ---
     // -------------------------
 
@@ -135,6 +141,7 @@ class MovimientoFinanciero extends Model
         if ($this->clienteOrigen) {
             return $this->clienteOrigen->nombre_cliente;
         }
+
         return null;
     }
 
@@ -152,6 +159,7 @@ class MovimientoFinanciero extends Model
         if ($this->proveedorDestino) {
             return $this->proveedorDestino->nombre_proveedor;
         }
+
         return null;
     }
 }

@@ -2,7 +2,6 @@
 
 use App\Models\Cliente;
 use App\Models\Cuenta;
-use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
 use App\Models\User;
@@ -83,6 +82,7 @@ test('un gasto rechaza si la moneda de la cuenta no coincide con la moneda de la
 
 test('un vendedor no puede gastar desde una cuenta que no tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -101,6 +101,7 @@ test('un vendedor no puede gastar desde una cuenta que no tiene asignada', funct
 
 test('un vendedor no puede gastar desde una cuenta asignada pero de tipo_titular externa', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -121,6 +122,7 @@ test('un vendedor no puede gastar desde una cuenta asignada pero de tipo_titular
 test('un vendedor sí puede gastar desde su cuenta personal asignada', function () {
     crearTiposMovimientoFinanciero();
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -202,6 +204,7 @@ test('un ingreso a un proveedor suma su saldo_proveedor', function () {
 
 test('un vendedor no puede ingresar a una cuenta que no tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -318,6 +321,7 @@ test('no se puede transferir de una cuenta a sí misma', function () {
 
 test('un vendedor no puede transferir desde una cuenta que no tiene asignada', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -337,7 +341,9 @@ test('un vendedor no puede transferir desde una cuenta que no tiene asignada', f
 test('un vendedor no puede transferir a una cuenta asignada a otro vendedor', function () {
     crearTiposMovimientoFinanciero();
     $vendedorA = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedorA);
     $vendedorB = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedorB);
     $this->actingAs($vendedorA);
 
     $monedaUsd = crearMoneda('USD', 1, true);
@@ -354,6 +360,84 @@ test('un vendedor no puede transferir a una cuenta asignada a otro vendedor', fu
     $response->assertSessionHasErrors('message');
     $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 500]);
     $this->assertDatabaseHas('cuentas', ['id' => $destinoDeOtro->id, 'saldo_cuenta' => 0]);
+});
+
+// ==========================================================================
+// ATENDIDO POR / TURNOS
+// ==========================================================================
+
+test('un gasto creado por un vendedor con turno activo guarda el turno_vendedor_id', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    $turno = crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedor);
+    $cuenta->update(['tipo_titular' => 'personal']);
+
+    $this->post(route('transacciones.gastar'), [
+        'origen_tipo' => 'cuenta',
+        'origen_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+        'comentario' => 'Compra de insumos',
+    ]);
+
+    $this->assertDatabaseHas('movimientos_financieros', [
+        'tipo_movimiento_id' => 1,
+        'cuenta_origen_id' => $cuenta->id,
+        'turno_vendedor_id' => $turno->id,
+    ]);
+});
+
+test('un ingreso creado por un moderador con turno activo guarda el turno_vendedor_id', function () {
+    crearTiposMovimientoFinanciero();
+    $moderador = User::factory()->moderador()->create();
+    $turno = crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+
+    $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'cuenta',
+        'destino_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+        'comentario' => 'Ingreso extra',
+    ]);
+
+    $this->assertDatabaseHas('movimientos_financieros', [
+        'tipo_movimiento_id' => 2,
+        'cuenta_destino_id' => $cuenta->id,
+        'turno_vendedor_id' => $turno->id,
+    ]);
+});
+
+test('una transferencia creada por admin (sin turno) guarda turno_vendedor_id null', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $destino = crearCuentaEnMoneda($monedaUsd, saldo: 0);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta',
+        'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta',
+        'destino_id' => $destino->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ]);
+
+    $this->assertDatabaseHas('movimientos_financieros', [
+        'tipo_movimiento_id' => 3,
+        'cuenta_origen_id' => $origen->id,
+        'turno_vendedor_id' => null,
+    ]);
 });
 
 // ==========================================================================

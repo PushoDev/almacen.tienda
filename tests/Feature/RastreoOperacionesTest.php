@@ -10,6 +10,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\PagoVenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
+use App\Models\TurnoVendedor;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
@@ -90,6 +91,38 @@ test('el reporte combina Venta, Gasto, Ingreso y Transferencia en un solo listad
     expect($filaVentaReciente['id'])->toBe($ventaReciente->id);
     expect($filaVentaReciente['moneda'])->toBe('USD');
     expect($filaVentaReciente['detalle_venta'])->not->toBeNull();
+});
+
+test('detalle_venta.info_general.atendido_por muestra el nombre del turno activo al crear la venta, no el nombre de la cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $vendedor = User::factory()->vendedor()->create(['name' => 'Cuenta POS Sucursal 1']);
+    $turno = TurnoVendedor::factory()->for($vendedor)->create(['nombre_vendedor' => 'María López']);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $vendedor->id,
+        'turno_vendedor_id' => $turno->id,
+        'total' => 50,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['usuario'])->toBe('Cuenta POS Sucursal 1');
+    expect($fila['detalle_venta']['info_general']['atendido_por'])->toBe('María López');
+});
+
+test('detalle_venta.info_general.atendido_por cae al nombre de la cuenta cuando la venta no tiene turno asociado (admin)', function () {
+    $admin = User::factory()->admin()->create(['name' => 'Angel Sanchez']);
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->create(['user_id' => $admin->id, 'turno_vendedor_id' => null, 'total' => 50]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['detalle_venta']['info_general']['atendido_por'])->toBe('Angel Sanchez');
 });
 
 test('el filtro por usuario en el reporte aplica a Venta, Gasto, Ingreso y Transferencia', function () {
@@ -231,6 +264,45 @@ test('el buscador encuentra una Venta por el nombre del destinatario', function 
     expect($operaciones->first()['id'])->toBe($ventaBuscada->id);
 });
 
+test('el buscador encuentra una Venta por el nombre de quien atendió (turno), no solo por el destinatario', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $vendedor = User::factory()->vendedor()->create();
+    $turno = TurnoVendedor::factory()->for($vendedor)->create(['nombre_vendedor' => 'Yaneisy Fonseca']);
+
+    $ventaBuscada = Venta::factory()->create(['user_id' => $vendedor->id, 'turno_vendedor_id' => $turno->id]);
+    Venta::factory()->create();
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['buscar' => 'Yaneisy']), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(1);
+    expect($operaciones->first()['id'])->toBe($ventaBuscada->id);
+});
+
+test('el buscador encuentra un Gasto por el nombre de quien atendió (turno)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $vendedor = User::factory()->vendedor()->create();
+    $turno = TurnoVendedor::factory()->for($vendedor)->create(['nombre_vendedor' => 'Osmani Prieto']);
+
+    $gastoBuscado = MovimientoFinanciero::factory()->gasto()->create([
+        'user_id' => $vendedor->id,
+        'turno_vendedor_id' => $turno->id,
+    ]);
+    MovimientoFinanciero::factory()->gasto()->create();
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['buscar' => 'Osmani']), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(1);
+    expect($operaciones->first()['id'])->toBe($gastoBuscado->id);
+});
+
 test('el detalle colapsable de un Gasto trae la cuenta origen y sus saldos antes/después', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
@@ -259,6 +331,28 @@ test('el detalle colapsable de un Gasto trae la cuenta origen y sus saldos antes
     expect($fila['detalle_movimiento']['origen']['saldo_anterior'])->toEqual(1000.0);
     expect($fila['detalle_movimiento']['origen']['saldo_posterior'])->toEqual(920.0);
     expect($fila['detalle_movimiento']['destino'])->toBeNull();
+});
+
+test('detalle_movimiento.info_general.atendido_por muestra el nombre del turno activo al crear el movimiento', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $vendedor = User::factory()->vendedor()->create();
+    $turno = TurnoVendedor::factory()->for($vendedor)->create(['nombre_vendedor' => 'Pedro Ruiz']);
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $gasto = MovimientoFinanciero::factory()->gasto()->create([
+        'user_id' => $vendedor->id,
+        'turno_vendedor_id' => $turno->id,
+        'cuenta_origen_id' => $cuenta->id,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $gasto->id);
+
+    expect($fila['detalle_movimiento']['info_general']['atendido_por'])->toBe('Pedro Ruiz');
 });
 
 test('el detalle colapsable de un Ingreso trae la cuenta destino y sus saldos antes/después', function () {

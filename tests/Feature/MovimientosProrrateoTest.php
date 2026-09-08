@@ -4,6 +4,7 @@ use App\Models\Almacen;
 use App\Models\Movimiento;
 use App\Models\Producto;
 use App\Models\User;
+use App\Notifications\MovimientoStockNotification;
 use App\Notifications\ProrrateoRequeridoNotification;
 use Illuminate\Support\Facades\Notification;
 
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Notification;
 
 test('vendedor crea movimiento hacia un almacén que no tiene asignado: requiere_prorrateo queda true', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $origen = Almacen::factory()->almacen()->create();
@@ -32,6 +34,7 @@ test('vendedor crea movimiento hacia un almacén que no tiene asignado: requiere
 
 test('vendedor crea movimiento hacia un almacén que sí tiene asignado: requiere_prorrateo queda false', function () {
     $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
 
     $origen = Almacen::factory()->almacen()->create();
@@ -99,9 +102,11 @@ test('enviar() notifica a admin/moderador cuando el movimiento requiere_prorrate
 
     $admin = User::factory()->admin()->create();
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     User::factory()->vendedor()->create(); // no debe recibir la notificación
 
     $creador = User::factory()->vendedor()->create();
+    crearTurnoActivo($creador);
     $origen = Almacen::factory()->almacen()->create();
     $destino = Almacen::factory()->almacen()->create();
     $producto = Producto::factory()->create();
@@ -143,7 +148,7 @@ test('enviar() NO notifica de prorrateo cuando el movimiento no lo requiere', fu
     $this->actingAs($creador)->post(route('movimientos.enviar', $movimiento));
 
     Notification::assertNotSentTo($creador, ProrrateoRequeridoNotification::class);
-    Notification::assertSentTo($creador, \App\Notifications\MovimientoStockNotification::class); // sanity check: el flujo normal de enviar() sigue intacto
+    Notification::assertSentTo($creador, MovimientoStockNotification::class); // sanity check: el flujo normal de enviar() sigue intacto
 });
 
 // ==========================================================================
