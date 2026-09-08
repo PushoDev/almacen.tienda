@@ -56,6 +56,7 @@ export interface DetalleVenta {
     info_general: {
         fecha: string;
         almacen: string | null;
+        atendido_por: string | null;
     };
     // Solo presente cuando la venta terminó anulada (estado === 'cancelada').
     anulacion: {
@@ -206,6 +207,11 @@ export const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) =>
             <span>
                 <strong className="text-foreground">Almacén:</strong> {detalle.info_general.almacen ?? '—'}
             </span>
+            {detalle.info_general.atendido_por && (
+                <span>
+                    <strong className="text-foreground">Atendido por:</strong> {detalle.info_general.atendido_por}
+                </span>
+            )}
         </div>
 
         {/* Anulación — solo presente cuando la venta terminó cancelada */}

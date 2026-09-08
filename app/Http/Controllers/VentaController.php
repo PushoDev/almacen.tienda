@@ -738,6 +738,7 @@ class VentaController extends Controller
             'destinatario',
             'detalles.producto.categoria',
             'usuario',
+            'turnoVendedor',
             'almacen',
             'moneda',
         ]);
@@ -767,6 +768,10 @@ class VentaController extends Controller
                 'usuario' => [
                     'nombre' => $venta->usuario->name,
                 ],
+                // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+                // `usuario` (cuenta de punto de venta). Null en ventas sin turno asociado
+                // (anteriores a esta feature, o hechas por admin).
+                'atendido_por' => $venta->turnoVendedor?->nombre_vendedor,
                 'destinatario' => $venta->destinatario ? [
                     'nombre' => $venta->destinatario->nombre,
                     'apellidos' => $venta->destinatario->apellidos,

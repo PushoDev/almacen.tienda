@@ -175,6 +175,10 @@ class DetalleOperacionService
             'info_general' => [
                 'fecha' => $venta->created_at,
                 'almacen' => $venta->almacen?->nombre_almacen,
+                // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+                // `usuario` (la cuenta de punto de venta usada), null en ventas anteriores a
+                // esta feature o hechas por admin (nunca captura turno).
+                'atendido_por' => $venta->turnoVendedor?->nombre_vendedor,
             ],
             // Solo presente cuando la venta terminó anulada — motivo es obligatorio en
             // anularVenta(), detalle es opcional (ver VentaController::anularVenta()).

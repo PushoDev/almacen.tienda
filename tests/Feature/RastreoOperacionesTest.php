@@ -10,6 +10,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\PagoVenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
+use App\Models\TurnoVendedor;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
@@ -90,6 +91,38 @@ test('el reporte combina Venta, Gasto, Ingreso y Transferencia en un solo listad
     expect($filaVentaReciente['id'])->toBe($ventaReciente->id);
     expect($filaVentaReciente['moneda'])->toBe('USD');
     expect($filaVentaReciente['detalle_venta'])->not->toBeNull();
+});
+
+test('detalle_venta.info_general.atendido_por muestra el nombre del turno activo al crear la venta, no el nombre de la cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $vendedor = User::factory()->vendedor()->create(['name' => 'Cuenta POS Sucursal 1']);
+    $turno = TurnoVendedor::factory()->for($vendedor)->create(['nombre_vendedor' => 'María López']);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $vendedor->id,
+        'turno_vendedor_id' => $turno->id,
+        'total' => 50,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['usuario'])->toBe('Cuenta POS Sucursal 1');
+    expect($fila['detalle_venta']['info_general']['atendido_por'])->toBe('María López');
+});
+
+test('detalle_venta.info_general.atendido_por es null cuando la venta no tiene turno asociado (ej. creada por admin)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->create(['user_id' => $admin->id, 'turno_vendedor_id' => null, 'total' => 50]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['detalle_venta']['info_general']['atendido_por'])->toBeNull();
 });
 
 test('el filtro por usuario en el reporte aplica a Venta, Gasto, Ingreso y Transferencia', function () {

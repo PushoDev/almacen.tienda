@@ -1173,6 +1173,46 @@ test('imprimir renderiza el ticket con la moneda principal cuando no hay paráme
     );
 });
 
+test('imprimir manda atendido_por desde el turno asociado a la venta', function () {
+    $vendedor = User::factory()->vendedor()->create(['name' => 'Cuenta POS Sucursal 1']);
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $venta = Venta::factory()->conMoneda($monedaUsd)->create([
+        'user_id' => $vendedor->id,
+        'turno_vendedor_id' => $vendedor->turnoActivo()->id,
+        'almacen_id' => $almacen->id,
+        'total' => 0,
+    ]);
+
+    $response = $this->get(route('ventas.imprimir', $venta));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('venta.usuario.nombre', 'Cuenta POS Sucursal 1')
+        ->where('venta.atendido_por', $vendedor->turnoActivo()->nombre_vendedor)
+    );
+});
+
+test('imprimir manda atendido_por null cuando la venta no tiene turno asociado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $venta = Venta::factory()->conMoneda($monedaUsd)->create([
+        'user_id' => $admin->id, 'turno_vendedor_id' => null, 'almacen_id' => $almacen->id, 'total' => 0,
+    ]);
+
+    $response = $this->get(route('ventas.imprimir', $venta));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page->where('venta.atendido_por', null));
+});
+
 test('imprimir no incluye datos de destinatario cuando la venta no tiene uno', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

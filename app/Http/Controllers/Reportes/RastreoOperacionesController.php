@@ -191,6 +191,7 @@ class RastreoOperacionesController extends Controller
 
         $ventasPorId = Venta::with([
             'usuario',
+            'turnoVendedor',
             'almacen',
             'destinatario',
             'comisionCuenta.moneda',
