@@ -10,6 +10,8 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
+import { CuentaCard, type CuentaCardData } from '@/components/CuentaCard';
+import { type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,12 +26,10 @@ import {
 } from '@/components/ui/pagination';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Lock, Minus, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
+import { CreditCard, Globe, Landmark, Lock, Minus, Plus, Search, User, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -60,6 +60,8 @@ interface CuentaConMoneda extends CuentaProps {
     moneda_id: number;
     moneda: MonedaInfo | null;
     tipo_titular?: string | null;
+    imagen: string | null;
+    banco: { slug: string; nombre: string; imagen_url: string } | null;
 }
 
 interface ResumenPorMonedaItem {
@@ -84,7 +86,17 @@ interface ResumenData {
     cuentas_inactivas: number;
 }
 
-export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cuentas: CuentaConMoneda[]; monedaPrincipal: MonedaInfo | null; resumen: ResumenData }) {
+export default function CuentasPage({
+    cuentas,
+    monedaPrincipal,
+    resumen,
+    catalogoTarjetas,
+}: {
+    cuentas: CuentaConMoneda[];
+    monedaPrincipal: MonedaInfo | null;
+    resumen: ResumenData;
+    catalogoTarjetas: CatalogoTarjetas;
+}) {
     const { props } = usePage();
     const isAdmin = props.auth?.user?.role === 'admin';
 
@@ -130,6 +142,8 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
     const [filtroMoneda, setFiltroMoneda] = useState('');
     const [filtroEstado, setFiltroEstado] = useState('');
     const [filtroTipoTitular, setFiltroTipoTitular] = useState('');
+    // '' = todos, '__sin_banco__' = tarjeta sin banco asignado, o el slug de un banco.
+    const [filtroBanco, setFiltroBanco] = useState('');
     const [busqueda, setBusqueda] = useState('');
     const [paginaActual, setPaginaActual] = useState(1);
 
@@ -137,6 +151,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         setFiltroMoneda('');
         setFiltroEstado('');
         setFiltroTipoTitular('');
+        setFiltroBanco('');
         setBusqueda('');
         setPaginaActual(1);
     };
@@ -159,12 +174,14 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
             const monOk = !filtroMoneda || c.moneda?.codigo_moneda === filtroMoneda;
             const estOk = !filtroEstado || c.estado === filtroEstado;
             const tipoTitularOk = !filtroTipoTitular || (c.tipo_titular ?? '__sin_asignar__') === filtroTipoTitular;
+            const bancoOk =
+                !filtroBanco || (filtroBanco === '__sin_banco__' ? !c.banco : c.banco?.slug === filtroBanco);
             const busqOk = !busqueda
                 || c.nombre_cuenta.toLowerCase().includes(busqueda.toLowerCase())
                 || c.moneda?.codigo_moneda.toLowerCase().includes(busqueda.toLowerCase());
-            return monOk && estOk && tipoTitularOk && busqOk;
+            return monOk && estOk && tipoTitularOk && bancoOk && busqOk;
         });
-    }, [cuentas, filtroMoneda, filtroEstado, filtroTipoTitular, busqueda]);
+    }, [cuentas, filtroMoneda, filtroEstado, filtroTipoTitular, filtroBanco, busqueda]);
 
     const elementosPorPagina = 10;
     const totalPaginas = Math.ceil(cuentasFiltradas.length / elementosPorPagina);
@@ -232,7 +249,13 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         };
     }, [cuentas]);
 
-    const hasFilters = !!(filtroMoneda || filtroEstado || filtroTipoTitular || busqueda);
+    const hasFilters = !!(filtroMoneda || filtroEstado || filtroTipoTitular || filtroBanco || busqueda);
+
+    const nombreBancoFiltro = useMemo(() => {
+        if (filtroBanco === '__sin_banco__') return 'Sin banco';
+        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa];
+        return todos.find((b) => b.slug === filtroBanco)?.nombre ?? filtroBanco;
+    }, [filtroBanco, catalogoTarjetas]);
 
     const paginas = useMemo((): (number | 'ellipsis')[] => {
         if (totalPaginas <= 7) return Array.from({ length: totalPaginas }, (_, i) => i + 1);
@@ -418,6 +441,19 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                <Select value={filtroBanco || 'all'} onValueChange={(v) => { setFiltroBanco(v === 'all' ? '' : v); setPaginaActual(1); }}>
+                                    <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todos los bancos" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos los bancos</SelectItem>
+                                        <SelectItem value="__sin_banco__">Sin banco asignado</SelectItem>
+                                        {catalogoTarjetas.interna.map((b) => (
+                                            <SelectItem key={b.slug} value={b.slug}>{b.nombre}</SelectItem>
+                                        ))}
+                                        {catalogoTarjetas.externa.map((b) => (
+                                            <SelectItem key={b.slug} value={b.slug}>{b.nombre}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                                 <Link href={route('cuentas.create')}>
                                     <Button className="flex cursor-pointer items-center gap-2"><Plus size={16} /> Nueva Cuenta</Button>
                                 </Link>
@@ -430,6 +466,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     {filtroMoneda && <FilterBadge label={`Moneda: ${filtroMoneda}`} onClear={() => setFiltroMoneda('')} />}
                                     {filtroEstado && <FilterBadge label={`Estado: ${filtroEstado}`} onClear={() => setFiltroEstado('')} />}
                                     {filtroTipoTitular && <FilterBadge label={`Titular: ${filtroTipoTitular === '__sin_asignar__' ? 'Sin asignar' : filtroTipoTitular.charAt(0).toUpperCase() + filtroTipoTitular.slice(1)}`} onClear={() => setFiltroTipoTitular('')} />}
+                                    {filtroBanco && <FilterBadge label={`Banco: ${nombreBancoFiltro}`} onClear={() => setFiltroBanco('')} />}
                                     {busqueda && <FilterBadge label={`Buscar: "${busqueda}"`} onClear={() => setBusqueda('')} />}
                                     <Button variant="ghost" size="sm" onClick={limpiarFiltros} className="h-7 text-xs">Limpiar todos</Button>
                                 </div>
@@ -451,152 +488,34 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                     </CardHeader>
                 </Card>
 
-                {/* Table */}
-                <Card>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableCaption>Lista de cuentas del sistema - {cuentasFiltradas.length} encontradas</TableCaption>
-                            <TableHeader>
-                                <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                    <TableHead className="w-[250px] text-white">Cuenta</TableHead>
-                                    <TableHead className="text-white">Moneda</TableHead>
-                                    <TableHead className="text-white">Saldo</TableHead>
-                                    <TableHead className="text-white">Tipo Activo</TableHead>
-                                    <TableHead className="text-white">Tipo Titular</TableHead>
-                                    <TableHead className="text-right text-white">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {cuentasPagina.map((cuenta) => (
-                                    <TableRow key={cuenta.id}>
-                                        <TableCell className="font-medium">
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-primary/10 flex h-8 w-8 items-center justify-center rounded-full"><Landmark size={16} className="text-primary" /></div>
-                                                <span className="font-semibold">{cuenta.nombre_cuenta}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/20"><Coins size={12} className="text-amber-600" /></div>
-                                                            <Badge variant="outline" className="font-mono">{cuenta.moneda?.codigo_moneda || 'N/A'}</Badge>
-                                                        </div>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent><p>{cuenta.moneda?.nombre_moneda || 'Moneda no especificada'}</p></TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Wallet size={14} className="text-muted-foreground" />
-                                                <span className={
-                                                    cuenta.saldo_cuenta != null
-                                                        ? cuenta.saldo_cuenta > 0 ? 'font-semibold text-emerald-600'
-                                                            : cuenta.saldo_cuenta < 0 ? 'font-semibold text-red-600' : 'text-muted-foreground'
-                                                        : 'text-muted-foreground'
-                                                }>
-                                                    {cuenta.saldo_cuenta != null
-                                                        ? `${cuenta.moneda?.simbolo_moneda || '$'} ${Math.abs(cuenta.saldo_cuenta).toFixed(2)}`
-                                                        : 'Sin saldo'}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className={
-                                                cuenta.tipo === 'tarjeta'
-                                                    ? 'inline-flex items-center gap-1.5 border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300'
-                                                    : 'inline-flex items-center gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
-                                            }>
-                                                {cuenta.tipo === 'tarjeta' ? <><CreditCard size={12} /> Tarjeta</> : <><Banknote size={12} /> Efectivo</>}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            {cuenta.tipo_titular ? (
-                                                <Badge variant="outline" className={
-                                                    cuenta.tipo_titular === 'externa'
-                                                        ? 'inline-flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
-                                                        : 'inline-flex items-center gap-1.5 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300'
-                                                }>
-                                                    {cuenta.tipo_titular === 'externa' ? <><Globe size={12} /> Externa</> : <><User size={12} /> Personal</>}
-                                                </Badge>
-                                            ) : (
-                                                <span className="text-muted-foreground inline-flex items-center gap-1 text-xs"><Minus size={12} /> Sin asignar</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-1">
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Link href={route('cuentas.show', { cuenta: cuenta.id })}>
-                                                                <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-blue-50 hover:text-blue-600"><Eye size={14} /></Button>
-                                                            </Link>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent><p>Ver detalles</p></TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Link href={route('cuentas.edit', { cuenta: cuenta.id })} onClick={handleEditClick}>
-                                                                <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-green-50 hover:text-green-600"><Edit3 size={14} /></Button>
-                                                            </Link>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent><p>{isAdmin ? 'Editar cuenta' : 'Sin acceso — solo administradores'}</p></TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className={`h-8 w-8 cursor-pointer p-0 ${
-                                                                    isAdmin && Number(cuenta.saldo_cuenta ?? 0) === 0
-                                                                        ? 'text-red-600 hover:bg-red-50 hover:text-red-700'
-                                                                        : 'text-muted-foreground'
-                                                                }`}
-                                                                onClick={() => handleDeleteClick(cuenta)}
-                                                            >
-                                                                {isAdmin && Number(cuenta.saldo_cuenta ?? 0) !== 0 ? <Lock size={14} /> : <Trash2 size={14} />}
-                                                            </Button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p>
-                                                                {!isAdmin
-                                                                    ? 'Sin acceso — solo administradores'
-                                                                    : Number(cuenta.saldo_cuenta ?? 0) !== 0
-                                                                      ? 'No eliminable — cuenta tiene saldo pendiente'
-                                                                      : 'Eliminar cuenta'}
-                                                            </p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {cuentasPagina.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
-                                            {hasFilters ? 'No hay cuentas que coincidan con los filtros aplicados.' : 'No hay cuentas registradas.'}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                            <TableFooter>
-                                    <TableRow>
-                                        <TableCell colSpan={2} className="font-medium">Total de cuentas filtradas</TableCell>
-                                        <TableCell className="font-medium">{cuentasFiltradas.length}</TableCell>
-                                        <TableCell colSpan={2} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
-                                        <TableCell />
-                                    </TableRow>
-                            </TableFooter>
-                        </Table>
-                    </CardContent>
-                </Card>
+                {/* Grilla de cards */}
+                {cuentasPagina.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {cuentasPagina.map((cuenta) => (
+                            <CuentaCard
+                                key={cuenta.id}
+                                cuenta={cuenta as CuentaCardData}
+                                isAdmin={isAdmin}
+                                onEditClick={handleEditClick}
+                                onDeleteClick={(c) => handleDeleteClick(c as CuentaConMoneda)}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <Card>
+                        <CardContent className="text-muted-foreground py-12 text-center">
+                            {hasFilters ? 'No hay cuentas que coincidan con los filtros aplicados.' : 'No hay cuentas registradas.'}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {cuentasPagina.length > 0 && (
+                    <p className="text-muted-foreground text-right text-sm">
+                        Total de cuentas filtradas: <span className="text-foreground font-medium">{cuentasFiltradas.length}</span>
+                        {' · '}
+                        <span className="font-medium text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</span>
+                    </p>
+                )}
 
                 {/* Pagination */}
                 {totalPaginas > 1 && (

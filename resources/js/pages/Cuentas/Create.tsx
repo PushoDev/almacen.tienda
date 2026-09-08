@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { SelectorBancoTarjeta, type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { HandCoins, Landmark } from 'lucide-react';
+import { CreditCard, HandCoins, Landmark } from 'lucide-react';
+import { useMemo } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
@@ -37,9 +39,10 @@ interface MonedaOption {
 
 interface CreateCuentasPageProps {
     monedas: MonedaOption[];
+    catalogoTarjetas: CatalogoTarjetas;
 }
 
-export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
+export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateCuentasPageProps) {
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
         tipo: 'tarjeta' as 'tarjeta' | 'efectivo',
@@ -49,7 +52,14 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
         tipo_titular: '',
         estado: 'activa' as 'activa' | 'inactiva',
         notas_cuenta: '',
+        imagen: null as string | null,
     });
+
+    // Banco elegido en vivo — se usa para el efecto bleed del header.
+    const bancoSeleccionado = useMemo(() => {
+        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa];
+        return todos.find((b) => b.slug === data.imagen) ?? null;
+    }, [catalogoTarjetas, data.imagen]);
 
     // Función para enviar el formulario
     const submit = (e: React.FormEvent) => {
@@ -69,14 +79,30 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Crear Cuenta" />
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6">
-                {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                {/* Header — sin overflow-hidden a propósito: la tarjeta elegida usa efecto
+                    bleed (ver docs/patron-mascota-bleed.md Variante A), se sale del borde
+                    superior en vez de quedar recortada adentro. */}
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Gestión de Cuentas" description="Administre las cuentas disponibles para su negocio." />
-                    <Landmark
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-                    />
+                    {data.tipo === 'efectivo' ? (
+                        <Landmark
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    ) : bancoSeleccionado ? (
+                        <img
+                            src={bancoSeleccionado.imagen_url}
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                        />
+                    ) : (
+                        <div className="pointer-events-none absolute right-4 bottom-2 flex flex-col items-center gap-1 opacity-60">
+                            <CreditCard size={44} color="#d6d3d1" className="animate-pulse" />
+                            <span className="text-[10px] font-medium whitespace-nowrap text-[#d6d3d1] animate-pulse">Elige un banco ↓</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Formulario de Creación */}
@@ -105,7 +131,13 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                         <Label htmlFor="tipo">Tipo de Activo *</Label>
                                         <Select
                                             value={data.tipo}
-                                            onValueChange={(value: 'tarjeta' | 'efectivo') => setData('tipo', value)}
+                                            onValueChange={(value: 'tarjeta' | 'efectivo') => {
+                                                setData('tipo', value);
+                                                // Efectivo no lleva banco/diseño de tarjeta.
+                                                if (value === 'efectivo') {
+                                                    setData('imagen', null);
+                                                }
+                                            }}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
@@ -117,6 +149,19 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                         </Select>
                                         <InputError message={errors.tipo} />
                                     </div>
+
+                                    {/* Campo Banco / Diseño de tarjeta — solo aplica cuando tipo=tarjeta */}
+                                    {data.tipo === 'tarjeta' && (
+                                        <div className="space-y-2">
+                                            <Label>Banco / Diseño de tarjeta</Label>
+                                            <SelectorBancoTarjeta
+                                                catalogo={catalogoTarjetas}
+                                                value={data.imagen}
+                                                onChange={(slug) => setData('imagen', slug)}
+                                            />
+                                            <InputError message={errors.imagen} />
+                                        </div>
+                                    )}
 
                                     {/* Campo Saldo de la Cuenta */}
                                     <div className="space-y-2">
