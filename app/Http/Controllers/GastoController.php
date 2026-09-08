@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Cuenta;
 use App\Models\Cliente;
+use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Notifications\MovimientoFinancieroNotification;
@@ -25,7 +25,7 @@ class GastoController extends Controller
             'origen_tipo' => 'required|string|in:cuenta,cliente',
             'origen_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
-            'moneda' => 'required|string|in:' . implode(',', $monedasValidas),
+            'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
         ]);
 
@@ -34,6 +34,7 @@ class GastoController extends Controller
         try {
             $movimientoData = [
                 'user_id' => auth()->id(),
+                'turno_vendedor_id' => auth()->user()->turnoActivo()?->id,
                 'tipo_movimiento_id' => 1,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
@@ -53,7 +54,7 @@ class GastoController extends Controller
 
                 if (auth()->user()->role === 'vendedor') {
                     $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                    if (!in_array($origen->id, $cuentasAsignadas)) {
+                    if (! in_array($origen->id, $cuentasAsignadas)) {
                         throw new \Exception('No tiene permiso para operar con esta cuenta.');
                     }
 
@@ -96,24 +97,24 @@ class GastoController extends Controller
             DB::commit();
 
             try {
-                $notificationService = new NotificationService();
+                $notificationService = new NotificationService;
                 $datosNotificacion = $notificationService->prepararDatosMovimientoFinanciero($movimiento);
                 $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
 
-                Log::info('Usuarios para notificar (gasto): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Usuarios para notificar (gasto): '.$usuariosParaNotificar->pluck('id')->implode(','));
 
                 $movimiento->load(['user', 'cuentaOrigen', 'clienteOrigen']);
 
                 Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'gasto'));
             } catch (\Exception $e) {
-                Log::error('Error enviando notificación de gasto: ' . $e->getMessage());
+                Log::error('Error enviando notificación de gasto: '.$e->getMessage());
             }
 
             return Redirect::route('transacciones.show', $movimiento->id)
                 ->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al registrar gasto: ' . $e->getMessage());
+            Log::error('Error al registrar gasto: '.$e->getMessage());
             throw ValidationException::withMessages(['message' => [$e->getMessage()]]);
         }
     }

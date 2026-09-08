@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Cuenta;
 use App\Models\Cliente;
-use App\Models\Proveedor;
+use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
+use App\Models\Proveedor;
 use App\Notifications\MovimientoFinancieroNotification;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -43,7 +43,7 @@ class IngresoController extends Controller
             'destino_tipo' => 'required|string|in:cuenta,cliente,proveedor',
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
-            'moneda' => 'required|string|in:' . implode(',', $monedasValidas),
+            'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
         ]);
 
@@ -52,6 +52,7 @@ class IngresoController extends Controller
         try {
             $movimientoData = [
                 'user_id' => auth()->id(),
+                'turno_vendedor_id' => auth()->user()->turnoActivo()?->id,
                 'tipo_movimiento_id' => 2,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
@@ -71,7 +72,7 @@ class IngresoController extends Controller
 
                 if (auth()->user()->role === 'vendedor') {
                     $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                    if (!in_array($destino->id, $cuentasAsignadas)) {
+                    if (! in_array($destino->id, $cuentasAsignadas)) {
                         throw new \Exception('No tiene permiso para operar con esta cuenta.');
                     }
                 }
@@ -90,7 +91,7 @@ class IngresoController extends Controller
                 $movimientoData['saldo_anterior_destino'] = $saldoAnterior;
                 $movimientoData['saldo_posterior_destino'] = $saldoPosterior;
                 $movimientoData['moneda_destino'] = $destino->moneda->codigo_moneda;
-            } else if ($request->destino_tipo === 'cliente') {
+            } elseif ($request->destino_tipo === 'cliente') {
                 $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
 
                 $saldoAnterior = $destino->deuda_pago_cliente;
@@ -123,24 +124,24 @@ class IngresoController extends Controller
             DB::commit();
 
             try {
-                $notificationService = new NotificationService();
+                $notificationService = new NotificationService;
                 $datosNotificacion = $notificationService->prepararDatosMovimientoFinanciero($movimiento);
                 $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
 
-                Log::info('Usuarios para notificar (ingreso): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Usuarios para notificar (ingreso): '.$usuariosParaNotificar->pluck('id')->implode(','));
 
                 $movimiento->load(['user', 'cuentaDestino', 'clienteDestino', 'proveedorDestino']);
 
                 Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'ingreso'));
             } catch (\Exception $e) {
-                Log::error('Error enviando notificación de ingreso: ' . $e->getMessage());
+                Log::error('Error enviando notificación de ingreso: '.$e->getMessage());
             }
 
             return Redirect::route('transacciones.show', $movimiento->id)
                 ->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al registrar ingreso: ' . $e->getMessage());
+            Log::error('Error al registrar ingreso: '.$e->getMessage());
             throw ValidationException::withMessages(['message' => [$e->getMessage()]]);
         }
     }

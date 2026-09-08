@@ -74,6 +74,7 @@ class TransaccionController extends Controller
         // ✅ Cargar TODAS las relaciones necesarias de forma eager
         $movimiento->load([
             'user',
+            'turnoVendedor',
             'tipoMovimiento',
             'cuentaOrigen.moneda',
             'cuentaDestino.moneda',

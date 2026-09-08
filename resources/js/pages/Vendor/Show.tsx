@@ -217,6 +217,9 @@ interface Venta {
     ganancia_real_total: number;
     fecha: string;
     usuario: Usuario;
+    // Quién atendía realmente (feature "Atendido por" / Turnos) — el backend ya cae al
+    // nombre de la cuenta cuando no hay turno (admin), así que siempre trae un nombre.
+    atendido_por: string | null;
     pagos: Pago[];
     total_pagado: number;
     restante: number;
@@ -2084,6 +2087,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <UserCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
                                             <span className="font-bold">Vendedor:</span> {currentVenta.usuario.nombre}
                                         </div>
+                                        {currentVenta.atendido_por && currentVenta.atendido_por !== currentVenta.usuario.nombre && (
+                                            <div className="mt-1 flex items-center gap-1.5 text-xs">
+                                                <UserCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                                                <span className="font-bold">Atendido por:</span> {currentVenta.atendido_por}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -3160,6 +3169,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         <p className="mt-2 text-sm">
                             {currentVenta.usuario.nombre} ({currentVenta.usuario.rol})
                         </p>
+                        {currentVenta.atendido_por && currentVenta.atendido_por !== currentVenta.usuario.nombre && (
+                            <p className="text-muted-foreground mt-1 text-xs">Atendido por: {currentVenta.atendido_por}</p>
+                        )}
                     </div>
                 </div>
 

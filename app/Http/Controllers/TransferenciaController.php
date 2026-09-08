@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Cuenta;
 use App\Models\Cliente;
-use App\Models\Proveedor;
+use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
+use App\Models\Proveedor;
 use App\Notifications\MovimientoFinancieroNotification;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -49,14 +49,14 @@ class TransferenciaController extends Controller
             'destino_tipo' => 'required|string|in:cuenta,cliente,proveedor',
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
-            'moneda' => 'required|string|in:' . implode(',', $monedasValidas),
+            'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
             'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
         ]);
 
-        if ($request->origen_tipo === $request->destino_tipo && (int)$request->origen_id === (int)$request->destino_id) {
+        if ($request->origen_tipo === $request->destino_tipo && (int) $request->origen_id === (int) $request->destino_id) {
             return Redirect::back()->withErrors([
-                'destino_id' => 'El origen y el destino no pueden ser la misma entidad.'
+                'destino_id' => 'El origen y el destino no pueden ser la misma entidad.',
             ])->withInput();
         }
 
@@ -70,7 +70,7 @@ class TransferenciaController extends Controller
 
             if (auth()->user()->role === 'vendedor' && $request->destino_tipo === 'cuenta') {
                 $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                if (!in_array((int)$request->destino_id, $cuentasAsignadas)) {
+                if (! in_array((int) $request->destino_id, $cuentasAsignadas)) {
                     throw new \Exception('No tiene permiso para transferir a esta cuenta.');
                 }
             }
@@ -82,7 +82,7 @@ class TransferenciaController extends Controller
                 throw new \Exception("La moneda del origen ({$monedaOrigen->codigo_moneda}) no coincide con la moneda de la transacción ({$request->moneda}).");
             }
 
-            $montoOrigen = (float)$request->monto;
+            $montoOrigen = (float) $request->monto;
             $montoDestino = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
             $tasaCambioAplicada = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
 
@@ -116,6 +116,7 @@ class TransferenciaController extends Controller
 
             $movimiento = MovimientoFinanciero::create([
                 'user_id' => auth()->id(),
+                'turno_vendedor_id' => auth()->user()->turnoActivo()?->id,
                 'tipo_movimiento_id' => 3,
                 'cuenta_origen_id' => $request->origen_tipo === 'cuenta' ? $origen->id : null,
                 'cliente_origen_id' => $request->origen_tipo === 'cliente' ? $origen->id : null,
@@ -141,17 +142,17 @@ class TransferenciaController extends Controller
             DB::commit();
 
             try {
-                $notificationService = new NotificationService();
+                $notificationService = new NotificationService;
                 $datosNotificacion = $notificationService->prepararDatosTransferencia($movimiento);
                 $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
 
-                Log::info('Usuarios para notificar (transferencia): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Usuarios para notificar (transferencia): '.$usuariosParaNotificar->pluck('id')->implode(','));
 
                 $movimiento->load(['user', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino']);
 
                 Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'transferencia'));
             } catch (\Exception $e) {
-                Log::error('Error enviando notificación de transferencia: ' . $e->getMessage());
+                Log::error('Error enviando notificación de transferencia: '.$e->getMessage());
             }
 
             $mensajeExito = $monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda
@@ -161,7 +162,7 @@ class TransferenciaController extends Controller
             return Redirect::route('transacciones.show', $movimiento->id)->with('success', $mensajeExito);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al registrar transferencia: ' . $e->getMessage());
+            Log::error('Error al registrar transferencia: '.$e->getMessage());
             throw ValidationException::withMessages(['message' => [$e->getMessage()]]);
         }
     }
@@ -183,7 +184,7 @@ class TransferenciaController extends Controller
             ->orderBy('tasa_cambio', 'desc')
             ->first();
 
-        if (!$moneda) {
+        if (! $moneda) {
             throw new \Exception("La moneda {$codigo} no está disponible o no existe.");
         }
 
@@ -223,11 +224,11 @@ class TransferenciaController extends Controller
     {
         switch ($tipo) {
             case 'cuenta':
-                return (float)$entidad->saldo_cuenta;
+                return (float) $entidad->saldo_cuenta;
             case 'cliente':
-                return (float)$entidad->deuda_pago_cliente;
+                return (float) $entidad->deuda_pago_cliente;
             case 'proveedor':
-                return (float)$entidad->saldo_proveedor;
+                return (float) $entidad->saldo_proveedor;
             default:
                 return 0.0;
         }
@@ -243,7 +244,7 @@ class TransferenciaController extends Controller
             case 'proveedor':
                 return "Proveedor: {$entidad->nombre_proveedor}";
             default:
-                return "Entidad desconocida";
+                return 'Entidad desconocida';
         }
     }
 
@@ -253,7 +254,7 @@ class TransferenciaController extends Controller
     {
         if (auth()->user()->role === 'vendedor' && $tipo === 'cuenta') {
             $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-            if (!in_array($entidad->id, $cuentasAsignadas)) {
+            if (! in_array($entidad->id, $cuentasAsignadas)) {
                 throw new \Exception('No tiene permiso para operar con esta cuenta.');
             }
             if (($entidad->tipo_titular ?? '__sin_asignar__') !== 'personal') {
@@ -302,7 +303,7 @@ class TransferenciaController extends Controller
             return $montoOrigen;
         }
 
-        if (!$origenEsCuenta && !$destinoEsCuenta) {
+        if (! $origenEsCuenta && ! $destinoEsCuenta) {
             return $montoOrigen;
         }
 
@@ -325,6 +326,7 @@ class TransferenciaController extends Controller
         }
 
         $montoEnUsd = $montoOrigen / $tasaOrigen;
+
         return round($montoEnUsd * $tasaDestino, 2);
     }
 

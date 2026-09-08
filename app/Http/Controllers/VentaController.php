@@ -514,6 +514,7 @@ class VentaController extends Controller
             'cliente',
             'almacen.mensajeroCuenta',
             'usuario',
+            'turnoVendedor',
             'moneda',
             'monedaCobro',
             'gestorCuenta.moneda',
@@ -596,6 +597,11 @@ class VentaController extends Controller
                 'email' => $venta->usuario->email,
                 'rol' => $venta->usuario->role,
             ],
+            // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
+            // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin, que
+            // nunca captura uno, o ventas anteriores a esta feature): ahí se cae al nombre
+            // de la cuenta, que para admin ya es la persona real.
+            'atendido_por' => $venta->turnoVendedor?->nombre_vendedor ?? $venta->usuario->name,
             'pagos' => $venta->pagos->map(function ($pago) {
                 // ✅ DETERMINAR TIPO DE DESTINO
                 $destinoTipo = $pago->cliente_id ? 'cliente' : 'cuenta';
@@ -769,9 +775,10 @@ class VentaController extends Controller
                     'nombre' => $venta->usuario->name,
                 ],
                 // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
-                // `usuario` (cuenta de punto de venta). Null en ventas sin turno asociado
-                // (anteriores a esta feature, o hechas por admin).
-                'atendido_por' => $venta->turnoVendedor?->nombre_vendedor,
+                // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin,
+                // que nunca captura uno, o ventas anteriores a esta feature): ahí se cae al
+                // nombre de la cuenta, que para admin ya es la persona real.
+                'atendido_por' => $venta->turnoVendedor?->nombre_vendedor ?? $venta->usuario->name,
                 'destinatario' => $venta->destinatario ? [
                     'nombre' => $venta->destinatario->nombre,
                     'apellidos' => $venta->destinatario->apellidos,

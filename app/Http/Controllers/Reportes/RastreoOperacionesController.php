@@ -75,11 +75,16 @@ class RastreoOperacionesController extends Controller
         $ventasSub = DB::table('ventas')
             ->leftJoin('users', 'users.id', '=', 'ventas.user_id')
             ->leftJoin('destinatarios_venta', 'destinatarios_venta.venta_id', '=', 'ventas.id')
+            // Turno activo al crear la venta (feature "Atendido por") — se une acá solo para
+            // que 'buscar' también encuentre por el nombre de quien atendió, no solo por la
+            // cuenta de usuario ('users.name').
+            ->leftJoin('turnos_vendedor as turno_venta', 'turno_venta.id', '=', 'ventas.turno_vendedor_id')
             ->select('ventas.id', 'ventas.created_at as fecha', DB::raw("'Venta' as tipo"))
             ->when($request->filled('fecha'), fn ($q) => $q->whereDate('ventas.created_at', $request->input('fecha')))
             ->when($userIdFiltro, fn ($q) => $q->where('ventas.user_id', $userIdFiltro))
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('users.name', 'like', "%{$buscar}%")
+                    ->orWhere('turno_venta.nombre_vendedor', 'like', "%{$buscar}%")
                     ->orWhere('destinatarios_venta.nombre', 'like', "%{$buscar}%")
                     ->orWhere('destinatarios_venta.apellidos', 'like', "%{$buscar}%")
                     ->orWhere('ventas.estado', 'like', "%{$buscar}%")
@@ -205,6 +210,7 @@ class RastreoOperacionesController extends Controller
 
         $movimientosPorId = MovimientoFinanciero::with([
             'user',
+            'turnoVendedor',
             'cuentaOrigen',
             'cuentaDestino',
             'clienteOrigen',
@@ -281,6 +287,10 @@ class RastreoOperacionesController extends Controller
     ) {
         return DB::table('movimientos_financieros as mf')
             ->leftJoin('users', 'users.id', '=', 'mf.user_id')
+            // Turno activo al crear el movimiento (feature "Atendido por") — mismo motivo
+            // que en la subquery de Venta: dejar que 'buscar' también encuentre por quien
+            // atendió, no solo por la cuenta de usuario.
+            ->leftJoin('turnos_vendedor as turno_mf', 'turno_mf.id', '=', 'mf.turno_vendedor_id')
             ->leftJoin('cuentas as cuenta_origen', 'cuenta_origen.id', '=', 'mf.cuenta_origen_id')
             ->leftJoin('cuentas as cuenta_destino', 'cuenta_destino.id', '=', 'mf.cuenta_destino_id')
             ->leftJoin('clientes as cliente_origen', 'cliente_origen.id', '=', 'mf.cliente_origen_id')
@@ -293,6 +303,7 @@ class RastreoOperacionesController extends Controller
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('mf.descripcion', 'like', "%{$buscar}%")
                     ->orWhere('users.name', 'like', "%{$buscar}%")
+                    ->orWhere('turno_mf.nombre_vendedor', 'like', "%{$buscar}%")
                     ->orWhere('cuenta_origen.nombre_cuenta', 'like', "%{$buscar}%")
                     ->orWhere('cuenta_destino.nombre_cuenta', 'like', "%{$buscar}%")
                     ->orWhere('cliente_origen.nombre_cliente', 'like', "%{$buscar}%")

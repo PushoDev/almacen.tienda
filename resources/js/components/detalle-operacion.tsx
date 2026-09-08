@@ -120,6 +120,7 @@ export interface DetalleMovimiento {
     info_general: {
         fecha: string;
         estado: string;
+        atendido_por: string | null;
         // Solo vienen con valor en Transferencia cuando origen y destino usan monedas
         // distintas — Gasto/Ingreso son de un solo lado y una sola moneda, sin conversión.
         tasa_cambio_aplicada: number | null;
@@ -469,6 +470,11 @@ export const DetalleMovimientoExpandido = ({
             <span>
                 <strong className="text-foreground">Registrado por:</strong> {usuario}
             </span>
+            {detalle.info_general.atendido_por && (
+                <span>
+                    <strong className="text-foreground">Atendido por:</strong> {detalle.info_general.atendido_por}
+                </span>
+            )}
             {detalle.info_general.tasa_cambio_aplicada !== null && (
                 <span>
                     <strong className="text-foreground">Tasa de Cambio:</strong> {detalle.info_general.tasa_cambio_aplicada}

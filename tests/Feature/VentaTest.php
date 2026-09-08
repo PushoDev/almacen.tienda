@@ -1197,8 +1197,8 @@ test('imprimir manda atendido_por desde el turno asociado a la venta', function 
     );
 });
 
-test('imprimir manda atendido_por null cuando la venta no tiene turno asociado', function () {
-    $admin = User::factory()->admin()->create();
+test('imprimir cae al nombre de la cuenta como atendido_por cuando la venta no tiene turno asociado (admin)', function () {
+    $admin = User::factory()->admin()->create(['name' => 'Luis Alberto']);
     $this->actingAs($admin);
 
     $almacen = Almacen::factory()->puntoVenta()->create();
@@ -1210,7 +1210,7 @@ test('imprimir manda atendido_por null cuando la venta no tiene turno asociado',
     $response = $this->get(route('ventas.imprimir', $venta));
 
     $response->assertOk();
-    $response->assertInertia(fn ($page) => $page->where('venta.atendido_por', null));
+    $response->assertInertia(fn ($page) => $page->where('venta.atendido_por', 'Luis Alberto'));
 });
 
 test('imprimir no incluye datos de destinatario cuando la venta no tiene uno', function () {
