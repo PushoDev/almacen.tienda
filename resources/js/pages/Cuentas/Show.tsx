@@ -508,8 +508,8 @@ export default function ShowCuentasPage({
                             title={`Cuenta: ${cuenta.nombre_cuenta}`}
                             description="Detalles de la cuenta y su historial de operaciones."
                         />
-                        {cuenta.tipo === 'efectivo' ? (
-                            // Efectivo no tiene banco — mismo ícono genérico de siempre.
+                        {cuenta.tipo === 'efectivo' && !cuenta.banco ? (
+                            // Efectivo sin insignia elegida todavía — ícono genérico de siempre.
                             <Handshake
                                 size={70}
                                 color="#d6d3d1"
@@ -597,6 +597,22 @@ export default function ShowCuentasPage({
                                         {cuenta.banco ? (
                                             <span className="flex items-center gap-1.5 text-sm font-medium">
                                                 <img src={cuenta.banco.imagen_url} alt="" className="h-4 w-6 object-contain" />
+                                                {cuenta.banco.nombre}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted-foreground text-sm">Sin asignar</span>
+                                        )}
+                                    </div>
+                                )}
+                                {cuenta.tipo === 'efectivo' && (
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Banknote className="text-muted-foreground h-4 w-4" />
+                                            <span className="text-sm font-medium">Insignia:</span>
+                                        </div>
+                                        {cuenta.banco ? (
+                                            <span className="flex items-center gap-1.5 text-sm font-medium">
+                                                <img src={cuenta.banco.imagen_url} alt="" className="h-4 w-8 object-contain" />
                                                 {cuenta.banco.nombre}
                                             </span>
                                         ) : (

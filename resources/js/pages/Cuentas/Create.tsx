@@ -1,6 +1,7 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { SelectorBancoTarjeta, type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
+import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -55,9 +56,9 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
         imagen: null as string | null,
     });
 
-    // Banco elegido en vivo — se usa para el efecto bleed del header.
+    // Banco o insignia de moneda elegidos en vivo — se usa para el efecto bleed del header.
     const bancoSeleccionado = useMemo(() => {
-        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa];
+        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa, ...catalogoTarjetas.efectivo];
         return todos.find((b) => b.slug === data.imagen) ?? null;
     }, [catalogoTarjetas, data.imagen]);
 
@@ -84,7 +85,7 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
                     superior en vez de quedar recortada adentro. */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Gestión de Cuentas" description="Administre las cuentas disponibles para su negocio." />
-                    {data.tipo === 'efectivo' ? (
+                    {data.tipo === 'efectivo' && !bancoSeleccionado ? (
                         <Landmark
                             size={70}
                             color="#d6d3d1"
@@ -133,10 +134,9 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
                                             value={data.tipo}
                                             onValueChange={(value: 'tarjeta' | 'efectivo') => {
                                                 setData('tipo', value);
-                                                // Efectivo no lleva banco/diseño de tarjeta.
-                                                if (value === 'efectivo') {
-                                                    setData('imagen', null);
-                                                }
+                                                // El catálogo de imagen es distinto por tipo (banco vs. moneda) — una
+                                                // imagen elegida para el tipo anterior no aplica al nuevo.
+                                                setData('imagen', null);
                                             }}
                                         >
                                             <SelectTrigger>
@@ -156,6 +156,19 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
                                             <Label>Banco / Diseño de tarjeta</Label>
                                             <SelectorBancoTarjeta
                                                 catalogo={catalogoTarjetas}
+                                                value={data.imagen}
+                                                onChange={(slug) => setData('imagen', slug)}
+                                            />
+                                            <InputError message={errors.imagen} />
+                                        </div>
+                                    )}
+
+                                    {/* Campo Insignia de Moneda — solo aplica cuando tipo=efectivo */}
+                                    {data.tipo === 'efectivo' && (
+                                        <div className="space-y-2">
+                                            <Label>Insignia de Moneda</Label>
+                                            <SelectorImagenEfectivo
+                                                catalogo={catalogoTarjetas.efectivo}
                                                 value={data.imagen}
                                                 onChange={(slug) => setData('imagen', slug)}
                                             />

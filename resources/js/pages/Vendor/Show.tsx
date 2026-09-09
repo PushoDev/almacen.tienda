@@ -42,20 +42,26 @@ import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
     AlertTriangle,
+    ArrowRightLeft,
+    Banknote,
     Calendar,
     CheckCircle,
     Clock,
+    Coins,
     CreditCard,
     DollarSign,
     Edit,
     FileText,
+    Hash,
     IdCard,
     ListOrdered,
     MapPin,
     MessageSquare,
     Package,
+    Percent,
     Phone,
     Printer,
+    Send,
     ShoppingBag,
     ShoppingCart,
     Store,
@@ -64,6 +70,7 @@ import {
     User,
     UserCheck,
     Users,
+    Wallet,
     XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -115,6 +122,11 @@ interface MonedaPago {
 interface CuentaPago {
     id: number;
     nombre: string;
+    tipo?: string;
+    // Logo real del banco (tarjeta) o insignia de moneda (efectivo) — feature "Cuentas →
+    // tarjetas bancarias", ver CatalogoTarjetasService. null si la cuenta no tiene imagen
+    // asignada todavía.
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
     moneda: MonedaPago | null;
 }
 
@@ -641,6 +653,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         }).format(amount);
 
     const getCurrencySymbol = (moneda: MonedaPago | MonedaPrincipal | null) => moneda?.simbolo || moneda?.codigo || 'USD';
+
+    // A diferencia de formatCurrency (Intl con currency=código ISO, que en es-ES pone el
+    // símbolo/código DESPUÉS del número — "34.060,00 US$"), esto solo formatea el número y
+    // deja que el símbolo se anteponga a mano donde se pida "$ primero" (tarjetas de Detalles
+    // de Pago).
+    // Number(...) es necesario: el backend serializa montos decimal:2 como string en JSON
+    // (mismo patrón ya documentado en Proveedores/Clientes) — sin esto, String.prototype
+    // .toLocaleString() ignora las opciones de formato y devuelve el string tal cual.
+    const formatMonto = (monto: number | string) =>
+        Number(monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     // Siempre: USD + CUP. Sin excepciones, sin inventar formatos distintos.
     const mensajeroMontos = (m: typeof currentVenta.mensajero): { usd: string; cup: string; cobrado: string } => {
@@ -3316,56 +3338,137 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="pt-5">
+                        <CardContent className="space-y-4 pt-5">
                             {currentVenta.pagos.length > 0 ? (
                                 currentVenta.pagos.map((pago, index) => {
                                     const simboloMonedaPago = getCurrencySymbol(pago.moneda);
                                     const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta?.moneda || null);
+                                    const esEfectivo = pago.metodo?.toLowerCase() === 'efectivo';
+                                    const esCliente = !!pago.cliente_destino?.nombre;
+                                    const nombreDestino = esCliente
+                                        ? pago.cliente_destino!.nombre
+                                        : (pago.cuenta?.nombre ?? 'Sin destino especificado');
+
                                     return (
-                                        <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <p className="text-sm font-medium">Método:</p>
-                                                    <p className="text-sm capitalize">{pago.metodo}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium">Moneda:</p>
-                                                    <p className="text-sm">{pago.moneda?.nombre || 'No especificada'}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium">Monto Original:</p>
-                                                    <p className="text-sm">{formatCurrency(pago.monto, simboloMonedaPago)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium">Equivalente {simboloMonedaPrincipal}:</p>
-                                                    <p className="text-sm">{formatCurrency(pago.monto_equivalente, simboloMonedaPrincipal)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium">Tasa Cambio:</p>
-                                                    <p className="text-sm">{pago.tasa_cambio}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium">Destino:</p>
-                                                    <p className="text-sm">
-                                                        {pago.cliente_destino?.nombre
-                                                            ? `Cliente: ${pago.cliente_destino.nombre}`
-                                                            : pago.cuenta?.nombre
-                                                                ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
-                                                                : 'No especificado'}
-                                                    </p>
-                                                </div>
-                                                {pago.via && (
-                                                    <div className="col-span-2">
-                                                        <p className="text-sm font-medium">Vía:</p>
-                                                        <p className="text-sm capitalize">{pago.via}</p>
-                                                    </div>
+                                        <div key={index} className="bg-card overflow-hidden rounded-2xl border shadow-sm transition-all hover:shadow-md">
+                                            {/* Header — logo real de la cuenta destino (banco/insignia de efectivo), ícono
+                                                de cliente, o un fondo genérico según el método de pago */}
+                                            <div
+                                                className={`relative flex h-20 items-center justify-center overflow-hidden bg-gradient-to-br ${
+                                                    esEfectivo ? 'from-emerald-600 to-emerald-800' : 'from-blue-600 to-blue-800'
+                                                }`}
+                                            >
+                                                {!esCliente && pago.cuenta?.banco ? (
+                                                    <img
+                                                        src={pago.cuenta.banco.imagen_url}
+                                                        alt={pago.cuenta.banco.nombre}
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                ) : esCliente ? (
+                                                    <User className="h-9 w-9 text-white/30" />
+                                                ) : (
+                                                    <CreditCard className="h-9 w-9 text-white/30" />
                                                 )}
-                                                {pago.referencia && (
-                                                    <div className="col-span-2">
-                                                        <p className="text-sm font-medium">Referencia:</p>
-                                                        <p className="text-sm">{pago.referencia}</p>
+
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="absolute top-2 right-2 gap-1 border-0 bg-black/40 text-white backdrop-blur-sm capitalize"
+                                                >
+                                                    {esEfectivo ? <Banknote className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+                                                    {pago.metodo}
+                                                </Badge>
+                                            </div>
+
+                                            {/* Cuerpo */}
+                                            <div className="space-y-3 p-4">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex min-w-0 items-center gap-1.5">
+                                                        {!esCliente && pago.cuenta?.banco ? (
+                                                            <img
+                                                                src={pago.cuenta.banco.imagen_url}
+                                                                alt=""
+                                                                className="h-5 w-7 shrink-0 rounded object-cover"
+                                                            />
+                                                        ) : esCliente ? (
+                                                            <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-pink-100 dark:bg-pink-950/30">
+                                                                <User className="h-3 w-3 text-pink-600 dark:text-pink-400" />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="bg-muted flex h-5 w-7 shrink-0 items-center justify-center rounded">
+                                                                <CreditCard className="text-muted-foreground h-3 w-3" />
+                                                            </span>
+                                                        )}
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="w-fit min-w-0 gap-1 border-slate-200 bg-slate-50 font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300"
+                                                        >
+                                                            <span className="truncate">{nombreDestino}</span>
+                                                        </Badge>
                                                     </div>
-                                                )}
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={
+                                                            esCliente
+                                                                ? 'shrink-0 gap-1 border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/20 dark:text-pink-300'
+                                                                : 'shrink-0 gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
+                                                        }
+                                                    >
+                                                        {esCliente ? <User className="h-3 w-3" /> : <Store className="h-3 w-3" />}
+                                                        {esCliente ? 'Cliente' : (pago.cuenta?.moneda?.nombre ?? simboloMonedaCuenta)}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-fit gap-1 border-amber-200 bg-amber-50 px-2.5 py-1 text-base font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                                                    >
+                                                        <Wallet className="h-3.5 w-3.5" />
+                                                        {simboloMonedaPago} {formatMonto(pago.monto)}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="w-fit gap-1 border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800 dark:bg-teal-950/20 dark:text-teal-300"
+                                                    >
+                                                        <ArrowRightLeft className="h-3 w-3" />
+                                                        Equiv. {simboloMonedaPrincipal} {formatMonto(pago.monto_equivalente)}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="inline-flex items-center gap-1 border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300"
+                                                    >
+                                                        <Coins className="h-3 w-3" />
+                                                        {pago.moneda?.nombre || 'No especificada'}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="inline-flex items-center gap-1 border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300"
+                                                    >
+                                                        <Percent className="h-3 w-3" />
+                                                        Tasa {pago.tasa_cambio}
+                                                    </Badge>
+                                                    {pago.via && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="inline-flex items-center gap-1 border-violet-200 bg-violet-50 text-violet-700 capitalize dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300"
+                                                        >
+                                                            <ArrowRightLeft className="h-3 w-3" />
+                                                            {pago.via}
+                                                        </Badge>
+                                                    )}
+                                                    {pago.referencia && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="inline-flex items-center gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                                                        >
+                                                            <Hash className="h-3 w-3" />
+                                                            {pago.referencia}
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );

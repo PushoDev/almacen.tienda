@@ -13,6 +13,7 @@ export interface BancoTarjeta {
 export interface CatalogoTarjetas {
     interna: BancoTarjeta[];
     externa: BancoTarjeta[];
+    efectivo: BancoTarjeta[];
 }
 
 interface SelectorBancoTarjetaProps {

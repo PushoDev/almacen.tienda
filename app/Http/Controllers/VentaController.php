@@ -18,6 +18,7 @@ use App\Models\VentaDetalle;
 use App\Notifications\VentaCreadaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
+use App\Services\CatalogoTarjetasService;
 use App\Services\DashboardStatsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -630,6 +631,11 @@ class VentaController extends Controller
                     'cuenta' => $pago->cuenta ? [
                         'id' => $pago->cuenta->id,
                         'nombre' => $pago->cuenta->nombre_cuenta,
+                        'tipo' => $pago->cuenta->tipo,
+                        // Feature "Cuentas → tarjetas bancarias" (ver CatalogoTarjetasService) —
+                        // mismo mecanismo que CuentaController, para mostrar el logo/insignia
+                        // real de la cuenta en la fila "Destino" de Detalles de Pago.
+                        'banco' => CatalogoTarjetasService::porSlug($pago->cuenta->imagen),
                         'moneda' => $pago->cuenta->moneda ? [
                             'id' => $pago->cuenta->moneda->id,
                             'codigo' => $pago->cuenta->moneda->codigo_moneda,

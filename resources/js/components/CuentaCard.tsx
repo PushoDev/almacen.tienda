@@ -45,7 +45,9 @@ export function CuentaCard({
 
     return (
         <div className="bg-card overflow-hidden rounded-2xl border shadow-sm transition-all hover:shadow-md">
-            {/* Header — la tarjeta real del banco elegido, o un fondo genérico */}
+            {/* Header — la tarjeta real del banco elegido, o la insignia de moneda elegida
+                para efectivo, ambas a bleed completo (mismo tratamiento visual), o un fondo
+                genérico si no hay imagen asignada todavía */}
             <div className="relative flex h-24 items-center justify-center overflow-hidden bg-gradient-to-br from-slate-600 to-slate-800">
                 {cuenta.banco ? (
                     <img src={cuenta.banco.imagen_url} alt={cuenta.banco.nombre} className="h-full w-full object-cover" />
