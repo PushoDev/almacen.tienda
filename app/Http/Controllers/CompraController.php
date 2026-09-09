@@ -251,6 +251,7 @@ class CompraController extends Controller
 
             $compraData = $resultadoPagos['compraData'] + [
                 'user_id' => $request->user()->id,
+                'turno_vendedor_id' => $request->user()->turnoActivo()?->id,
                 'proveedor_id' => $tipoProveedor === 'proveedor' ? $entidad->id : null,
                 'cliente_id' => $tipoProveedor === 'cliente' ? $entidad->id : null,
                 'fecha_compra' => $validated['fecha'],

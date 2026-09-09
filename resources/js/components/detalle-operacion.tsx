@@ -159,6 +159,7 @@ export interface DetalleCompra {
         // alcanza") — mismo criterio que Compra::getEsParcialAttribute en el backend y que
         // Comprar/Index.tsx / Comprar/Show.tsx en el resto del sistema.
         es_parcial: boolean;
+        atendido_por: string | null;
     };
     // Quién recibió el pago — solo uno de los dos, nunca ambos.
     proveedor: string | null;
@@ -536,6 +537,11 @@ export const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: D
             <span>
                 <strong className="text-foreground">Registrado por:</strong> {usuario}
             </span>
+            {detalle.info_general.atendido_por && (
+                <span>
+                    <strong className="text-foreground">Atendido por:</strong> {detalle.info_general.atendido_por}
+                </span>
+            )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

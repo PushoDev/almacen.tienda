@@ -324,6 +324,10 @@ class DetalleOperacionService
                 'fecha' => $compra->fecha_compra,
                 'tipo_compra' => $compra->tipo_compra,
                 'es_parcial' => $compra->es_parcial,
+                // Mismo criterio que detalleVenta()/movimiento: nombre de la persona real bajo
+                // turno, con fallback a la cuenta (admin, que nunca captura turno, o compras
+                // anteriores a esta feature).
+                'atendido_por' => $compra->turnoVendedor?->nombre_vendedor ?? $compra->usuario?->name,
             ],
             // Quién recibió el pago — siempre uno solo (proveedor O cliente-proveedor),
             // a diferencia de "pagos" abajo que sí puede ser múltiple (varias cuentas).

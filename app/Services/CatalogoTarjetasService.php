@@ -5,13 +5,13 @@ namespace App\Services;
 class CatalogoTarjetasService
 {
     /**
-     * Catálogo de bancos/diseños de tarjeta para la feature "Cuentas → tarjetas de banco".
-     * No es una tabla en base de datos a propósito (ver migración
-     * agregar_imagen_a_cuentas_table): el catálogo de imágenes en public/projects/ sigue
-     * creciendo según lo pida el cliente, así que agregar un banco nuevo es solo agregar
-     * una fila acá + el archivo de imagen — sin migración.
+     * Catálogo de bancos/diseños de tarjeta (+ imágenes de moneda para cuentas tipo
+     * "efectivo") para la feature "Cuentas → tarjetas de banco". No es una tabla en base de
+     * datos a propósito (ver migración agregar_imagen_a_cuentas_table): el catálogo de
+     * imágenes en public/projects/ sigue creciendo según lo pida el cliente, así que agregar
+     * un banco/moneda nuevo es solo agregar una fila acá + el archivo de imagen — sin migración.
      *
-     * @return array<string, array{nombre: string, grupo: 'interna'|'externa', imagen: string}>
+     * @return array<string, array{nombre: string, grupo: 'interna'|'externa'|'efectivo', imagen: string}>
      */
     private static function todos(): array
     {
@@ -27,6 +27,12 @@ class CatalogoTarjetasService
             'mastercard' => ['nombre' => 'Mastercard', 'grupo' => 'externa', 'imagen' => 'card_interacionales/Mastercard.webp'],
             'zelle' => ['nombre' => 'Zelle', 'grupo' => 'externa', 'imagen' => 'card_interacionales/Zelle.webp'],
             'discovery' => ['nombre' => 'Discovery', 'grupo' => 'externa', 'imagen' => 'card_interacionales/Discovery.webp'],
+            // Efectivo — insignias por moneda, para cuentas tipo=efectivo (mismo mecanismo,
+            // no un mapeo automático desde cuentas.moneda_id: el usuario elige explícitamente,
+            // igual que con el banco de una tarjeta).
+            'usd' => ['nombre' => 'USD', 'grupo' => 'efectivo', 'imagen' => 'efectivo/usd.webp'],
+            'cup' => ['nombre' => 'CUP', 'grupo' => 'efectivo', 'imagen' => 'efectivo/cup.webp'],
+            'eur' => ['nombre' => 'EUR', 'grupo' => 'efectivo', 'imagen' => 'efectivo/eur.webp'],
         ];
     }
 
@@ -41,14 +47,15 @@ class CatalogoTarjetasService
     }
 
     /**
-     * Catálogo agrupado interna/externa con la URL de imagen ya resuelta — para exponer
-     * al frontend (selector con pestañas Internas/Externas).
+     * Catálogo agrupado interna/externa/efectivo con la URL de imagen ya resuelta — para
+     * exponer al frontend (selector con pestañas Internas/Externas para tarjeta, grilla
+     * plana de efectivo para cuentas tipo=efectivo).
      *
-     * @return array{interna: array<int, array{slug: string, nombre: string, imagen_url: string}>, externa: array<int, array{slug: string, nombre: string, imagen_url: string}>}
+     * @return array{interna: array<int, array{slug: string, nombre: string, imagen_url: string}>, externa: array<int, array{slug: string, nombre: string, imagen_url: string}>, efectivo: array<int, array{slug: string, nombre: string, imagen_url: string}>}
      */
     public static function agrupado(): array
     {
-        $grupos = ['interna' => [], 'externa' => []];
+        $grupos = ['interna' => [], 'externa' => [], 'efectivo' => []];
 
         foreach (self::todos() as $slug => $item) {
             $grupos[$item['grupo']][] = [

@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Almacen;
 use App\Models\CierreCaja;
+use App\Models\Cliente;
+use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
+use App\Models\PagoVenta;
+use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\CierreCajaNotification;
 use App\Services\NotificationService;
@@ -15,8 +20,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
-use App\Models\Almacen;
-use App\Models\User;
 
 class CierreCajaController extends Controller
 {
@@ -65,6 +68,29 @@ class CierreCajaController extends Controller
 
         $cierres = $query->paginate(20);
 
+        // Un cierre cubre un rango de tiempo (fecha_apertura → fecha_cierre) en una cuenta
+        // compartida por punto de venta — con la feature de Turnos (re-captura en cada login,
+        // ver App\Models\User::requiereCapturaTurno()) ese rango puede incluir varias personas
+        // distintas relevándose antes de que alguien cierre la caja. Se listan todas, no solo
+        // quien cerró — mismo criterio de "responsable real" que ya usa DetalleOperacionService.
+        $cierres->getCollection()->transform(function (CierreCaja $cierre) {
+            $nombresVenta = Venta::where('user_id', $cierre->user_id)
+                ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+                ->with('turnoVendedor:id,nombre_vendedor')
+                ->get()
+                ->pluck('turnoVendedor.nombre_vendedor');
+
+            $nombresMovimiento = MovimientoFinanciero::where('user_id', $cierre->user_id)
+                ->whereBetween('fecha_operacion', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+                ->with('turnoVendedor:id,nombre_vendedor')
+                ->get()
+                ->pluck('turnoVendedor.nombre_vendedor');
+
+            $cierre->responsables_turno = $nombresVenta->merge($nombresMovimiento)->filter()->unique()->values();
+
+            return $cierre;
+        });
+
         return Inertia::render('Cierres/Index', [
             'cierres' => $cierres,
             'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'user_id', 'cuadre']),
@@ -108,7 +134,7 @@ class CierreCajaController extends Controller
         $comparativaClientes = [];
 
         // Obtener saldos actuales de TODAS las cuentas accesibles por el usuario
-        $cuentasQuery = \App\Models\Cuenta::with('moneda');
+        $cuentasQuery = Cuenta::with('moneda');
         if (! in_array($user->role, ['admin', 'moderador'])) {
             $cuentasQuery->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
@@ -117,7 +143,7 @@ class CierreCajaController extends Controller
         $cuentasActuales = $cuentasQuery->get();
 
         // Obtener deudas actuales de TODOS los clientes
-        $clientesActuales = \App\Models\Cliente::all();
+        $clientesActuales = Cliente::all();
 
         // Obtener saldos/deudas del cierre anterior (snapshot o fallback a detalles)
         $cuentasCierreAnteriorPorId = [];
@@ -237,11 +263,11 @@ class CierreCajaController extends Controller
                 'saldo_esperado_global' => $calculos['saldo_esperado_global'],
                 'detalles' => $calculos['detalles'],
                 // Widgets: Totales por moneda (sin conversión global)
-                'usd_efectivo'       => $calculos['usd_efectivo'] ?? 0,
-                'cup_efectivo'       => $calculos['cup_efectivo'] ?? 0,
-                'usd_transferencia'  => $calculos['usd_transferencia'] ?? 0,
+                'usd_efectivo' => $calculos['usd_efectivo'] ?? 0,
+                'cup_efectivo' => $calculos['cup_efectivo'] ?? 0,
+                'usd_transferencia' => $calculos['usd_transferencia'] ?? 0,
                 'cup_transferencias' => $calculos['cup_transferencias'] ?? 0,
-                'usd_internacional'  => $calculos['usd_internacional'] ?? 0,
+                'usd_internacional' => $calculos['usd_internacional'] ?? 0,
                 'transferencias_resumen' => $this->obtenerResumenTransferencias($calculos['detalles']),
                 // NUEVO: Totales separados por destino (cuentas vs clientes)
                 'ventas_a_cuentas_total_usd' => $calculos['ventas_a_cuentas_total_usd'],
@@ -254,30 +280,30 @@ class CierreCajaController extends Controller
                 'comisiones_gestor_total' => $calculos['comisiones_gestor_total'] ?? 0,
                 'comisiones_gestor_detalles' => $calculos['comisiones_gestor_detalles'] ?? [],
                 // Nuevos: comisiones y ganancia agencia
-                'comision_pv_total'       => $calculos['comision_pv_total'] ?? 0,
-                'comision_gestor_total'   => $calculos['comision_gestor_total'] ?? 0,
-                'comisiones_pv_detalles'  => $calculos['comisiones_pv_detalles'] ?? [],
-                'ganancia_agencia_total'  => $calculos['ganancia_agencia_total'] ?? 0,
+                'comision_pv_total' => $calculos['comision_pv_total'] ?? 0,
+                'comision_gestor_total' => $calculos['comision_gestor_total'] ?? 0,
+                'comisiones_pv_detalles' => $calculos['comisiones_pv_detalles'] ?? [],
+                'ganancia_agencia_total' => $calculos['ganancia_agencia_total'] ?? 0,
                 // Resumen financiero
-                'ventas_brutas_usd'       => $calculos['ventas_brutas_usd'] ?? 0,
-                'comisiones_pv_cup'     => $calculos['comisiones_pv_cup'] ?? 0,
+                'ventas_brutas_usd' => $calculos['ventas_brutas_usd'] ?? 0,
+                'comisiones_pv_cup' => $calculos['comisiones_pv_cup'] ?? 0,
                 'comisiones_gestor_cup' => $calculos['comisiones_gestor_cup'] ?? 0,
-                'comisiones_total_cup'  => $calculos['comisiones_total_cup'] ?? 0,
+                'comisiones_total_cup' => $calculos['comisiones_total_cup'] ?? 0,
                 // Ventas especiales
-                'ventas_especiales_count'       => $calculos['ventas_especiales_count'] ?? 0,
-                'ventas_especiales_total_usd'   => $calculos['ventas_especiales_total_usd'] ?? 0,
-                'ventas_especiales_costo_usd'   => $calculos['ventas_especiales_costo_usd'] ?? 0,
+                'ventas_especiales_count' => $calculos['ventas_especiales_count'] ?? 0,
+                'ventas_especiales_total_usd' => $calculos['ventas_especiales_total_usd'] ?? 0,
+                'ventas_especiales_costo_usd' => $calculos['ventas_especiales_costo_usd'] ?? 0,
                 'ventas_especiales_impacto_usd' => $calculos['ventas_especiales_impacto_usd'] ?? 0,
-                'ventas_especiales_detalles'    => $calculos['ventas_especiales_detalles'] ?? [],
+                'ventas_especiales_detalles' => $calculos['ventas_especiales_detalles'] ?? [],
                 // Ventas anuladas
-                'ventas_anuladas_count'         => $calculos['ventas_anuladas_count'] ?? 0,
-                'ventas_anuladas_total_usd'     => $calculos['ventas_anuladas_total_usd'] ?? 0,
-                'ventas_anuladas_detalles'      => $calculos['ventas_anuladas_detalles'] ?? [],
+                'ventas_anuladas_count' => $calculos['ventas_anuladas_count'] ?? 0,
+                'ventas_anuladas_total_usd' => $calculos['ventas_anuladas_total_usd'] ?? 0,
+                'ventas_anuladas_detalles' => $calculos['ventas_anuladas_detalles'] ?? [],
                 // Mensajería del turno
-                'mensajero_total_usd'           => $calculos['mensajero_total_usd'] ?? 0,
-                'mensajero_total_cup'           => $calculos['mensajero_total_cup'] ?? 0,
-                'mensajero_count'               => $calculos['mensajero_count'] ?? 0,
-                'mensajero_detalles'            => $calculos['mensajero_detalles'] ?? [],
+                'mensajero_total_usd' => $calculos['mensajero_total_usd'] ?? 0,
+                'mensajero_total_cup' => $calculos['mensajero_total_cup'] ?? 0,
+                'mensajero_count' => $calculos['mensajero_count'] ?? 0,
+                'mensajero_detalles' => $calculos['mensajero_detalles'] ?? [],
             ],
             // NUEVO: Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
@@ -293,6 +319,7 @@ class CierreCajaController extends Controller
 
             $calculosPayload['calculos']['ventas_especiales_detalles'] = array_map(function ($detalle) {
                 unset($detalle['costo'], $detalle['impacto']);
+
                 return $detalle;
             }, $calculosPayload['calculos']['ventas_especiales_detalles']);
         }
@@ -329,22 +356,22 @@ class CierreCajaController extends Controller
             $ventasEfectivo = $calculos['ventas_efectivo'];
             $ventasOtros = $calculos['ventas_otros'];
             $saldoEsperado = $calculos['saldo_esperado_global'];
-            $mensajeroSnapshotTotUSD   = $calculos['mensajero_total_usd'] ?? 0;
-            $mensajeroSnapshotTotCUP   = $calculos['mensajero_total_cup'] ?? 0;
-            $mensajeroSnapshotCount    = $calculos['mensajero_count'] ?? 0;
+            $mensajeroSnapshotTotUSD = $calculos['mensajero_total_usd'] ?? 0;
+            $mensajeroSnapshotTotCUP = $calculos['mensajero_total_cup'] ?? 0;
+            $mensajeroSnapshotCount = $calculos['mensajero_count'] ?? 0;
             $mensajeroSnapshotDetalles = $calculos['mensajero_detalles'] ?? [];
         } catch (\Exception $e) {
             // Fallback defensivo solo si falla el cálculo backend
-            \Illuminate\Support\Facades\Log::error('Fallo obtenerDetallesCierre: ' . $e->getMessage());
+            Log::error('Fallo obtenerDetallesCierre: '.$e->getMessage());
             $ventasEfectivo = $data['ventas_efectivo'] ?? 0;
             $ventasOtros = $data['ventas_otros'] ?? 0;
             $comisionesGestorTotal = 0;
             $comisionesGestorDetalles = [];
             $detallesJson = [];
             $saldoEsperado = 0;
-            $mensajeroSnapshotTotUSD   = 0;
-            $mensajeroSnapshotTotCUP   = 0;
-            $mensajeroSnapshotCount    = 0;
+            $mensajeroSnapshotTotUSD = 0;
+            $mensajeroSnapshotTotCUP = 0;
+            $mensajeroSnapshotCount = 0;
             $mensajeroSnapshotDetalles = [];
         }
 
@@ -357,7 +384,7 @@ class CierreCajaController extends Controller
         $diferencia = round($saldoContado - $saldoEsperado, 2);
 
         // Snapshot real de cuentas accesibles
-        $cuentasSnapshotQuery = \App\Models\Cuenta::with('moneda');
+        $cuentasSnapshotQuery = Cuenta::with('moneda');
         if (! in_array($user->role, ['admin', 'moderador'])) {
             $cuentasSnapshotQuery->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
@@ -374,7 +401,7 @@ class CierreCajaController extends Controller
         })->values()->all();
 
         // Snapshot real de clientes
-        $clientesSnapshot = \App\Models\Cliente::all()->map(function ($cliente) {
+        $clientesSnapshot = Cliente::all()->map(function ($cliente) {
             return [
                 'id' => $cliente->id,
                 'nombre' => $cliente->nombre_cliente,
@@ -406,10 +433,10 @@ class CierreCajaController extends Controller
                 'confirmacion_transferencias' => $data['confirmacion_transferencias'] ?? [],
                 'snapshot_cuentas' => $cuentasSnapshot,
                 'snapshot_clientes' => $clientesSnapshot,
-                'mensajero_total_usd'  => $mensajeroSnapshotTotUSD,
-                'mensajero_total_cup'  => $mensajeroSnapshotTotCUP,
-                'mensajero_count'      => $mensajeroSnapshotCount,
-                'mensajero_detalles'   => $mensajeroSnapshotDetalles,
+                'mensajero_total_usd' => $mensajeroSnapshotTotUSD,
+                'mensajero_total_cup' => $mensajeroSnapshotTotCUP,
+                'mensajero_count' => $mensajeroSnapshotCount,
+                'mensajero_detalles' => $mensajeroSnapshotDetalles,
             ]);
 
             DB::commit();
@@ -423,15 +450,15 @@ class CierreCajaController extends Controller
 
                 Notification::send($usuariosParaNotificar, new CierreCajaNotification($cierre));
             } catch (\Exception $e) {
-                \Log::error('Error enviando notificación de cierre de caja: ' . $e->getMessage());
+                \Log::error('Error enviando notificación de cierre de caja: '.$e->getMessage());
             }
 
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('CierreCaja error al guardar: ' . $e->getMessage());
+            Log::error('CierreCaja error al guardar: '.$e->getMessage());
 
-            return back()->with('error', 'Error crítico: ' . $e->getMessage());
+            return back()->with('error', 'Error crítico: '.$e->getMessage());
         }
     }
 
@@ -458,7 +485,7 @@ class CierreCajaController extends Controller
         ]);
 
         // Calcular comisiones y ganancia desde las ventas del turno del cierre
-        $comisionesPVVentasCierre = \App\Models\Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+        $comisionesPVVentasCierre = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
             ->where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
@@ -466,44 +493,43 @@ class CierreCajaController extends Controller
             ->where('total_comision', '>', 0)
             ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
 
-        $comisionPVTotal = $comisionesPVVentasCierre->sum(fn($v) => (float) $v->total_comision);
+        $comisionPVTotal = $comisionesPVVentasCierre->sum(fn ($v) => (float) $v->total_comision);
 
-        $comisionesPVDetallesCierre = $comisionesPVVentasCierre->map(fn($v) => [
-            'venta_id'     => $v->id,
+        $comisionesPVDetallesCierre = $comisionesPVVentasCierre->map(fn ($v) => [
+            'venta_id' => $v->id,
             'comision_usd' => round((float) $v->total_comision, 2),
             'comision_cup' => round((float) $v->total_comision * (float) $v->comision_tasa, 2),
-            'fecha'        => $v->created_at->format('Y-m-d H:i'),
-            'total_venta'  => round((float) $v->total, 2),
-            'productos'    => $v->detalles->map(fn($d) => [
-                'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
-                'marca'    => $d->producto?->marca_producto,
-                'modelo'   => $d->producto?->modelo_producto,
+            'fecha' => $v->created_at->format('Y-m-d H:i'),
+            'total_venta' => round((float) $v->total, 2),
+            'productos' => $v->detalles->map(fn ($d) => [
+                'nombre' => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                'marca' => $d->producto?->marca_producto,
+                'modelo' => $d->producto?->modelo_producto,
                 'cantidad' => (int) $d->cantidad,
             ])->values()->all(),
         ])->values()->all();
 
-        $comisionGestorTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $comisionGestorTotal = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', true)
             ->sum('total_comision');
 
-        $ventasDelCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $ventasDelCierre = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->get(['total_ganancia', 'total_comision']);
 
-        $gananciaAgenciaTotal = $ventasDelCierre->sum(fn($v) =>
-            (float) $v->total_ganancia - (float) $v->total_comision
+        $gananciaAgenciaTotal = $ventasDelCierre->sum(fn ($v) => (float) $v->total_ganancia - (float) $v->total_comision
         );
 
         // --- RESUMEN FINANCIERO DEL CIERRE ---
-        $ventasBrutasUSD = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $ventasBrutasUSD = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->sum('total_esperado_usd');
 
-        $comisionesPVCUP = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $comisionesPVCUP = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
@@ -513,78 +539,78 @@ class CierreCajaController extends Controller
             ->value('total_cup') ?? 0;
 
         // Comisiones gestor CUP: calculadas sobre ventas con gestor (gestor_monto * tasa de la cuenta)
-        $comisionesGestorCUPTotal = (float) (\App\Models\Venta::where('user_id', $cierre->user_id)
+        $comisionesGestorCUPTotal = (float) (Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', true)
-            ->whereHas('gestorCuenta', fn($q) => $q->whereHas('moneda', fn($q2) => $q2->where('codigo_moneda', 'CUP')))
+            ->whereHas('gestorCuenta', fn ($q) => $q->whereHas('moneda', fn ($q2) => $q2->where('codigo_moneda', 'CUP')))
             ->sum('gestor_monto'));
 
-        $comisionesTotalCUP = round((float)$comisionesPVCUP + $comisionesGestorCUPTotal, 2);
+        $comisionesTotalCUP = round((float) $comisionesPVCUP + $comisionesGestorCUPTotal, 2);
 
-        $almacenes = \App\Models\Almacen::select('id', 'nombre_almacen')->get()->map(function ($a) {
+        $almacenes = Almacen::select('id', 'nombre_almacen')->get()->map(function ($a) {
             return ['id' => $a->id, 'nombre' => $a->nombre_almacen];
         })->toArray();
 
         // Ventas especiales del turno del cierre
-        $ventasEspecialesCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $ventasEspecialesCierre = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_especial', true)
             ->with(['detalles'])
             ->get();
 
-        $veCount    = $ventasEspecialesCierre->count();
-        $veTotal    = 0;
-        $veCosto    = 0;
+        $veCount = $ventasEspecialesCierre->count();
+        $veTotal = 0;
+        $veCosto = 0;
         $veDetalles = [];
 
         foreach ($ventasEspecialesCierre as $ve) {
             $t = (float) $ve->total;
-            $c = $ve->detalles->sum(fn($d) => (float) $d->costo_unitario * (int) $d->cantidad);
+            $c = $ve->detalles->sum(fn ($d) => (float) $d->costo_unitario * (int) $d->cantidad);
             $veTotal += $t;
             $veCosto += $c;
             $veDetalles[] = [
                 'venta_id' => $ve->id,
-                'motivo'   => $ve->nota_venta_especial ?? 'Sin motivo registrado',
-                'total'    => round($t, 2),
-                'costo'    => round($c, 2),
-                'impacto'  => round($t - $c, 2),
-                'es_regalo'=> $t == 0,
-                'fecha'    => $ve->created_at->format('Y-m-d H:i'),
+                'motivo' => $ve->nota_venta_especial ?? 'Sin motivo registrado',
+                'total' => round($t, 2),
+                'costo' => round($c, 2),
+                'impacto' => round($t - $c, 2),
+                'es_regalo' => $t == 0,
+                'fecha' => $ve->created_at->format('Y-m-d H:i'),
             ];
         }
 
         $puedeVerCostoImpactoEspeciales = in_array($currentUser->role, ['admin', 'moderador'], true);
 
         // Ventas anuladas durante el período del cierre
-        $ventasAnuladasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $ventasAnuladasCierre = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'cancelada')
             ->with('detalles')
             ->get();
 
-        $vaCount    = $ventasAnuladasCierre->count();
-        $vaTotalUSD = round($ventasAnuladasCierre->sum(fn($v) => (float) $v->detalles->sum('subtotal')), 2);
-        $vaDetalles = $ventasAnuladasCierre->map(fn($v) => [
+        $vaCount = $ventasAnuladasCierre->count();
+        $vaTotalUSD = round($ventasAnuladasCierre->sum(fn ($v) => (float) $v->detalles->sum('subtotal')), 2);
+        $vaDetalles = $ventasAnuladasCierre->map(fn ($v) => [
             'venta_id' => $v->id,
-            'total'    => round((float) $v->detalles->sum('subtotal'), 2),
-            'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
-            'detalle'  => $v->detalle_anulacion,
-            'fecha'    => $v->created_at->format('Y-m-d H:i'),
+            'total' => round((float) $v->detalles->sum('subtotal'), 2),
+            'motivo' => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle' => $v->detalle_anulacion,
+            'fecha' => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
         // Mensajería del período del cierre — usar snapshot si existe, recalcular si es un cierre antiguo
         if ($cierre->mensajero_detalles !== null) {
-            $mensajeroCount         = $cierre->mensajero_count ?? 0;
-            $mensajeroTotUSD        = $cierre->mensajero_total_usd ?? 0;
-            $mensajeroTotCUP        = $cierre->mensajero_total_cup ?? 0;
-            $mensajeroDetallesList  = $cierre->mensajero_detalles ?? [];
-            $mensajeroPropioTotCUP  = round(array_sum(array_map(fn($d) => ($d['tipo'] ?? '') === 'propio' ? ($d['monto_cup'] ?? 0) : 0, $mensajeroDetallesList)), 2);
-            $mensajeroExternoTotCUP = round(array_sum(array_map(fn($d) => ($d['tipo'] ?? '') !== 'propio' ? ($d['monto_cup'] ?? 0) : 0, $mensajeroDetallesList)), 2);
+            $mensajeroCount = $cierre->mensajero_count ?? 0;
+            $mensajeroTotUSD = $cierre->mensajero_total_usd ?? 0;
+            $mensajeroTotCUP = $cierre->mensajero_total_cup ?? 0;
+            $mensajeroDetallesList = $cierre->mensajero_detalles ?? [];
+            $mensajeroPropioTotCUP = round(array_sum(array_map(fn ($d) => ($d['tipo'] ?? '') === 'propio' ? ($d['monto_cup'] ?? 0) : 0, $mensajeroDetallesList)), 2);
+            $mensajeroExternoTotCUP = round(array_sum(array_map(fn ($d) => ($d['tipo'] ?? '') !== 'propio' ? ($d['monto_cup'] ?? 0) : 0, $mensajeroDetallesList)), 2);
         } else {
             // Fallback: recalcular desde la BD para cierres anteriores sin snapshot
-            $mensajeroCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+            $mensajeroCierre = Venta::where('user_id', $cierre->user_id)
                 ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
                 ->where('estado', 'completada')
                 ->whereNotNull('mensajero_monto')
@@ -592,11 +618,11 @@ class CierreCajaController extends Controller
                 ->with('detalles.producto:id,nombre_producto,marca_producto,modelo_producto')
                 ->get(['id', 'total', 'mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_tipo', 'mensajero_tasa', 'mensajero_tasa_entrada']);
 
-            $mensajeroCount         = $mensajeroCierre->count();
-            $mensajeroTotUSD        = round($mensajeroCierre->sum(fn($v) => (float) $v->mensajero_monto), 2);
-            $mensajeroPropioTotCUP  = 0;
+            $mensajeroCount = $mensajeroCierre->count();
+            $mensajeroTotUSD = round($mensajeroCierre->sum(fn ($v) => (float) $v->mensajero_monto), 2);
+            $mensajeroPropioTotCUP = 0;
             $mensajeroExternoTotCUP = 0;
-            $mensajeroDetallesList  = [];
+            $mensajeroDetallesList = [];
 
             $mensajeroTotCUP = round($mensajeroCierre->sum(function ($v) use (&$mensajeroPropioTotCUP, &$mensajeroExternoTotCUP, &$mensajeroDetallesList) {
                 $montoUSD = (float) $v->mensajero_monto;
@@ -614,22 +640,23 @@ class CierreCajaController extends Controller
                     $mensajeroExternoTotCUP += $cup;
                 }
                 $mensajeroDetallesList[] = [
-                    'venta_id'    => $v->id,
-                    'monto_usd'   => round($montoUSD, 2),
-                    'monto_cup'   => round($cup, 2),
-                    'tasa'        => $montoUSD > 0 ? round($cup / $montoUSD, 2) : null,
-                    'tipo'        => $v->mensajero_tipo,
+                    'venta_id' => $v->id,
+                    'monto_usd' => round($montoUSD, 2),
+                    'monto_cup' => round($cup, 2),
+                    'tasa' => $montoUSD > 0 ? round($cup / $montoUSD, 2) : null,
+                    'tipo' => $v->mensajero_tipo,
                     'total_venta' => round((float) $v->total, 2),
-                    'productos'   => $v->detalles->map(fn($d) => [
-                        'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
-                        'marca'    => $d->producto?->marca_producto,
-                        'modelo'   => $d->producto?->modelo_producto,
+                    'productos' => $v->detalles->map(fn ($d) => [
+                        'nombre' => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                        'marca' => $d->producto?->marca_producto,
+                        'modelo' => $d->producto?->modelo_producto,
                         'cantidad' => (int) $d->cantidad,
                     ])->values()->all(),
                 ];
+
                 return $cup;
             }), 2);
-            $mensajeroPropioTotCUP  = round($mensajeroPropioTotCUP, 2);
+            $mensajeroPropioTotCUP = round($mensajeroPropioTotCUP, 2);
             $mensajeroExternoTotCUP = round($mensajeroExternoTotCUP, 2);
         }
 
@@ -730,11 +757,11 @@ class CierreCajaController extends Controller
 
         // --- TRANSACCIONES EXTERNAS (operaciones de otros usuarios en cuentas del vendedor) ---
         $transaccionesExternas = [];
-        $cierreUser = \App\Models\User::find($cierre->user_id);
+        $cierreUser = User::find($cierre->user_id);
         $cuentaIdsExternas = $cierreUser ? $cierreUser->cuentas()->pluck('id')->toArray() : [];
 
         if ($cierreUser && ! empty($cuentaIdsExternas)) {
-            $movimientosExternos = \App\Models\MovimientoFinanciero::where(function ($q) use ($cierreUser, $cuentaIdsExternas) {
+            $movimientosExternos = MovimientoFinanciero::where(function ($q) use ($cierreUser, $cuentaIdsExternas) {
                 $q->where('user_id', '!=', $cierreUser->id);
                 $q->where(function ($qq) use ($cuentaIdsExternas) {
                     $qq->where(function ($qqq) use ($cuentaIdsExternas) {
@@ -783,44 +810,44 @@ class CierreCajaController extends Controller
                 $transaccionesExternas[] = $item;
             }
 
-            usort($transaccionesExternas, fn($a, $b) => $a['hora'] <=> $b['hora']);
+            usort($transaccionesExternas, fn ($a, $b) => $a['hora'] <=> $b['hora']);
         }
 
         $showPayload = [
-            'cierre'                => $cierre,
+            'cierre' => $cierre,
             'transacciones_externas' => $transaccionesExternas,
-            'userRole'              => $currentUser->role ?? 'vendedor',
-            'comision_pv_total'       => round((float) $comisionPVTotal, 2),
-            'comision_gestor_total'   => round((float) $comisionGestorTotal, 2),
-            'comisiones_pv_detalles'  => $comisionesPVDetallesCierre,
-            'ganancia_agencia_total'  => round($gananciaAgenciaTotal, 2),
+            'userRole' => $currentUser->role ?? 'vendedor',
+            'comision_pv_total' => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
+            'comisiones_pv_detalles' => $comisionesPVDetallesCierre,
+            'ganancia_agencia_total' => round($gananciaAgenciaTotal, 2),
             // Resumen financiero
-            'ventas_brutas_usd'       => round((float) $ventasBrutasUSD, 2),
-            'comisiones_pv_cup'     => round((float) $comisionesPVCUP, 2),
+            'ventas_brutas_usd' => round((float) $ventasBrutasUSD, 2),
+            'comisiones_pv_cup' => round((float) $comisionesPVCUP, 2),
             'comisiones_gestor_cup' => round($comisionesGestorCUPTotal, 2),
-            'comisiones_total_cup'  => $comisionesTotalCUP,
-            'almacenes'             => $almacenes,
+            'comisiones_total_cup' => $comisionesTotalCUP,
+            'almacenes' => $almacenes,
             // Ventas especiales
-            'ventas_especiales_count'       => $veCount,
-            'ventas_especiales_total_usd'   => round($veTotal, 2),
-            'ventas_especiales_costo_usd'   => round($veCosto, 2),
+            'ventas_especiales_count' => $veCount,
+            'ventas_especiales_total_usd' => round($veTotal, 2),
+            'ventas_especiales_costo_usd' => round($veCosto, 2),
             'ventas_especiales_impacto_usd' => round($veTotal - $veCosto, 2),
-            'ventas_especiales_detalles'    => $veDetalles,
+            'ventas_especiales_detalles' => $veDetalles,
             // Ventas anuladas
-            'ventas_anuladas_count'         => $vaCount,
-            'ventas_anuladas_total_usd'     => $vaTotalUSD,
-            'ventas_anuladas_detalles'      => $vaDetalles,
+            'ventas_anuladas_count' => $vaCount,
+            'ventas_anuladas_total_usd' => $vaTotalUSD,
+            'ventas_anuladas_detalles' => $vaDetalles,
             // Mensajería del turno
-            'mensajero_total_usd'           => $mensajeroTotUSD,
-            'mensajero_total_cup'           => $mensajeroTotCUP,
-            'mensajero_count'               => $mensajeroCount,
-            'mensajero_propio_total_cup'    => $mensajeroPropioTotCUP,
-            'mensajero_externo_total_cup'   => $mensajeroExternoTotCUP,
-            'mensajero_detalles'            => $mensajeroDetallesList,
+            'mensajero_total_usd' => $mensajeroTotUSD,
+            'mensajero_total_cup' => $mensajeroTotCUP,
+            'mensajero_count' => $mensajeroCount,
+            'mensajero_propio_total_cup' => $mensajeroPropioTotCUP,
+            'mensajero_externo_total_cup' => $mensajeroExternoTotCUP,
+            'mensajero_detalles' => $mensajeroDetallesList,
             // Comparativa con cierre anterior
-            'comparativa_cuentas'            => $comparativaCuentas,
-            'comparativa_clientes'           => $comparativaClientes,
-            'tiene_cierre_anterior'          => $tieneCierreAnterior,
+            'comparativa_cuentas' => $comparativaCuentas,
+            'comparativa_clientes' => $comparativaClientes,
+            'tiene_cierre_anterior' => $tieneCierreAnterior,
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -831,6 +858,7 @@ class CierreCajaController extends Controller
 
             $showPayload['ventas_especiales_detalles'] = array_map(function ($detalle) {
                 unset($detalle['costo'], $detalle['impacto']);
+
                 return $detalle;
             }, $showPayload['ventas_especiales_detalles']);
         }
@@ -856,14 +884,14 @@ class CierreCajaController extends Controller
     private function obtenerDetallesCierre($user, $inicioTurno)
     {
         // 1. Obtener Pagos de Ventas (Ingresos por Venta) - solo ventas completadas
-        $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
+        $pagos = PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
             $q->where('user_id', $user->id)
                 ->where('created_at', '>=', $inicioTurno)
                 ->where('estado', 'completada');
         })->with(['moneda', 'cuenta', 'cliente', 'venta.detalles.producto.categoria'])->get();
 
         // Acumular mensajero del turno (solo ventas completadas con mensajero)
-        $ventasConMensajero = \App\Models\Venta::where('user_id', $user->id)
+        $ventasConMensajero = Venta::where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'completada')
             ->whereNotNull('mensajero_monto')
@@ -1021,7 +1049,7 @@ class CierreCajaController extends Controller
                 ? $pago->cuenta->nombre_cuenta
                 : ($pago->cliente ? $pago->cliente->nombre_cliente : null);
             $itemVenta = [
-                'id' => 'p_' . $pago->id,
+                'id' => 'p_'.$pago->id,
                 'venta_id' => $pago->venta_id,
                 'monto' => (float) $pago->monto,
                 'monto_equivalente' => (float) ($pago->monto_equivalente ?? $pago->monto),
@@ -1124,7 +1152,7 @@ class CierreCajaController extends Controller
                     $almacenId = $pago->venta->almacen_id;
 
                     // Agrupar por producto + almacen para manejar precios base diferentes por almacen
-                    $key = $prodId . '_' . $almacenId;
+                    $key = $prodId.'_'.$almacenId;
 
                     if (! isset($resumenPorMoneda[$codigo]['productos_resumen'][$key])) {
                         $resumenPorMoneda[$codigo]['productos_resumen'][$key] = [
@@ -1157,9 +1185,9 @@ class CierreCajaController extends Controller
                     $hasGestor = ($pago->venta->es_venta_gestor ?? false) && (float) ($pago->venta->gestor_monto ?? 0) > 0;
 
                     if ($hasGestor) {
-                        $gestorMonto  = (float) ($pago->venta->gestor_monto ?? 0);
-                        $gestorTasa   = (float) ($pago->venta->tasa_aplicada_gestor ?? 0);
-                        $gestorUSD    = $gestorTasa > 0 ? $gestorMonto / $gestorTasa : $gestorMonto;
+                        $gestorMonto = (float) ($pago->venta->gestor_monto ?? 0);
+                        $gestorTasa = (float) ($pago->venta->tasa_aplicada_gestor ?? 0);
+                        $gestorUSD = $gestorTasa > 0 ? $gestorMonto / $gestorTasa : $gestorMonto;
                         $comisionTotal = $ratio * $gestorUSD;
                     } else {
                         $comisionTotal = (float) $det->comision_unitaria * $det->cantidad;
@@ -1180,7 +1208,7 @@ class CierreCajaController extends Controller
             // TIPO 1: GASTO
             if ($mov->tipo_movimiento_id == 1) {
                 $item = [
-                    'id' => 'm_' . $mov->id,
+                    'id' => 'm_'.$mov->id,
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
                     'moneda' => $mov->moneda ?? 'USD',
@@ -1199,7 +1227,7 @@ class CierreCajaController extends Controller
             // TIPO 2: INGRESO
             elseif ($mov->tipo_movimiento_id == 2) {
                 $item = [
-                    'id' => 'm_' . $mov->id,
+                    'id' => 'm_'.$mov->id,
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
                     'moneda' => $mov->moneda ?? 'USD',
@@ -1264,7 +1292,7 @@ class CierreCajaController extends Controller
             // Tasa realmente negociada en la venta (tasa_aplicada_gestor, editable desde
             // guardarDestinatario()) tiene prioridad sobre la tasa global actual del sistema —
             // esta última puede haber cambiado desde que se hizo la venta.
-            $tasaVenta  = (float) ($venta->tasa_aplicada_gestor ?? 0);
+            $tasaVenta = (float) ($venta->tasa_aplicada_gestor ?? 0);
             $tasaCambio = $tasaVenta > 0 ? $tasaVenta : ($gestorCuenta?->moneda?->tasa_cambio ?? 1);
             $montoEnUSD = $tasaCambio > 0 ? $montoComision / $tasaCambio : $montoComision;
 
@@ -1273,21 +1301,21 @@ class CierreCajaController extends Controller
 
             // Crear detalle para la UI
             $comisionesGestorDetalles[] = [
-                'venta_id'     => $venta->id,
-                'monto'        => $montoComision,
-                'moneda_codigo'=> $monedaCodigo,
-                'monto_usd'    => round($montoEnUSD, 2),
+                'venta_id' => $venta->id,
+                'monto' => $montoComision,
+                'moneda_codigo' => $monedaCodigo,
+                'monto_usd' => round($montoEnUSD, 2),
                 // Tasa efectiva (monto / monto_usd) — siempre coincide con los montos mostrados.
-                'tasa'         => $montoEnUSD > 0 ? round($montoComision / $montoEnUSD, 2) : null,
-                'cuenta_nombre'=> $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
-                'cuenta_tipo'  => $venta->gestorCuenta?->tipo ?? 'N/A',
-                'comentario'   => $venta->gestor_comentario ?? '',
-                'fecha'        => $venta->created_at->format('Y-m-d H:i'),
-                'total_venta'  => round((float) $venta->total, 2),
-                'productos'    => $venta->detalles->map(fn($d) => [
-                    'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
-                    'marca'    => $d->producto?->marca_producto,
-                    'modelo'   => $d->producto?->modelo_producto,
+                'tasa' => $montoEnUSD > 0 ? round($montoComision / $montoEnUSD, 2) : null,
+                'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
+                'cuenta_tipo' => $venta->gestorCuenta?->tipo ?? 'N/A',
+                'comentario' => $venta->gestor_comentario ?? '',
+                'fecha' => $venta->created_at->format('Y-m-d H:i'),
+                'total_venta' => round((float) $venta->total, 2),
+                'productos' => $venta->detalles->map(fn ($d) => [
+                    'nombre' => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                    'marca' => $d->producto?->marca_producto,
+                    'modelo' => $d->producto?->modelo_producto,
                     'cantidad' => (int) $d->cantidad,
                 ])->values()->all(),
             ];
@@ -1304,7 +1332,7 @@ class CierreCajaController extends Controller
             $monedaData['comisiones_gestor'] = $monedaData['comisiones_gestor'] ?? 0;
             $monedaData['comisiones_gestor_detalles'] = array_filter(
                 $comisionesGestorDetalles,
-                fn($d) => $d['moneda_codigo'] === $monedaCodigo
+                fn ($d) => $d['moneda_codigo'] === $monedaCodigo
             );
         }
         unset($monedaData); // Romper referencia
@@ -1358,12 +1386,12 @@ class CierreCajaController extends Controller
         $eurTasa = ! empty($resumenPorMoneda['EUR']['tasa_cambio']) && $resumenPorMoneda['EUR']['tasa_cambio'] > 0
             ? $resumenPorMoneda['EUR']['tasa_cambio']
             : 1;
-        $cupEfectivoRaw   = $resumenPorMoneda['CUP']['ventas_efectivo_cuentas'] ?? 0;
-        $usdTransfRaw     = $resumenPorMoneda['USD']['ventas_transferencia_cuentas'] ?? 0;
-        $cupTransfRaw     = $resumenPorMoneda['CUP']['ventas_transferencia_cuentas'] ?? 0;
+        $cupEfectivoRaw = $resumenPorMoneda['CUP']['ventas_efectivo_cuentas'] ?? 0;
+        $usdTransfRaw = $resumenPorMoneda['USD']['ventas_transferencia_cuentas'] ?? 0;
+        $cupTransfRaw = $resumenPorMoneda['CUP']['ventas_transferencia_cuentas'] ?? 0;
 
-        $widgetUsdEfectivo      = $usdEfectivoRaw + round($eurEfectivoRaw / $eurTasa, 2);
-        $widgetCupEfectivo      = $cupEfectivoRaw;
+        $widgetUsdEfectivo = $usdEfectivoRaw + round($eurEfectivoRaw / $eurTasa, 2);
+        $widgetCupEfectivo = $cupEfectivoRaw;
         $widgetUsdTransferencia = $usdTransfRaw;
         $widgetCupTransferencias = $cupTransfRaw;
 
@@ -1375,26 +1403,26 @@ class CierreCajaController extends Controller
             ->with(['detalles'])
             ->get();
 
-        $ventasEspecialesCount     = $ventasEspeciales->count();
-        $ventasEspecialesTotalUSD  = 0;
-        $ventasEspecialesCostoUSD  = 0;
-        $ventasEspecialesDetalles  = [];
+        $ventasEspecialesCount = $ventasEspeciales->count();
+        $ventasEspecialesTotalUSD = 0;
+        $ventasEspecialesCostoUSD = 0;
+        $ventasEspecialesDetalles = [];
 
         foreach ($ventasEspeciales as $ventaE) {
-            $totalVenta  = (float) $ventaE->total;
-            $costoVenta  = $ventaE->detalles->sum(fn($d) => (float) $d->costo_unitario * (int) $d->cantidad);
+            $totalVenta = (float) $ventaE->total;
+            $costoVenta = $ventaE->detalles->sum(fn ($d) => (float) $d->costo_unitario * (int) $d->cantidad);
 
             $ventasEspecialesTotalUSD += $totalVenta;
             $ventasEspecialesCostoUSD += $costoVenta;
 
             $ventasEspecialesDetalles[] = [
                 'venta_id' => $ventaE->id,
-                'motivo'   => $ventaE->nota_venta_especial ?? 'Sin motivo registrado',
-                'total'    => round($totalVenta, 2),
-                'costo'    => round($costoVenta, 2),
-                'impacto'  => round($totalVenta - $costoVenta, 2),
-                'es_regalo'=> $totalVenta == 0,
-                'fecha'    => $ventaE->created_at->format('Y-m-d H:i'),
+                'motivo' => $ventaE->nota_venta_especial ?? 'Sin motivo registrado',
+                'total' => round($totalVenta, 2),
+                'costo' => round($costoVenta, 2),
+                'impacto' => round($totalVenta - $costoVenta, 2),
+                'es_regalo' => $totalVenta == 0,
+                'fecha' => $ventaE->created_at->format('Y-m-d H:i'),
             ];
         }
 
@@ -1409,20 +1437,19 @@ class CierreCajaController extends Controller
             ->where('total_comision', '>', 0)
             ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
 
-        $comisionPVTotal = $comisionesPVVentas->sum(fn($v) =>
-            (float) $v->total_comision
+        $comisionPVTotal = $comisionesPVVentas->sum(fn ($v) => (float) $v->total_comision
         );
 
-        $comisionesPVDetalles = $comisionesPVVentas->map(fn($v) => [
-            'venta_id'     => $v->id,
+        $comisionesPVDetalles = $comisionesPVVentas->map(fn ($v) => [
+            'venta_id' => $v->id,
             'comision_usd' => round((float) $v->total_comision, 2),
             'comision_cup' => round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
-            'fecha'        => $v->created_at->format('Y-m-d H:i'),
-            'total_venta'  => round((float) $v->total, 2),
-            'productos'    => $v->detalles->map(fn($d) => [
-                'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
-                'marca'    => $d->producto?->marca_producto,
-                'modelo'   => $d->producto?->modelo_producto,
+            'fecha' => $v->created_at->format('Y-m-d H:i'),
+            'total_venta' => round((float) $v->total, 2),
+            'productos' => $v->detalles->map(fn ($d) => [
+                'nombre' => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                'marca' => $d->producto?->marca_producto,
+                'modelo' => $d->producto?->modelo_producto,
                 'cantidad' => (int) $d->cantidad,
             ])->values()->all(),
         ])->values()->all();
@@ -1436,8 +1463,7 @@ class CierreCajaController extends Controller
             ->where('estado', 'completada')
             ->get(['total_ganancia', 'total_comision']);
 
-        $gananciaAgenciaTotal = $ventasDelTurno->sum(fn($v) =>
-            (float) $v->total_ganancia - (float) $v->total_comision
+        $gananciaAgenciaTotal = $ventasDelTurno->sum(fn ($v) => (float) $v->total_ganancia - (float) $v->total_comision
         );
 
         // --- RESUMEN FINANCIERO DEL TURNO ---
@@ -1458,21 +1484,21 @@ class CierreCajaController extends Controller
 
         // Comisiones Gestor en CUP: suma de gestor_monto en cuentas CUP
         $comisionesGestorCUP = array_sum(array_map(
-            fn($d) => ($d['moneda_codigo'] ?? '') === 'CUP' ? (float)($d['monto'] ?? 0) : 0,
+            fn ($d) => ($d['moneda_codigo'] ?? '') === 'CUP' ? (float) ($d['monto'] ?? 0) : 0,
             $comisionesGestorDetalles
         ));
 
-        $comisionesTotalCUP = round((float)$comisionesPVCUP + $comisionesGestorCUP, 2);
+        $comisionesTotalCUP = round((float) $comisionesPVCUP + $comisionesGestorCUP, 2);
 
         // --- MENSAJERO DEL TURNO ---
         $mensajeroTotalUSD = 0;
         $mensajeroTotalCUP = 0;
         $mensajeroDetalles = [];
 
-        $mensajeroPropioTotalCUP  = 0;
-        $mensajeroPropioCount     = 0;
+        $mensajeroPropioTotalCUP = 0;
+        $mensajeroPropioCount = 0;
         $mensajeroExternoTotalCUP = 0;
-        $mensajeroExternoCount    = 0;
+        $mensajeroExternoCount = 0;
 
         foreach ($ventasConMensajero as $v) {
             $montoUSD = (float) $v->mensajero_monto;
@@ -1500,26 +1526,26 @@ class CierreCajaController extends Controller
             }
 
             $mensajeroDetalles[] = [
-                'venta_id'    => $v->id,
-                'monto_usd'   => round($montoUSD, 2),
-                'monto_cup'   => round($montoCUP, 2),
+                'venta_id' => $v->id,
+                'monto_usd' => round($montoUSD, 2),
+                'monto_cup' => round($montoCUP, 2),
                 // Tasa efectiva (monto_cup / monto_usd), no simplemente mensajero_tasa —
                 // así siempre coincide con el monto mostrado aunque se haya ajustado
                 // manualmente el monto final (premio/sanción) por encima del cálculo por tasa.
-                'tasa'        => $montoUSD > 0 ? round($montoCUP / $montoUSD, 2) : null,
-                'tipo'        => $v->mensajero_tipo,
+                'tasa' => $montoUSD > 0 ? round($montoCUP / $montoUSD, 2) : null,
+                'tipo' => $v->mensajero_tipo,
                 'total_venta' => round((float) $v->total, 2),
-                'productos'   => $v->detalles->map(fn($d) => [
-                    'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
-                    'marca'    => $d->producto?->marca_producto,
-                    'modelo'   => $d->producto?->modelo_producto,
+                'productos' => $v->detalles->map(fn ($d) => [
+                    'nombre' => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                    'marca' => $d->producto?->marca_producto,
+                    'modelo' => $d->producto?->modelo_producto,
                     'cantidad' => (int) $d->cantidad,
                 ])->values()->all(),
             ];
         }
-        $mensajeroTotalUSD        = round($mensajeroTotalUSD, 2);
-        $mensajeroTotalCUP        = round($mensajeroTotalCUP, 2);
-        $mensajeroPropioTotalCUP  = round($mensajeroPropioTotalCUP, 2);
+        $mensajeroTotalUSD = round($mensajeroTotalUSD, 2);
+        $mensajeroTotalCUP = round($mensajeroTotalCUP, 2);
+        $mensajeroPropioTotalCUP = round($mensajeroPropioTotalCUP, 2);
         $mensajeroExternoTotalCUP = round($mensajeroExternoTotalCUP, 2);
 
         // --- VENTAS ANULADAS EN EL TURNO ---
@@ -1529,15 +1555,15 @@ class CierreCajaController extends Controller
             ->with('detalles')
             ->get();
 
-        $ventasAnuladasCount    = $ventasAnuladas->count();
+        $ventasAnuladasCount = $ventasAnuladas->count();
         // Usar suma de subtotales de productos (excluye mensajero del total)
-        $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn($v) => (float) $v->detalles->sum('subtotal')), 2);
-        $ventasAnuladasDetalles = $ventasAnuladas->map(fn($v) => [
+        $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn ($v) => (float) $v->detalles->sum('subtotal')), 2);
+        $ventasAnuladasDetalles = $ventasAnuladas->map(fn ($v) => [
             'venta_id' => $v->id,
-            'total'    => round((float) $v->detalles->sum('subtotal'), 2),
-            'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
-            'detalle'  => $v->detalle_anulacion,
-            'fecha'    => $v->created_at->format('Y-m-d H:i'),
+            'total' => round((float) $v->detalles->sum('subtotal'), 2),
+            'motivo' => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle' => $v->detalle_anulacion,
+            'fecha' => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
         // El mensajero cobrado al cliente entra al saldo pero es pass-through —
@@ -1550,14 +1576,14 @@ class CierreCajaController extends Controller
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
             'saldo_esperado_global' => $saldoEsperadoSinMensajero,
             // Mensajero del turno — informativo y ya descontado del saldo esperado
-            'mensajero_total_usd'          => $mensajeroTotalUSD,
-            'mensajero_total_cup'          => $mensajeroTotalCUP,
-            'mensajero_count'              => count($mensajeroDetalles),
-            'mensajero_propio_total_cup'   => $mensajeroPropioTotalCUP,
-            'mensajero_propio_count'       => $mensajeroPropioCount,
-            'mensajero_externo_total_cup'  => $mensajeroExternoTotalCUP,
-            'mensajero_externo_count'      => $mensajeroExternoCount,
-            'mensajero_detalles'           => $mensajeroDetalles,
+            'mensajero_total_usd' => $mensajeroTotalUSD,
+            'mensajero_total_cup' => $mensajeroTotalCUP,
+            'mensajero_count' => count($mensajeroDetalles),
+            'mensajero_propio_total_cup' => $mensajeroPropioTotalCUP,
+            'mensajero_propio_count' => $mensajeroPropioCount,
+            'mensajero_externo_total_cup' => $mensajeroExternoTotalCUP,
+            'mensajero_externo_count' => $mensajeroExternoCount,
+            'mensajero_detalles' => $mensajeroDetalles,
             // Totales separados por destino
             'ventas_a_cuentas_total_usd' => round($ventasACuentasTotalUSD, 2),
             'ventas_a_clientes_total_usd' => round($ventasAClientesTotalUSD, 2),
@@ -1566,40 +1592,40 @@ class CierreCajaController extends Controller
             'ventas_a_clientes_efectivo_usd' => round($ventasAClientesEfectivoUSD, 2),
             'ventas_a_clientes_transferencia_usd' => round($ventasAClientesTransferenciaUSD, 2),
             // Widgets: Totales por moneda (sin conversión global)
-            'usd_efectivo'       => round($widgetUsdEfectivo, 2),
-            'cup_efectivo'       => round($widgetCupEfectivo, 2),
-            'usd_transferencia'  => round($widgetUsdTransferencia, 2),
+            'usd_efectivo' => round($widgetUsdEfectivo, 2),
+            'cup_efectivo' => round($widgetCupEfectivo, 2),
+            'usd_transferencia' => round($widgetUsdTransferencia, 2),
             'cup_transferencias' => round($widgetCupTransferencias, 2),
             // USD Internacional = total de ventas que fueron a CLIENTES (deuda)
-            'usd_internacional'  => round($ventasAClientesTotalUSD, 2),
+            'usd_internacional' => round($ventasAClientesTotalUSD, 2),
             // Comisiones a gestores (legacy)
             'comisiones_gestor_total' => round($comisionesGestorTotalUSD, 2),
             'comisiones_gestor_detalles' => $comisionesGestorDetalles,
             // Nuevos: comisiones y ganancia agencia
-            'comision_pv_total'       => round((float) $comisionPVTotal, 2),
-            'comision_gestor_total'   => round((float) $comisionGestorTotal, 2),
-            'comisiones_pv_detalles'  => $comisionesPVDetalles,
-            'ganancia_agencia_total'  => round($gananciaAgenciaTotal, 2),
+            'comision_pv_total' => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
+            'comisiones_pv_detalles' => $comisionesPVDetalles,
+            'ganancia_agencia_total' => round($gananciaAgenciaTotal, 2),
             // Resumen financiero del turno
-            'ventas_brutas_usd'      => round((float) $ventasBrutasUSD, 2),
-            'comisiones_pv_cup'      => round((float) $comisionesPVCUP, 2),
-            'comisiones_gestor_cup'  => round($comisionesGestorCUP, 2),
-            'comisiones_total_cup'   => $comisionesTotalCUP,
+            'ventas_brutas_usd' => round((float) $ventasBrutasUSD, 2),
+            'comisiones_pv_cup' => round((float) $comisionesPVCUP, 2),
+            'comisiones_gestor_cup' => round($comisionesGestorCUP, 2),
+            'comisiones_total_cup' => $comisionesTotalCUP,
             // Ventas especiales
-            'ventas_especiales_count'      => $ventasEspecialesCount,
-            'ventas_especiales_total_usd'  => round($ventasEspecialesTotalUSD, 2),
-            'ventas_especiales_costo_usd'  => round($ventasEspecialesCostoUSD, 2),
-            'ventas_especiales_impacto_usd'=> $ventasEspecialesImpactoUSD,
-            'ventas_especiales_detalles'   => $ventasEspecialesDetalles,
+            'ventas_especiales_count' => $ventasEspecialesCount,
+            'ventas_especiales_total_usd' => round($ventasEspecialesTotalUSD, 2),
+            'ventas_especiales_costo_usd' => round($ventasEspecialesCostoUSD, 2),
+            'ventas_especiales_impacto_usd' => $ventasEspecialesImpactoUSD,
+            'ventas_especiales_detalles' => $ventasEspecialesDetalles,
             // Ventas anuladas
-            'ventas_anuladas_count'        => $ventasAnuladasCount,
-            'ventas_anuladas_total_usd'    => $ventasAnuladasTotalUSD,
-            'ventas_anuladas_detalles'     => $ventasAnuladasDetalles,
+            'ventas_anuladas_count' => $ventasAnuladasCount,
+            'ventas_anuladas_total_usd' => $ventasAnuladasTotalUSD,
+            'ventas_anuladas_detalles' => $ventasAnuladasDetalles,
         ];
 
         Log::info('CIERRE: Resultado', [
             'detalles_count' => count($result['detalles']),
-            'items_ventas_total' => array_sum(array_map(fn($d) => count($d['items_ventas'] ?? []), $result['detalles'])),
+            'items_ventas_total' => array_sum(array_map(fn ($d) => count($d['items_ventas'] ?? []), $result['detalles'])),
             'ventas_efectivo' => $result['ventas_efectivo'],
             'ventas_otros' => $result['ventas_otros'],
         ]);
@@ -1708,7 +1734,7 @@ class CierreCajaController extends Controller
 
         // Crear item de salida con detalles completos
         $itemSalida = [
-            'id' => 't_' . $movimiento->id,
+            'id' => 't_'.$movimiento->id,
             'desc' => $movimiento->descripcion,
             'monto_origen' => $movimiento->monto,
             'moneda_origen' => $codigoOrigen,
@@ -1732,7 +1758,7 @@ class CierreCajaController extends Controller
 
         if ($destinoInfo['moneda'] !== $codigoOrigen && isset($resumenPorMoneda[$destinoInfo['moneda']])) {
             $itemEntrada = [
-                'id' => 't_entrada_' . $movimiento->id,
+                'id' => 't_entrada_'.$movimiento->id,
                 'desc' => $movimiento->descripcion,
                 'monto_origen' => $movimiento->monto,
                 'moneda_origen' => $codigoOrigen,
@@ -1751,7 +1777,7 @@ class CierreCajaController extends Controller
         } else {
             // Mismo código de moneda, crear item de entrada con el mismo monto
             $itemEntrada = [
-                'id' => 't_entrada_' . $movimiento->id,
+                'id' => 't_entrada_'.$movimiento->id,
                 'desc' => $movimiento->descripcion,
                 'monto_origen' => $movimiento->monto,
                 'moneda_origen' => $codigoOrigen,
@@ -1890,7 +1916,9 @@ class CierreCajaController extends Controller
             $id = $transferencia['id'] ?? '';
             $baseId = str_replace(['t_entrada_', 't_'], '', $id);
 
-            if (isset($seenMovimientos[$baseId])) return;
+            if (isset($seenMovimientos[$baseId])) {
+                return;
+            }
 
             $seenMovimientos[$baseId] = true;
 
@@ -1982,7 +2010,7 @@ class CierreCajaController extends Controller
         }
 
         // 3. Buscar el pago más antiguo
-        $primerPago = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user) {
+        $primerPago = PagoVenta::whereHas('venta', function ($q) use ($user) {
             $q->where('user_id', $user->id);
         })->orderBy('created_at', 'asc')->first();
 

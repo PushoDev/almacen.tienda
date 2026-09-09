@@ -4,9 +4,10 @@ use App\Http\Controllers\CompraController;
 use App\Http\Controllers\LoteStockController;
 use Illuminate\Support\Facades\Route;
 
-// 'admin.only' (EnsureUserIsAdminOnly) — a diferencia del alias 'admin' usado en Reportes,
-// este exige estrictamente role === 'admin'; moderador y vendedor no tienen acceso a Compras.
-Route::middleware(['auth', 'verified', 'admin.only'])->group(
+// 'admin' (EnsureUserIsAdmin) permite 'admin' y 'moderador' — vendedor sigue sin acceso a
+// Compras. Antes usaba 'admin.only' (estrictamente 'admin'); se abrió a moderador a pedido
+// del negocio.
+Route::middleware(['auth', 'verified', 'admin'])->group(
     function () {
         /**
          * Iniciar Compra

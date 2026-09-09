@@ -1,6 +1,7 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { SelectorBancoTarjeta, type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
+import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -81,10 +82,11 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
         motivo_ajuste_saldo: '',
     });
 
-    // Banco elegido en vivo (reacciona a cada cambio en el selector, antes de guardar) —
-    // se usa para mostrar la tarjeta real en el header en vez del ícono genérico.
+    // Banco o insignia de moneda elegidos en vivo (reacciona a cada cambio en el selector,
+    // antes de guardar) — se usa para mostrar la tarjeta real en el header en vez del ícono
+    // genérico.
     const bancoSeleccionado = useMemo(() => {
-        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa];
+        const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa, ...catalogoTarjetas.efectivo];
         return todos.find((b) => b.slug === data.imagen) ?? null;
     }, [catalogoTarjetas, data.imagen]);
 
@@ -137,8 +139,8 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Editar Cuenta" description="Actualice los detalles de la cuenta para su negocio" />
-                    {data.tipo === 'efectivo' ? (
-                        // Efectivo no tiene banco — mismo ícono genérico de siempre.
+                    {data.tipo === 'efectivo' && !bancoSeleccionado ? (
+                        // Efectivo sin insignia elegida todavía — ícono genérico de siempre.
                         <Landmark
                             size={70}
                             color="#d6d3d1"
@@ -191,10 +193,9 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                                             value={data.tipo}
                                             onValueChange={(value: 'tarjeta' | 'efectivo') => {
                                                 setData('tipo', value);
-                                                // Efectivo no lleva banco/diseño de tarjeta.
-                                                if (value === 'efectivo') {
-                                                    setData('imagen', null);
-                                                }
+                                                // El catálogo de imagen es distinto por tipo (banco vs. moneda) — una
+                                                // imagen elegida para el tipo anterior no aplica al nuevo.
+                                                setData('imagen', null);
                                             }}
                                         >
                                             <SelectTrigger>
@@ -214,6 +215,19 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                                             <Label>Banco / Diseño de tarjeta</Label>
                                             <SelectorBancoTarjeta
                                                 catalogo={catalogoTarjetas}
+                                                value={data.imagen}
+                                                onChange={(slug) => setData('imagen', slug)}
+                                            />
+                                            <InputError message={errors.imagen} />
+                                        </div>
+                                    )}
+
+                                    {/* Campo Insignia de Moneda — solo aplica cuando tipo=efectivo */}
+                                    {data.tipo === 'efectivo' && (
+                                        <div className="space-y-2">
+                                            <Label>Insignia de Moneda</Label>
+                                            <SelectorImagenEfectivo
+                                                catalogo={catalogoTarjetas.efectivo}
                                                 value={data.imagen}
                                                 onChange={(slug) => setData('imagen', slug)}
                                             />
@@ -426,7 +440,7 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                                         value={data.security_password}
                                         onChange={(e) => setData('security_password', e.target.value)}
                                         placeholder="Ingrese su contraseña"
-                                        className="pr-10"
+                                        className="pr-10 normal-case"
                                         autoFocus
                                     />
                                     <button

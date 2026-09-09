@@ -494,7 +494,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                         onChange={(e) => setPasswordInput(e.target.value)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' && passwordInput) confirmAndSubmit(); }}
                                         placeholder="Ingresa tu contraseña"
-                                        className="pr-10"
+                                        className="pr-10 normal-case"
                                         autoFocus
                                     />
                                     <button

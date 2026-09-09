@@ -535,7 +535,7 @@ test('update() cambia el banco asignado a una cuenta existente', function () {
     $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'imagen' => 'visa']);
 });
 
-test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/externas', function () {
+test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/externas/efectivo', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -543,8 +543,10 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
     $responseCreate->assertInertia(fn ($page) => $page
         ->has('catalogoTarjetas.interna', 5)
         ->has('catalogoTarjetas.externa', 4)
+        ->has('catalogoTarjetas.efectivo', 3)
         ->where('catalogoTarjetas.interna.0.slug', 'bandec')
         ->where('catalogoTarjetas.externa.0.slug', 'visa')
+        ->where('catalogoTarjetas.efectivo.0.slug', 'usd')
     );
 
     $moneda = crearMonedaUsd();
@@ -563,6 +565,25 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
         ->has('catalogoTarjetas.externa', 4)
         ->where('cuenta.imagen', 'zelle')
     );
+});
+
+test('una cuenta tipo efectivo puede guardar una insignia de moneda del catálogo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $moneda = crearMonedaUsd();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Caja Efectivo USD '.uniqid(),
+        'tipo' => 'efectivo',
+        'saldo_cuenta' => 0,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'imagen' => 'usd',
+    ]);
+
+    $response->assertRedirect();
+    $this->assertDatabaseHas('cuentas', ['tipo' => 'efectivo', 'imagen' => 'usd']);
 });
 
 // ==========================================================================
