@@ -131,14 +131,23 @@ class User extends Authenticatable
     }
 
     /**
-     * true si este usuario necesita capturar/confirmar el turno hoy: solo aplica a
-     * moderador/vendedor (admin nunca), y solo si el turno activo no es de hoy (cada día
-     * exige al menos una confirmación, aunque sea repitiendo el mismo nombre de ayer).
+     * true si este usuario necesita capturar/confirmar el turno: solo aplica a
+     * moderador/vendedor (admin nunca). Dos condiciones independientes disparan la captura:
+     * (1) el turno activo no es de hoy (cada día exige al menos una confirmación), o
+     * (2) hubo un login nuevo desde la última captura — las cuentas son compartidas por
+     * punto de venta, no por persona, así que un cambio de turno a mitad del día (logout +
+     * login de otra persona) debe volver a preguntar aunque ya se haya confirmado hoy mismo.
+     * La bandera de sesión la arma AuthenticatedSessionController::store() en cada login y
+     * la limpia TurnoVendedorController::store() al capturar.
      */
     public function requiereCapturaTurno(): bool
     {
         if (! in_array($this->role, ['moderador', 'vendedor'])) {
             return false;
+        }
+
+        if (session('turno_pendiente_confirmacion', false)) {
+            return true;
         }
 
         $activo = $this->turnoActivo();

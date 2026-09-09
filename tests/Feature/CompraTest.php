@@ -328,7 +328,7 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
     ]);
 });
 
-// ─── Acceso: solo admin (moderador y vendedor no tienen acceso a Compras) ────
+// ─── Acceso: admin y moderador (vendedor no tiene acceso a Compras) ────
 
 test('un admin sí puede acceder a la vista de Compras', function () {
     $admin = User::factory()->admin()->create();
@@ -339,13 +339,13 @@ test('un admin sí puede acceder a la vista de Compras', function () {
     $response->assertOk();
 });
 
-test('un moderador no puede acceder a la vista de Compras (403)', function () {
+test('un moderador sí puede acceder a la vista de Compras', function () {
     $moderador = User::factory()->moderador()->create();
     $this->actingAs($moderador);
 
     $response = $this->get(route('comprar.index'), ['X-Inertia' => 'true']);
 
-    $response->assertStatus(403);
+    $response->assertOk();
 });
 
 test('un vendedor no puede acceder a la vista de Compras (403)', function () {
@@ -357,8 +357,9 @@ test('un vendedor no puede acceder a la vista de Compras (403)', function () {
     $response->assertStatus(403);
 });
 
-test('un moderador no puede registrar una compra por bypass directo de URL (403), y no se crea nada', function () {
+test('un moderador sí puede registrar una compra', function () {
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
     $almacen = Almacen::factory()->create();
@@ -366,13 +367,13 @@ test('un moderador no puede registrar una compra por bypass directo de URL (403)
 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => 'Proveedor Bypass',
+        'proveedor' => 'Proveedor Moderador',
         'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
                 'almacen_id' => $almacen->id,
-                'producto' => 'Producto Bypass Moderador',
+                'producto' => 'Producto Moderador',
                 'categoria' => $categoria->nombre_categoria,
                 'cantidad' => 1,
                 'precio' => 10,
@@ -380,8 +381,53 @@ test('un moderador no puede registrar una compra por bypass directo de URL (403)
         ],
     ], ['X-Inertia' => 'true']);
 
-    $response->assertStatus(403);
-    expect(Compra::count())->toBe(0);
+    $response->assertSessionHasNoErrors();
+    expect(Compra::count())->toBe(1);
+});
+
+// ─── Captura de turno en Compras (moderador ya tiene acceso, admin nunca captura turno) ───
+
+test('una compra registrada por un moderador con turno activo guarda el turno_vendedor_id', function () {
+    $moderador = User::factory()->moderador()->create();
+    $turno = crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Turno',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-09',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Turno', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
+        ],
+    ], ['X-Inertia' => 'true'])->assertSessionHasNoErrors();
+
+    $compra = Compra::where('proveedor_id', '!=', null)->latest('id')->first();
+    expect($compra->turno_vendedor_id)->toBe($turno->id);
+});
+
+test('una compra registrada por admin no guarda turno_vendedor_id (admin nunca captura turno)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Admin Sin Turno',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-09',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Admin Sin Turno', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
+        ],
+    ], ['X-Inertia' => 'true'])->assertSessionHasNoErrors();
+
+    $compra = Compra::latest('id')->first();
+    expect($compra->turno_vendedor_id)->toBeNull();
 });
 
 test('un vendedor no puede registrar una compra por bypass directo de URL (403), y no se crea nada', function () {
@@ -1513,7 +1559,7 @@ test('no se puede editar el código de un lote con uno que ya usa otro lote', fu
     expect($loteDos->fresh()->codigo)->toBe("LOTE-{$compra->id}-002");
 });
 
-test('un moderador no puede editar el código de un lote (403)', function () {
+test('un moderador sí puede editar el código de un lote', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -1522,11 +1568,11 @@ test('un moderador no puede editar el código de un lote (403)', function () {
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => 'Proveedor Lote Bypass',
+        'proveedor' => 'Proveedor Lote Moderador',
         'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
-            ['almacen_id' => $almacen->id, 'producto' => 'Producto Lote Bypass', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Lote Moderador', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
 
@@ -1535,16 +1581,17 @@ test('un moderador no puede editar el código de un lote (403)', function () {
     $lote = LoteStock::firstOrFail();
 
     $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
-    $this->post(route('lotes-stock.actualizar-codigo', $lote->id), ['codigo' => 'HACKEO'], ['X-Inertia' => 'true'])
-        ->assertStatus(403);
-    expect($lote->fresh()->codigo)->not->toBe('HACKEO');
+    $this->post(route('lotes-stock.actualizar-codigo', $lote->id), ['codigo' => 'LOTE-MOD-EDITADO'], ['X-Inertia' => 'true'])
+        ->assertSessionHasNoErrors();
+    expect($lote->fresh()->codigo)->toBe('LOTE-MOD-EDITADO');
 });
 
-// ─── Permisos: moderador/vendedor no acceden a aprobar/anular/actualizar ───
+// ─── Permisos: vendedor no accede a aprobar/anular/actualizar (moderador sí, igual que admin) ───
 
-test('un moderador no puede aprobar/anular/editar una compra por bypass directo (403)', function () {
+test('un vendedor no puede aprobar/anular/editar una compra por bypass directo (403)', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -1563,12 +1610,40 @@ test('un moderador no puede aprobar/anular/editar una compra por bypass directo 
     ])->assertSessionHasNoErrors();
     $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
 
-    $moderador = User::factory()->moderador()->create();
-    $this->actingAs($moderador);
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
 
     $this->post(route('comprar.aprobar', $compra->id), [], ['X-Inertia' => 'true'])->assertStatus(403);
     $this->post(route('comprar.anular', $compra->id), ['tipo_anulacion' => 'reversion', 'motivo_anulacion' => 'x'], ['X-Inertia' => 'true'])->assertStatus(403);
     $this->post(route('comprar.actualizar', $compra->id), ['productos' => []], ['X-Inertia' => 'true'])->assertStatus(403);
 
     expect($compra->fresh()->estado)->toBe('pendiente');
+});
+
+test('un moderador sí puede aprobar/anular/editar una compra, igual que admin', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $proveedor->nombre_proveedor,
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-07',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Moderador Estado', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $this->post(route('comprar.aprobar', $compra->id), [], ['X-Inertia' => 'true'])->assertSessionHasNoErrors();
+
+    expect($compra->fresh()->estado)->toBe('aprobada');
 });

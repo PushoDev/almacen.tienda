@@ -23,6 +23,10 @@ class TurnoVendedorController extends Controller
             'iniciado_en' => now(),
         ]);
 
+        // Limpia la bandera de "login nuevo pendiente de confirmar" (ver User::requiereCapturaTurno)
+        // — ya se confirmó para esta sesión, no debe volver a bloquear hasta el próximo login.
+        $request->session()->forget('turno_pendiente_confirmacion');
+
         return back()->with('success', 'Turno registrado correctamente.');
     }
 }

@@ -426,7 +426,7 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                                         value={data.security_password}
                                         onChange={(e) => setData('security_password', e.target.value)}
                                         placeholder="Ingrese su contraseña"
-                                        className="pr-10"
+                                        className="pr-10 normal-case"
                                         autoFocus
                                     />
                                     <button

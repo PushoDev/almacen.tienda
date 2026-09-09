@@ -154,7 +154,7 @@ export default function CreateEmpleadoPage({ almacenes, cuentas }: { almacenes: 
                                             value={data.password}
                                             onChange={(e) => setData('password', e.target.value)}
                                             placeholder="Contraseña"
-                                            className="pr-10"
+                                            className="pr-10 normal-case"
                                         />
                                         <Button
                                             type="button"

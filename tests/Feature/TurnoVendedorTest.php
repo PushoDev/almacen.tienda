@@ -65,6 +65,64 @@ test('un turno capturado ayer ya no cuenta hoy — requiere captura de nuevo', f
     expect($user->requiereCapturaTurno())->toBeTrue();
 });
 
+// ─── Cuentas compartidas por punto de venta: un login nuevo vuelve a exigir captura ───
+
+test('un login nuevo de vendedor requiere captura de turno aunque ya haya turno de hoy', function () {
+    $user = User::factory()->vendedor()->create();
+    TurnoVendedor::factory()->for($user)->create(['iniciado_en' => now()]);
+
+    // Sin pasar por el controller de login (ej. actingAs en otros tests), solo manda la fecha.
+    expect($user->requiereCapturaTurno())->toBeFalse();
+
+    $this->post('/login', [
+        'email' => $user->email,
+        'password' => 'password',
+    ]);
+
+    $this->assertAuthenticated();
+    expect($user->fresh()->requiereCapturaTurno())->toBeTrue();
+});
+
+test('capturar el turno tras un login nuevo limpia la bandera de pendiente', function () {
+    $user = User::factory()->vendedor()->create();
+    TurnoVendedor::factory()->for($user)->create(['iniciado_en' => now()]);
+
+    $this->post('/login', ['email' => $user->email, 'password' => 'password']);
+    expect($user->fresh()->requiereCapturaTurno())->toBeTrue();
+
+    $this->post(route('turno-vendedor.store'), ['nombre_vendedor' => 'Nueva Persona']);
+
+    expect($user->fresh()->requiereCapturaTurno())->toBeFalse();
+});
+
+test('el login de un admin no deja pendiente ninguna captura de turno', function () {
+    $admin = User::factory()->admin()->create();
+
+    $this->post('/login', ['email' => $admin->email, 'password' => 'password']);
+
+    expect($admin->fresh()->requiereCapturaTurno())->toBeFalse();
+});
+
+test('moderador con turno de hoy pero login nuevo sigue bloqueado para escribir hasta volver a confirmar', function () {
+    crearTiposMovimientoFinanciero();
+    $moneda = crearMonedaUsd();
+    $user = User::factory()->moderador()->create();
+    $cuenta = crearCuentaEnMoneda($moneda, 1000, $user);
+    TurnoVendedor::factory()->for($user)->create(['iniciado_en' => now()]);
+
+    $this->post('/login', ['email' => $user->email, 'password' => 'password']);
+
+    $response = $this->post(route('transacciones.gastar'), [
+        'origen_tipo' => 'cuenta',
+        'origen_id' => $cuenta->id,
+        'monto' => 10,
+        'moneda' => 'USD',
+        'comentario' => 'Test',
+    ]);
+
+    $response->assertStatus(403);
+});
+
 test('moderador sin turno no puede crear un gasto (escritura bloqueada)', function () {
     crearTiposMovimientoFinanciero();
     $moneda = crearMonedaUsd();

@@ -153,7 +153,7 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                                             value={data.password}
                                             onChange={(e) => setData('password', e.target.value)}
                                             placeholder="Deje en blanco si no desea cambiar la contraseña"
-                                            className="pr-10"
+                                            className="pr-10 normal-case"
                                         />
                                         <Button
                                             type="button"

@@ -11,6 +11,7 @@ class Compra extends Model
 
     protected $fillable = [
         'user_id',
+        'turno_vendedor_id',
         'proveedor_id',
         'cuenta_id',
         'cliente_id',
@@ -34,6 +35,13 @@ class Compra extends Model
     public function usuario()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    // Feature "Atendido por" / Turnos — nullable, admin nunca captura turno (ver
+    // migración add_turno_vendedor_id_to_compras_table y User::turnoActivo()).
+    public function turnoVendedor()
+    {
+        return $this->belongsTo(TurnoVendedor::class);
     }
 
     // Relación con proveedor

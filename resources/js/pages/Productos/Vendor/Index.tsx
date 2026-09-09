@@ -1394,7 +1394,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         onChange={(e) => setBulkPasswordInput(e.target.value)}
                                         onKeyDown={(e) => { if (e.key === 'Enter' && bulkPasswordInput) handleBulkSubmit(); }}
                                         placeholder="Ingresa tu contraseña"
-                                        className="pr-10"
+                                        className="pr-10 normal-case"
                                         autoFocus
                                     />
                                     <button

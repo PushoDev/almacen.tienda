@@ -35,6 +35,11 @@ class AuthenticatedSessionController extends Controller
         // Obtiene el usuario autenticado
         $user = Auth::user();
 
+        // Cuentas compartidas por punto de venta, no por persona (ver User::requiereCapturaTurno):
+        // cada login nuevo debe volver a preguntar quién atiende, aunque ya se haya confirmado
+        // hoy bajo otra sesión — cubre el cambio de turno vía logout/login de otra persona.
+        $request->session()->put('turno_pendiente_confirmacion', true);
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
