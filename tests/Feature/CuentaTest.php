@@ -542,7 +542,7 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
     $responseCreate = $this->get(route('cuentas.create'));
     $responseCreate->assertInertia(fn ($page) => $page
         ->has('catalogoTarjetas.interna', 5)
-        ->has('catalogoTarjetas.externa', 4)
+        ->has('catalogoTarjetas.externa', 14)
         ->has('catalogoTarjetas.efectivo', 3)
         ->where('catalogoTarjetas.interna.0.slug', 'bandec')
         ->where('catalogoTarjetas.externa.0.slug', 'visa')
@@ -562,7 +562,7 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
 
     $responseEdit = $this->get(route('cuentas.edit', $cuenta));
     $responseEdit->assertInertia(fn ($page) => $page
-        ->has('catalogoTarjetas.externa', 4)
+        ->has('catalogoTarjetas.externa', 14)
         ->where('cuenta.imagen', 'zelle')
     );
 });
