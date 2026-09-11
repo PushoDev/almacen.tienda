@@ -4,4 +4,5 @@ Before planning or editing, find the row whose globs match the file's path and r
 
 | Applies to | Rule file |
 | --- | --- |
+| app/Http/Controllers/TelegramWebhookController.php | .ai/rules/controllers.md |
 | tests/Pest.php | .ai/rules/tests.md |
