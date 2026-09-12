@@ -356,9 +356,9 @@ class CompraController extends Controller
                 $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
             } else {
                 $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
-                $entidad->increment('deuda_pago_cliente', $total);
+                $entidad->decrement('deuda_pago_cliente', $total);
                 $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $total;
+                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
             }
             $compraData['cuenta_id'] = null;
         } elseif ($tipoCompra === 'pago_cash') {
@@ -395,9 +395,9 @@ class CompraController extends Controller
                     $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
                 } else {
                     $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
-                    $entidad->increment('deuda_pago_cliente', $montoFaltante);
+                    $entidad->decrement('deuda_pago_cliente', $montoFaltante);
                     $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior + $montoFaltante;
+                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
                 }
             } else {
                 $montoFaltante = 0;
@@ -612,7 +612,7 @@ class CompraController extends Controller
                 if ($compra->proveedor) {
                     $compra->proveedor->increment('saldo_proveedor', $pago->monto);
                 } elseif ($compra->cliente) {
-                    $compra->cliente->decrement('deuda_pago_cliente', $pago->monto);
+                    $compra->cliente->increment('deuda_pago_cliente', $pago->monto);
                 }
             }
         }
@@ -737,7 +737,7 @@ class CompraController extends Controller
                     if ($comprar->proveedor) {
                         $comprar->proveedor->increment('saldo_proveedor', $pagoDeuda->monto);
                     } elseif ($comprar->cliente) {
-                        $comprar->cliente->decrement('deuda_pago_cliente', $pagoDeuda->monto);
+                        $comprar->cliente->increment('deuda_pago_cliente', $pagoDeuda->monto);
                     }
                 }
 
