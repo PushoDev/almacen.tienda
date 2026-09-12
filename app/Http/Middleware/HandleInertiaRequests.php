@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Moneda;
+use App\Services\CatalogoTarjetasService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -59,7 +60,14 @@ class HandleInertiaRequests extends Middleware
             'tasas' => fn () => Moneda::where('estado', true)
                 ->orderBy('principal', 'desc')
                 ->orderBy('codigo_moneda')
-                ->get(['codigo_moneda', 'nombre_moneda', 'tasa_cambio', 'principal']),
+                ->get(['codigo_moneda', 'nombre_moneda', 'tasa_cambio', 'principal', 'imagen'])
+                ->map(fn (Moneda $moneda) => [
+                    'codigo_moneda' => $moneda->codigo_moneda,
+                    'nombre_moneda' => $moneda->nombre_moneda,
+                    'tasa_cambio' => $moneda->tasa_cambio,
+                    'principal' => $moneda->principal,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+                ]),
             'turno' => fn () => $this->turnoCompartido($request),
         ];
     }

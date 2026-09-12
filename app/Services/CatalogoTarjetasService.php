@@ -131,4 +131,79 @@ class CatalogoTarjetasService
             'imagen_url' => asset('projects/'.$item['imagen']),
         ];
     }
+
+    /**
+     * Catálogo de insignias visuales para el registro de Moneda en sí (`monedas.imagen`),
+     * independiente del grupo 'efectivo' de arriba (ese es para `cuentas.imagen`, elegido
+     * por cuenta) — se mantiene aparte a propósito para no acoplar las dos features aunque
+     * hoy compartan las mismas monedas. Incluye MXN/BRL ya preparadas como insignias
+     * disponibles aunque esas monedas todavía no existan como registros reales (mismo
+     * patrón que un banco con logo ya cargado antes de asignarlo a una cuenta).
+     *
+     * @return array<string, string> slug => nombre
+     */
+    private static function monedasConImagen(): array
+    {
+        return [
+            'usd' => 'USD',
+            'cup' => 'CUP',
+            'eur' => 'EUR',
+            'mxn' => 'MXN',
+            'brl' => 'BRL',
+        ];
+    }
+
+    /**
+     * Slugs válidos de insignia de moneda — para la regla `in:...` de `imagen` en
+     * MonedaController.
+     *
+     * @return array<int, string>
+     */
+    public static function monedaImagenSlugsValidos(): array
+    {
+        return array_keys(self::monedasConImagen());
+    }
+
+    /**
+     * Catálogo plano con la URL de imagen ya resuelta — para el selector en
+     * Monedas/Create.tsx y Edit.tsx.
+     *
+     * @return array<int, array{slug: string, nombre: string, imagen_url: string}>
+     */
+    public static function monedaImagenes(): array
+    {
+        $items = [];
+
+        foreach (self::monedasConImagen() as $slug => $nombre) {
+            $items[] = [
+                'slug' => $slug,
+                'nombre' => $nombre,
+                'imagen_url' => asset('projects/monedas/'.$slug.'.webp'),
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * Un solo item del catálogo de insignias de moneda por slug — para resolver la
+     * imagen de una moneda ya guardada sin repetir el mapeo en el frontend. Null si el
+     * slug no existe o es null (moneda sin insignia asignada todavía).
+     *
+     * @return array{slug: string, nombre: string, imagen_url: string}|null
+     */
+    public static function monedaImagenPorSlug(?string $slug): ?array
+    {
+        $nombre = self::monedasConImagen()[$slug] ?? null;
+
+        if (! $nombre) {
+            return null;
+        }
+
+        return [
+            'slug' => $slug,
+            'nombre' => $nombre,
+            'imagen_url' => asset('projects/monedas/'.$slug.'.webp'),
+        ];
+    }
 }

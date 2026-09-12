@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, TrendingUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -49,60 +50,61 @@ export default function InformacionMonedas() {
                     {isLoadingMonedas ? (
                         <div className="flex h-[300px] items-center justify-center text-center">Cargando datos de monedas...</div>
                     ) : monedas.length > 0 ? (
-                        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+                        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
                             {monedas.map((moneda, index) => {
                                 const c = colorMoneda(moneda.codigo_moneda, index);
                                 return (
                                     <div
                                         key={moneda.id}
-                                        className={`rounded-lg border p-3 transition-all hover:shadow-md ${
-                                            moneda.principal
-                                                ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
-                                                : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                                        className={`overflow-hidden rounded-lg border bg-white transition-all hover:shadow-md dark:bg-gray-800 ${
+                                            moneda.principal ? 'border-green-300 dark:border-green-700' : 'border-gray-200 dark:border-gray-700'
                                         }`}
                                     >
-                                        {/* Header con símbolo y código */}
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${c.bg}`}>
-                                                    <span className={`text-sm font-bold ${c.text}`}>{moneda.simbolo_moneda}</span>
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                                                        {moneda.nombre_moneda}
-                                                    </h3>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">{moneda.codigo_moneda}</p>
-                                                </div>
-                                            </div>
-                                            {moneda.principal && (
-                                                <TrendingUp
-                                                    className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
-                                                    aria-label="Moneda Principal"
+                                        {/* Header — insignia real a bleed completo (misma receta que CuentaCard.tsx),
+                                            o el círculo de color con el símbolo como respaldo cuando no hay imagen
+                                            asignada todavía. */}
+                                        <div className={`relative flex h-16 items-center justify-center ${moneda.imagen_url ? '' : c.bg}`}>
+                                            {moneda.imagen_url ? (
+                                                <img
+                                                    src={moneda.imagen_url}
+                                                    alt={moneda.nombre_moneda}
+                                                    className="h-full w-full object-cover"
                                                 />
+                                            ) : (
+                                                <span className={`text-2xl font-bold ${c.text}`}>{moneda.simbolo_moneda}</span>
+                                            )}
+                                            {moneda.principal && (
+                                                <span className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-yellow-400 shadow">
+                                                    <TrendingUp className="h-3 w-3 text-yellow-900" aria-label="Moneda Principal" />
+                                                </span>
                                             )}
                                         </div>
 
-                                        {/* Información de tasas */}
-                                        <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs dark:border-gray-700">
-                                            <span className="text-gray-500 dark:text-gray-400">
-                                                Tasa:{' '}
-                                                <span className="font-semibold text-gray-900 dark:text-white">
+                                        <div className="space-y-2 p-3">
+                                            <div className="min-w-0">
+                                                <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                                    {moneda.nombre_moneda}
+                                                </h3>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">{moneda.codigo_moneda}</p>
+                                            </div>
+
+                                            {/* Tasa/comisión como badges — más claras de leer de un vistazo que
+                                                texto plano, mismo lenguaje visual que el resto del proyecto. */}
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <Badge variant="outline" className={`font-mono text-sm font-bold ${c.text} ${c.border}`}>
                                                     {moneda.tasa_cambio.toLocaleString('es-ES', {
                                                         minimumFractionDigits: 2,
                                                         maximumFractionDigits: 6,
                                                     })}
-                                                </span>
-                                            </span>
-                                            <span className="text-gray-500 dark:text-gray-400">
-                                                Com:{' '}
-                                                <span className="font-semibold text-orange-600 dark:text-orange-400">
+                                                </Badge>
+                                                <Badge variant="secondary" className="text-orange-600 dark:text-orange-400">
                                                     {moneda.commission.toLocaleString('es-ES', {
                                                         minimumFractionDigits: 2,
                                                         maximumFractionDigits: 4,
                                                     })}
                                                     %
-                                                </span>
-                                            </span>
+                                                </Badge>
+                                            </div>
                                         </div>
                                     </div>
                                 );

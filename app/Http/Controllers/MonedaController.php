@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Moneda;
-use App\Models\HistorialTasaCambio;
 use App\Models\Cuenta;
+use App\Models\HistorialTasaCambio;
+use App\Models\Moneda;
+use App\Services\CatalogoTarjetasService;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 
 class MonedaController extends Controller
 {
@@ -20,7 +21,12 @@ class MonedaController extends Controller
     {
         $monedas = Moneda::orderBy('principal', 'desc')
             ->orderBy('codigo_moneda')
-            ->get();
+            ->get()
+            ->map(function (Moneda $moneda) {
+                return $moneda->toArray() + [
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+                ];
+            });
 
         return Inertia::render('Monedas/Index', [
             'monedas' => $monedas,
@@ -36,7 +42,8 @@ class MonedaController extends Controller
     public function create()
     {
         return Inertia::render('Monedas/Create', [
-            'moneda_principal' => Moneda::where('principal', true)->first()
+            'moneda_principal' => Moneda::where('principal', true)->first(),
+            'catalogoImagenes' => CatalogoTarjetasService::monedaImagenes(),
         ]);
     }
 
@@ -49,6 +56,10 @@ class MonedaController extends Controller
             'codigo_moneda' => 'required|string|max:10',
             'nombre_moneda' => 'required|string|max:100|unique:monedas,nombre_moneda',
             'simbolo_moneda' => 'required|string|max:10',
+            // Insignia visual de la moneda (catálogo en código, ver
+            // CatalogoTarjetasService::monedaImagenes()) — opcional, distinta de
+            // cuentas.imagen.
+            'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
             'commission' => 'required|numeric|min:0',
             'estado' => 'boolean',
@@ -75,6 +86,7 @@ class MonedaController extends Controller
                     'codigo_moneda' => strtoupper($request->codigo_moneda),
                     'nombre_moneda' => $request->nombre_moneda,
                     'simbolo_moneda' => $request->simbolo_moneda,
+                    'imagen' => $request->imagen ?: null,
                     'tasa_cambio' => $request->tasa_cambio,
                     'commission' => $request->commission,
                     'estado' => $request->estado ?? true,
@@ -86,7 +98,7 @@ class MonedaController extends Controller
                 ->with('success', 'Moneda creada exitosamente.');
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error al crear la moneda: ' . $e->getMessage())
+                ->with('error', 'Error al crear la moneda: '.$e->getMessage())
                 ->withInput();
         }
     }
@@ -97,7 +109,7 @@ class MonedaController extends Controller
     public function show(Moneda $moneda)
     {
         return Inertia::render('Monedas/Show', [
-            'moneda' => $moneda
+            'moneda' => $moneda,
         ]);
     }
 
@@ -111,7 +123,8 @@ class MonedaController extends Controller
         return Inertia::render('Monedas/Edit', [
             'moneda' => $moneda,
             'moneda_principal' => $moneda_principal,
-            'es_principal_actual' => $moneda->principal
+            'es_principal_actual' => $moneda->principal,
+            'catalogoImagenes' => CatalogoTarjetasService::monedaImagenes(),
         ]);
     }
 
@@ -122,8 +135,9 @@ class MonedaController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'codigo_moneda' => 'required|string|max:10',
-            'nombre_moneda' => 'required|string|max:100|unique:monedas,nombre_moneda,' . $moneda->id,
+            'nombre_moneda' => 'required|string|max:100|unique:monedas,nombre_moneda,'.$moneda->id,
             'simbolo_moneda' => 'required|string|max:10',
+            'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
             'commission' => 'required|numeric|min:0',
             'estado' => 'boolean',
@@ -143,7 +157,7 @@ class MonedaController extends Controller
             DB::transaction(function () use ($request, $moneda) {
                 $era_principal = $moneda->principal;
                 $nuevo_principal = $request->principal;
-                
+
                 // Guardar tasa anterior para el historial
                 $tasaAnterior = $moneda->tasa_cambio;
                 $tasaNueva = (float) $request->tasa_cambio;
@@ -152,14 +166,14 @@ class MonedaController extends Controller
                 if ($tasaAnterior != $tasaNueva) {
                     // Calcular capital total ANTES del cambio
                     $totalCapitalAntes = $this->calcularCapitalTotal();
-                    
+
                     // Si se está marcando como principal y antes no lo era
-                    if ($nuevo_principal && !$era_principal) {
+                    if ($nuevo_principal && ! $era_principal) {
                         Moneda::where('principal', true)->update(['principal' => false]);
                     }
 
                     // Si se está quitando el principal y era el principal
-                    if (!$nuevo_principal && $era_principal) {
+                    if (! $nuevo_principal && $era_principal) {
                         // Buscar otra moneda activa para hacerla principal
                         $otra_moneda = Moneda::where('id', '!=', $moneda->id)
                             ->where('estado', true)
@@ -175,6 +189,7 @@ class MonedaController extends Controller
                         'codigo_moneda' => strtoupper($request->codigo_moneda),
                         'nombre_moneda' => $request->nombre_moneda,
                         'simbolo_moneda' => $request->simbolo_moneda,
+                        'imagen' => $request->imagen ?: null,
                         'tasa_cambio' => $request->tasa_cambio,
                         'commission' => $request->commission,
                         'estado' => $request->estado,
@@ -183,16 +198,16 @@ class MonedaController extends Controller
 
                     // Calcular capital total DESPUÉS del cambio
                     $totalCapitalDespues = $this->calcularCapitalTotal();
-                    
+
                     // Crear registro en el historial
                     $this->registrarHistorialCambioTasa($moneda, $tasaAnterior, $tasaNueva, $totalCapitalAntes, $totalCapitalDespues);
                 } else {
                     // Si la tasa no cambió, solo actualizar los demás campos
-                    if ($nuevo_principal && !$era_principal) {
+                    if ($nuevo_principal && ! $era_principal) {
                         Moneda::where('principal', true)->update(['principal' => false]);
                     }
 
-                    if (!$nuevo_principal && $era_principal) {
+                    if (! $nuevo_principal && $era_principal) {
                         $otra_moneda = Moneda::where('id', '!=', $moneda->id)
                             ->where('estado', true)
                             ->first();
@@ -206,6 +221,7 @@ class MonedaController extends Controller
                         'codigo_moneda' => strtoupper($request->codigo_moneda),
                         'nombre_moneda' => $request->nombre_moneda,
                         'simbolo_moneda' => $request->simbolo_moneda,
+                        'imagen' => $request->imagen ?: null,
                         'tasa_cambio' => $request->tasa_cambio,
                         'commission' => $request->commission,
                         'estado' => $request->estado,
@@ -218,7 +234,7 @@ class MonedaController extends Controller
                 ->with('success', 'Moneda actualizada exitosamente.');
         } catch (\Exception $e) {
             return redirect()->back()
-                ->with('error', 'Error al actualizar la moneda: ' . $e->getMessage())
+                ->with('error', 'Error al actualizar la moneda: '.$e->getMessage())
                 ->withInput();
         }
     }
@@ -241,7 +257,7 @@ class MonedaController extends Controller
                 ->with('success', 'Moneda eliminada exitosamente.');
         } catch (\Exception $e) {
             return redirect()->route('monedas.index')
-                ->with('error', 'Error al eliminar la moneda: ' . $e->getMessage());
+                ->with('error', 'Error al eliminar la moneda: '.$e->getMessage());
         }
     }
 
@@ -252,10 +268,10 @@ class MonedaController extends Controller
     {
         try {
             DB::transaction(function () use ($moneda) {
-                $nuevo_estado = !$moneda->estado;
+                $nuevo_estado = ! $moneda->estado;
 
                 // Si se está desactivando la moneda principal
-                if (!$nuevo_estado && $moneda->principal) {
+                if (! $nuevo_estado && $moneda->principal) {
                     // Buscar otra moneda activa para hacerla principal
                     $otra_moneda = Moneda::where('id', '!=', $moneda->id)
                         ->where('estado', true)
@@ -275,7 +291,7 @@ class MonedaController extends Controller
                 ->with('success', 'Estado de la moneda actualizado exitosamente.');
         } catch (\Exception $e) {
             return redirect()->route('monedas.index')
-                ->with('error', 'Error al cambiar estado: ' . $e->getMessage());
+                ->with('error', 'Error al cambiar estado: '.$e->getMessage());
         }
     }
 
@@ -287,7 +303,7 @@ class MonedaController extends Controller
         try {
             DB::transaction(function () use ($moneda) {
                 // Validar que la moneda esté activa
-                if (!$moneda->estado) {
+                if (! $moneda->estado) {
                     throw new \Exception('No se puede establecer como principal una moneda inactiva.');
                 }
 
@@ -302,7 +318,7 @@ class MonedaController extends Controller
                 ->with('success', 'Moneda principal establecida exitosamente.');
         } catch (\Exception $e) {
             return redirect()->route('monedas.index')
-                ->with('error', 'Error al establecer moneda principal: ' . $e->getMessage());
+                ->with('error', 'Error al establecer moneda principal: '.$e->getMessage());
         }
     }
 
@@ -312,20 +328,22 @@ class MonedaController extends Controller
     private function calcularCapitalTotal(): float
     {
         $totalCapital = 0;
-        
+
         // Obtener todas las cuentas con sus monedas
         $cuentas = Cuenta::with('moneda')->get();
-        
+
         foreach ($cuentas as $cuenta) {
-            if (!$cuenta->moneda) continue;
-            
+            if (! $cuenta->moneda) {
+                continue;
+            }
+
             $monto = $cuenta->saldo_cuenta ?? 0;
             $tasaCambio = $cuenta->moneda->tasa_cambio ?? 1;
-            
+
             // Convertir a moneda base (USD)
             $totalCapital += $monto / $tasaCambio;
         }
-        
+
         return (float) $totalCapital;
     }
 
@@ -337,16 +355,16 @@ class MonedaController extends Controller
         // Calcular impacto financiero
         $impactoFinanciero = $totalCapitalDespues - $totalCapitalAntes;
         $impactoPorcentaje = $totalCapitalAntes != 0 ? ($impactoFinanciero / $totalCapitalAntes) * 100 : 0;
-        
+
         // Calcular diferencia y porcentaje de cambio en la tasa
         $diferenciaTasa = $tasaNueva - $tasaAnterior;
         $porcentajeCambioTasa = $tasaAnterior != 0 ? ($diferenciaTasa / $tasaAnterior) * 100 : 0;
-        
+
         // Obtener cuentas afectadas por esta moneda
         $cuentasAfectadas = Cuenta::where('moneda_id', $moneda->id)->get();
         $numeroCuentas = $cuentasAfectadas->count();
         $totalCuentasAfectadas = $cuentasAfectadas->sum('saldo_cuenta');
-        
+
         // Crear registro en el historial
         HistorialTasaCambio::create([
             'moneda_id' => $moneda->id,
@@ -361,5 +379,4 @@ class MonedaController extends Controller
             'numero_cuentas_afectadas' => $numeroCuentas,
         ]);
     }
-
 }

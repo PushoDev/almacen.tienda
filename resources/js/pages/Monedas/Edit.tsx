@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, Coins, Save } from 'lucide-react';
-import { useEffect } from 'react';
+import { ArrowLeft, Coins, DollarSign, Info, Save } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
@@ -19,12 +21,19 @@ interface Moneda {
     codigo_moneda: string;
     nombre_moneda: string;
     simbolo_moneda: string;
+    imagen: string | null;
     tasa_cambio: number;
     commission: number;
     estado: boolean;
     principal: boolean;
     created_at: string;
     updated_at: string;
+}
+
+interface CatalogoImagen {
+    slug: string;
+    nombre: string;
+    imagen_url: string;
 }
 
 interface PageProps {
@@ -35,6 +44,7 @@ interface PageProps {
         nombre_moneda: string;
     };
     es_principal_actual: boolean;
+    catalogoImagenes: CatalogoImagen[];
     errors?: Record<string, string>;
     [key: string]: unknown;
 }
@@ -56,7 +66,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function MonedaEdit() {
     const { props } = usePage<PageProps>();
-    const { moneda, moneda_principal, es_principal_actual, errors } = props;
+    const { moneda, moneda_principal, es_principal_actual, catalogoImagenes, errors } = props;
 
     // Función para formatear a 2 decimales asegurando que sea número
     const formatToTwoDecimals = (value: number | string): number => {
@@ -68,11 +78,16 @@ export default function MonedaEdit() {
         codigo_moneda: moneda.codigo_moneda,
         nombre_moneda: moneda.nombre_moneda,
         simbolo_moneda: moneda.simbolo_moneda,
+        imagen: moneda.imagen,
         tasa_cambio: formatToTwoDecimals(moneda.tasa_cambio),
         commission: formatToTwoDecimals(moneda.commission),
         estado: moneda.estado,
         principal: moneda.principal,
     });
+
+    // Insignia elegida en vivo (reacciona a cada cambio en el selector, antes de guardar) —
+    // mismo patrón que Cuentas/Create.tsx y Edit.tsx (docs/patron-mascota-bleed.md Variante A).
+    const insigniaSeleccionada = useMemo(() => catalogoImagenes.find((item) => item.slug === data.imagen) ?? null, [catalogoImagenes, data.imagen]);
 
     // Mostrar notificación si hay errores
     useEffect(() => {
@@ -125,34 +140,65 @@ export default function MonedaEdit() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Editar Moneda" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <div className="flex items-center gap-4">
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/monedas">
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                Volver
-                            </Link>
-                        </Button>
-                        <HeadingSmall
-                            title={`Editar Moneda: ${moneda.codigo_moneda}`}
-                            description="Actualiza la información de la moneda seleccionada."
-                        />
-                    </div>
-                    <Coins
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                {/* Header — sin overflow-hidden a propósito: la insignia elegida usa efecto
+                    bleed (ver docs/patron-mascota-bleed.md Variante A), se sale del borde
+                    superior en vez de quedar recortada adentro. Mismo patrón que Cuentas/Edit.tsx. */}
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
+                    <HeadingSmall
+                        title={`Editar Moneda: ${moneda.codigo_moneda}`}
+                        description="Actualiza la información de la moneda seleccionada."
                     />
+                    {insigniaSeleccionada ? (
+                        <img
+                            src={insigniaSeleccionada.imagen_url}
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                        />
+                    ) : (
+                        <Coins
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    )}
+                </div>
+
+                {/* Navegación — mismo patrón que Clientes/Edit.tsx: el botón de volver vive
+                    debajo del banner de página, nunca dentro (ese banner es solo HeadingSmall
+                    + ícono decorativo, ver docs/header-structure.md). */}
+                <div className="flex items-center gap-2">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Link href="/monedas">
+                                <Button variant="outline" className="flex items-center gap-2">
+                                    <ArrowLeft size={16} />
+                                    Volver
+                                </Button>
+                            </Link>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Volver al listado de monedas</p>
+                        </TooltipContent>
+                    </Tooltip>
                 </div>
 
                 {/* Formulario */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     {/* Formulario Principal */}
-                    <Card className="lg:col-span-2">
-                        <CardHeader>
-                            <CardTitle>Información de la Moneda</CardTitle>
-                            <CardDescription>Actualiza los campos necesarios para modificar la moneda</CardDescription>
+                    <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md lg:col-span-2">
+                        <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <DollarSign className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Información de la Moneda</CardTitle>
+                                    <CardDescription className="text-violet-100">
+                                        Actualiza los campos necesarios para modificar la moneda
+                                    </CardDescription>
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <form onSubmit={handleSubmit} className="space-y-6">
@@ -205,6 +251,18 @@ export default function MonedaEdit() {
                                         className={errors?.simbolo_moneda ? 'border-red-500' : ''}
                                     />
                                     {errors?.simbolo_moneda && <p className="text-sm text-red-500">{errors.simbolo_moneda}</p>}
+                                </div>
+
+                                {/* Insignia visual — catálogo en código (CatalogoTarjetasService::monedaImagenes()),
+                                    independiente de cuentas.imagen. Opcional. */}
+                                <div className="space-y-2">
+                                    <Label>Insignia de la Moneda</Label>
+                                    <SelectorImagenEfectivo
+                                        catalogo={catalogoImagenes}
+                                        value={data.imagen}
+                                        onChange={(slug) => setData('imagen', slug)}
+                                    />
+                                    {errors?.imagen && <p className="text-sm text-red-500">{errors.imagen}</p>}
                                 </div>
 
                                 {/* Tasa de Cambio y Comisión */}
@@ -324,9 +382,14 @@ export default function MonedaEdit() {
                     </Card>
 
                     {/* Panel de Información */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Información de la Moneda</CardTitle>
+                    <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                        <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Info className="h-5 w-5" />
+                                </div>
+                                <CardTitle className="text-white">Información de la Moneda</CardTitle>
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">

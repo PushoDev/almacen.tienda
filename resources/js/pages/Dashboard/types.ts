@@ -10,6 +10,7 @@ export interface Moneda {
     nombre_moneda: string;
     codigo_moneda: string;
     simbolo_moneda: string;
+    imagen_url: string | null;
     tasa_cambio: number;
     commission: number;
     estado: boolean;

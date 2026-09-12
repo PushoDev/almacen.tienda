@@ -29,6 +29,8 @@ interface Moneda {
     codigo_moneda: string;
     nombre_moneda: string;
     simbolo_moneda: string;
+    imagen: string | null;
+    imagen_url: string | null;
     tasa_cambio: number;
     commission: number;
     estado: boolean;
@@ -143,14 +145,20 @@ export default function MonedasIndex() {
                     />
                 </div>
 
-                {/* Listado de Monedas */}
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                        <div>
-                            <CardTitle>Lista de Monedas</CardTitle>
-                            <CardDescription>Gestiona todas las monedas disponibles en el sistema</CardDescription>
+                {/* Listado de Monedas — mismo patrón de degradado que Monedas/Edit.tsx
+                    (docs/patron-card-header-degradado.md), violeta para todo el módulo. */}
+                <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Coins className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Lista de Monedas</CardTitle>
+                                <CardDescription className="text-violet-100">Gestiona todas las monedas disponibles en el sistema</CardDescription>
+                            </div>
                         </div>
-                        <Button asChild>
+                        <Button asChild className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
                             <Link href="/monedas/create">
                                 <Plus className="mr-2 h-4 w-4" />
                                 Nueva Moneda
@@ -181,7 +189,21 @@ export default function MonedasIndex() {
                                 ) : (
                                     monedas.map((moneda) => (
                                         <TableRow key={moneda.id}>
-                                            <TableCell className="font-mono font-bold">{moneda.codigo_moneda}</TableCell>
+                                            <TableCell className="font-mono font-bold">
+                                                <div className="flex items-center gap-2">
+                                                    {moneda.imagen_url ? (
+                                                        <img
+                                                            src={moneda.imagen_url}
+                                                            alt=""
+                                                            aria-hidden="true"
+                                                            className="h-6 w-9 rounded object-cover"
+                                                        />
+                                                    ) : (
+                                                        <Coins className="text-muted-foreground h-5 w-5" />
+                                                    )}
+                                                    {moneda.codigo_moneda}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="font-medium">{moneda.nombre_moneda}</TableCell>
                                             <TableCell>{moneda.simbolo_moneda}</TableCell>
                                             <TableCell>{formatNumber(moneda.tasa_cambio, 2)}</TableCell> {/* 2 decimales para tasa */}
