@@ -38,12 +38,18 @@ interface MonedaOption {
     simbolo_moneda: string;
 }
 
+interface BancoOption {
+    slug: string;
+    nombre: string;
+}
+
 interface CreateCuentasPageProps {
     monedas: MonedaOption[];
     catalogoTarjetas: CatalogoTarjetas;
+    bancos: BancoOption[];
 }
 
-export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateCuentasPageProps) {
+export default function CreateCuentasPage({ monedas, catalogoTarjetas, bancos }: CreateCuentasPageProps) {
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
         tipo: 'tarjeta' as 'tarjeta' | 'efectivo',
@@ -54,6 +60,7 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
         estado: 'activa' as 'activa' | 'inactiva',
         notas_cuenta: '',
         imagen: null as string | null,
+        tipo_banco: '',
     });
 
     // Banco o insignia de moneda elegidos en vivo — se usa para el efecto bleed del header.
@@ -137,6 +144,8 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
                                                 // El catálogo de imagen es distinto por tipo (banco vs. moneda) — una
                                                 // imagen elegida para el tipo anterior no aplica al nuevo.
                                                 setData('imagen', null);
+                                                // tipo_banco tampoco aplica a efectivo (hace función de caja, no es un banco).
+                                                setData('tipo_banco', '');
                                             }}
                                         >
                                             <SelectTrigger>
@@ -160,6 +169,29 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas }: CreateC
                                                 onChange={(slug) => setData('imagen', slug)}
                                             />
                                             <InputError message={errors.imagen} />
+                                        </div>
+                                    )}
+
+                                    {/* Campo Tipo de Banco — clasificación para uso futuro (restringir vendedores
+                                        por banco en Ventas), independiente del diseño elegido arriba. No aplica a
+                                        efectivo (hace función de caja, no es un banco). Las opciones vienen del
+                                        mismo catálogo de bancos/tarjetas, así que crecen solas al agregar uno nuevo. */}
+                                    {data.tipo === 'tarjeta' && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="tipo_banco">Tipo de Banco</Label>
+                                            <Select value={data.tipo_banco} onValueChange={(value) => setData('tipo_banco', value)}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Seleccione el banco" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {bancos.map((banco) => (
+                                                        <SelectItem key={banco.slug} value={banco.slug}>
+                                                            {banco.nombre}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <InputError message={errors.tipo_banco} />
                                         </div>
                                     )}
 

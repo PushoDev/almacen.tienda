@@ -37,6 +37,7 @@ class CatalogoTarjetasService
             'amazon' => ['nombre' => 'Amazon', 'grupo' => 'externa', 'imagen' => 'card_interacionales/Amazon.webp'],
             'bank_of_america' => ['nombre' => 'Bank of America', 'grupo' => 'externa', 'imagen' => 'card_interacionales/BankOfAmerica.webp'],
             'freedom_unlimited' => ['nombre' => 'Chase Freedom Unlimited', 'grupo' => 'externa', 'imagen' => 'card_interacionales/FreedomUnlimited.webp'],
+            'square' => ['nombre' => 'Square', 'grupo' => 'externa', 'imagen' => 'card_interacionales/Square.webp'],
             // Efectivo — insignias por moneda, para cuentas tipo=efectivo (mismo mecanismo,
             // no un mapeo automático desde cuentas.moneda_id: el usuario elige explícitamente,
             // igual que con el banco de una tarjeta).
@@ -54,6 +55,37 @@ class CatalogoTarjetasService
     public static function slugsValidos(): array
     {
         return array_keys(self::todos());
+    }
+
+    /**
+     * Bancos válidos para clasificar `cuentas.tipo_banco` — internas + externas, sin
+     * efectivo (una moneda no es un banco; las cuentas tipo=efectivo hacen función de
+     * caja y no tienen banco asignable). Lista plana para un `<select>` simple; crece
+     * sola a medida que se agreguen bancos/tarjetas nuevos a todos(), sin tocar nada más.
+     *
+     * @return array<int, array{slug: string, nombre: string}>
+     */
+    public static function bancos(): array
+    {
+        $bancos = [];
+
+        foreach (self::todos() as $slug => $item) {
+            if (in_array($item['grupo'], ['interna', 'externa'], true)) {
+                $bancos[] = ['slug' => $slug, 'nombre' => $item['nombre']];
+            }
+        }
+
+        return $bancos;
+    }
+
+    /**
+     * Slugs de banco válidos — para la regla `in:...` de `tipo_banco` en CuentaController.
+     *
+     * @return array<int, string>
+     */
+    public static function bancoSlugsValidos(): array
+    {
+        return array_column(self::bancos(), 'slug');
     }
 
     /**
