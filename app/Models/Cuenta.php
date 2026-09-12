@@ -11,8 +11,8 @@ class Cuenta extends Model
     use HasFactory;
 
     protected $primaryKey = 'id';
-    protected $table = 'cuentas';
 
+    protected $table = 'cuentas';
 
     protected $fillable = [
         'nombre_cuenta',
@@ -25,6 +25,7 @@ class Cuenta extends Model
         'estado',
         'tipo_titular',
         'imagen',
+        'tipo_banco',
     ];
 
     protected $casts = [

@@ -3,13 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Compra;
-use App\Models\Venta;
 use App\Models\HistorialPrecioCosto;
+use App\Models\Venta;
+use App\Services\CatalogoTarjetasService;
 use App\Services\DashboardStatsService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class ReporteController extends Controller
 {
@@ -191,15 +193,14 @@ class ReporteController extends Controller
     /**
      * Obtiene datos de compras y ventas para un gráfico en un rango de tiempo.
      *
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getComprasVentasData(Request $request)
     {
         // Compras es admin-only en el resto del sistema (routes/acciones/compras.php,
         // middleware admin.only) — este endpoint agrega totales de Compras de todo el
         // negocio, así que necesita el mismo gate, aunque viva fuera de ese grupo de rutas.
-        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+        if (! in_array(auth()->user()->role, ['admin', 'moderador'])) {
             abort(403);
         }
 
@@ -281,8 +282,7 @@ class ReporteController extends Controller
     /**
      * Obtiene los estados financieros (Cuentas) con información de Monedas y Usuarios
      *
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getFinancialStates(Request $request)
     {
@@ -331,7 +331,7 @@ class ReporteController extends Controller
         foreach ($data as $row) {
             $cuentaKey = $row->cuenta_id;
 
-            if (!isset($cuentas[$cuentaKey])) {
+            if (! isset($cuentas[$cuentaKey])) {
                 $cuentas[$cuentaKey] = [
                     'cuenta_id' => $row->cuenta_id,
                     'nombre_cuenta' => $row->nombre_cuenta,
@@ -348,7 +348,7 @@ class ReporteController extends Controller
                         'commission' => (float) $row->commission,
                         'estado' => $row->estado_moneda,
                     ],
-                    'usuarios' => []
+                    'usuarios' => [],
                 ];
             }
 
@@ -369,7 +369,7 @@ class ReporteController extends Controller
     /**
      * Obtiene la lista de usuarios para el filtro del dashboard
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getUsuarios()
     {
@@ -384,12 +384,12 @@ class ReporteController extends Controller
     /**
      * Obtiene todas las monedas activas con sus tasas de cambio
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getMonedas()
     {
         $monedas = DB::table('monedas')
-            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'commission', 'estado', 'principal')
+            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'imagen', 'tasa_cambio', 'commission', 'estado', 'principal')
             ->where('estado', true)
             ->orderBy('principal', 'desc')
             ->orderBy('nombre_moneda')
@@ -400,6 +400,7 @@ class ReporteController extends Controller
                     'nombre_moneda' => $moneda->nombre_moneda,
                     'codigo_moneda' => $moneda->codigo_moneda,
                     'simbolo_moneda' => $moneda->simbolo_moneda,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
                     'tasa_cambio' => (float) $moneda->tasa_cambio,
                     'commission' => (float) $moneda->commission,
                     'estado' => (bool) $moneda->estado,
@@ -505,7 +506,7 @@ class ReporteController extends Controller
         ]);
 
         $user = auth()->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'No autenticado'], 401);
         }
 
@@ -558,7 +559,7 @@ class ReporteController extends Controller
         $totales = [
             'venta' => $ventas->sum('total_venta'),
             'ganancia' => $ventas->sum('ganancia_total'),
-            'diferencia_cambiaria' => $ventas->sum('diferencia_cambiaria')
+            'diferencia_cambiaria' => $ventas->sum('diferencia_cambiaria'),
         ];
 
         return Inertia::render('Reportes/Report/ReporteGanancias', [
@@ -567,6 +568,7 @@ class ReporteController extends Controller
             'usuarios' => DB::table('users')->select('id', 'name')->get(),
         ]);
     }
+
     /**
      * Reporte de productos con stock bajo.
      */
@@ -648,7 +650,7 @@ class ReporteController extends Controller
      */
     public function historialCostoPrecio()
     {
-        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+        if (! in_array(auth()->user()->role, ['admin', 'moderador'])) {
             abort(403);
         }
 
@@ -660,35 +662,35 @@ class ReporteController extends Controller
             ->paginate(20)
             ->through(function ($item) {
                 return [
-                    'id'                 => $item->id,
-                    'producto'           => $item->producto->nombre_producto ?? '-',
-                    'marca'              => $item->producto->marca_producto ?? '',
-                    'usuario'            => $item->user->name ?? '-',
-                    'precio_anterior'    => (float) $item->precio_anterior,
-                    'precio_nuevo'       => (float) $item->precio_nuevo,
-                    'diferencia'         => (float) $item->diferencia,
-                    'stock_momento'      => $item->stock_momento,
+                    'id' => $item->id,
+                    'producto' => $item->producto->nombre_producto ?? '-',
+                    'marca' => $item->producto->marca_producto ?? '',
+                    'usuario' => $item->user->name ?? '-',
+                    'precio_anterior' => (float) $item->precio_anterior,
+                    'precio_nuevo' => (float) $item->precio_nuevo,
+                    'diferencia' => (float) $item->diferencia,
+                    'stock_momento' => $item->stock_momento,
                     'impacto_financiero' => (float) $item->impacto_financiero,
                     'impacto_formateado' => $item->getImpactoFormateadoAttribute(),
-                    'es_perdida'         => $item->es_perdida,
-                    'es_ganancia'        => $item->esGanancia(),
-                    'motivo'             => $item->motivo,
-                    'fecha'              => $item->created_at->format('d/m/Y H:i'),
+                    'es_perdida' => $item->es_perdida,
+                    'es_ganancia' => $item->esGanancia(),
+                    'motivo' => $item->motivo,
+                    'fecha' => $item->created_at->format('d/m/Y H:i'),
                 ];
             });
 
         $stats = [
-            'total_ganancias'      => (float) HistorialPrecioCosto::ganancias()->sum('impacto_financiero'),
-            'total_perdidas'       => abs((float) HistorialPrecioCosto::perdidas()->sum('impacto_financiero')),
-            'neto_impacto'         => (float) HistorialPrecioCosto::sum('impacto_financiero'),
-            'numero_cambios'       => HistorialPrecioCosto::count(),
+            'total_ganancias' => (float) HistorialPrecioCosto::ganancias()->sum('impacto_financiero'),
+            'total_perdidas' => abs((float) HistorialPrecioCosto::perdidas()->sum('impacto_financiero')),
+            'neto_impacto' => (float) HistorialPrecioCosto::sum('impacto_financiero'),
+            'numero_cambios' => HistorialPrecioCosto::count(),
             'cambios_con_ganancia' => HistorialPrecioCosto::ganancias()->count(),
-            'cambios_con_perdida'  => HistorialPrecioCosto::perdidas()->count(),
+            'cambios_con_perdida' => HistorialPrecioCosto::perdidas()->count(),
         ];
 
         return Inertia::render('Reportes/Report/HistorialCostoPrecio', [
             'historial' => $historial,
-            'stats'     => $stats,
+            'stats' => $stats,
         ]);
     }
 
@@ -711,8 +713,8 @@ class ReporteController extends Controller
                 'movimientos_financieros.moneda',
                 'movimientos_financieros.descripcion',
                 'movimientos_financieros.fecha_operacion',
-                DB::raw("COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) as origen"),
-                DB::raw("COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) as destino")
+                DB::raw('COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) as origen'),
+                DB::raw('COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) as destino')
             );
 
         if ($request->filled('start_date')) {

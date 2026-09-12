@@ -50,6 +50,7 @@ interface CuentaEditProps {
     estado: string;
     notas_cuenta: string;
     imagen: string | null;
+    tipo_banco: string | null;
     moneda: {
         id: number;
         nombre_moneda: string;
@@ -58,13 +59,19 @@ interface CuentaEditProps {
     } | null;
 }
 
+interface BancoOption {
+    slug: string;
+    nombre: string;
+}
+
 interface EditarCuentasPageProps {
     cuenta: CuentaEditProps;
     monedas: MonedaOption[];
     catalogoTarjetas: CatalogoTarjetas;
+    bancos: BancoOption[];
 }
 
-export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }: EditarCuentasPageProps) {
+export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, bancos }: EditarCuentasPageProps) {
     const { props } = usePage() as any;
     const isAdmin = props?.auth?.user?.role === 'admin';
 
@@ -78,6 +85,7 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
         estado: cuenta.estado as 'activa' | 'inactiva',
         notas_cuenta: cuenta.notas_cuenta || '',
         imagen: cuenta.imagen,
+        tipo_banco: cuenta.tipo_banco || '',
         security_password: '',
         motivo_ajuste_saldo: '',
     });
@@ -196,6 +204,8 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                                                 // El catálogo de imagen es distinto por tipo (banco vs. moneda) — una
                                                 // imagen elegida para el tipo anterior no aplica al nuevo.
                                                 setData('imagen', null);
+                                                // tipo_banco tampoco aplica a efectivo (hace función de caja, no es un banco).
+                                                setData('tipo_banco', '');
                                             }}
                                         >
                                             <SelectTrigger>
@@ -219,6 +229,29 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas }:
                                                 onChange={(slug) => setData('imagen', slug)}
                                             />
                                             <InputError message={errors.imagen} />
+                                        </div>
+                                    )}
+
+                                    {/* Campo Tipo de Banco — clasificación para uso futuro (restringir vendedores
+                                        por banco en Ventas), independiente del diseño elegido arriba. No aplica a
+                                        efectivo (hace función de caja, no es un banco). Las opciones vienen del
+                                        mismo catálogo de bancos/tarjetas, así que crecen solas al agregar uno nuevo. */}
+                                    {data.tipo === 'tarjeta' && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="tipo_banco">Tipo de Banco</Label>
+                                            <Select value={data.tipo_banco} onValueChange={(value) => setData('tipo_banco', value)}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Seleccione el banco" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {bancos.map((banco) => (
+                                                        <SelectItem key={banco.slug} value={banco.slug}>
+                                                            {banco.nombre}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <InputError message={errors.tipo_banco} />
                                         </div>
                                     )}
 

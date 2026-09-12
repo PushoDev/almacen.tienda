@@ -32,6 +32,7 @@ export interface TasaMoneda {
     nombre_moneda: string;
     tasa_cambio: number;
     principal: boolean;
+    imagen_url: string | null;
 }
 
 /**

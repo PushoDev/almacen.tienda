@@ -147,6 +147,7 @@ class CuentaController extends Controller
                     'notas_cuenta' => $cuenta->notas_cuenta,
                     'imagen' => $cuenta->imagen,
                     'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
+                    'tipo_banco' => $cuenta->tipo_banco,
                     'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
                 ];
@@ -176,6 +177,7 @@ class CuentaController extends Controller
                     ];
                 }),
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
+            'bancos' => CatalogoTarjetasService::bancos(),
         ]);
     }
 
@@ -197,6 +199,9 @@ class CuentaController extends Controller
             // CatalogoTarjetasService) — opcional siempre, incluso para tipo=tarjeta: una
             // cuenta puede quedar sin banco asignado hasta que se edite más tarde.
             'imagen' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::slugsValidos())],
+            // Clasificación de banco para uso futuro (restringir vendedores por banco en
+            // Ventas) — independiente de `imagen`, no aplica a cuentas tipo=efectivo (caja).
+            'tipo_banco' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::bancoSlugsValidos())],
         ]);
 
         Cuenta::create([
@@ -209,6 +214,7 @@ class CuentaController extends Controller
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'] ?? null,
             'imagen' => $validated['imagen'] ?? null,
+            'tipo_banco' => $validated['tipo_banco'] ?? null,
         ]);
 
         // Redirigimos al usuario a la lista de cuentas
@@ -251,6 +257,7 @@ class CuentaController extends Controller
                 'notas_cuenta' => $cuenta->notas_cuenta,
                 'imagen' => $cuenta->imagen,
                 'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
+                'tipo_banco' => $cuenta->tipo_banco,
                 'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
             ],
@@ -638,6 +645,7 @@ class CuentaController extends Controller
                 'estado' => $cuenta->estado,
                 'notas_cuenta' => $cuenta->notas_cuenta,
                 'imagen' => $cuenta->imagen,
+                'tipo_banco' => $cuenta->tipo_banco,
             ],
             'monedas' => Moneda::where('estado', true)
                 ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda')
@@ -651,6 +659,7 @@ class CuentaController extends Controller
                     ];
                 }),
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
+            'bancos' => CatalogoTarjetasService::bancos(),
         ]);
     }
 
@@ -691,6 +700,7 @@ class CuentaController extends Controller
             'notas_cuenta' => ['nullable', 'string'],
             'motivo_ajuste_saldo' => [$saldoCambio ? 'required' : 'nullable', 'string', 'max:500'],
             'imagen' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::slugsValidos())],
+            'tipo_banco' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::bancoSlugsValidos())],
         ]);
 
         $saldoAnterior = $cuenta->saldo_cuenta;
@@ -705,6 +715,7 @@ class CuentaController extends Controller
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'] ?? $cuenta->notas_cuenta,
             'imagen' => $validated['imagen'] ?? null,
+            'tipo_banco' => $validated['tipo_banco'] ?? null,
         ]);
 
         if ($saldoCambio) {

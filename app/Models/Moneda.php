@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Moneda extends Model
 {
@@ -13,10 +13,11 @@ class Moneda extends Model
         'codigo_moneda',
         'nombre_moneda',
         'simbolo_moneda',
+        'imagen',
         'tasa_cambio',
         'commission',
         'estado',
-        'principal'
+        'principal',
     ];
 
     protected $casts = [
@@ -36,13 +37,14 @@ class Moneda extends Model
         });
     }
 
-    // Scope para monedas activas
+    /**
+     * Scope para monedas activas
+     */
     public function scopeActivas($query)
     {
         return $query->where('estado', true);
     }
 
-    // Scope para moneda principal
     public function scopePrincipal($query)
     {
         return $query->where('principal', true);

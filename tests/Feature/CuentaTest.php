@@ -542,7 +542,7 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
     $responseCreate = $this->get(route('cuentas.create'));
     $responseCreate->assertInertia(fn ($page) => $page
         ->has('catalogoTarjetas.interna', 5)
-        ->has('catalogoTarjetas.externa', 14)
+        ->has('catalogoTarjetas.externa', 15)
         ->has('catalogoTarjetas.efectivo', 3)
         ->where('catalogoTarjetas.interna.0.slug', 'bandec')
         ->where('catalogoTarjetas.externa.0.slug', 'visa')
@@ -562,7 +562,7 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
 
     $responseEdit = $this->get(route('cuentas.edit', $cuenta));
     $responseEdit->assertInertia(fn ($page) => $page
-        ->has('catalogoTarjetas.externa', 14)
+        ->has('catalogoTarjetas.externa', 15)
         ->where('cuenta.imagen', 'zelle')
     );
 });
@@ -584,6 +584,118 @@ test('una cuenta tipo efectivo puede guardar una insignia de moneda del catálog
 
     $response->assertRedirect();
     $this->assertDatabaseHas('cuentas', ['tipo' => 'efectivo', 'imagen' => 'usd']);
+});
+
+test('store() guarda un tipo_banco válido, independiente de imagen', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $nombre = 'Cuenta Zelle Restringida '.uniqid();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => $nombre,
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'zelle',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    $this->assertDatabaseHas('cuentas', ['nombre_cuenta' => $nombre, 'tipo_banco' => 'zelle', 'imagen' => null]);
+});
+
+test('store() rechaza un tipo_banco que no existe en el catálogo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Cuenta Tipo Banco Falso '.uniqid(),
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'banco-inventado',
+    ]);
+
+    $response->assertSessionHasErrors('tipo_banco');
+});
+
+test('store() rechaza una insignia de efectivo (usd) como tipo_banco — efectivo no es un banco', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Cuenta Tipo Banco Efectivo '.uniqid(),
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'usd',
+    ]);
+
+    $response->assertSessionHasErrors('tipo_banco');
+});
+
+test('update() cambia el tipo_banco de una cuenta existente', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta tipo_banco a editar '.uniqid(),
+        'tipo' => 'tarjeta',
+        'saldo_cuenta' => 0,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ]);
+
+    $response = $this->put(route('cuentas.update', $cuenta), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'zelle',
+    ]);
+
+    $response->assertRedirect(route('cuentas.index'));
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'tipo_banco' => 'zelle']);
+});
+
+test('create() y edit() exponen la lista plana de bancos para el select de tipo_banco, sin efectivo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $responseCreate = $this->get(route('cuentas.create'));
+    $responseCreate->assertInertia(fn ($page) => $page
+        ->has('bancos', 20)
+        ->where('bancos.0.slug', 'bandec')
+        ->where('bancos.0.nombre', 'BANDEC')
+    );
+
+    $moneda = crearMonedaUsd();
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta bancos edit '.uniqid(),
+        'tipo' => 'tarjeta',
+        'saldo_cuenta' => 0,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'zelle',
+    ]);
+
+    $responseEdit = $this->get(route('cuentas.edit', $cuenta));
+    $responseEdit->assertInertia(fn ($page) => $page
+        ->has('bancos', 20)
+        ->where('cuenta.tipo_banco', 'zelle')
+    );
 });
 
 // ==========================================================================

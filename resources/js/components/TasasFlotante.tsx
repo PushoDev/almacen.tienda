@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import { TrendingUp, X } from 'lucide-react';
+import { Coins, TrendingUp, X } from 'lucide-react';
 import { useState } from 'react';
 import { type SharedData } from '@/types';
 
@@ -26,17 +26,29 @@ export default function TasasFlotante() {
                     <ul className="divide-y divide-border">
                         {tasas.map((moneda) => (
                             <li key={moneda.codigo_moneda} className="flex items-center justify-between px-3 py-2.5 gap-2">
-                                <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-medium text-foreground truncate">
-                                        {moneda.nombre_moneda}
-                                    </span>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                                            {moneda.codigo_moneda}
+                                <div className="flex items-center gap-2 min-w-0">
+                                    {moneda.imagen_url ? (
+                                        <img
+                                            src={moneda.imagen_url}
+                                            alt=""
+                                            aria-hidden="true"
+                                            className="h-6 w-9 shrink-0 rounded object-cover"
+                                        />
+                                    ) : (
+                                        <Coins className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    )}
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="text-xs font-medium text-foreground truncate">
+                                            {moneda.nombre_moneda}
                                         </span>
-                                        {moneda.principal && (
-                                            <span className="text-[10px] text-primary font-medium">base</span>
-                                        )}
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                                {moneda.codigo_moneda}
+                                            </span>
+                                            {moneda.principal && (
+                                                <span className="text-[10px] text-primary font-medium">base</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <span className="text-sm font-bold text-foreground tabular-nums shrink-0">
