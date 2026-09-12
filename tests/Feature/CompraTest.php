@@ -716,7 +716,7 @@ test('pago_cash con permitir_deuda_parcial y pagos insuficientes: completa la co
     ]);
 });
 
-test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante incrementa deuda_pago_cliente del cliente correcto (no el que paga)', function () {
+test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante decrementa deuda_pago_cliente del cliente correcto (no el que paga)', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -752,8 +752,9 @@ test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante
 
     $response->assertSessionHasNoErrors();
 
-    // El faltante (10 - 3 - 3 = 4) va al cliente-proveedor de la compra, no al que pagó.
-    $this->assertDatabaseHas('clientes', ['id' => $clienteProveedor->id, 'deuda_pago_cliente' => 4]);
+    // El faltante (10 - 3 - 3 = 4) queda como deuda del negocio hacia el cliente-proveedor de la
+    // compra (mismo signo que el proveedor real: negativo = el negocio debe), no al que pagó.
+    $this->assertDatabaseHas('clientes', ['id' => $clienteProveedor->id, 'deuda_pago_cliente' => -4]);
     // El que pagó se descuenta solo por lo que pagó (-3, comportamiento preexistente de "pagos con
     // clientes" — no relacionado con este cambio), nunca por el faltante que le tocó al otro cliente.
     $this->assertDatabaseHas('clientes', ['id' => $clientePagador->id, 'deuda_pago_cliente' => -3]);
@@ -762,7 +763,7 @@ test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante
     $this->assertDatabaseHas('compras', [
         'id' => $compra->id,
         'receptor_saldo_anterior' => 0,
-        'receptor_saldo_posterior' => 4,
+        'receptor_saldo_posterior' => -4,
     ]);
     $this->assertDatabaseHas('compra_pago', [
         'compra_id' => $compra->id,
@@ -772,6 +773,114 @@ test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante
         'saldo_anterior' => 0,
         'saldo_posterior' => -3,
     ]);
+});
+
+test('deuda_proveedor pura con tipo_proveedor cliente: decrementa deuda_pago_cliente igual que un proveedor real', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    // Mismo signo que saldo_proveedor: negativo = el negocio le debe a esa entidad. Comprar a
+    // crédito de un cliente registrado (en vez de un proveedor) debe mover el saldo hacia negativo
+    // exactamente igual, nunca hacia positivo (que significaría "el cliente le debe al negocio").
+    $cliente = Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $response = $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $cliente->nombre_cliente,
+        'tipo_proveedor' => 'cliente',
+        'fecha' => '2026-09-07',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Deuda Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
+        ],
+    ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => -50]);
+
+    $compra = Compra::where('cliente_id', $cliente->id)->firstOrFail();
+    $this->assertDatabaseHas('compras', [
+        'id' => $compra->id,
+        'receptor_saldo_anterior' => 0,
+        'receptor_saldo_posterior' => -50,
+    ]);
+});
+
+test('anular con reversión una compra deuda_proveedor pura con tipo_proveedor cliente: la deuda vuelve a 0', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $cliente = Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $cliente->nombre_cliente,
+        'tipo_proveedor' => 'cliente',
+        'fecha' => '2026-09-07',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Anular Deuda Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $compra = Compra::where('cliente_id', $cliente->id)->firstOrFail();
+    expect($cliente->fresh()->deuda_pago_cliente)->toEqual('-50.00');
+
+    $this->post(route('comprar.anular', $compra->id), [
+        'tipo_anulacion' => 'reversion',
+        'motivo_anulacion' => 'El cliente-proveedor no pudo entregar',
+    ])->assertSessionHasNoErrors();
+
+    expect($compra->fresh()->estado)->toBe('anulada');
+    expect($cliente->fresh()->deuda_pago_cliente)->toEqual('0.00');
+});
+
+test('anular como fondo una compra pago_cash parcial con tipo_proveedor cliente: la porción de deuda se revierte a 0, solo la porción pagada se convierte en fondo', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $cliente = Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => 0]);
+    $moneda = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta Anular Fondo Parcial Cliente',
+        'saldo_cuenta' => 100,
+        'tipo_cuenta' => 'permanentes',
+        'moneda_id' => $moneda->id,
+        'estado' => 'activa',
+    ]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    // Total 10, paga 6 con cuenta, 4 queda como deuda parcial al cliente-proveedor.
+    $this->post(route('comprar.store'), [
+        'compra' => 'pago_cash',
+        'proveedor' => $cliente->nombre_cliente,
+        'tipo_proveedor' => 'cliente',
+        'fecha' => '2026-09-07',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Fondo Parcial Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
+        ],
+        'pagos' => [['cuenta_id' => $cuenta->id, 'monto' => 6]],
+        'permitir_deuda_parcial' => true,
+    ])->assertSessionHasNoErrors();
+
+    $compra = Compra::where('cliente_id', $cliente->id)->firstOrFail();
+    expect($cliente->fresh()->deuda_pago_cliente)->toEqual('-4.00');
+    expect($cuenta->fresh()->saldo_cuenta)->toEqual('94.00');
+
+    $this->post(route('comprar.anular', $compra->id), [
+        'tipo_anulacion' => 'fondo',
+        'motivo_anulacion' => 'Suspendida, lo pagado queda como crédito',
+    ])->assertSessionHasNoErrors();
+
+    // La cuenta no recupera los 6 pagados.
+    expect($cuenta->fresh()->saldo_cuenta)->toEqual('94.00');
+    // Neto en deuda_pago_cliente: la deuda de 4 se revierte (+4) y los 6 pagados se convierten en
+    // fondo (+6) => de -4 pasa a +6. Mismo neto que el equivalente con proveedor real.
+    expect($cliente->fresh()->deuda_pago_cliente)->toEqual('6.00');
 });
 
 test('el historial de compras marca es_parcial solo en la compra que quedó con deuda parcial, no en las demás', function () {
