@@ -1,5 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
-import { DetalleCompraExpandido, DetalleMovimientoExpandido } from '@/components/detalle-operacion';
+import { DetalleCompraExpandido, DetalleMovimientoExpandido, DetalleRemesaExpandido } from '@/components/detalle-operacion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import { CompraProveedor, EstadisticasProveedor, ProveedorProps, TransaccionProveedor, type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { CompraProveedor, EstadisticasProveedor, ProveedorProps, RemesaProveedor, TransaccionProveedor, type BreadcrumbItem } from '@/types';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -26,6 +26,7 @@ import {
     MapPin,
     Package,
     Phone,
+    Send,
     TrendingDown,
     TrendingUp,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ interface ShowProveedoresPageProps {
     proveedor: ProveedorProps;
     compras: CompraProveedor[];
     transacciones: TransaccionProveedor[];
+    remesas: RemesaProveedor[];
     estadisticas: EstadisticasProveedor;
 }
 
@@ -53,10 +55,12 @@ const breadcrumbs = (proveedor: ProveedorProps): BreadcrumbItem[] => [
     },
 ];
 
-export default function ShowProveedoresPage({ proveedor, compras, transacciones, estadisticas }: ShowProveedoresPageProps) {
+export default function ShowProveedoresPage({ proveedor, compras, transacciones, remesas, estadisticas }: ShowProveedoresPageProps) {
     // Solo una fila abierta a la vez — mismo patrón que Rastreo de Operaciones
-    // (RastreoOperaciones.tsx), compartido entre las dos tablas de esta página.
+    // (RastreoOperaciones.tsx), compartido entre las tres tablas de esta página.
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const { props } = usePage();
+    const puedeVerRemesas = props.auth?.user?.role === 'admin' || props.auth?.user?.role === 'moderador';
     const toggleRow = (key: string) => {
         setExpandedRow((prev) => (prev === key ? null : key));
     };
@@ -291,9 +295,9 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                     </Card>
                 </div>
 
-                {/* Tabs para Compras y Transacciones */}
+                {/* Tabs para Compras, Transacciones y Remesas */}
                 <Tabs defaultValue="compras" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className={cn('grid w-full', puedeVerRemesas ? 'grid-cols-3' : 'grid-cols-2')}>
                         <TabsTrigger value="compras" className="flex items-center gap-2">
                             <Package className="h-4 w-4" />
                             Compras ({compras.length})
@@ -302,6 +306,12 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                             <CreditCard className="h-4 w-4" />
                             Transacciones ({transacciones.length})
                         </TabsTrigger>
+                        {puedeVerRemesas && (
+                            <TabsTrigger value="remesas" className="flex items-center gap-2">
+                                <Send className="h-4 w-4" />
+                                Remesas ({remesas.length})
+                            </TabsTrigger>
+                        )}
                     </TabsList>
 
                     {/* Tab de Compras */}
@@ -562,6 +572,103 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                             </CardContent>
                         </Card>
                     </TabsContent>
+
+                    {/* Tab de Remesas */}
+                    {puedeVerRemesas && (
+                        <TabsContent value="remesas" className="space-y-4">
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                                <CardHeader className="bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Send className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">Historial de Remesas</CardTitle>
+                                            <CardDescription className="text-sky-100">
+                                                Remesas donde este proveedor participó como entrada o salida
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="pt-5">
+                                    {remesas.length > 0 ? (
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Fecha</TableHead>
+                                                        <TableHead>Notas</TableHead>
+                                                        <TableHead>Registrado por</TableHead>
+                                                        <TableHead>Dirección</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {remesas.map((remesa) => {
+                                                        const rowKey = `remesa-${remesa.id}`;
+                                                        const expandida = expandedRow === rowKey;
+                                                        const esEntrada = remesa.entrada_proveedor_id === proveedor.id;
+                                                        return (
+                                                            <React.Fragment key={remesa.id}>
+                                                                <TableRow
+                                                                    className="hover:bg-sidebar-accent/30 cursor-pointer transition-colors"
+                                                                    onClick={() => toggleRow(rowKey)}
+                                                                >
+                                                                    <TableCell>
+                                                                        <div className="flex items-center gap-2">
+                                                                            {expandida ? (
+                                                                                <ChevronDown className="h-4 w-4 shrink-0" />
+                                                                            ) : (
+                                                                                <ChevronRight className="h-4 w-4 shrink-0" />
+                                                                            )}
+                                                                            <Calendar className="text-muted-foreground h-4 w-4" />
+                                                                            {formatearFecha(remesa.fecha_operacion)}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="max-w-[220px] truncate">{remesa.notas || '—'}</TableCell>
+                                                                    <TableCell>{remesa.user?.name ?? '—'}</TableCell>
+                                                                    <TableCell>
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={
+                                                                                esEntrada
+                                                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                                                    : 'border-red-200 bg-red-50 text-red-700'
+                                                                            }
+                                                                        >
+                                                                            {esEntrada ? 'Entrada' : 'Salida'}
+                                                                        </Badge>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                                {expandida && (
+                                                                    <TableRow>
+                                                                        <TableCell colSpan={4} className="bg-sidebar-accent/20 p-4">
+                                                                            {remesa.detalle ? (
+                                                                                <DetalleRemesaExpandido
+                                                                                    detalle={remesa.detalle}
+                                                                                    usuario={remesa.user?.name ?? '—'}
+                                                                                />
+                                                                            ) : (
+                                                                                <p className="text-muted-foreground text-xs">Sin detalle disponible.</p>
+                                                                            )}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <div className="py-8 text-center">
+                                            <Send className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
+                                            <p className="text-muted-foreground">No hay remesas registradas para este proveedor</p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
         </AppLayout>

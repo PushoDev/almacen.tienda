@@ -147,6 +147,32 @@ class ClienteController extends Controller
             $mov->detalle = $this->detalleOperacionService->detalleMovimiento($mov);
         });
 
+        // ✅ CARGAR LAS REMESAS DONDE ESTE CLIENTE PARTICIPÓ (entrada o salida) — Remesa es
+        // admin/moderador-only (mismo criterio que Compras), vendedor no ve esta sección.
+        if ($puedeVerCosto) {
+            $cliente->load([
+                'remesasComoEntrada' => function ($query) {
+                    $query->with(['user', 'turnoVendedor', 'salidaCuenta', 'salidaCliente', 'salidaProveedor', 'mensajeroCuenta']);
+                },
+                'remesasComoSalida' => function ($query) {
+                    $query->with(['user', 'turnoVendedor', 'entradaCuenta', 'entradaCliente', 'entradaProveedor', 'mensajeroCuenta']);
+                },
+            ]);
+            $cliente->remesasComoEntrada->each(function ($remesa) use ($cliente) {
+                // entrada_cliente_id === $cliente->id por definición de esta relación — se
+                // reutiliza la misma instancia en vez de una query extra por fila.
+                $remesa->setRelation('entradaCliente', $cliente);
+                $remesa->detalle = $this->detalleOperacionService->detalleRemesa($remesa);
+            });
+            $cliente->remesasComoSalida->each(function ($remesa) use ($cliente) {
+                $remesa->setRelation('salidaCliente', $cliente);
+                $remesa->detalle = $this->detalleOperacionService->detalleRemesa($remesa);
+            });
+        } else {
+            $cliente->setRelation('remesasComoEntrada', collect());
+            $cliente->setRelation('remesasComoSalida', collect());
+        }
+
         // ✅ CARGAR LOS PAGOS DE VENTAS RECIBIDOS POR EL CLIENTE
         $cliente->load(['pagosVenta' => function ($query) {
             $query->with([

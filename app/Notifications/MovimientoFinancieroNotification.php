@@ -2,9 +2,8 @@
 
 namespace App\Notifications;
 
+use App\Channels\TelegramChannel;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class MovimientoFinancieroNotification extends Notification
@@ -15,17 +14,22 @@ class MovimientoFinancieroNotification extends Notification
      * Create a new notification instance.
      */
     public $movimiento;
+
     public $tipoOperacion;
+
     public $entidadAfectada;
+
+    public bool $anulado;
 
     /**
      * Create a new notification instance.
      */
-    public function __construct($movimiento, $tipoOperacion = null, $entidadAfectada = null)
+    public function __construct($movimiento, $tipoOperacion = null, $entidadAfectada = null, bool $anulado = false)
     {
         $this->movimiento = $movimiento;
         $this->tipoOperacion = $tipoOperacion ?? $this->determinarTipoOperacion();
         $this->entidadAfectada = $entidadAfectada ?? $this->determinarEntidadAfectada();
+        $this->anulado = $anulado;
     }
 
     /**
@@ -37,12 +41,15 @@ class MovimientoFinancieroNotification extends Notification
     {
         $channels = ['database'];
 
-        if (!$notifiable->telegram_chat_id) {
+        if (! $notifiable->telegram_chat_id) {
             return $channels;
         }
 
-        if ($notifiable->role === 'admin') {
-            $channels[] = \App\Channels\TelegramChannel::class;
+        // 'moderador' se agrega acá a propósito — antes solo 'admin' entraba en esta rama y
+        // moderador nunca recibía Telegram para estas 3 operaciones, aunque ya tiene acceso
+        // total a Compras/Remesa/etc. en el resto del sistema (hallazgo real, corregido).
+        if (in_array($notifiable->role, ['admin', 'moderador'])) {
+            $channels[] = TelegramChannel::class;
         } elseif ($notifiable->role === 'vendedor') {
             $esSuCuentaOrigen = $this->movimiento->cuenta_origen_id &&
                 $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_origen_id)->exists();
@@ -50,7 +57,7 @@ class MovimientoFinancieroNotification extends Notification
                 $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_destino_id)->exists();
 
             if ($esSuCuentaOrigen || $esSuCuentaDestino) {
-                $channels[] = \App\Channels\TelegramChannel::class;
+                $channels[] = TelegramChannel::class;
             }
         }
 
@@ -97,14 +104,22 @@ class MovimientoFinancieroNotification extends Notification
                 break;
         }
 
-        $texto  = "{$icon} <b>{$titulo}</b>\n";
+        if ($this->anulado) {
+            $icon = '⛔';
+            $titulo = 'ANULADO: '.$titulo;
+        }
+
+        $texto = "{$icon} <b>{$titulo}</b>\n";
         $texto .= "💰 Monto: $ {$monto} {$this->movimiento->moneda}\n";
         $texto .= "{$detalle}\n";
+        if ($this->anulado) {
+            $texto .= "❗ Motivo: {$this->movimiento->motivo_anulacion}\n";
+        }
         $texto .= "👤 Registrado por: {$this->movimiento->user->name}\n";
-        $texto .= "🕐 " . now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.now()->format('d/m/Y H:i');
 
         return [
-            'text'       => $texto,
+            'text' => $texto,
             'parse_mode' => 'HTML',
         ];
     }
@@ -125,17 +140,17 @@ class MovimientoFinancieroNotification extends Notification
             'cuenta_origen_id' => $this->movimiento->cuenta_origen_id,
             'cuenta_destino_id' => $this->movimiento->cuenta_destino_id,
             'icon' => 'dollar-sign',
-            'color' => 'blue'
+            'color' => 'blue',
         ];
 
         // Mensaje personalizado según el rol del notificado
         if ($notifiable->role === 'vendedor') {
             // Verificar si involucra sus cuentas
-            $esSuCuentaOrigen = $this->movimiento->cuenta_origen_id && 
+            $esSuCuentaOrigen = $this->movimiento->cuenta_origen_id &&
                                 $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_origen_id)->exists();
-            $esSuCuentaDestino = $this->movimiento->cuenta_destino_id && 
+            $esSuCuentaDestino = $this->movimiento->cuenta_destino_id &&
                                  $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_destino_id)->exists();
-            
+
             if ($esSuCuentaOrigen || $esSuCuentaDestino) {
                 $this->construirMensajeVendedor($base, $notifiable);
             } else {
@@ -144,6 +159,12 @@ class MovimientoFinancieroNotification extends Notification
         } else {
             // Admin y moderador ven mensaje general
             $this->construirMensajeGeneral($base, $notifiable);
+        }
+
+        $base['anulado'] = $this->anulado;
+        if ($this->anulado) {
+            $base['title'] = 'Anulado: '.($base['title'] ?? '');
+            $base['color'] = 'red';
         }
 
         return $base;
@@ -177,7 +198,7 @@ class MovimientoFinancieroNotification extends Notification
             $entidades[] = [
                 'tipo' => 'cuenta',
                 'id' => $this->movimiento->cuenta_origen_id,
-                'rol' => 'origen'
+                'rol' => 'origen',
             ];
         }
 
@@ -185,7 +206,7 @@ class MovimientoFinancieroNotification extends Notification
             $entidades[] = [
                 'tipo' => 'cuenta',
                 'id' => $this->movimiento->cuenta_destino_id,
-                'rol' => 'destino'
+                'rol' => 'destino',
             ];
         }
 
@@ -199,7 +220,7 @@ class MovimientoFinancieroNotification extends Notification
     {
         switch ($this->tipoOperacion) {
             case 'gasto':
-                $esSuCuenta = $this->movimiento->cuenta_origen_id && 
+                $esSuCuenta = $this->movimiento->cuenta_origen_id &&
                                $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_origen_id)->exists();
                 if ($esSuCuenta) {
                     $base['title'] = 'Gasto en tu Cuenta';
@@ -219,7 +240,7 @@ class MovimientoFinancieroNotification extends Notification
                 break;
 
             case 'ingreso':
-                $esSuCuenta = $this->movimiento->cuenta_destino_id && 
+                $esSuCuenta = $this->movimiento->cuenta_destino_id &&
                                $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_destino_id)->exists();
                 if ($esSuCuenta) {
                     $base['title'] = 'Ingreso a tu Cuenta';
@@ -239,11 +260,11 @@ class MovimientoFinancieroNotification extends Notification
                 break;
 
             case 'transferencia':
-                $esSuCuentaOrigen = $this->movimiento->cuenta_origen_id && 
+                $esSuCuentaOrigen = $this->movimiento->cuenta_origen_id &&
                                    $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_origen_id)->exists();
-                $esSuCuentaDestino = $this->movimiento->cuenta_destino_id && 
+                $esSuCuentaDestino = $this->movimiento->cuenta_destino_id &&
                                     $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_destino_id)->exists();
-                
+
                 if ($esSuCuentaOrigen || $esSuCuentaDestino) {
                     if ($esSuCuentaOrigen) {
                         $base['title'] = 'Salida de tu Cuenta';
@@ -277,7 +298,7 @@ class MovimientoFinancieroNotification extends Notification
     {
         switch ($this->tipoOperacion) {
             case 'gasto':
-                $nombreOrigen = $this->movimiento->cuentaOrigen->nombre_cuenta ?? 
+                $nombreOrigen = $this->movimiento->cuentaOrigen->nombre_cuenta ??
                                ($this->movimiento->clienteOrigen->nombre_cliente ?? 'Desconocido');
                 $base['title'] = 'Gasto Registrado';
                 $base['message'] = "Gasto de {$this->movimiento->monto} {$this->movimiento->moneda} desde {$nombreOrigen} por {$this->movimiento->user->name}";
@@ -287,8 +308,8 @@ class MovimientoFinancieroNotification extends Notification
                 break;
 
             case 'ingreso':
-                $nombreDestino = $this->movimiento->cuentaDestino->nombre_cuenta ?? 
-                                ($this->movimiento->clienteDestino->nombre_cliente ?? 
+                $nombreDestino = $this->movimiento->cuentaDestino->nombre_cuenta ??
+                                ($this->movimiento->clienteDestino->nombre_cliente ??
                                 ($this->movimiento->proveedorDestino->nombre_proveedor ?? 'Desconocido'));
                 $base['title'] = 'Ingreso Registrado';
                 $base['message'] = "Ingreso de {$this->movimiento->monto} {$this->movimiento->moneda} a {$nombreDestino} por {$this->movimiento->user->name}";
@@ -298,10 +319,10 @@ class MovimientoFinancieroNotification extends Notification
                 break;
 
             case 'transferencia':
-                $nombreOrigen = $this->movimiento->cuentaOrigen->nombre_cuenta ?? 
+                $nombreOrigen = $this->movimiento->cuentaOrigen->nombre_cuenta ??
                                ($this->movimiento->clienteOrigen->nombre_cliente ?? 'Desconocido');
-                $nombreDestino = $this->movimiento->cuentaDestino->nombre_cuenta ?? 
-                                ($this->movimiento->clienteDestino->nombre_cliente ?? 
+                $nombreDestino = $this->movimiento->cuentaDestino->nombre_cuenta ??
+                                ($this->movimiento->clienteDestino->nombre_cliente ??
                                 ($this->movimiento->proveedorDestino->nombre_proveedor ?? 'Desconocido'));
                 $base['title'] = 'Transferencia Registrada';
                 $base['message'] = "Transferencia de {$this->movimiento->monto} {$this->movimiento->moneda} de {$nombreOrigen} a {$nombreDestino} por {$this->movimiento->user->name}";

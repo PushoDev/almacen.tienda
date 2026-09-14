@@ -111,7 +111,7 @@ class GastoController extends Controller
             }
 
             return Redirect::route('transacciones.show', $movimiento->id)
-                ->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
+                ->with('success', "Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar gasto: '.$e->getMessage());

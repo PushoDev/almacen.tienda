@@ -1,10 +1,9 @@
 import HeadingSmall from '@/components/heading-small';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Banknote, Repeat } from 'lucide-react';
 import Movimientos from './layouts/Movimientos';
 
 // ✅ INTERFACES ACTUALIZADAS con el sistema de monedas
@@ -96,21 +95,12 @@ export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes,
                 </div>
                 <Separator className="col-span-4" />
 
-                {/* Opciones de Transacciones — "Distribuir Costos" quitada (2026-08-28): el cliente
-                    ya la migró a otra pantalla, este tab quedó obsoleto. */}
-                <Tabs defaultValue="movimientos" className="w-full">
-                    <TabsList className="grid w-full grid-cols-1">
-                        <TabsTrigger value="movimientos" className="flex items-center gap-2">
-                            <Repeat className="h-4 w-4" />
-                            Movimientos Financieros
-                        </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="movimientos" className="space-y-4">
-                        <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} userRole={userRole} />
-                    </TabsContent>
-                </Tabs>
+                {/* El Tabs externo de una sola pestaña ("Movimientos Financieros") se quitó
+                    2026-09-14: dejó de tener sentido cuando "Distribuir Costos" se eliminó
+                    (2026-08-28) y quedó como única opción sin nada entre qué elegir. */}
+                <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} userRole={userRole} />
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

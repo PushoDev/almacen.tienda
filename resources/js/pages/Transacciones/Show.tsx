@@ -1,3 +1,4 @@
+import { AnularOperacionDialog } from '@/components/anular-operacion-dialog';
 import HeadingSmall from '@/components/heading-small';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -5,11 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sileo-toaster';
+import { labelMotivoAnulacion } from '@/components/detalle-operacion';
 import AppLayout from '@/layouts/app-layout';
+import { sileo } from '@/lib/sileo';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, ArrowRight, Banknote, Building, Calendar, CheckCircle, DollarSign, Download, FileText, Info, TrendingDown, TrendingUp, User, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Banknote, Building, Calendar, CheckCircle, DollarSign, Download, FileText, Info, TrendingDown, TrendingUp, User, XCircle } from 'lucide-react';
+import { useEffect } from 'react';
 
 interface MovimientoFinanciero {
     id: number;
@@ -26,6 +30,8 @@ interface MovimientoFinanciero {
     descripcion: string | null;
     fecha_operacion: string;
     estado: string;
+    motivo_anulacion: string | null;
+    detalle_anulacion: string | null;
     created_at: string;
     updated_at: string;
 
@@ -193,18 +199,19 @@ function FlujoSaldo({ detalles, esOrigen }: { detalles: DetallesSaldo; esOrigen:
     );
 }
 
-export default function VerDetalleTransacciones({ movimiento, detallesOrigen, detallesDestino, userRole }: Props) {
+export default function VerDetalleTransacciones({ movimiento, detallesOrigen, detallesDestino }: Props) {
     const page = usePage();
-    const flash = (page.props as any).flash || {};
-    const [showNotification, setShowNotification] = useState(false);
+    const flash = (page.props as { flash?: { success?: string; error?: string } }).flash ?? {};
 
     useEffect(() => {
-        if (flash.success || flash.error) {
-            setShowNotification(true);
-            const timer = setTimeout(() => setShowNotification(false), 4000);
-            return () => clearTimeout(timer);
+        if (flash.success) {
+            sileo.success({ title: 'Transacción registrada', description: flash.success });
         }
-    }, [flash.success, flash.error]);
+        if (flash.error) {
+            sileo.error({ title: 'Error', description: flash.error });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const getTipoMovimiento = (tipoId: number) => {
         switch (tipoId) {
@@ -222,17 +229,7 @@ export default function VerDetalleTransacciones({ movimiento, detallesOrigen, de
     const tipo = getTipoMovimiento(movimiento.tipo_movimiento_id);
 
     return (
-        <>
-            {showNotification && (
-                <div className="fixed top-4 right-4 z-50 max-w-sm">
-                    <Alert variant={flash.success ? 'default' : 'destructive'}>
-                        {flash.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                        <AlertDescription>{flash.success || flash.error}</AlertDescription>
-                    </Alert>
-                </div>
-            )}
-
-            <AppLayout breadcrumbs={breadcrumbs}>
+        <AppLayout breadcrumbs={breadcrumbs}>
                 <Head title={`Transacción #${movimiento.id}`} />
                 <ScrollProgress />
                 <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
@@ -260,6 +257,17 @@ export default function VerDetalleTransacciones({ movimiento, detallesOrigen, de
                         </Badge>
                     </div>
 
+                    {/* Anulada — banner con motivo, mismo criterio visual que Venta */}
+                    {movimiento.estado === 'cancelado' && (
+                        <Alert className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10">
+                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <AlertDescription className="text-red-800 dark:text-red-300">
+                                <strong>Operación anulada.</strong> Motivo: {labelMotivoAnulacion(movimiento.motivo_anulacion)}
+                                {movimiento.detalle_anulacion && <> — {movimiento.detalle_anulacion}</>}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
                     {/* Botones */}
                     <div className="flex items-center justify-between">
                         <Link href={route('transacciones')}>
@@ -270,6 +278,7 @@ export default function VerDetalleTransacciones({ movimiento, detallesOrigen, de
                         </Link>
 
                         <div className="flex gap-2">
+                            {movimiento.estado !== 'cancelado' && <AnularOperacionDialog url={route('transacciones.anular', movimiento.id)} />}
                             <Button variant="outline" size="sm">
                                 <Download className="mr-2 h-4 w-4" />
                                 Exportar PDF
@@ -561,7 +570,7 @@ export default function VerDetalleTransacciones({ movimiento, detallesOrigen, de
                         </Card>
                     </div>
                 </div>
+                <Toaster position="top-center" />
             </AppLayout>
-        </>
     );
 }

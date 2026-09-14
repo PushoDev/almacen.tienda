@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AjusteSaldoCuenta;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
+use App\Models\Remesa;
 use App\Models\Venta;
 
 /**
@@ -64,6 +65,12 @@ class DetalleOperacionService
                     ? round((float) $mov->saldo_posterior_destino - (float) $mov->saldo_anterior_destino, 2)
                     : null,
             ],
+            // Solo presente cuando el movimiento terminó anulado (estado === 'cancelado') —
+            // mismo patrón que Venta::anulacion, ver detalleVenta().
+            'anulacion' => $mov->estado === 'cancelado' ? [
+                'motivo' => $mov->motivo_anulacion,
+                'detalle' => $mov->detalle_anulacion,
+            ] : null,
             // Gasto solo llena origen, Ingreso solo destino, Transferencia llena ambos.
             'origen' => $this->entidadMovimiento(
                 $mov->cuentaOrigen,
@@ -273,6 +280,63 @@ class DetalleOperacionService
                 'comision_vendedor' => (float) $venta->total_comision,
                 'ganancia_agencia' => $puedeVerCosto ? $gananciaAgencia : null,
             ],
+            'movimientos_saldo' => $movimientosSaldo,
+        ];
+    }
+
+    /**
+     * Shape de `detalle_remesa`. Requiere `$remesa` con `entradaCuenta`, `entradaCliente`,
+     * `entradaProveedor`, `salidaCuenta`, `salidaCliente`, `salidaProveedor`,
+     * `mensajeroCuenta`, `user`, `turnoVendedor` cargados.
+     *
+     * Remesa no tiene un origen/destino único como Gasto/Ingreso/Transferencia — tiene 3
+     * patas independientes (entrada/salida/mensajero, sin cuadre entre montos), así que se
+     * modela con el mismo patrón `movimientos_saldo` que ya usan Venta/Compra para sus
+     * propias operaciones multi-entidad, en vez de forzarla al shape origen/destino binario.
+     */
+    public function detalleRemesa(Remesa $remesa): array
+    {
+        $movimientosSaldo = [
+            [
+                'etiqueta' => 'Entrada',
+                'tipo' => $remesa->entrada_tipo,
+                'nombre' => $remesa->nombre_entrada ?? '—',
+                'saldo_anterior' => (float) $remesa->entrada_saldo_anterior,
+                'saldo_posterior' => (float) $remesa->entrada_saldo_posterior,
+                'moneda' => $remesa->entrada_moneda,
+            ],
+            [
+                'etiqueta' => 'Salida',
+                'tipo' => $remesa->salida_tipo,
+                'nombre' => $remesa->nombre_salida ?? '—',
+                'saldo_anterior' => (float) $remesa->salida_saldo_anterior,
+                'saldo_posterior' => (float) $remesa->salida_saldo_posterior,
+                'moneda' => $remesa->salida_moneda,
+            ],
+        ];
+
+        if ($remesa->mensajero_cuenta_id) {
+            $movimientosSaldo[] = [
+                'etiqueta' => 'Mensajero',
+                'tipo' => 'cuenta',
+                'nombre' => $remesa->mensajeroCuenta?->nombre_cuenta ?? '—',
+                'saldo_anterior' => (float) $remesa->mensajero_saldo_anterior,
+                'saldo_posterior' => (float) $remesa->mensajero_saldo_posterior,
+                'moneda' => $remesa->mensajero_moneda,
+            ];
+        }
+
+        return [
+            'info_general' => [
+                'fecha' => $remesa->fecha_operacion,
+                'notas' => $remesa->notas,
+                'atendido_por' => $remesa->turnoVendedor?->nombre_vendedor ?? $remesa->user?->name,
+            ],
+            // Solo presente cuando la remesa terminó anulada (estado === 'anulada').
+            'anulacion' => $remesa->estado === 'anulada' ? [
+                'motivo' => $remesa->motivo_anulacion,
+                'detalle' => $remesa->detalle_anulacion,
+            ] : null,
             'movimientos_saldo' => $movimientosSaldo,
         ];
     }

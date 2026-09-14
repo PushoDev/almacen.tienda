@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,16 +10,23 @@ import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { Coins, Save } from 'lucide-react';
-import { useEffect } from 'react';
+import { Coins, DollarSign, Info, Save } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
+
+interface CatalogoImagen {
+    slug: string;
+    nombre: string;
+    imagen_url: string;
+}
 
 interface PageProps {
     moneda_principal?: {
         codigo_moneda: string;
         nombre_moneda: string;
     };
+    catalogoImagenes: CatalogoImagen[];
     errors?: Record<string, string>;
     [key: string]: unknown;
 }
@@ -40,17 +48,22 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function MonedaCreate() {
     const { props } = usePage<PageProps>();
-    const { moneda_principal, errors } = props;
+    const { moneda_principal, catalogoImagenes, errors } = props;
 
     const { data, setData, post, processing, reset } = useForm({
         codigo_moneda: '',
         nombre_moneda: '',
         simbolo_moneda: '',
+        imagen: null as string | null,
         tasa_cambio: '' as number | '',
         commission: '' as number | '',
         estado: true,
         principal: false,
     });
+
+    // Insignia elegida en vivo (reacciona a cada cambio en el selector, antes de guardar) —
+    // mismo patrón que Monedas/Edit.tsx (docs/patron-mascota-bleed.md Variante A).
+    const insigniaSeleccionada = useMemo(() => catalogoImagenes.find((item) => item.slug === data.imagen) ?? null, [catalogoImagenes, data.imagen]);
 
     // Mostrar notificación si hay errores
     useEffect(() => {
@@ -95,25 +108,45 @@ export default function MonedaCreate() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Crear Moneda" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                {/* Header — sin overflow-hidden a propósito: la insignia elegida usa efecto
+                    bleed (ver docs/patron-mascota-bleed.md Variante A), se sale del borde
+                    superior en vez de quedar recortada adentro. Mismo patrón que Monedas/Edit.tsx. */}
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <div className="flex items-center gap-4">
                         <HeadingSmall title="Crear Nueva Moneda" description="Agrega una nueva moneda al sistema con todos sus detalles." />
                     </div>
-                    <Coins
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-                    />
+                    {insigniaSeleccionada ? (
+                        <img
+                            src={insigniaSeleccionada.imagen_url}
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                        />
+                    ) : (
+                        <Coins
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    )}
                 </div>
 
                 {/* Formulario */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     {/* Formulario Principal */}
-                    <Card className="lg:col-span-2">
-                        <CardHeader>
-                            <CardTitle>Información de la Moneda</CardTitle>
-                            <CardDescription>Completa todos los campos requeridos para registrar la nueva moneda</CardDescription>
+                    <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md lg:col-span-2">
+                        <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <DollarSign className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Información de la Moneda</CardTitle>
+                                    <CardDescription className="text-violet-100">
+                                        Completa todos los campos requeridos para registrar la nueva moneda
+                                    </CardDescription>
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <form onSubmit={handleSubmit} className="space-y-6">
@@ -168,6 +201,18 @@ export default function MonedaCreate() {
                                     {errors?.simbolo_moneda && <p className="text-sm text-red-500">{errors.simbolo_moneda}</p>}
                                 </div>
 
+                                {/* Insignia visual — catálogo en código (CatalogoTarjetasService::monedaImagenes()),
+                                    independiente de cuentas.imagen. Opcional. */}
+                                <div className="space-y-2">
+                                    <Label>Insignia de la Moneda</Label>
+                                    <SelectorImagenEfectivo
+                                        catalogo={catalogoImagenes}
+                                        value={data.imagen}
+                                        onChange={(slug) => setData('imagen', slug)}
+                                    />
+                                    {errors?.imagen && <p className="text-sm text-red-500">{errors.imagen}</p>}
+                                </div>
+
                                 {/* Tasa de Cambio y Comisión */}
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div className="space-y-2">
@@ -189,9 +234,7 @@ export default function MonedaCreate() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="commission">
-                                            Comisión (%) <span className="text-red-500">*</span>
-                                        </Label>
+                                        <Label htmlFor="commission">Comisión (%)</Label>
                                         <Input
                                             id="commission"
                                             type="number"
@@ -203,7 +246,7 @@ export default function MonedaCreate() {
                                             className={errors?.commission ? 'border-red-500' : ''}
                                         />
                                         {errors?.commission && <p className="text-sm text-red-500">{errors.commission}</p>}
-                                        <p className="text-muted-foreground text-sm">Comisión porcentual aplicada</p>
+                                        <p className="text-muted-foreground text-sm">Opcional — comisión porcentual aplicada, 0 si se deja vacío</p>
                                     </div>
                                 </div>
 
@@ -262,9 +305,14 @@ export default function MonedaCreate() {
                     </Card>
 
                     {/* Panel de Información */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Información Importante</CardTitle>
+                    <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                        <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Info className="h-5 w-5" />
+                                </div>
+                                <CardTitle className="text-white">Información Importante</CardTitle>
+                            </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">

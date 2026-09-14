@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
+import { sileo } from '@/lib/sileo';
 import { Building, DollarSign, User } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
@@ -60,7 +61,6 @@ export default function IngresoForm() {
     const [clientes, setClientes] = useState<Cliente[]>([]);
     const [proveedores, setProveedores] = useState<Proveedor[]>([]);
     const [loading, setLoading] = useState(true);
-    const [alert, setAlert] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
 
     useEffect(() => {
         axios.get(route('transacciones.ingreso.data'))
@@ -69,11 +69,11 @@ export default function IngresoForm() {
                 setClientes(res.data.clientes);
                 setProveedores(res.data.proveedores);
             })
-            .catch(() => showToast('Error al cargar datos del formulario.', 'error'))
+            .catch(() => sileo.error({ title: 'Error al cargar datos del formulario', description: 'Inténtalo nuevamente' }))
             .finally(() => setLoading(false));
     }, []);
 
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
         destino_tipo: 'cuenta' as EntidadTipo,
         destino_id: '',
         monto: '',
@@ -81,20 +81,11 @@ export default function IngresoForm() {
         comentario: '',
     });
 
-    const showToast = (message: string, type: 'success' | 'error') => {
-        setAlert({ show: true, message, type });
-        setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         post(route('transacciones.ingresar'), {
-            onSuccess: () => {
-                showToast('¡Ingreso registrado con éxito!', 'success');
-                reset();
-            },
             onError: (err) => {
-                showToast(err.message || 'Hubo un error al registrar el ingreso.', 'error');
+                sileo.error({ title: 'Error al registrar el ingreso', description: err.message || 'Inténtalo nuevamente' });
             },
         });
     };
@@ -207,12 +198,6 @@ export default function IngresoForm() {
             <Button type="submit" disabled={processing || !data.destino_id || !data.monto || Number(data.monto) <= 0} className="w-full">
                 {processing ? 'Procesando...' : 'Registrar Ingreso'}
             </Button>
-
-            {alert.show && (
-                <div className={`fixed bottom-5 right-5 rounded-md p-4 text-white shadow-lg transition-all duration-300 z-50 ${alert.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {alert.message}
-                </div>
-            )}
         </form>
     );
 }

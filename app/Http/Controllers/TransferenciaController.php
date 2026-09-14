@@ -156,8 +156,8 @@ class TransferenciaController extends Controller
             }
 
             $mensajeExito = $monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda
-                ? "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} registrada con éxito."
-                : "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} registrada con éxito (Tasa: {$tasaCambioAplicada}).";
+                ? "Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} registrada con éxito."
+                : "Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} registrada con éxito (Tasa: {$tasaCambioAplicada}).";
 
             return Redirect::route('transacciones.show', $movimiento->id)->with('success', $mensajeExito);
         } catch (\Exception $e) {

@@ -5,8 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useForm } from '@inertiajs/react';
+import { sileo } from '@/lib/sileo';
 import { DollarSign, User } from 'lucide-react';
-import React, { useState } from 'react';
+import React from 'react';
 
 interface Moneda {
     id: number;
@@ -50,9 +51,7 @@ interface Props {
 type EntidadTipo = 'cuenta' | 'cliente';
 
 export default function GastoForm({ cuentasOrigen, clientes }: Props) {
-    const [alert, setAlert] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
-
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
         origen_tipo: 'cuenta' as EntidadTipo,
         origen_id: '',
         monto: '',
@@ -60,20 +59,11 @@ export default function GastoForm({ cuentasOrigen, clientes }: Props) {
         comentario: '',
     });
 
-    const showToast = (message: string, type: 'success' | 'error') => {
-        setAlert({ show: true, message, type });
-        setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         post(route('transacciones.gastar'), {
-            onSuccess: () => {
-                showToast('¡Gasto registrado con éxito!', 'success');
-                reset();
-            },
             onError: (err) => {
-                showToast(err.message || 'Hubo un error al registrar el gasto.', 'error');
+                sileo.error({ title: 'Error al registrar el gasto', description: err.message || 'Inténtalo nuevamente' });
             },
         });
     };
@@ -170,12 +160,6 @@ export default function GastoForm({ cuentasOrigen, clientes }: Props) {
             <Button type="submit" disabled={processing || !data.origen_id || !data.monto || Number(data.monto) <= 0} className="w-full">
                 {processing ? 'Procesando...' : 'Registrar Gasto'}
             </Button>
-
-            {alert.show && (
-                <div className={`fixed bottom-5 right-5 rounded-md p-4 text-white shadow-lg transition-all duration-300 z-50 ${alert.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {alert.message}
-                </div>
-            )}
         </form>
     );
 }

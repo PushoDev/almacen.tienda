@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
+import { sileo } from '@/lib/sileo';
 import { Building, DollarSign, User } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -62,7 +63,6 @@ export default function TransferenciaForm() {
     const [proveedores, setProveedores] = useState<Proveedor[]>([]);
     const [monedasActivas, setMonedasActivas] = useState<Moneda[]>([]);
     const [loading, setLoading] = useState(true);
-    const [alert, setAlert] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
 
     useEffect(() => {
         axios.get(route('transacciones.transferencia.data'))
@@ -73,11 +73,11 @@ export default function TransferenciaForm() {
                 setProveedores(res.data.proveedores);
                 setMonedasActivas(res.data.monedasActivas);
             })
-            .catch(() => showToast('Error al cargar datos del formulario.', 'error'))
+            .catch(() => sileo.error({ title: 'Error al cargar datos del formulario', description: 'Inténtalo nuevamente' }))
             .finally(() => setLoading(false));
     }, []);
 
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
         origen_tipo: 'cuenta' as EntidadTipo,
         origen_id: '',
         destino_tipo: 'cuenta' as EntidadTipo,
@@ -89,24 +89,15 @@ export default function TransferenciaForm() {
         tasa_cambio_aplicada: '',
     });
 
-    const showToast = (message: string, type: 'success' | 'error') => {
-        setAlert({ show: true, message, type });
-        setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (data.origen_tipo === data.destino_tipo && data.origen_id === data.destino_id) {
-            showToast('El origen y el destino no pueden ser la misma entidad.', 'error');
+            sileo.error({ title: 'Entidades inválidas', description: 'El origen y el destino no pueden ser la misma entidad.' });
             return;
         }
         post(route('transacciones.transferir'), {
-            onSuccess: () => {
-                showToast('¡Transferencia realizada con éxito!', 'success');
-                reset();
-            },
             onError: (err) => {
-                showToast(err.message || err.destino_id || 'Hubo un error al realizar la transferencia.', 'error');
+                sileo.error({ title: 'Error al realizar la transferencia', description: err.message || err.destino_id || 'Inténtalo nuevamente' });
             },
         });
     };
@@ -352,12 +343,6 @@ export default function TransferenciaForm() {
             >
                 {processing ? 'Procesando...' : 'Realizar Transferencia'}
             </Button>
-
-            {alert.show && (
-                <div className={`fixed bottom-5 right-5 rounded-md p-4 text-white shadow-lg transition-all duration-300 z-50 ${alert.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {alert.message}
-                </div>
-            )}
         </form>
     );
 }

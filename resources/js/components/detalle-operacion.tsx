@@ -116,6 +116,11 @@ export interface DetalleVenta {
     movimientos_saldo: MovimientoSaldoEntry[];
 }
 
+export interface DetalleAnulacion {
+    motivo: string | null;
+    detalle: string | null;
+}
+
 export interface DetalleMovimiento {
     info_general: {
         fecha: string;
@@ -126,9 +131,25 @@ export interface DetalleMovimiento {
         tasa_cambio_aplicada: number | null;
         monto_destino: number | null;
     };
+    // Solo presente cuando el movimiento terminó anulado (estado === 'cancelado').
+    anulacion: DetalleAnulacion | null;
     origen: EntidadMovimiento | null;
     destino: EntidadMovimiento | null;
 }
+
+// Lista fija de motivos de anulación — compartida por Gasto/Ingreso/Transferencia
+// (TransaccionController::MOTIVOS_ANULACION) y Remesa (RemesaController::MOTIVOS_ANULACION).
+// 'otros' exige un detalle libre adicional, ver los diálogos de anulación.
+export const MOTIVOS_ANULACION: { value: string; label: string }[] = [
+    { value: 'error_monto', label: 'Monto incorrecto' },
+    { value: 'error_entidad', label: 'Cuenta/Cliente/Proveedor incorrecto' },
+    { value: 'duplicado', label: 'Operación duplicada' },
+    { value: 'error_tipo_operacion', label: 'Tipo de operación equivocado' },
+    { value: 'solicitud_cliente', label: 'A pedido del cliente/negocio' },
+    { value: 'otros', label: 'Otro motivo' },
+];
+
+export const labelMotivoAnulacion = (motivo: string | null) => MOTIVOS_ANULACION.find((m) => m.value === motivo)?.label ?? motivo ?? '—';
 
 export interface DetallePagoCompra {
     tipo_pago: string;
@@ -149,6 +170,19 @@ export interface DetalleProductoCompra {
     cantidad: number;
     precio: number;
     subtotal: number;
+}
+
+export interface DetalleRemesa {
+    info_general: {
+        fecha: string;
+        notas: string | null;
+        atendido_por: string | null;
+    };
+    // Solo presente cuando la remesa terminó anulada (estado === 'anulada').
+    anulacion: DetalleAnulacion | null;
+    // Entrada, Salida y opcionalmente Mensajero — sin cuadre entre montos, cada
+    // pata es independiente (ver App\Services\DetalleOperacionService::detalleRemesa()).
+    movimientos_saldo: MovimientoSaldoEntry[];
 }
 
 export interface DetalleCompra {
@@ -195,6 +229,22 @@ export const EntidadMovimientoCard = ({ titulo, entidad }: { titulo: string; ent
                 <strong>Saldo Posterior:</strong>{' '}
                 {entidad.saldo_posterior !== null ? formatMonto(entidad.saldo_posterior, entidad.moneda ?? '') : '—'}
             </p>
+        </CardContent>
+    </Card>
+);
+
+// Mismo estilo de card que ya usa DetalleVentaExpandido para 'anulacion' — reusado acá
+// para Gasto/Ingreso/Transferencia/Remesa, que comparten el mismo shape DetalleAnulacion.
+export const AnulacionCard = ({ anulacion, titulo }: { anulacion: DetalleAnulacion; titulo: string }) => (
+    <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10">
+        <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-1.5 text-xs font-semibold text-red-700 uppercase dark:text-red-300">
+                <AlertTriangle className="h-3.5 w-3.5" /> {titulo}
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 text-xs">
+            <p><strong>Motivo:</strong> {labelMotivoAnulacion(anulacion.motivo)}</p>
+            {anulacion.detalle && <p><strong>Detalle:</strong> {anulacion.detalle}</p>}
         </CardContent>
     </Card>
 );
@@ -483,6 +533,8 @@ export const DetalleMovimientoExpandido = ({
             )}
         </div>
 
+        {detalle.anulacion && <AnulacionCard anulacion={detalle.anulacion} titulo="Operación Anulada" />}
+
         {/*
             Gasto/Ingreso solo llenan un lado (origen o destino), así que la card de
             entidad y la de Monto y Detalle caben juntas en una sola fila de 2 columnas.
@@ -509,6 +561,44 @@ export const DetalleMovimientoExpandido = ({
                 </CardContent>
             </Card>
         </div>
+    </div>
+);
+
+export const DetalleRemesaExpandido = ({ detalle, usuario }: { detalle: DetalleRemesa; usuario: string }) => (
+    <div className="space-y-4 py-2">
+        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span>
+                <strong className="text-foreground">Fecha y Hora:</strong> {new Date(detalle.info_general.fecha).toLocaleString()}
+            </span>
+            <span>
+                <strong className="text-foreground">Registrado por:</strong> {usuario}
+            </span>
+            {detalle.info_general.atendido_por && (
+                <span>
+                    <strong className="text-foreground">Atendido por:</strong> {detalle.info_general.atendido_por}
+                </span>
+            )}
+        </div>
+
+        {detalle.anulacion && <AnulacionCard anulacion={detalle.anulacion} titulo="Remesa Anulada" />}
+
+        {/* Entrada, Salida y Mensajero (si existió) — 3 patas independientes, sin cuadre entre montos. */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {detalle.movimientos_saldo.map((m, i) => (
+                <EntidadMovimientoCard key={i} titulo={m.etiqueta} entidad={m} />
+            ))}
+        </div>
+
+        {detalle.info_general.notas && (
+            <Card className="bg-background/60">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-semibold uppercase">Notas</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs">
+                    <p>{detalle.info_general.notas}</p>
+                </CardContent>
+            </Card>
+        )}
     </div>
 );
 
