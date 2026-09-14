@@ -64,6 +64,25 @@ test('store() no exige imagen — una moneda puede quedar sin insignia asignada'
     $this->assertDatabaseHas('monedas', ['nombre_moneda' => $nombre, 'imagen' => null]);
 });
 
+test('store() no exige commission — la columna tiene default 0 en la migración', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $nombre = 'Moneda Sin Comision '.uniqid();
+
+    $response = $this->post(route('monedas.store'), [
+        'codigo_moneda' => 'EUR',
+        'nombre_moneda' => $nombre,
+        'simbolo_moneda' => 'EUR',
+        'tasa_cambio' => 0.95,
+        'estado' => true,
+        'principal' => false,
+    ]);
+
+    $response->assertRedirect(route('monedas.index'));
+    $this->assertDatabaseHas('monedas', ['nombre_moneda' => $nombre, 'commission' => 0]);
+});
+
 test('update() cambia la insignia asignada a una moneda existente', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);

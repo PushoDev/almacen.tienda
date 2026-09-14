@@ -7,7 +7,23 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react'; // Agregamos usePage
-import { ArrowLeft, Calendar, CheckCircle, Coins, DollarSign, Edit, Hash, Percent, Star, Tag, XCircle } from 'lucide-react';
+import {
+    ArrowLeft,
+    Calendar,
+    CheckCircle,
+    ClipboardList,
+    Coins,
+    DollarSign,
+    Edit,
+    Hash,
+    Info,
+    Percent,
+    Settings,
+    Star,
+    Tag,
+    XCircle,
+    Zap,
+} from 'lucide-react';
 import { useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -17,6 +33,8 @@ interface Moneda {
     codigo_moneda: string;
     nombre_moneda: string;
     simbolo_moneda: string;
+    imagen: string | null;
+    imagen_url: string | null;
     tasa_cambio: number;
     commission: number;
     estado: boolean;
@@ -95,18 +113,29 @@ export default function MonedaShow() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Moneda: ${moneda.codigo_moneda}`} />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                {/* Header — sin overflow-hidden a propósito: la insignia real usa efecto
+                    bleed (ver docs/patron-mascota-bleed.md Variante A), se sale del borde
+                    superior en vez de quedar recortada adentro. Mismo patrón que Monedas/Edit.tsx. */}
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 rounded-2xl border border-dashed p-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <HeadingSmall title={`Moneda: ${moneda.codigo_moneda}`} description="Vista detallada de la información de la moneda." />
                         </div>
                     </div>
-                    <Coins
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-                    />
+                    {moneda.imagen_url ? (
+                        <img
+                            src={moneda.imagen_url}
+                            alt=""
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
+                        />
+                    ) : (
+                        <Coins
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    )}
                 </div>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -130,10 +159,19 @@ export default function MonedaShow() {
                     {/* Información Principal */}
                     <div className="space-y-6 lg:col-span-2">
                         {/* Tarjeta de Información Básica */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Información General</CardTitle>
-                                <CardDescription>Detalles básicos y configuración de la moneda</CardDescription>
+                        <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <DollarSign className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Información General</CardTitle>
+                                        <CardDescription className="text-violet-100">
+                                            Detalles básicos y configuración de la moneda
+                                        </CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -177,10 +215,19 @@ export default function MonedaShow() {
                         </Card>
 
                         {/* Tarjeta de Tasas y Estado */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Configuración y Estado</CardTitle>
-                                <CardDescription>Configuración financiera y estado operativo de la moneda</CardDescription>
+                        <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Settings className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Configuración y Estado</CardTitle>
+                                        <CardDescription className="text-violet-100">
+                                            Configuración financiera y estado operativo de la moneda
+                                        </CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -248,10 +295,17 @@ export default function MonedaShow() {
                     {/* Panel Lateral */}
                     <div className="space-y-6">
                         {/* Tarjeta de Información del Sistema */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Información del Sistema</CardTitle>
-                                <CardDescription>Metadatos y auditoría de la moneda</CardDescription>
+                        <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Info className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Información del Sistema</CardTitle>
+                                        <CardDescription className="text-violet-100">Metadatos y auditoría de la moneda</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="space-y-2">
@@ -283,9 +337,14 @@ export default function MonedaShow() {
                         </Card>
 
                         {/* Tarjeta de Resumen de Estado */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Resumen de Estado</CardTitle>
+                        <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <ClipboardList className="h-5 w-5" />
+                                    </div>
+                                    <CardTitle className="text-white">Resumen de Estado</CardTitle>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-3">
                                 <div className="flex items-center justify-between">
@@ -323,9 +382,14 @@ export default function MonedaShow() {
                         </Card>
 
                         {/* Tarjeta de Acciones Rápidas */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Acciones Rápidas</CardTitle>
+                        <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Zap className="h-5 w-5" />
+                                    </div>
+                                    <CardTitle className="text-white">Acciones Rápidas</CardTitle>
+                                </div>
                             </CardHeader>
                             <CardContent className="space-y-3">
                                 <Button asChild className="w-full">

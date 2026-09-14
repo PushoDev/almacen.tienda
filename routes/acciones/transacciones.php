@@ -1,8 +1,9 @@
 <?php
 
-use App\Http\Controllers\TransaccionController;
 use App\Http\Controllers\GastoController;
 use App\Http\Controllers\IngresoController;
+use App\Http\Controllers\RemesaController;
+use App\Http\Controllers\TransaccionController;
 use App\Http\Controllers\TransferenciaController;
 use Illuminate\Support\Facades\Route;
 
@@ -37,5 +38,13 @@ Route::middleware(['auth', 'verified'])->group(
         // ✅ Gastos por Transportación
         Route::post('transacciones/gasto-transportacion', [TransaccionController::class, 'gastoTransportacion'])
             ->name('transacciones.gasto-transportacion');
+
+        // Remesas — solo admin/moderador (mueve dinero por 3 vías: entrada/salida/mensajero).
+        Route::middleware('admin')->group(function () {
+            Route::get('transacciones/remesa/data', [RemesaController::class, 'formData'])
+                ->name('transacciones.remesa.data');
+            Route::post('transacciones/remesa', [RemesaController::class, 'store'])
+                ->name('transacciones.remesa.store');
+        });
     }
 );

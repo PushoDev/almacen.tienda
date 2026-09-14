@@ -61,7 +61,7 @@ class MonedaController extends Controller
             // cuentas.imagen.
             'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
-            'commission' => 'required|numeric|min:0',
+            'commission' => 'nullable|numeric|min:0',
             'estado' => 'boolean',
             'principal' => 'boolean',
         ], [
@@ -88,7 +88,7 @@ class MonedaController extends Controller
                     'simbolo_moneda' => $request->simbolo_moneda,
                     'imagen' => $request->imagen ?: null,
                     'tasa_cambio' => $request->tasa_cambio,
-                    'commission' => $request->commission,
+                    'commission' => $request->commission ?? 0,
                     'estado' => $request->estado ?? true,
                     'principal' => $request->principal ?? false,
                 ]);
@@ -109,7 +109,9 @@ class MonedaController extends Controller
     public function show(Moneda $moneda)
     {
         return Inertia::render('Monedas/Show', [
-            'moneda' => $moneda,
+            'moneda' => $moneda->toArray() + [
+                'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+            ],
         ]);
     }
 
