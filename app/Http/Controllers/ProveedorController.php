@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
+use App\Models\Remesa;
 use App\Services\DetalleOperacionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -133,6 +134,35 @@ class ProveedorController extends Controller
             $mov->detalle = $this->detalleOperacionService->detalleMovimiento($mov);
         });
 
+        // Remesas donde este proveedor participó (entrada o salida) — Remesa es
+        // admin/moderador-only (mismo criterio que Compras), vendedor no ve esta sección.
+        $esAdminOModerador = in_array(auth()->user()->role, ['admin', 'moderador']);
+        $remesas = collect();
+        if ($esAdminOModerador) {
+            $remesas = Remesa::with([
+                'user', 'turnoVendedor', 'mensajeroCuenta',
+                'entradaCuenta', 'entradaCliente',
+                'salidaCuenta', 'salidaCliente',
+            ])
+                ->where('entrada_proveedor_id', $proveedor->id)
+                ->orWhere('salida_proveedor_id', $proveedor->id)
+                ->orderByDesc('fecha_operacion')
+                ->get();
+
+            $remesas->each(function (Remesa $remesa) use ($proveedor) {
+                // entrada_proveedor_id o salida_proveedor_id === $proveedor->id por
+                // definición de esta consulta — se reutiliza la misma instancia en vez de
+                // una query extra por fila.
+                if ($remesa->entrada_proveedor_id === $proveedor->id) {
+                    $remesa->setRelation('entradaProveedor', $proveedor);
+                }
+                if ($remesa->salida_proveedor_id === $proveedor->id) {
+                    $remesa->setRelation('salidaProveedor', $proveedor);
+                }
+                $remesa->detalle = $this->detalleOperacionService->detalleRemesa($remesa);
+            });
+        }
+
         // Calcular estadísticas
         $estadisticas = [
             'total_compras' => $compras->count(),
@@ -146,6 +176,7 @@ class ProveedorController extends Controller
             'proveedor' => $proveedor,
             'compras' => $compras,
             'transacciones' => $transacciones,
+            'remesas' => $remesas,
             'estadisticas' => $estadisticas,
         ]);
     }

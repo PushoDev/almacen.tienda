@@ -29,6 +29,8 @@ class MovimientoFinanciero extends Model
         'descripcion',
         'fecha_operacion',
         'estado',
+        'motivo_anulacion',
+        'detalle_anulacion',
         'saldo_anterior_origen',
         'saldo_posterior_origen',
         'moneda_origen',

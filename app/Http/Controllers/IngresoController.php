@@ -138,7 +138,7 @@ class IngresoController extends Controller
             }
 
             return Redirect::route('transacciones.show', $movimiento->id)
-                ->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
+                ->with('success', "Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar ingreso: '.$e->getMessage());

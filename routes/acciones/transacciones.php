@@ -35,6 +35,10 @@ Route::middleware(['auth', 'verified'])->group(
         Route::get('transacciones/{movimiento}', [TransaccionController::class, 'show'])
             ->name('transacciones.show');
 
+        // Anulación — abierta a cualquier rol (vendedor incluido), ver TransaccionController::anular().
+        Route::post('transacciones/{movimiento}/anular', [TransaccionController::class, 'anular'])
+            ->name('transacciones.anular');
+
         // ✅ Gastos por Transportación
         Route::post('transacciones/gasto-transportacion', [TransaccionController::class, 'gastoTransportacion'])
             ->name('transacciones.gasto-transportacion');
@@ -45,6 +49,10 @@ Route::middleware(['auth', 'verified'])->group(
                 ->name('transacciones.remesa.data');
             Route::post('transacciones/remesa', [RemesaController::class, 'store'])
                 ->name('transacciones.remesa.store');
+            Route::get('transacciones/remesa/{remesa}', [RemesaController::class, 'show'])
+                ->name('transacciones.remesa.show');
+            Route::post('transacciones/remesa/{remesa}/anular', [RemesaController::class, 'anular'])
+                ->name('transacciones.remesa.anular');
         });
     }
 );

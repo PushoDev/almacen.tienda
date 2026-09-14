@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
+import { sileo } from '@/lib/sileo';
 import { Building, DollarSign, User } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
@@ -55,7 +56,6 @@ export default function RemesaForm() {
     const [clientes, setClientes] = useState<Cliente[]>([]);
     const [proveedores, setProveedores] = useState<Proveedor[]>([]);
     const [loading, setLoading] = useState(true);
-    const [alert, setAlert] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
 
     useEffect(() => {
         axios.get(route('transacciones.remesa.data'))
@@ -64,11 +64,11 @@ export default function RemesaForm() {
                 setClientes(res.data.clientes);
                 setProveedores(res.data.proveedores);
             })
-            .catch(() => showToast('Error al cargar datos del formulario.', 'error'))
+            .catch(() => sileo.error({ title: 'Error al cargar datos del formulario', description: 'Inténtalo nuevamente' }))
             .finally(() => setLoading(false));
     }, []);
 
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
         entrada_tipo: 'cuenta' as EntidadTipo,
         entrada_id: '',
         entrada_monto: '',
@@ -80,20 +80,11 @@ export default function RemesaForm() {
         notas: '',
     });
 
-    const showToast = (message: string, type: 'success' | 'error') => {
-        setAlert({ show: true, message, type });
-        setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         post(route('transacciones.remesa.store'), {
-            onSuccess: () => {
-                showToast('¡Remesa registrada con éxito!', 'success');
-                reset();
-            },
             onError: (err) => {
-                showToast(err.message || 'Hubo un error al registrar la remesa.', 'error');
+                sileo.error({ title: 'Error al registrar la remesa', description: err.message || 'Inténtalo nuevamente' });
             },
         });
     };
@@ -258,12 +249,6 @@ export default function RemesaForm() {
             >
                 {processing ? 'Procesando...' : 'Registrar Remesa'}
             </Button>
-
-            {alert.show && (
-                <div className={`fixed bottom-5 right-5 rounded-md p-4 text-white shadow-lg transition-all duration-300 z-50 ${alert.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-                    {alert.message}
-                </div>
-            )}
         </form>
     );
 }

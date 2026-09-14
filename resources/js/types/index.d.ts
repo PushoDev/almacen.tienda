@@ -1,4 +1,4 @@
-import type { DetalleCompra, DetalleMovimiento } from '@/components/detalle-operacion';
+import type { DetalleCompra, DetalleMovimiento, DetalleRemesa } from '@/components/detalle-operacion';
 import { LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
 
@@ -737,6 +737,19 @@ export interface TransaccionProveedor {
     saldo_posterior_destino: number | null;
     user?: { id: number; name: string } | null;
     detalle: DetalleMovimiento | null;
+}
+
+// Interface para Remesas del Proveedor (entrada o salida)
+export interface RemesaProveedor {
+    id: number;
+    entrada_tipo: 'cuenta' | 'cliente' | 'proveedor';
+    entrada_proveedor_id: number | null;
+    salida_tipo: 'cuenta' | 'cliente' | 'proveedor';
+    salida_proveedor_id: number | null;
+    notas: string | null;
+    fecha_operacion: string;
+    user?: { id: number; name: string } | null;
+    detalle: DetalleRemesa | null;
 }
 
 // Interface para Estadísticas del Proveedor

@@ -33,6 +33,9 @@ class Remesa extends Model
         'mensajero_saldo_posterior',
         'notas',
         'fecha_operacion',
+        'estado',
+        'motivo_anulacion',
+        'detalle_anulacion',
     ];
 
     protected function casts(): array

@@ -4,6 +4,8 @@ import {
     DetalleCompraExpandido,
     DetalleMovimiento,
     DetalleMovimientoExpandido,
+    DetalleRemesa,
+    DetalleRemesaExpandido,
     DetalleVenta,
     DetalleVentaExpandido,
 } from '@/components/detalle-operacion';
@@ -36,6 +38,7 @@ import {
     LucideIcon,
     Receipt,
     Search,
+    Send,
     ShoppingCart,
     Tag,
     TrendingDown,
@@ -86,7 +89,7 @@ interface HistorialItem {
     // Detalle rico para la fila colapsable — mismo shape que arma
     // App\Services\DetalleOperacionService, null para ajustes de saldo (el motivo ya
     // es todo el detalle que existe) o filas de datos históricos sin snapshot.
-    detalle: DetalleVenta | DetalleMovimiento | DetalleCompra | null;
+    detalle: DetalleVenta | DetalleMovimiento | DetalleCompra | DetalleRemesa | null;
 }
 
 interface PaginationLink {
@@ -116,12 +119,14 @@ interface ShowCuentasPageProps {
     historialVentas: HistorialPaginado;
     historialCompras: HistorialPaginado;
     historialAjustes: HistorialPaginado;
+    historialRemesas: HistorialPaginado;
     puedeEditar: boolean;
     filtros: {
         transacciones: { q_transacciones?: string; tipo_transacciones?: string; desde_transacciones?: string; hasta_transacciones?: string };
         ventas: { q_ventas?: string; tipo_ventas?: string; desde_ventas?: string; hasta_ventas?: string };
         compras: { q_compras?: string; desde_compras?: string; hasta_compras?: string };
         ajustes: { q_ajustes?: string; desde_ajustes?: string; hasta_ajustes?: string };
+        remesas: { q_remesas?: string; desde_remesas?: string; hasta_remesas?: string };
     };
 }
 
@@ -148,6 +153,8 @@ const getFuenteIcono = (item: HistorialItem) => {
             return ShoppingCart;
         case 'ajuste_saldo':
             return Edit3;
+        case 'remesa':
+            return Send;
         default:
             return DollarSign;
     }
@@ -175,7 +182,7 @@ const TablaHistorial = ({
     Icono: LucideIcon;
     historial: HistorialPaginado;
     emptyTexto: string;
-    filtroKey: 'transacciones' | 'ventas' | 'compras' | 'ajustes';
+    filtroKey: 'transacciones' | 'ventas' | 'compras' | 'ajustes' | 'remesas';
     tiposFiltro?: { value: string; label: string }[];
     filtrosIniciales: FiltrosCard;
 }) => {
@@ -398,6 +405,8 @@ const TablaHistorial = ({
                                                                 monto={Number(item.monto)}
                                                                 usuario={item.usuario}
                                                             />
+                                                        ) : item.fuente === 'remesa' && item.detalle ? (
+                                                            <DetalleRemesaExpandido detalle={item.detalle as DetalleRemesa} usuario={item.usuario} />
                                                         ) : (
                                                             // Ajustes de saldo (y cualquier fila sin detalle rico cargado) — el
                                                             // motivo ya se ve en la columna Descripción, acá solo el salto de saldo.
@@ -477,6 +486,7 @@ export default function ShowCuentasPage({
     historialVentas,
     historialCompras,
     historialAjustes,
+    historialRemesas,
     puedeEditar,
     filtros,
 }: ShowCuentasPageProps) {
@@ -495,7 +505,8 @@ export default function ShowCuentasPage({
               : { texto: 'Neutro', color: 'gray', icon: CheckCircle };
     const EstadoIcon = estadoFinanciero.icon;
 
-    const totalOperaciones = historialTransacciones.total + historialVentas.total + historialCompras.total + historialAjustes.total;
+    const totalOperaciones =
+        historialTransacciones.total + historialVentas.total + historialCompras.total + historialAjustes.total + historialRemesas.total;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs(cuenta.nombre_cuenta)}>
@@ -796,6 +807,18 @@ export default function ShowCuentasPage({
                             emptyTexto="Los ajustes manuales de saldo de esta cuenta aparecerán aquí"
                             filtroKey="ajustes"
                             filtrosIniciales={{ q: filtros.ajustes.q_ajustes, desde: filtros.ajustes.desde_ajustes, hasta: filtros.ajustes.hasta_ajustes }}
+                        />
+                    )}
+
+                    {puedeEditar && (
+                        <TablaHistorial
+                            titulo="Remesas"
+                            descripcion="Remesas donde esta cuenta participó como entrada, salida o mensajero"
+                            Icono={Send}
+                            historial={historialRemesas}
+                            emptyTexto="Las remesas que involucren esta cuenta aparecerán aquí"
+                            filtroKey="remesas"
+                            filtrosIniciales={{ q: filtros.remesas.q_remesas, desde: filtros.remesas.desde_remesas, hasta: filtros.remesas.hasta_remesas }}
                         />
                     )}
 

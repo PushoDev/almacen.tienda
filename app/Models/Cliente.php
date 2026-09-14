@@ -74,6 +74,20 @@ class Cliente extends Model
             ->orderBy('fecha_operacion', 'desc');
     }
 
+    // Relación con remesas donde el cliente es la entrada
+    public function remesasComoEntrada()
+    {
+        return $this->hasMany(Remesa::class, 'entrada_cliente_id')
+            ->orderBy('fecha_operacion', 'desc');
+    }
+
+    // Relación con remesas donde el cliente es la salida
+    public function remesasComoSalida()
+    {
+        return $this->hasMany(Remesa::class, 'salida_cliente_id')
+            ->orderBy('fecha_operacion', 'desc');
+    }
+
     // Relación con pagos de ventas donde el cliente es destino del pago
     public function pagosVenta()
     {

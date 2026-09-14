@@ -7,6 +7,7 @@ use App\Models\Compra;
 use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
+use App\Models\Remesa;
 use App\Models\Venta;
 use App\Services\CatalogoTarjetasService;
 use App\Services\DetalleOperacionService;
@@ -270,11 +271,17 @@ class CuentaController extends Controller
             'historialAjustes' => $esAdminOModerador
                 ? $this->obtenerHistorialAjustes($cuenta, $request)
                 : new LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
+            // Remesa es admin/moderador-only (mismo criterio que Compras) — vendedor no ve
+            // esta sección, ni siquiera si la cuenta le está asignada.
+            'historialRemesas' => $esAdminOModerador
+                ? $this->obtenerHistorialRemesas($cuenta, $request)
+                : new LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
             'filtros' => [
                 'transacciones' => $request->only(['q_transacciones', 'tipo_transacciones', 'desde_transacciones', 'hasta_transacciones']),
                 'ventas' => $request->only(['q_ventas', 'tipo_ventas', 'desde_ventas', 'hasta_ventas']),
                 'compras' => $request->only(['q_compras', 'desde_compras', 'hasta_compras']),
                 'ajustes' => $request->only(['q_ajustes', 'desde_ajustes', 'hasta_ajustes']),
+                'remesas' => $request->only(['q_remesas', 'desde_remesas', 'hasta_remesas']),
             ],
         ]);
     }
@@ -614,6 +621,101 @@ class CuentaController extends Controller
         $codigoMoneda = $cuenta->moneda->codigo_moneda ?? '';
         $historial->getCollection()->transform(function ($item) use ($codigoMoneda) {
             $item->moneda = $codigoMoneda;
+
+            return $item;
+        });
+
+        return $historial;
+    }
+
+    /**
+     * Historial de Remesas donde esta cuenta participó como entrada, salida o mensajero.
+     * Solo se llama para admin/moderador — Remesa es una feature admin/moderador-only.
+     */
+    private function obtenerHistorialRemesas(Cuenta $cuenta, Request $request)
+    {
+        $cuentaId = $cuenta->id;
+
+        $query = DB::table('remesas as r')
+            ->join('users', 'r.user_id', '=', 'users.id')
+            ->leftJoin('cuentas as c_entrada', 'r.entrada_cuenta_id', '=', 'c_entrada.id')
+            ->leftJoin('clientes as cl_entrada', 'r.entrada_cliente_id', '=', 'cl_entrada.id')
+            ->leftJoin('proveedors as p_entrada', 'r.entrada_proveedor_id', '=', 'p_entrada.id')
+            ->leftJoin('cuentas as c_salida', 'r.salida_cuenta_id', '=', 'c_salida.id')
+            ->leftJoin('clientes as cl_salida', 'r.salida_cliente_id', '=', 'cl_salida.id')
+            ->leftJoin('proveedors as p_salida', 'r.salida_proveedor_id', '=', 'p_salida.id')
+            ->where(function ($q) use ($cuentaId) {
+                $q->where('r.entrada_cuenta_id', $cuentaId)
+                    ->orWhere('r.salida_cuenta_id', $cuentaId)
+                    ->orWhere('r.mensajero_cuenta_id', $cuentaId);
+            });
+
+        if ($busqueda = $request->query('q_remesas')) {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('r.notas', 'like', "%{$busqueda}%")
+                    ->orWhere('users.name', 'like', "%{$busqueda}%");
+            });
+        }
+        if ($desde = $request->query('desde_remesas')) {
+            $query->whereDate('r.fecha_operacion', '>=', $desde);
+        }
+        if ($hasta = $request->query('hasta_remesas')) {
+            $query->whereDate('r.fecha_operacion', '<=', $hasta);
+        }
+
+        $historial = $query->select(
+            'r.id as referencia_id',
+            'r.fecha_operacion as fecha',
+            DB::raw("CASE
+                WHEN r.entrada_cuenta_id = {$cuentaId} THEN 'Remesa (Entrada)'
+                WHEN r.salida_cuenta_id = {$cuentaId} THEN 'Remesa (Salida)'
+                ELSE 'Remesa (Mensajero)'
+            END as tipo"),
+            DB::raw("CASE
+                WHEN r.entrada_cuenta_id = {$cuentaId} THEN r.entrada_monto
+                WHEN r.salida_cuenta_id = {$cuentaId} THEN -r.salida_monto
+                ELSE -r.mensajero_monto
+            END as monto"),
+            DB::raw("CASE
+                WHEN r.entrada_cuenta_id = {$cuentaId} THEN r.entrada_moneda
+                WHEN r.salida_cuenta_id = {$cuentaId} THEN r.salida_moneda
+                ELSE r.mensajero_moneda
+            END as moneda"),
+            'r.notas as descripcion',
+            DB::raw("CONCAT(
+                'Entrada: ', COALESCE(c_entrada.nombre_cuenta, cl_entrada.nombre_cliente, p_entrada.nombre_proveedor, '—'),
+                ' → Salida: ', COALESCE(c_salida.nombre_cuenta, cl_salida.nombre_cliente, p_salida.nombre_proveedor, '—')
+            ) as contraparte"),
+            'users.name as usuario',
+            DB::raw("'remesa' as fuente"),
+            DB::raw("CASE
+                WHEN r.entrada_cuenta_id = {$cuentaId} THEN r.entrada_saldo_anterior
+                WHEN r.salida_cuenta_id = {$cuentaId} THEN r.salida_saldo_anterior
+                ELSE r.mensajero_saldo_anterior
+            END as saldo_anterior"),
+            DB::raw("CASE
+                WHEN r.entrada_cuenta_id = {$cuentaId} THEN r.entrada_saldo_posterior
+                WHEN r.salida_cuenta_id = {$cuentaId} THEN r.salida_saldo_posterior
+                ELSE r.mensajero_saldo_posterior
+            END as saldo_posterior")
+        )
+            ->orderByDesc('r.fecha_operacion')
+            ->paginate(15, ['*'], 'pagina_remesas')
+            ->withQueryString();
+
+        $remesas = Remesa::with([
+            'user', 'turnoVendedor',
+            'entradaCuenta', 'entradaCliente', 'entradaProveedor',
+            'salidaCuenta', 'salidaCliente', 'salidaProveedor',
+            'mensajeroCuenta',
+        ])
+            ->whereIn('id', $historial->pluck('referencia_id'))
+            ->get()
+            ->keyBy('id');
+
+        $historial->getCollection()->transform(function ($item) use ($remesas) {
+            $remesa = $remesas->get($item->referencia_id);
+            $item->detalle = $remesa ? $this->detalleOperacionService->detalleRemesa($remesa) : null;
 
             return $item;
         });

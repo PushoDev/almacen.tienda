@@ -4,6 +4,8 @@ import {
     DetalleCompraExpandido,
     DetalleMovimiento,
     DetalleMovimientoExpandido,
+    DetalleRemesa,
+    DetalleRemesaExpandido,
     DetalleVenta,
     DetalleVentaExpandido,
 } from '@/components/detalle-operacion';
@@ -16,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowDownCircle,
@@ -38,6 +40,7 @@ import {
     Package,
     Phone,
     Receipt,
+    Send,
     ShoppingCart,
     TrendingDown,
     TrendingUp,
@@ -187,6 +190,16 @@ interface PagoVentaRecibido {
     } | null;
 }
 
+interface RemesaCliente {
+    id: number;
+    entrada_tipo: 'cuenta' | 'cliente' | 'proveedor';
+    salida_tipo: 'cuenta' | 'cliente' | 'proveedor';
+    notas: string | null;
+    fecha_operacion: string;
+    user: { id: number; name: string } | null;
+    detalle: DetalleRemesa | null;
+}
+
 interface ShowClientePageProps {
     cliente: ClienteProps & {
         compras_como_pagador?: CompraCliente[];
@@ -194,6 +207,8 @@ interface ShowClientePageProps {
         movimientos_como_destino?: MovimientoFinanciero[];
         ventas?: VentaCliente[];
         pagos_venta?: PagoVentaRecibido[];
+        remesas_como_entrada?: RemesaCliente[];
+        remesas_como_salida?: RemesaCliente[];
     };
 }
 
@@ -327,6 +342,94 @@ const TablaTransacciones = ({
                                     <ArrowRightLeft size={32} className="opacity-40" />
                                     <p className="font-medium">Sin transacciones financieras</p>
                                     <p className="text-xs">Gastos, ingresos y transferencias donde participe este cliente aparecerán aquí</p>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </ScrollArea>
+    );
+};
+
+// ─── Componente: TablaRemesas ────────────────────────────────────────────────
+
+const TablaRemesas = ({
+    remesas,
+    formatearFecha,
+}: {
+    remesas: (RemesaCliente & { direccion: 'entrada' | 'salida' })[];
+    formatearFecha: (fecha: string) => string;
+}) => {
+    const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+    return (
+        <ScrollArea className="h-[420px]">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Notas</TableHead>
+                        <TableHead>Registrado por</TableHead>
+                        <TableHead>Dirección</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {remesas.length > 0 ? (
+                        remesas.map((r) => {
+                            const expandida = expandedRow === r.id;
+                            return (
+                                <Fragment key={`${r.direccion}-${r.id}`}>
+                                    <TableRow className="hover:bg-muted/50 cursor-pointer" onClick={() => setExpandedRow(expandida ? null : r.id)}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1">
+                                                {expandida ? (
+                                                    <ChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                ) : (
+                                                    <ChevronRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                                                )}
+                                                <Calendar size={12} className="text-muted-foreground" />
+                                                <span className="text-sm">{formatearFecha(r.fecha_operacion)}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="max-w-[220px] truncate text-sm">
+                                            {r.notas || <span className="text-muted-foreground italic">—</span>}
+                                        </TableCell>
+                                        <TableCell className="text-sm">{r.user?.name ?? '—'}</TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant="outline"
+                                                className={
+                                                    r.direccion === 'entrada'
+                                                        ? 'bg-emerald-100 text-emerald-800'
+                                                        : 'bg-red-100 text-red-800'
+                                                }
+                                            >
+                                                {r.direccion === 'entrada' ? 'Entrada' : 'Salida'}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                    {expandida && (
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableCell colSpan={4} className="bg-muted/30 px-6 py-3">
+                                                {r.detalle ? (
+                                                    <DetalleRemesaExpandido detalle={r.detalle} usuario={r.user?.name ?? '—'} />
+                                                ) : (
+                                                    <p className="text-muted-foreground text-xs">Sin detalle disponible.</p>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </Fragment>
+                            );
+                        })
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={4} className="text-muted-foreground py-10 text-center">
+                                <div className="flex flex-col items-center gap-2">
+                                    <Send size={32} className="opacity-40" />
+                                    <p className="font-medium">Sin remesas registradas</p>
+                                    <p className="text-xs">Las remesas donde participe este cliente (entrada o salida) aparecerán aquí</p>
                                 </div>
                             </TableCell>
                         </TableRow>
@@ -688,6 +791,11 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
     const pagosVenta = cliente.pagos_venta || [];
     const movimientosOrigen = cliente.movimientos_como_origen || [];
     const movimientosDestino = cliente.movimientos_como_destino || [];
+    const remesasComoEntrada = cliente.remesas_como_entrada || [];
+    const remesasComoSalida = cliente.remesas_como_salida || [];
+
+    const { props } = usePage();
+    const puedeVerRemesas = props.auth?.user?.role === 'admin' || props.auth?.user?.role === 'moderador';
 
     const metricas = useMemo(() => {
         const totalCompras = compras.length;
@@ -707,6 +815,8 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
         const montoTransaccionesDestino = movimientosDestino.reduce((sum, m) => sum + Number(m.monto), 0);
         const saldoNetoTransacciones = montoTransaccionesDestino - montoTransaccionesOrigen;
 
+        const totalRemesas = remesasComoEntrada.length + remesasComoSalida.length;
+
         const saldoActual = Number(cliente.deuda_pago_cliente) || 0;
 
         return {
@@ -724,8 +834,9 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
             montoTransaccionesOrigen,
             montoTransaccionesDestino,
             saldoNetoTransacciones,
+            totalRemesas,
         };
-    }, [compras, ventas, pagosVenta, movimientosOrigen, movimientosDestino, cliente.deuda_pago_cliente]);
+    }, [compras, ventas, pagosVenta, movimientosOrigen, movimientosDestino, remesasComoEntrada, remesasComoSalida, cliente.deuda_pago_cliente]);
 
     const getEstadoFinanciero = (saldo: number | null | undefined) => {
         if (saldo === null || saldo === undefined) {
@@ -749,6 +860,15 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                 (a, b) => new Date(b.fecha_operacion).getTime() - new Date(a.fecha_operacion).getTime(),
             ),
         [movimientosOrigen, movimientosDestino],
+    );
+
+    const todasRemesas = useMemo(
+        () =>
+            [
+                ...remesasComoEntrada.map((r) => ({ ...r, direccion: 'entrada' as const })),
+                ...remesasComoSalida.map((r) => ({ ...r, direccion: 'salida' as const })),
+            ].sort((a, b) => new Date(b.fecha_operacion).getTime() - new Date(a.fecha_operacion).getTime()),
+        [remesasComoEntrada, remesasComoSalida],
     );
 
     const ventasFiltradas = useMemo(() => {
@@ -996,7 +1116,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                         </CardHeader>
                         <CardContent>
                             <Tabs defaultValue="ventas">
-                                <TabsList className="grid w-full grid-cols-4">
+                                <TabsList className={`grid w-full ${puedeVerRemesas ? 'grid-cols-5' : 'grid-cols-4'}`}>
                                     <TabsTrigger value="ventas" className="flex items-center gap-1.5">
                                         <Receipt size={13} />
                                         Ventas
@@ -1036,6 +1156,17 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                             </Badge>
                                         )}
                                     </TabsTrigger>
+                                    {puedeVerRemesas && (
+                                        <TabsTrigger value="remesas" className="flex items-center gap-1.5">
+                                            <Send size={13} />
+                                            Remesas
+                                            {metricas.totalRemesas > 0 && (
+                                                <Badge variant="secondary" className="h-4 min-w-[18px] px-1 text-[10px]">
+                                                    {metricas.totalRemesas}
+                                                </Badge>
+                                            )}
+                                        </TabsTrigger>
+                                    )}
                                 </TabsList>
 
                                 {/* ── Tab: Ventas ── */}
@@ -1381,6 +1512,12 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                         </div>
                                     )}
                                 </TabsContent>
+
+                                {puedeVerRemesas && (
+                                    <TabsContent value="remesas" className="mt-4 space-y-4">
+                                        <TablaRemesas remesas={todasRemesas} formatearFecha={formatearFecha} />
+                                    </TabsContent>
+                                )}
                             </Tabs>
                         </CardContent>
                     </Card>

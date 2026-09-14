@@ -23,6 +23,14 @@ use Inertia\Inertia;
 class TransaccionController extends Controller
 {
     /**
+     * Lista fija de motivos de anulación — compartida por Gasto/Ingreso/Transferencia
+     * (este controller) y Remesa (RemesaController::MOTIVOS_ANULACION, misma lista
+     * duplicada a propósito: no hay abstracción compartida entre módulos de anulación en
+     * este proyecto, ver Compra/Venta).
+     */
+    public const MOTIVOS_ANULACION = ['error_monto', 'error_entidad', 'duplicado', 'error_tipo_operacion', 'solicitud_cliente', 'otros'];
+
+    /**
      * Vista principal de transacciones.
      */
     public function index()
@@ -136,6 +144,96 @@ class TransaccionController extends Controller
             'detallesDestino' => $detallesDestino,
             'userRole' => auth()->user()->role ?? 'vendedor',
         ]);
+    }
+
+    // =======================================================
+    // === ANULACIÓN de Gasto/Ingreso/Transferencia ===
+    // =======================================================
+
+    /**
+     * Anula un Gasto, Ingreso o Transferencia — revierte el efecto en saldo de cada
+     * entidad tocada (origen y/o destino) y marca el movimiento como 'cancelado' con
+     * motivo obligatorio. Abierto a cualquier rol (vendedor incluido) — mismo criterio
+     * de cuentas asignadas que ya aplica al crear el movimiento; cliente/proveedor no
+     * tienen ese chequeo hoy en ningún módulo de Transacciones (hueco ya reportado, no
+     * se introduce uno nuevo acá).
+     */
+    public function anular(Request $request, MovimientoFinanciero $movimiento)
+    {
+        if ($movimiento->estado === 'cancelado') {
+            return back()->withErrors(['estado' => 'Esta operación ya está anulada.']);
+        }
+
+        if (auth()->user()->role === 'vendedor') {
+            $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+            $cuentaOrigenAjena = $movimiento->cuenta_origen_id && ! in_array($movimiento->cuenta_origen_id, $cuentasAsignadas);
+            $cuentaDestinoAjena = $movimiento->cuenta_destino_id && ! in_array($movimiento->cuenta_destino_id, $cuentasAsignadas);
+            if ($cuentaOrigenAjena || $cuentaDestinoAjena) {
+                abort(403, 'No tiene permiso para anular una operación sobre una cuenta que no tiene asignada.');
+            }
+        }
+
+        // Movimientos anteriores al registro de saldo_anterior/posterior (2026-08-01) no
+        // tienen snapshot — revertir "a ciegas" sería adivinar el monto exacto. Se
+        // rechaza en vez de arriesgar una reversión incorrecta.
+        $sinSnapshotOrigen = $movimiento->cuenta_origen_id || $movimiento->cliente_origen_id;
+        $sinSnapshotDestino = $movimiento->cuenta_destino_id || $movimiento->cliente_destino_id || $movimiento->proveedor_destino_id;
+        if (($sinSnapshotOrigen && $movimiento->saldo_anterior_origen === null) ||
+            ($sinSnapshotDestino && $movimiento->saldo_anterior_destino === null)) {
+            return back()->withErrors(['estado' => 'Esta operación es anterior al registro de saldos y no se puede anular automáticamente.']);
+        }
+
+        $request->validate([
+            'motivo_anulacion' => 'required|string|in:'.implode(',', self::MOTIVOS_ANULACION),
+            'detalle_anulacion' => 'required_if:motivo_anulacion,otros|nullable|string|max:1000',
+        ]);
+
+        DB::transaction(function () use ($movimiento, $request) {
+            if ($movimiento->saldo_anterior_origen !== null) {
+                $delta = (float) $movimiento->saldo_anterior_origen - (float) $movimiento->saldo_posterior_origen;
+                $this->revertirEntidad($movimiento->cuenta_origen_id, $movimiento->cliente_origen_id, null, $delta);
+            }
+            if ($movimiento->saldo_anterior_destino !== null) {
+                $delta = (float) $movimiento->saldo_anterior_destino - (float) $movimiento->saldo_posterior_destino;
+                $this->revertirEntidad($movimiento->cuenta_destino_id, $movimiento->cliente_destino_id, $movimiento->proveedor_destino_id, $delta);
+            }
+
+            $movimiento->update([
+                'estado' => 'cancelado',
+                'motivo_anulacion' => $request->motivo_anulacion,
+                'detalle_anulacion' => $request->detalle_anulacion,
+            ]);
+        });
+
+        try {
+            $movimiento->load(['user', 'cuentaOrigen', 'clienteOrigen', 'cuentaDestino', 'clienteDestino', 'proveedorDestino']);
+            $notificationService = new NotificationService;
+            $datosNotificacion = $notificationService->prepararDatosMovimientoFinanciero($movimiento);
+            $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+            Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, null, null, true));
+        } catch (Exception $e) {
+            Log::error('Error enviando notificación de anulación: '.$e->getMessage());
+        }
+
+        return Redirect::route('transacciones.show', $movimiento->id)->with('success', 'Operación anulada con éxito.');
+    }
+
+    /**
+     * Revierte el delta de saldo de una entidad (cuenta/cliente/proveedor) — $delta ya
+     * viene con el signo correcto a aplicar directamente con increment(), que también
+     * decrementa si el valor es negativo. Aplicar el delta (no restaurar al snapshot
+     * exacto) es lo que hace la reversión segura aunque hayan ocurrido otras
+     * operaciones sobre la misma entidad después de esta.
+     */
+    private function revertirEntidad(?int $cuentaId, ?int $clienteId, ?int $proveedorId, float $delta): void
+    {
+        if ($cuentaId) {
+            Cuenta::whereKey($cuentaId)->lockForUpdate()->first()?->increment('saldo_cuenta', $delta);
+        } elseif ($clienteId) {
+            Cliente::whereKey($clienteId)->lockForUpdate()->first()?->increment('deuda_pago_cliente', $delta);
+        } elseif ($proveedorId) {
+            Proveedor::whereKey($proveedorId)->lockForUpdate()->first()?->increment('saldo_proveedor', $delta);
+        }
     }
 
     // =======================================================

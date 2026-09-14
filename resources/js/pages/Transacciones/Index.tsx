@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -99,6 +100,7 @@ export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes,
                     (2026-08-28) y quedó como única opción sin nada entre qué elegir. */}
                 <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} userRole={userRole} />
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }
