@@ -2,24 +2,25 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Producto;
-use App\Models\ProductoCodigo;
+use App\Exports\PlantillaProductoExport;
+use App\Exports\ProductoExport;
+use App\Imports\ProductoImport;
+use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Categoria;
-use App\Models\Almacen;
 use App\Models\HistorialPrecioCosto;
+use App\Models\Producto;
+use App\Models\ProductoCodigo;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 // NOTE: Removed automatic migration/seed calls for safety in production
-use App\Exports\ProductoExport;
-use App\Exports\PlantillaProductoExport;
-use App\Imports\ProductoImport;
-use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ProductoController extends Controller
 {
@@ -131,8 +132,6 @@ class ProductoController extends Controller
         ]);
     }
 
-
-
     /**
      * Mostrar producto con detalle completo
      */
@@ -144,12 +143,12 @@ class ProductoController extends Controller
         $producto->load(['categoria', 'almacenes', 'codigos']);
 
         foreach ($producto->codigos as $codigo) {
-            if (!$codigo->imagen_barcode) {
+            if (! $codigo->imagen_barcode) {
                 try {
-                    $imagen = \App\Models\ProductoCodigo::generarImagenBarcode($codigo->codigo_barras);
+                    $imagen = ProductoCodigo::generarImagenBarcode($codigo->codigo_barras);
                     $codigo->update(['imagen_barcode' => $imagen]);
                 } catch (\Exception $e) {
-                    logger()->warning('No se pudo generar barcode para ' . $codigo->codigo_barras . ': ' . $e->getMessage());
+                    logger()->warning('No se pudo generar barcode para '.$codigo->codigo_barras.': '.$e->getMessage());
                 }
             }
         }
@@ -170,14 +169,14 @@ class ProductoController extends Controller
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'stock_bajo' => $producto->stock_bajo,
-                'codigos' => $producto->codigos->map(fn($codigo) => [
+                'codigos' => $producto->codigos->map(fn ($codigo) => [
                     'id' => $codigo->id,
                     'codigo_barras' => $codigo->codigo_barras,
                     'cantidad' => $codigo->cantidad,
                     'es_default' => $codigo->es_default,
                     'imagen_barcode' => $codigo->imagen_barcode ? asset($codigo->imagen_barcode) : null,
                 ]),
-                'almacenes' => $producto->almacenes->map(fn($almacen) => [
+                'almacenes' => $producto->almacenes->map(fn ($almacen) => [
                     'id' => $almacen->id,
                     'nombre_almacen' => $almacen->nombre_almacen,
                     'ciudad_almacen' => $almacen->ciudad_almacen,
@@ -218,7 +217,7 @@ class ProductoController extends Controller
                 'barcode_image_url' => $producto->barcode_image_url,
                 'cantidad_total' => $producto->cantidad_total,
                 'stock_bajo' => $producto->stock_bajo,
-                'codigos' => $producto->codigos->map(fn($codigo) => [
+                'codigos' => $producto->codigos->map(fn ($codigo) => [
                     'id' => $codigo->id,
                     'codigo_barras' => $codigo->codigo_barras,
                     'cantidad' => $codigo->cantidad,
@@ -245,7 +244,7 @@ class ProductoController extends Controller
                 'nullable',
                 'string',
                 'max:14',
-                'unique:productos,codigo_producto,' . $producto->id,
+                'unique:productos,codigo_producto,'.$producto->id,
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
@@ -259,17 +258,17 @@ class ProductoController extends Controller
         $user = Auth::user();
 
         $precioCostoAnterior = (float) $producto->precio_compra_producto;
-        $precioCostoNuevo    = (float) $validatedData['precio_compra_producto'];
-        $precioCostoChanged  = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
+        $precioCostoNuevo = (float) $validatedData['precio_compra_producto'];
+        $precioCostoChanged = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
 
         if ($precioCostoChanged) {
-            if (!in_array($user->role, ['admin', 'moderador'])) {
+            if ($user->role !== 'admin') {
                 return redirect()->back()
                     ->with('error', 'No tiene permisos para modificar el precio de costo.');
             }
 
             $password = $validatedData['password_confirmacion'] ?? '';
-            if (empty($password) || !Hash::check($password, $user->password)) {
+            if (empty($password) || ! Hash::check($password, $user->password)) {
                 return redirect()->back()
                     ->withErrors(['password_confirmacion' => 'Contraseña incorrecta. El precio de costo no fue actualizado.'])
                     ->withInput();
@@ -287,9 +286,9 @@ class ProductoController extends Controller
                     unlink(public_path($imagenPath));
                 }
 
-                $filename = time() . '_' . $request->file('imagen_producto')->getClientOriginalName();
+                $filename = time().'_'.$request->file('imagen_producto')->getClientOriginalName();
                 $request->file('imagen_producto')->move(public_path('productos'), $filename);
-                $imagenPath = 'productos/' . $filename;
+                $imagenPath = 'productos/'.$filename;
             }
 
             $stockMomento = $producto->cantidad_total;
@@ -300,7 +299,7 @@ class ProductoController extends Controller
             $updateData['imagen_producto'] = $imagenPath;
 
             // Restringir campos de ecommerce solo a admin/moderador
-            if (!in_array($user->role, ['admin', 'moderador'])) {
+            if (! in_array($user->role, ['admin', 'moderador'])) {
                 unset($updateData['activo']);
                 unset($updateData['descripcion_producto']);
             }
@@ -308,19 +307,19 @@ class ProductoController extends Controller
             $producto->update($updateData);
 
             if ($precioCostoChanged) {
-                $diferencia         = $precioCostoNuevo - $precioCostoAnterior;
-                $impactoFinanciero  = $diferencia * $stockMomento;
+                $diferencia = $precioCostoNuevo - $precioCostoAnterior;
+                $impactoFinanciero = $diferencia * $stockMomento;
 
                 HistorialPrecioCosto::create([
-                    'producto_id'       => $producto->id,
-                    'user_id'           => $user->id,
-                    'precio_anterior'   => $precioCostoAnterior,
-                    'precio_nuevo'      => $precioCostoNuevo,
-                    'diferencia'        => $diferencia,
-                    'stock_momento'     => $stockMomento,
-                    'impacto_financiero'=> $impactoFinanciero,
-                    'es_perdida'        => $impactoFinanciero < 0,
-                    'motivo'            => $validatedData['motivo_cambio_costo'] ?? null,
+                    'producto_id' => $producto->id,
+                    'user_id' => $user->id,
+                    'precio_anterior' => $precioCostoAnterior,
+                    'precio_nuevo' => $precioCostoNuevo,
+                    'diferencia' => $diferencia,
+                    'stock_momento' => $stockMomento,
+                    'impacto_financiero' => $impactoFinanciero,
+                    'es_perdida' => $impactoFinanciero < 0,
+                    'motivo' => $validatedData['motivo_cambio_costo'] ?? null,
                 ]);
             }
 
@@ -330,8 +329,9 @@ class ProductoController extends Controller
                 ->with('success', 'Producto actualizado correctamente.');
         } catch (\Exception $e) {
             DB::rollBack();
+
             return redirect()->back()
-                ->with('error', 'Error al actualizar el producto: ' . $e->getMessage());
+                ->with('error', 'Error al actualizar el producto: '.$e->getMessage());
         }
     }
 
@@ -367,8 +367,9 @@ class ProductoController extends Controller
                 ->with('success', 'Producto eliminado correctamente.');
         } catch (\Exception $e) {
             DB::rollBack();
+
             return redirect()->back()
-                ->with('error', 'Error al eliminar el producto: ' . $e->getMessage());
+                ->with('error', 'Error al eliminar el producto: '.$e->getMessage());
         }
     }
 
@@ -403,8 +404,6 @@ class ProductoController extends Controller
         return response()->json($productos);
     }
 
-
-
     /**
      * Transferir cantidad entre códigos de barras o crear nuevo escaneado
      */
@@ -413,12 +412,12 @@ class ProductoController extends Controller
         $request->validate([
             'codigo_origen_id' => 'required|exists:producto_codigos,id',
             'nuevo_codigo' => 'required|string|max:255',
-            'cantidad' => 'required|integer|min:1'
+            'cantidad' => 'required|integer|min:1',
         ]);
 
-        $codigoOrigen = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
-                            ->where('id', $request->codigo_origen_id)
-                            ->firstOrFail();
+        $codigoOrigen = ProductoCodigo::where('producto_id', $producto->id)
+            ->where('id', $request->codigo_origen_id)
+            ->firstOrFail();
 
         if ($codigoOrigen->cantidad < $request->cantidad) {
             return redirect()->back()->withErrors(['cantidad' => 'La cantidad a transferir es mayor a la disponible en el código de origen.']);
@@ -430,14 +429,14 @@ class ProductoController extends Controller
             $codigoOrigen->decrement('cantidad', $request->cantidad);
 
             // Buscar o crear el nuevo código
-            $nuevoCodigo = \App\Models\ProductoCodigo::firstOrNew([
+            $nuevoCodigo = ProductoCodigo::firstOrNew([
                 'producto_id' => $producto->id,
                 'codigo_barras' => $request->nuevo_codigo,
             ]);
 
             // Asignar cantidad y asegurar que no es el default (solo el generado inicialmente es default)
             $nuevoCodigo->cantidad = ($nuevoCodigo->cantidad ?? 0) + $request->cantidad;
-            if (!$nuevoCodigo->exists) {
+            if (! $nuevoCodigo->exists) {
                 $nuevoCodigo->es_default = false;
             }
             $nuevoCodigo->save();
@@ -447,7 +446,8 @@ class ProductoController extends Controller
             return redirect()->back()->with('success', 'Código de barras asignado y cantidad transferida correctamente.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->withErrors(['error' => 'Error al transferir cantidad: ' . $e->getMessage()]);
+
+            return redirect()->back()->withErrors(['error' => 'Error al transferir cantidad: '.$e->getMessage()]);
         }
     }
 
@@ -460,10 +460,10 @@ class ProductoController extends Controller
             ->with('categoria', 'almacenes')
             ->first();
 
-        if (!$producto) {
+        if (! $producto) {
             return response()->json([
                 'success' => false,
-                'message' => 'Producto no encontrado'
+                'message' => 'Producto no encontrado',
             ], 404);
         }
 
@@ -482,7 +482,7 @@ class ProductoController extends Controller
                 'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
-            ]
+            ],
         ]);
     }
 
@@ -496,7 +496,7 @@ class ProductoController extends Controller
 
             // Validar que el almacén existe
             $almacen = Almacen::find($almacenId);
-            if (!$almacen) {
+            if (! $almacen) {
                 return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
             }
 
@@ -510,15 +510,16 @@ class ProductoController extends Controller
             }
 
             // Generar nombre del archivo
-            $nombreArchivo = 'productos-' . Str::slug($almacen->nombre_almacen) . '-' . date('Y-m-d-His') . '.xlsx';
+            $nombreArchivo = 'productos-'.Str::slug($almacen->nombre_almacen).'-'.date('Y-m-d-His').'.xlsx';
 
             return Excel::download(
                 new ProductoExport($almacenId),
                 $nombreArchivo
             );
         } catch (\Exception $e) {
-            Log::error('Error al exportar productos: ' . $e->getMessage());
-            return redirect()->back()->withErrors(['error' => 'Error al exportar: ' . $e->getMessage()]);
+            Log::error('Error al exportar productos: '.$e->getMessage());
+
+            return redirect()->back()->withErrors(['error' => 'Error al exportar: '.$e->getMessage()]);
         }
     }
 
@@ -530,7 +531,7 @@ class ProductoController extends Controller
         // Validación de archivo
         $request->validate([
             'file' => 'required|file|mimes:xlsx,xls|max:5120',
-            'almacen_id' => 'required|integer|exists:almacens,id'
+            'almacen_id' => 'required|integer|exists:almacens,id',
         ], [
             'file.required' => 'Debes seleccionar un archivo para importar',
             'file.file' => 'El archivo debe ser un archivo válido',
@@ -547,7 +548,7 @@ class ProductoController extends Controller
 
             // Validar que el almacén existe
             $almacen = Almacen::find($almacenId);
-            if (!$almacen) {
+            if (! $almacen) {
                 throw new \Exception('El almacén especificado no existe.');
             }
 
@@ -573,21 +574,22 @@ class ProductoController extends Controller
             return redirect()
                 ->route('productos.index')
                 ->with('success', $mensaje);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             DB::rollBack();
+
             return redirect()->back()
                 ->withErrors($e->errors())
                 ->withInput();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al importar productos: ' . $e->getMessage(), [
+            Log::error('Error al importar productos: '.$e->getMessage(), [
                 'almacen_id' => $request->get('almacen_id'),
                 'archivo' => $request->file('file')?->getClientOriginalName(),
             ]);
 
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Error al importar productos: ' . $e->getMessage()])
+                ->withErrors(['error' => 'Error al importar productos: '.$e->getMessage()])
                 ->withInput();
         }
     }
@@ -597,7 +599,7 @@ class ProductoController extends Controller
      */
     public function downloadTemplate()
     {
-        return Excel::download(new PlantillaProductoExport(), 'plantilla-importacion-productos.xlsx', \Maatwebsite\Excel\Excel::XLSX);
+        return Excel::download(new PlantillaProductoExport, 'plantilla-importacion-productos.xlsx', \Maatwebsite\Excel\Excel::XLSX);
     }
 
     /**
@@ -607,6 +609,7 @@ class ProductoController extends Controller
     {
         // Redirigir a import con el almacén en el request
         $request->merge(['almacen_id' => $almacenId]);
+
         return $this->import($request);
     }
 
@@ -634,7 +637,7 @@ class ProductoController extends Controller
             $productos = Producto::with('almacenes', 'codigos', 'categoria')
                 ->whereIn('id', $ids)
                 ->get()
-                ->map(fn($p) => [
+                ->map(fn ($p) => [
                     'id' => $p->id,
                     'nombre' => $p->nombre_producto,
                     'marca' => $p->marca_producto,
@@ -646,24 +649,24 @@ class ProductoController extends Controller
                     'cantidad_total' => $p->cantidad_total,
                     'categoria' => $p->categoria?->nombre_categoria,
                     'categoria_id' => $p->categoria_id,
-                    'almacenes' => $p->almacenes->map(fn($a) => [
+                    'almacenes' => $p->almacenes->map(fn ($a) => [
                         'id' => $a->id,
                         'nombre' => $a->nombre_almacen,
                         'cantidad' => $a->pivot->cantidad,
                     ]),
-                    'codigos_barras' => $p->codigos->map(fn($c) => $c->codigo_barras)->values(),
+                    'codigos_barras' => $p->codigos->map(fn ($c) => $c->codigo_barras)->values(),
                 ]);
 
             $cantidadTotal = $productos->sum('cantidad_total');
             $precioPromedioPonderado = $cantidadTotal > 0
-                ? $productos->sum(fn($p) => $p['precio_compra'] * $p['cantidad_total']) / $cantidadTotal
+                ? $productos->sum(fn ($p) => $p['precio_compra'] * $p['cantidad_total']) / $cantidadTotal
                 : $productos->avg('precio_compra');
 
             // Detectar campos que varían entre los productos del grupo
             $camposVariables = [];
             $camposRevisar = [
-                'capacidad' => fn($p) => $p['capacidad'],
-                'categoria_id' => fn($p) => $p['categoria_id'],
+                'capacidad' => fn ($p) => $p['capacidad'],
+                'categoria_id' => fn ($p) => $p['categoria_id'],
             ];
             foreach ($camposRevisar as $nombre => $extractor) {
                 $valores = $productos->map($extractor)->filter()->unique()->values();
@@ -671,13 +674,13 @@ class ProductoController extends Controller
                     $camposVariables[] = [
                         'campo' => $nombre,
                         'valores' => $valores->toArray(),
-                        'valor_sugerido' => $valores->groupBy(fn($v) => $v)->sortByDesc(fn($g) => $g->count())->keys()->first(),
+                        'valor_sugerido' => $valores->groupBy(fn ($v) => $v)->sortByDesc(fn ($g) => $g->count())->keys()->first(),
                     ];
                 }
             }
 
             return [
-                'clave' => trim("{$grupo->nombre_producto} {$grupo->marca_producto} {$grupo->modelo_producto}") . ($grupo->capacidad_limpia ? " ({$grupo->capacidad_limpia})" : '') . ($grupo->color_producto ? " - {$grupo->color_producto}" : ''),
+                'clave' => trim("{$grupo->nombre_producto} {$grupo->marca_producto} {$grupo->modelo_producto}").($grupo->capacidad_limpia ? " ({$grupo->capacidad_limpia})" : '').($grupo->color_producto ? " - {$grupo->color_producto}" : ''),
                 'productos' => $productos,
                 'cantidad_total' => $cantidadTotal,
                 'precio_promedio' => round($precioPromedioPonderado, 2),
@@ -717,11 +720,12 @@ class ProductoController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Valores normalizados correctamente en ' . count($request->productos_ids) . ' productos.',
+                'message' => 'Valores normalizados correctamente en '.count($request->productos_ids).' productos.',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'message' => 'Error al normalizar: ' . $e->getMessage()], 500);
+
+            return response()->json(['success' => false, 'message' => 'Error al normalizar: '.$e->getMessage()], 500);
         }
     }
 
@@ -744,7 +748,7 @@ class ProductoController extends Controller
             // 0. Aplicar valores canónicos si se enviaron
             $camposPermitidos = ['capacidad_producto', 'categoria_id'];
             $actualizar = array_intersect_key($request->valores_canonicos ?? [], array_flip($camposPermitidos));
-            if (!empty($actualizar)) {
+            if (! empty($actualizar)) {
                 $todosIds = array_merge([$conservar->id], $request->productos_eliminar_ids);
                 Producto::whereIn('id', $todosIds)->update($actualizar);
                 $conservar->refresh();
@@ -752,7 +756,9 @@ class ProductoController extends Controller
 
             foreach ($request->productos_eliminar_ids as $eliminarId) {
                 $eliminar = Producto::with('almacenes', 'codigos')->find($eliminarId);
-                if (!$eliminar) continue;
+                if (! $eliminar) {
+                    continue;
+                }
 
                 // 1. Sumar cantidades en almacen_producto
                 foreach ($eliminar->almacenes as $almacen) {
@@ -777,7 +783,7 @@ class ProductoController extends Controller
                         ->where('codigo_barras', $codigo->codigo_barras)
                         ->exists();
 
-                    if (!$existe) {
+                    if (! $existe) {
                         $codigo->update(['producto_id' => $conservar->id]);
                     }
                 }
@@ -796,12 +802,13 @@ class ProductoController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Fusión completada. Producto conservado: ID ' . $conservar->id . ' — ' . $totalCantidad . ' unidades totales.',
+                'message' => 'Fusión completada. Producto conservado: ID '.$conservar->id.' — '.$totalCantidad.' unidades totales.',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al fusionar duplicados: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Error al fusionar: ' . $e->getMessage()], 500);
+            Log::error('Error al fusionar duplicados: '.$e->getMessage());
+
+            return response()->json(['success' => false, 'message' => 'Error al fusionar: '.$e->getMessage()], 500);
         }
     }
 }

@@ -193,10 +193,15 @@ class DetalleOperacionService
                 // (admin, que nunca captura uno, o ventas anteriores a esta feature): ahí se
                 // cae al nombre de la cuenta, que para admin ya es la persona real.
                 'atendido_por' => $venta->turnoVendedor?->nombre_vendedor ?? $venta->usuario?->name,
+                // Para distinguir "Venta Anulada" (nunca movió dinero) de "Venta Devuelta"
+                // (ya estaba completada) en el frontend — ver DetalleVentaExpandido.
+                'estado' => $venta->estado,
             ],
-            // Solo presente cuando la venta terminó anulada — motivo es obligatorio en
-            // anularVenta(), detalle es opcional (ver VentaController::anularVenta()).
-            'anulacion' => $venta->estado === 'cancelada' ? [
+            // Solo presente cuando la venta terminó anulada O devuelta — motivo es
+            // obligatorio en anularVenta(), detalle es opcional (ver
+            // VentaController::anularVenta()). 'devuelta' es el mismo mecanismo pero
+            // para una venta que ya estaba completada cuando se revirtió.
+            'anulacion' => in_array($venta->estado, ['cancelada', 'devuelta']) ? [
                 'motivo' => $venta->motivo_anulacion,
                 'detalle' => $venta->detalle_anulacion,
             ] : null,

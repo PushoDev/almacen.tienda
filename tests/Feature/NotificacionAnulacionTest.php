@@ -4,8 +4,10 @@ use App\Channels\TelegramChannel;
 use App\Models\MovimientoFinanciero;
 use App\Models\Remesa;
 use App\Models\User;
+use App\Models\Venta;
 use App\Notifications\MovimientoFinancieroNotification;
 use App\Notifications\RemesaNotification;
+use App\Notifications\VentaDevueltaNotification;
 use Illuminate\Support\Facades\Notification;
 
 // crearMoneda(), crearCuentaEnMoneda() y crearTiposMovimientoFinanciero() están
@@ -110,4 +112,37 @@ test('anular una remesa envía RemesaNotification con anulada=true', function ()
     Notification::assertSentTo($admin, RemesaNotification::class, function ($notification) {
         return $notification->anulada === true;
     });
+});
+
+test('devolver una venta completada envía VentaDevueltaNotification a admin/moderador', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->completada()->create(['user_id' => $admin->id]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_pedido']);
+
+    Notification::assertSentTo($admin, VentaDevueltaNotification::class);
+});
+
+test('anular una venta pendiente no envía VentaDevueltaNotification', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->create(['user_id' => $admin->id, 'estado' => 'pendiente']);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_pedido']);
+
+    Notification::assertNotSentTo($admin, VentaDevueltaNotification::class);
+});
+
+test('un moderador recibe el canal de Telegram para la notificación de devolución de venta', function () {
+    $moderador = User::factory()->moderador()->create(['telegram_chat_id' => '12345']);
+    $venta = Venta::factory()->devuelta()->create();
+
+    $notification = new VentaDevueltaNotification($venta);
+
+    expect($notification->via($moderador))->toContain(TelegramChannel::class);
 });

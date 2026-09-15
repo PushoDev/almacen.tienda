@@ -680,6 +680,27 @@ test('el detalle colapsable de una Venta anulada incluye motivo y detalle de anu
     expect($fila['detalle_venta']['anulacion']['detalle'])->toBe('Se cargó el precio equivocado, cliente pidió reembolso.');
 });
 
+test('el detalle colapsable de una Venta devuelta también incluye motivo y detalle de anulación', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $venta = Venta::factory()->create([
+        'estado' => 'devuelta',
+        'motivo_anulacion' => 'producto_defectuoso',
+        'detalle_anulacion' => 'El cliente no quedó conforme, se devolvió el producto completo.',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+
+    expect($fila['detalle_venta']['info_general']['estado'])->toBe('devuelta');
+    expect($fila['detalle_venta']['anulacion'])->not->toBeNull();
+    expect($fila['detalle_venta']['anulacion']['motivo'])->toBe('producto_defectuoso');
+    expect($fila['detalle_venta']['anulacion']['detalle'])->toBe('El cliente no quedó conforme, se devolvió el producto completo.');
+});
+
 test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por tipo', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

@@ -33,6 +33,7 @@ import {
     Search,
     ShoppingCart,
     Store,
+    Undo2,
     User,
     Users,
     Wallet,
@@ -204,6 +205,11 @@ export default function ListadoVentas() {
                 bg: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-800',
                 icon: XCircle,
                 label: 'Cancelada',
+            },
+            devuelta: {
+                bg: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/20 dark:text-orange-300 dark:border-orange-800',
+                icon: Undo2,
+                label: 'Devuelta',
             },
             solicitud_especial: {
                 bg: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-800',

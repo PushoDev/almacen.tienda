@@ -21,7 +21,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function EditarProductosPage({ producto, categorias }: { producto: ProductoProps; categorias: CategoriasProps[] }) {
     const { auth } = usePage<SharedData>().props;
-    const isPrivileged = auth.user.role === 'admin' || auth.user.role === 'moderador';
+    const isPrivileged = auth.user.role === 'admin';
 
     const { data, setData, post, errors, processing } = useForm({
         _method: 'put',
@@ -32,7 +32,10 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         color_producto: producto.color_producto || '',
         codigo_producto: producto.codigo_producto || '',
         categoria_id: producto.categoria_id.toString(),
-        precio_compra_producto: producto.precio_compra_producto,
+        // String mientras se edita — convertir a número en cada tecla (parseFloat) borraba
+        // el "." que el usuario acababa de escribir en cuanto no había dígitos después
+        // (ej. "21." se guardaba como 21, el input se re-renderizaba sin el punto).
+        precio_compra_producto: producto.precio_compra_producto.toString(),
         imagen_producto: null as File | null,
         password_confirmacion: '',
         motivo_cambio_costo: '',
@@ -43,7 +46,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
     const [passwordInput, setPasswordInput] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    const priceChanged = isPrivileged && data.precio_compra_producto !== producto.precio_compra_producto;
+    const priceChanged = isPrivileged && parseFloat(data.precio_compra_producto) !== producto.precio_compra_producto;
 
     const doPost = () => {
         post(route('productos.update', { producto: producto.id }), {
@@ -257,10 +260,14 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     <Input
                                         id="precio_compra_producto"
                                         disabled={!isPrivileged}
-                                        step="0.01"
-                                        min="0"
+                                        inputMode="decimal"
                                         value={data.precio_compra_producto}
-                                        onChange={(e) => setData('precio_compra_producto', parseFloat(e.target.value) || 0)}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                                setData('precio_compra_producto', value);
+                                            }
+                                        }}
                                         placeholder="0.00"
                                         className={`mt-1 ${priceChanged ? 'border-amber-500 ring-1 ring-amber-400' : ''}`}
                                     />

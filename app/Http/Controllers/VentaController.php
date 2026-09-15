@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
 use App\Notifications\VentaCreadaNotification;
+use App\Notifications\VentaDevueltaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
@@ -1737,6 +1738,7 @@ class VentaController extends Controller
                 ['value' => 'pendiente',           'label' => 'Pendiente'],
                 ['value' => 'completada',          'label' => 'Completada'],
                 ['value' => 'cancelada',           'label' => 'Cancelada'],
+                ['value' => 'devuelta',            'label' => 'Devuelta'],
                 ['value' => 'solicitud_especial',  'label' => 'Solicitud Especial'],
                 ['value' => 'rechazada',           'label' => 'Rechazada'],
             ],
@@ -2119,7 +2121,7 @@ class VentaController extends Controller
         $eraCompletada = $venta->estado === 'completada';
 
         // Cargar relaciones necesarias para poder revertirlas
-        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda']);
+        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda', 'usuario', 'moneda']);
 
         DB::transaction(function () use ($venta, $validated, $eraCompletada) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
@@ -2229,6 +2231,17 @@ class VentaController extends Controller
                 'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
             ]);
         });
+
+        // Notificar por Telegram solo cuando es una Devolución real (venta que ya
+        // había movido dinero de verdad). Anular una venta pendiente no lo hace.
+        if ($eraCompletada) {
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new VentaDevueltaNotification($venta));
+            } catch (\Exception $e) {
+                \Log::error('Error enviando notificación de devolución de venta: '.$e->getMessage());
+            }
+        }
 
         return response()->json([
             'success' => true,
