@@ -1512,10 +1512,8 @@ class VentaController extends Controller
                 $cuentaGestor = $venta->gestorCuenta;
 
                 if ($cuentaGestor) {
-                    if ($cuentaGestor->saldo_cuenta < $venta->gestor_monto) {
-                        throw new \Exception('La cuenta del gestor no tiene saldo suficiente para cubrir la comisión');
-                    }
-
+                    // Se permite dejar la cuenta en deuda (saldo negativo) — misma
+                    // política que la comisión del vendedor, decisión del cliente.
                     $gestorSaldoAnterior = (float) $cuentaGestor->saldo_cuenta;
                     $cuentaGestor->decrement('saldo_cuenta', $venta->gestor_monto);
                     $venta->update([
@@ -1566,12 +1564,7 @@ class VentaController extends Controller
                 if ($cuentaComision) {
                     $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
 
-                    if ($cuentaComision->saldo_cuenta < $montoCUP) {
-                        throw new \Exception(
-                            "La cuenta de comisión no tiene saldo suficiente. Necesita {$montoCUP} CUP, disponible: {$cuentaComision->saldo_cuenta} CUP."
-                        );
-                    }
-
+                    // Se permite dejar la cuenta en deuda (saldo negativo) — decisión del cliente.
                     $comisionSaldoAnterior = (float) $cuentaComision->saldo_cuenta;
                     $cuentaComision->decrement('saldo_cuenta', $montoCUP);
                     $venta->update([

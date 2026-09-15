@@ -794,19 +794,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const isVentaSolicitudEspecial = currentVenta.estado === 'solicitud_especial';
     const isVentaRechazada = currentVenta.estado === 'rechazada';
 
-    // Verifica si la cuenta del gestor tiene saldo insuficiente para cubrir la comisión
-    const gestorSinSaldo =
-        currentVenta.gestor !== null &&
-        currentVenta.gestor.saldo_disponible !== undefined &&
-        currentVenta.gestor.saldo_disponible < currentVenta.gestor.monto;
-
-    const comisionSinSaldo =
-        currentVenta.comision_pago !== null &&
-        currentVenta.comision_pago?.cuenta !== null &&
-        currentVenta.comision_pago?.monto_cup !== null &&
-        (currentVenta.comision_pago?.cuenta?.saldo_disponible ?? Infinity) <
-        (currentVenta.comision_pago?.monto_cup ?? 0);
-
     // Venta sin gestor con comisión pendiente de configurar (cuenta + tasa) — si no se
     // resuelve antes de aprobar, la comisión nunca se descuenta de ninguna cuenta.
     const comisionSinConfigurar =
@@ -814,7 +801,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         currentVenta.total_comision > 0 &&
         (currentVenta.comision_pago === null || !currentVenta.comision_pago?.tasa);
 
-    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !gestorSinSaldo && !comisionSinSaldo && !comisionSinConfigurar;
+    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !comisionSinConfigurar;
 
     const monedaPrincipal = currentVenta.moneda_principal;
     const simboloMonedaPrincipal = getCurrencySymbol(monedaPrincipal);
@@ -2160,11 +2147,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             ? 'Falta Receptor'
                                             : comisionSinConfigurar
                                                 ? 'Falta Configurar Comisión'
-                                                : gestorSinSaldo
-                                                    ? 'Sin Fondos Gestor'
-                                                    : comisionSinSaldo
-                                                        ? 'Sin Fondos Comisión'
-                                                        : 'Aprobar Venta'}
+                                                : 'Aprobar Venta'}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>

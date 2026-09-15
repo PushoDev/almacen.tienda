@@ -408,6 +408,78 @@ test('aprobarVenta sin gestor descuenta la comisión del vendedor de su cuenta C
     ]);
 });
 
+test('aprobarVenta descuenta la comisión aunque la cuenta no tenga saldo suficiente, dejándola en deuda', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true, 'tasa_cambio' => 365]);
+    $cuentaComision = crearCuentaCup(saldo: 100);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $admin->id,
+        'almacen_id' => $almacen->id,
+        'estado' => 'pendiente',
+        'moneda_id' => $monedaCup->id,
+        'total' => 100,
+        'es_venta_gestor' => false,
+        'total_comision' => 10,
+        'comision_cuenta_id' => $cuentaComision->id,
+        'comision_tasa' => 365,
+    ]);
+    crearDestinatario($venta);
+
+    $response = $this->postJson(route('ventas.aprobar', $venta));
+    $response->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('cuentas', [
+        'id' => $cuentaComision->id,
+        'saldo_cuenta' => 100 - (10 * 365), // -3550, queda en deuda
+    ]);
+
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'comision_saldo_anterior' => 100,
+        'comision_saldo_posterior' => 100 - (10 * 365),
+    ]);
+});
+
+test('aprobarVenta descuenta al gestor aunque su cuenta no tenga saldo suficiente, dejándola en deuda', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true, 'tasa_cambio' => 365]);
+    $cuentaGestor = crearCuentaCup(saldo: 100);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $admin->id,
+        'almacen_id' => $almacen->id,
+        'estado' => 'pendiente',
+        'moneda_id' => $monedaCup->id,
+        'total' => 100,
+        'es_venta_gestor' => true,
+        'gestor_cuenta_id' => $cuentaGestor->id,
+        'gestor_monto' => 1000,
+        'tasa_aplicada_gestor' => 365,
+    ]);
+    crearDestinatario($venta);
+
+    $response = $this->postJson(route('ventas.aprobar', $venta));
+    $response->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('cuentas', [
+        'id' => $cuentaGestor->id,
+        'saldo_cuenta' => 100 - 1000, // -900, queda en deuda
+    ]);
+
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'gestor_saldo_anterior' => 100,
+        'gestor_saldo_posterior' => 100 - 1000,
+    ]);
+});
+
 test('aprobarVenta guarda ganancia_neta = total_ganancia - total_comision + ganancia_perdida_cambiaria', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
