@@ -51,18 +51,18 @@ test('el historial de Cuentas incluye una remesa como entrada, salida y mensajer
 
     $responseEntrada = $this->get(route('cuentas.show', $cuentaEntrada->id), ['X-Inertia' => 'true']);
     $itemEntrada = collect($responseEntrada->json('props.historialRemesas.data'))->firstWhere('referencia_id', $remesa->id);
-    expect($itemEntrada['tipo'])->toBe('Remesa (Entrada)');
+    expect($itemEntrada['tipo'])->toBe('Operación Múltiple (Entrada)');
     expect((float) $itemEntrada['monto'])->toBe(100.0);
     expect($itemEntrada['detalle']['movimientos_saldo'])->toHaveCount(3);
 
     $responseSalida = $this->get(route('cuentas.show', $cuentaSalida->id), ['X-Inertia' => 'true']);
     $itemSalida = collect($responseSalida->json('props.historialRemesas.data'))->firstWhere('referencia_id', $remesa->id);
-    expect($itemSalida['tipo'])->toBe('Remesa (Salida)');
+    expect($itemSalida['tipo'])->toBe('Operación Múltiple (Salida)');
     expect((float) $itemSalida['monto'])->toBe(-90.0);
 
     $responseMensajero = $this->get(route('cuentas.show', $cuentaMensajero->id), ['X-Inertia' => 'true']);
     $itemMensajero = collect($responseMensajero->json('props.historialRemesas.data'))->firstWhere('referencia_id', $remesa->id);
-    expect($itemMensajero['tipo'])->toBe('Remesa (Mensajero)');
+    expect($itemMensajero['tipo'])->toBe('Operación Múltiple (Mensajero)');
     expect((float) $itemMensajero['monto'])->toBe(-20.0);
 });
 

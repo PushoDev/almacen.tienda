@@ -812,11 +812,11 @@ export default function ShowCuentasPage({
 
                     {puedeEditar && (
                         <TablaHistorial
-                            titulo="Remesas"
-                            descripcion="Remesas donde esta cuenta participó como entrada, salida o mensajero"
+                            titulo="Operaciones Múltiples"
+                            descripcion="Operaciones Múltiples donde esta cuenta participó como entrada, salida o mensajero"
                             Icono={Send}
                             historial={historialRemesas}
-                            emptyTexto="Las remesas que involucren esta cuenta aparecerán aquí"
+                            emptyTexto="Las Operaciones Múltiples que involucren esta cuenta aparecerán aquí"
                             filtroKey="remesas"
                             filtrosIniciales={{ q: filtros.remesas.q_remesas, desde: filtros.remesas.desde_remesas, hasta: filtros.remesas.hasta_remesas }}
                         />

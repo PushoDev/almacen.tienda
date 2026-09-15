@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
 use App\Notifications\VentaCreadaNotification;
+use App\Notifications\VentaDevueltaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
@@ -1737,6 +1738,7 @@ class VentaController extends Controller
                 ['value' => 'pendiente',           'label' => 'Pendiente'],
                 ['value' => 'completada',          'label' => 'Completada'],
                 ['value' => 'cancelada',           'label' => 'Cancelada'],
+                ['value' => 'devuelta',            'label' => 'Devuelta'],
                 ['value' => 'solicitud_especial',  'label' => 'Solicitud Especial'],
                 ['value' => 'rechazada',           'label' => 'Rechazada'],
             ],
@@ -2102,15 +2104,26 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'La venta ya está anulada'], 400);
         }
 
+        if ($venta->estado === 'devuelta') {
+            return response()->json(['success' => false, 'message' => 'La venta ya fue devuelta'], 400);
+        }
+
         $validated = $request->validate([
             'motivo_anulacion' => 'required|in:error_precio,solicitud_cliente,producto_defectuoso,duplicado_venta,error_pedido,otros',
             'detalle_anulacion' => 'nullable|string|max:500|required_if:motivo_anulacion,otros',
         ]);
 
-        // Cargar relaciones necesarias para poder revertirlas
-        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda']);
+        // Una venta pendiente nunca movió dinero real — anularla es una simple
+        // cancelación. Una venta completada ya movió stock y dinero de verdad —
+        // revertirla es conceptualmente una Devolución, aunque el mecanismo de
+        // reversión (abajo) sea idéntico. Se decide el estado final ANTES de la
+        // transacción porque dentro de ella $venta->estado ya cambia a 'cancelada'.
+        $eraCompletada = $venta->estado === 'completada';
 
-        DB::transaction(function () use ($venta, $validated) {
+        // Cargar relaciones necesarias para poder revertirlas
+        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda', 'usuario', 'moneda']);
+
+        DB::transaction(function () use ($venta, $validated, $eraCompletada) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
             foreach ($venta->detalles as $detalle) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
@@ -2213,15 +2226,26 @@ class VentaController extends Controller
             }
 
             $venta->update([
-                'estado' => 'cancelada',
+                'estado' => $eraCompletada ? 'devuelta' : 'cancelada',
                 'motivo_anulacion' => $validated['motivo_anulacion'],
                 'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
             ]);
         });
 
+        // Notificar por Telegram solo cuando es una Devolución real (venta que ya
+        // había movido dinero de verdad). Anular una venta pendiente no lo hace.
+        if ($eraCompletada) {
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new VentaDevueltaNotification($venta));
+            } catch (\Exception $e) {
+                \Log::error('Error enviando notificación de devolución de venta: '.$e->getMessage());
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Venta anulada correctamente',
+            'message' => $eraCompletada ? 'Devolución procesada correctamente' : 'Venta anulada correctamente',
         ]);
     }
 

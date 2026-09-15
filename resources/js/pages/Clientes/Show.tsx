@@ -44,6 +44,7 @@ import {
     ShoppingCart,
     TrendingDown,
     TrendingUp,
+    Undo2,
     User,
     Users,
     Wallet,
@@ -428,8 +429,8 @@ const TablaRemesas = ({
                             <TableCell colSpan={4} className="text-muted-foreground py-10 text-center">
                                 <div className="flex flex-col items-center gap-2">
                                     <Send size={32} className="opacity-40" />
-                                    <p className="font-medium">Sin remesas registradas</p>
-                                    <p className="text-xs">Las remesas donde participe este cliente (entrada o salida) aparecerán aquí</p>
+                                    <p className="font-medium">Sin Operaciones Múltiples registradas</p>
+                                    <p className="text-xs">Las Operaciones Múltiples donde participe este cliente (entrada o salida) aparecerán aquí</p>
                                 </div>
                             </TableCell>
                         </TableRow>
@@ -456,6 +457,7 @@ const TablaVentas = ({
             case 'completada': return 'bg-green-100 text-green-800 border-green-200';
             case 'pendiente': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
             case 'cancelada': return 'bg-red-100 text-red-800 border-red-200';
+            case 'devuelta': return 'bg-orange-100 text-orange-800 border-orange-200';
             default: return 'bg-gray-100 text-gray-800 border-gray-200';
         }
     };
@@ -464,6 +466,7 @@ const TablaVentas = ({
             case 'completada': return CheckCircle;
             case 'pendiente': return AlertCircle;
             case 'cancelada': return AlertCircle;
+            case 'devuelta': return Undo2;
             default: return History;
         }
     };
@@ -653,6 +656,7 @@ const TablaPagosRecibidos = ({
             case 'completada': return 'bg-green-100 text-green-800 border-green-200';
             case 'pendiente': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
             case 'cancelada': return 'bg-red-100 text-red-800 border-red-200';
+            case 'devuelta': return 'bg-orange-100 text-orange-800 border-orange-200';
             default: return 'bg-gray-100 text-gray-800 border-gray-200';
         }
     };
@@ -1159,7 +1163,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                     {puedeVerRemesas && (
                                         <TabsTrigger value="remesas" className="flex items-center gap-1.5">
                                             <Send size={13} />
-                                            Remesas
+                                            Operaciones Múltiples
                                             {metricas.totalRemesas > 0 && (
                                                 <Badge variant="secondary" className="h-4 min-w-[18px] px-1 text-[10px]">
                                                     {metricas.totalRemesas}

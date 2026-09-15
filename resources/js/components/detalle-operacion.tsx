@@ -57,8 +57,9 @@ export interface DetalleVenta {
         fecha: string;
         almacen: string | null;
         atendido_por: string | null;
+        estado: string;
     };
-    // Solo presente cuando la venta terminó anulada (estado === 'cancelada').
+    // Solo presente cuando la venta terminó anulada o devuelta (estado === 'cancelada' | 'devuelta').
     anulacion: {
         motivo: string | null;
         detalle: string | null;
@@ -266,12 +267,12 @@ export const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) =>
             )}
         </div>
 
-        {/* Anulación — solo presente cuando la venta terminó cancelada */}
+        {/* Anulación — solo presente cuando la venta terminó cancelada o devuelta */}
         {detalle.anulacion && (
             <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10">
                 <CardHeader className="pb-2">
                     <CardTitle className="flex items-center gap-1.5 text-xs font-semibold text-red-700 uppercase dark:text-red-300">
-                        <AlertTriangle className="h-3.5 w-3.5" /> Venta Anulada
+                        <AlertTriangle className="h-3.5 w-3.5" /> {detalle.info_general.estado === 'devuelta' ? 'Venta Devuelta' : 'Venta Anulada'}
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1 text-xs">
@@ -580,7 +581,7 @@ export const DetalleRemesaExpandido = ({ detalle, usuario }: { detalle: DetalleR
             )}
         </div>
 
-        {detalle.anulacion && <AnulacionCard anulacion={detalle.anulacion} titulo="Remesa Anulada" />}
+        {detalle.anulacion && <AnulacionCard anulacion={detalle.anulacion} titulo="Operación Múltiple Anulada" />}
 
         {/* Entrada, Salida y Mensajero (si existió) — 3 patas independientes, sin cuadre entre montos. */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

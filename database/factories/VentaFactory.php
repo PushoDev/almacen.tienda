@@ -42,6 +42,14 @@ class VentaFactory extends Factory
         ]);
     }
 
+    public function devuelta(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'estado' => 'devuelta',
+            'motivo_anulacion' => fake()->sentence(),
+        ]);
+    }
+
     public function especial(): static
     {
         return $this->state(fn (array $attributes) => [

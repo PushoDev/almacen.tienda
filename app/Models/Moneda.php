@@ -45,6 +45,9 @@ class Moneda extends Model
         return $query->where('estado', true);
     }
 
+    /**
+     * Scope para moneda principal
+     */
     public function scopePrincipal($query)
     {
         return $query->where('principal', true);

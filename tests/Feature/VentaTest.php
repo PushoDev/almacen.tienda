@@ -702,7 +702,10 @@ test('anularVenta completada revierte stock, saldo de cuenta y comisión (invers
     $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 100]);
     $this->assertDatabaseHas('cuentas', ['id' => $cuentaPago->id, 'saldo_cuenta' => 50000]);
     $this->assertDatabaseHas('cuentas', ['id' => $cuentaComision->id, 'saldo_cuenta' => 5000]);
-    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'cancelada']);
+    // Una venta COMPLETADA que se revierte queda como "devuelta", no "cancelada" —
+    // esa palabra queda reservada para anular una venta que nunca movió dinero
+    // (pendiente). Ver test siguiente.
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'devuelta']);
 });
 
 test('no se puede anular una venta ya anulada', function () {
@@ -710,6 +713,18 @@ test('no se puede anular una venta ya anulada', function () {
     $this->actingAs($admin);
 
     $venta = Venta::factory()->cancelada()->create(['user_id' => $admin->id]);
+
+    $response = $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'otros', 'detalle_anulacion' => 'x']);
+
+    $response->assertStatus(400);
+    $response->assertJson(['success' => false]);
+});
+
+test('no se puede procesar la devolución de una venta ya devuelta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta = Venta::factory()->devuelta()->create(['user_id' => $admin->id]);
 
     $response = $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'otros', 'detalle_anulacion' => 'x']);
 

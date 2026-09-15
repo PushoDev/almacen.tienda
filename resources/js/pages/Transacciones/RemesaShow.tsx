@@ -61,7 +61,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/transacciones',
     },
     {
-        title: 'Detalle de Remesa',
+        title: 'Detalle de Operación Múltiple',
         href: '#',
     },
 ];
@@ -129,7 +129,7 @@ export default function RemesaShow({ remesa, detallesEntrada, detallesSalida, de
 
     useEffect(() => {
         if (flash.success) {
-            sileo.success({ title: 'Remesa registrada', description: flash.success });
+            sileo.success({ title: 'Operación Múltiple registrada', description: flash.success });
         }
         if (flash.error) {
             sileo.error({ title: 'Error', description: flash.error });
@@ -139,12 +139,12 @@ export default function RemesaShow({ remesa, detallesEntrada, detallesSalida, de
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Remesa #${remesa.id}`} />
+            <Head title={`Operación Múltiple #${remesa.id}`} />
             <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall title={`Remesa #${remesa.id}`} description="Detalle completo de la operación de remesa" />
+                    <HeadingSmall title={`Operación Múltiple #${remesa.id}`} description="Detalle completo de la Operación Múltiple" />
                     <Send
                         size={70}
                         color="#d6d3d1"
@@ -158,7 +158,7 @@ export default function RemesaShow({ remesa, detallesEntrada, detallesSalida, de
                     <Alert className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10">
                         <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
                         <AlertDescription className="text-red-800 dark:text-red-300">
-                            <strong>Remesa anulada.</strong> Motivo: {labelMotivoAnulacion(remesa.motivo_anulacion)}
+                            <strong>Operación Múltiple anulada.</strong> Motivo: {labelMotivoAnulacion(remesa.motivo_anulacion)}
                             {remesa.detalle_anulacion && <> — {remesa.detalle_anulacion}</>}
                         </AlertDescription>
                     </Alert>
