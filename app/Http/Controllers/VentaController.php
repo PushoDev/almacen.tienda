@@ -2102,15 +2102,26 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'La venta ya está anulada'], 400);
         }
 
+        if ($venta->estado === 'devuelta') {
+            return response()->json(['success' => false, 'message' => 'La venta ya fue devuelta'], 400);
+        }
+
         $validated = $request->validate([
             'motivo_anulacion' => 'required|in:error_precio,solicitud_cliente,producto_defectuoso,duplicado_venta,error_pedido,otros',
             'detalle_anulacion' => 'nullable|string|max:500|required_if:motivo_anulacion,otros',
         ]);
 
+        // Una venta pendiente nunca movió dinero real — anularla es una simple
+        // cancelación. Una venta completada ya movió stock y dinero de verdad —
+        // revertirla es conceptualmente una Devolución, aunque el mecanismo de
+        // reversión (abajo) sea idéntico. Se decide el estado final ANTES de la
+        // transacción porque dentro de ella $venta->estado ya cambia a 'cancelada'.
+        $eraCompletada = $venta->estado === 'completada';
+
         // Cargar relaciones necesarias para poder revertirlas
         $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda']);
 
-        DB::transaction(function () use ($venta, $validated) {
+        DB::transaction(function () use ($venta, $validated, $eraCompletada) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
             foreach ($venta->detalles as $detalle) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
@@ -2213,7 +2224,7 @@ class VentaController extends Controller
             }
 
             $venta->update([
-                'estado' => 'cancelada',
+                'estado' => $eraCompletada ? 'devuelta' : 'cancelada',
                 'motivo_anulacion' => $validated['motivo_anulacion'],
                 'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
             ]);
@@ -2221,7 +2232,7 @@ class VentaController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Venta anulada correctamente',
+            'message' => $eraCompletada ? 'Devolución procesada correctamente' : 'Venta anulada correctamente',
         ]);
     }
 

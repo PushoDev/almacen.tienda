@@ -86,10 +86,10 @@ class RemesaNotification extends Notification
             'type' => 'remesa',
             'remesa_id' => $this->remesa->id,
             'anulada' => $this->anulada,
-            'title' => $this->anulada ? 'Remesa Anulada' : 'Remesa Registrada',
+            'title' => $this->anulada ? 'Operación Múltiple Anulada' : 'Operación Múltiple Registrada',
             'message' => $this->anulada
-                ? "Remesa #{$this->remesa->id} anulada por {$this->remesa->user->name}"
-                : "Remesa #{$this->remesa->id} registrada por {$this->remesa->user->name}",
+                ? "Operación Múltiple #{$this->remesa->id} anulada por {$this->remesa->user->name}"
+                : "Operación Múltiple #{$this->remesa->id} registrada por {$this->remesa->user->name}",
             'icon' => $this->anulada ? 'ban' : 'send',
             'color' => $this->anulada ? 'red' : 'purple',
         ];

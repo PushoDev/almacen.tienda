@@ -67,7 +67,7 @@ export default function Movimientos({ cuentasOrigen, clientes, userRole }: Props
                     <div>
                         <CardTitle className="text-white">Movimientos Financieros</CardTitle>
                         <CardDescription className="text-blue-100">
-                            Registre entradas (Ingreso), salidas (Gasto), movimientos entre sus entidades (Transferencia){puedeVerRemesa && ' o remesas (Remesa)'}.
+                            Registre entradas (Ingreso), salidas (Gasto), movimientos entre sus entidades (Transferencia){puedeVerRemesa && ' u operaciones múltiples (Operación Múltiple)'}.
                         </CardDescription>
                     </div>
                 </div>
@@ -90,7 +90,7 @@ export default function Movimientos({ cuentasOrigen, clientes, userRole }: Props
                         {puedeVerRemesa && (
                             <TabsTrigger value="remesa" className="flex items-center gap-2">
                                 <Send className="h-4 w-4" />
-                                Remesa
+                                Operación Múltiple
                             </TabsTrigger>
                         )}
                     </TabsList>

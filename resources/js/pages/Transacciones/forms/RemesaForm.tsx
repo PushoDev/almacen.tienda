@@ -84,7 +84,7 @@ export default function RemesaForm() {
         e.preventDefault();
         post(route('transacciones.remesa.store'), {
             onError: (err) => {
-                sileo.error({ title: 'Error al registrar la remesa', description: err.message || 'Inténtalo nuevamente' });
+                sileo.error({ title: 'Error al registrar la Operación Múltiple', description: err.message || 'Inténtalo nuevamente' });
             },
         });
     };
@@ -247,7 +247,7 @@ export default function RemesaForm() {
                 disabled={processing || !data.entrada_id || !data.entrada_monto || !data.salida_id || !data.salida_monto}
                 className="w-full"
             >
-                {processing ? 'Procesando...' : 'Registrar Remesa'}
+                {processing ? 'Procesando...' : 'Registrar Operación Múltiple'}
             </Button>
         </form>
     );

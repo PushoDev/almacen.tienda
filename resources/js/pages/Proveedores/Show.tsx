@@ -309,7 +309,7 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                         {puedeVerRemesas && (
                             <TabsTrigger value="remesas" className="flex items-center gap-2">
                                 <Send className="h-4 w-4" />
-                                Remesas ({remesas.length})
+                                Operaciones Múltiples ({remesas.length})
                             </TabsTrigger>
                         )}
                     </TabsList>
@@ -583,9 +583,9 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                             <Send className="h-5 w-5" />
                                         </div>
                                         <div>
-                                            <CardTitle className="text-white">Historial de Remesas</CardTitle>
+                                            <CardTitle className="text-white">Historial de Operaciones Múltiples</CardTitle>
                                             <CardDescription className="text-sky-100">
-                                                Remesas donde este proveedor participó como entrada o salida
+                                                Operaciones Múltiples donde este proveedor participó como entrada o salida
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -662,7 +662,7 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
                                     ) : (
                                         <div className="py-8 text-center">
                                             <Send className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-                                            <p className="text-muted-foreground">No hay remesas registradas para este proveedor</p>
+                                            <p className="text-muted-foreground">No hay Operaciones Múltiples registradas para este proveedor</p>
                                         </div>
                                     )}
                                 </CardContent>

@@ -38,46 +38,16 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Gestión de Monedas',
-        href: '/monedas',
-        icon: HandCoins,
-        roles: ['admin'],
-    },
-    {
-        title: 'Distribuicion de Costos',
-        href: '/distribucion-costos',
-        icon: DollarSignIcon,
-        roles: ['admin'],
-    },
-    {
-        title: 'Almacenes o Tiendas',
-        href: '/almacenes',
-        icon: StoreIcon,
-        roles: ['admin', 'moderador'],
-    },
-    {
-        title: 'Mis Puntos de Ventas',
-        href: '/almacenes',
-        icon: StoreIcon,
-        roles: ['vendedor'],
-    },
-    {
         title: 'Movimientos de Inventario',
         href: '/movimientos',
         icon: Repeat,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Categorias',
-        href: '/categorias',
-        icon: StoreIcon,
-        roles: ['admin', 'moderador'],
-    },
-    {
-        title: 'Productos Generales',
-        href: '/listado-productos',
-        icon: Package,
-        roles: ['admin', 'moderador', 'vendedor'],
+        title: 'Distribuicion de Costos',
+        href: '/distribucion-costos',
+        icon: DollarSignIcon,
+        roles: ['admin'],
     },
     {
         title: 'Inventario Disponible',
@@ -92,10 +62,23 @@ const allNavItems: NavItem[] = [
         roles: ['vendedor'],
     },
     {
-        title: 'Proveedores',
-        href: '/proveedores',
-        icon: ShoppingCart,
+        title: 'Productos Generales',
+        href: '/listado-productos',
+        icon: Package,
+        roles: ['admin', 'moderador', 'vendedor'],
+    },
+
+    {
+        title: 'Almacenes o Tiendas',
+        href: '/almacenes',
+        icon: StoreIcon,
         roles: ['admin', 'moderador'],
+    },
+    {
+        title: 'Mis Puntos de Ventas',
+        href: '/almacenes',
+        icon: StoreIcon,
+        roles: ['vendedor'],
     },
     {
         title: 'Cuentas Monetarias',
@@ -104,16 +87,28 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
+        title: 'Proveedores',
+        href: '/proveedores',
+        icon: ShoppingCart,
+        roles: ['admin', 'moderador'],
+    },
+    {
         title: 'Clientes Asociados',
         href: '/clientes',
         icon: Users,
         roles: ['admin', 'moderador'],
     },
     {
-        title: 'Empleados & Usuarios',
-        href: '/empleados',
-        icon: Contact,
+        title: 'Gestión de Monedas',
+        href: '/monedas',
+        icon: HandCoins,
         roles: ['admin'],
+    },
+    {
+        title: 'Categorias',
+        href: '/categorias',
+        icon: StoreIcon,
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Reportes Generales',
@@ -131,6 +126,12 @@ const allNavItems: NavItem[] = [
         title: 'Calendario de Historial',
         href: '/calendario',
         icon: CalendarIcon,
+        roles: ['admin'],
+    },
+    {
+        title: 'Empleados & Usuarios',
+        href: '/empleados',
+        icon: Contact,
         roles: ['admin'],
     },
 ];

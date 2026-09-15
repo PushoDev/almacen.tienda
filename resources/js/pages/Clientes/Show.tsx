@@ -428,8 +428,8 @@ const TablaRemesas = ({
                             <TableCell colSpan={4} className="text-muted-foreground py-10 text-center">
                                 <div className="flex flex-col items-center gap-2">
                                     <Send size={32} className="opacity-40" />
-                                    <p className="font-medium">Sin remesas registradas</p>
-                                    <p className="text-xs">Las remesas donde participe este cliente (entrada o salida) aparecerán aquí</p>
+                                    <p className="font-medium">Sin Operaciones Múltiples registradas</p>
+                                    <p className="text-xs">Las Operaciones Múltiples donde participe este cliente (entrada o salida) aparecerán aquí</p>
                                 </div>
                             </TableCell>
                         </TableRow>
@@ -1159,7 +1159,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                     {puedeVerRemesas && (
                                         <TabsTrigger value="remesas" className="flex items-center gap-1.5">
                                             <Send size={13} />
-                                            Remesas
+                                            Operaciones Múltiples
                                             {metricas.totalRemesas > 0 && (
                                                 <Badge variant="secondary" className="h-4 min-w-[18px] px-1 text-[10px]">
                                                     {metricas.totalRemesas}

@@ -580,7 +580,7 @@ export const DetalleRemesaExpandido = ({ detalle, usuario }: { detalle: DetalleR
             )}
         </div>
 
-        {detalle.anulacion && <AnulacionCard anulacion={detalle.anulacion} titulo="Remesa Anulada" />}
+        {detalle.anulacion && <AnulacionCard anulacion={detalle.anulacion} titulo="Operación Múltiple Anulada" />}
 
         {/* Entrada, Salida y Mensajero (si existió) — 3 patas independientes, sin cuadre entre montos. */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

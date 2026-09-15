@@ -667,9 +667,9 @@ class CuentaController extends Controller
             'r.id as referencia_id',
             'r.fecha_operacion as fecha',
             DB::raw("CASE
-                WHEN r.entrada_cuenta_id = {$cuentaId} THEN 'Remesa (Entrada)'
-                WHEN r.salida_cuenta_id = {$cuentaId} THEN 'Remesa (Salida)'
-                ELSE 'Remesa (Mensajero)'
+                WHEN r.entrada_cuenta_id = {$cuentaId} THEN 'Operación Múltiple (Entrada)'
+                WHEN r.salida_cuenta_id = {$cuentaId} THEN 'Operación Múltiple (Salida)'
+                ELSE 'Operación Múltiple (Mensajero)'
             END as tipo"),
             DB::raw("CASE
                 WHEN r.entrada_cuenta_id = {$cuentaId} THEN r.entrada_monto

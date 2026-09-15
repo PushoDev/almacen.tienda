@@ -235,7 +235,7 @@ interface Venta {
     pagos: Pago[];
     total_pagado: number;
     restante: number;
-    estado: 'pendiente' | 'completada' | 'cancelada';
+    estado: 'pendiente' | 'completada' | 'cancelada' | 'devuelta';
     moneda_principal: MonedaPrincipal | null;
     tasa_cambio_principal: number;
     tasa_aplicada_venta: number | null;
@@ -790,6 +790,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const isVentaPendiente = currentVenta.estado === 'pendiente';
     const isVentaCompletada = currentVenta.estado === 'completada';
     const isVentaCancelada = currentVenta.estado === 'cancelada';
+    const isVentaDevuelta = currentVenta.estado === 'devuelta';
     const isVentaSolicitudEspecial = currentVenta.estado === 'solicitud_especial';
     const isVentaRechazada = currentVenta.estado === 'rechazada';
 
@@ -826,6 +827,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 return { color: 'bg-green-500', text: 'COMPLETADA', textColor: 'text-green-600' };
             case 'cancelada':
                 return { color: 'bg-red-500', text: 'ANULADA', textColor: 'text-red-600' };
+            case 'devuelta':
+                return { color: 'bg-orange-500', text: 'DEVUELTA', textColor: 'text-orange-600' };
             case 'solicitud_especial':
                 return { color: 'bg-amber-500', text: 'SOLICITUD ESPECIAL', textColor: 'text-amber-600' };
             case 'rechazada':
@@ -1130,6 +1133,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             sileo.warning({ title: 'Debe describir el motivo en el campo "Otros"' });
             return;
         }
+        const esDevolucion = isVentaCompletada;
         setIsCancelling(true);
         try {
             const { data } = await axios.post(route('ventas.anular', currentVenta.id), {
@@ -1137,10 +1141,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
             });
             if (data.success) {
-                sileo.success({ title: data.message || 'Venta anulada correctamente' });
+                sileo.success({ title: data.message || (esDevolucion ? 'Devolución procesada correctamente' : 'Venta anulada correctamente') });
                 setCurrentVenta((prev) => ({
                     ...prev,
-                    estado: 'cancelada',
+                    estado: esDevolucion ? 'devuelta' : 'cancelada',
                     motivo_anulacion: motivoAnulacion,
                     detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
                 }));
@@ -1148,13 +1152,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 setMotivoAnulacion('');
                 setDetalleAnulacion('');
             } else {
-                sileo.error({ title: 'No se pudo anular la venta', description: data.message });
+                sileo.error({ title: esDevolucion ? 'No se pudo procesar la devolución' : 'No se pudo anular la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
                 sileo.error({
-                    title: 'No se pudo anular la venta',
-                    description: error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.',
+                    title: esDevolucion ? 'No se pudo procesar la devolución' : 'No se pudo anular la venta',
+                    description: error.response?.data?.message || error.response?.data?.error || (esDevolucion ? 'Ocurrió un error al intentar procesar la devolución.' : 'Ocurrió un error al intentar anular la venta.'),
                 });
             } else {
                 sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
@@ -2283,17 +2287,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         </Button>
                     )}
 
-                    {/* Anular venta */}
-                    {isVentaPendiente && (
+                    {/* Anular venta (pendiente) / Devolución (completada) — mismo mecanismo de
+                        reversión por debajo, ver anularVenta() en el backend. */}
+                    {(isVentaPendiente || isVentaCompletada) && (
                         <>
                             <Button
                                 variant="destructive"
                                 className="flex cursor-pointer items-center gap-2"
-                                disabled={isVentaCancelada || isCancelling}
+                                disabled={isVentaCancelada || isVentaDevuelta || isCancelling}
                                 onClick={() => setIsAnularDialogOpen(true)}
                             >
                                 <XCircle size={16} />
-                                {isVentaCancelada ? 'Anulada' : 'Anular Venta'}
+                                {isVentaCancelada ? 'Anulada' : isVentaDevuelta ? 'Devuelta' : isVentaCompletada ? 'Devolución' : 'Anular Venta'}
                             </Button>
 
                             <Dialog
@@ -2310,17 +2315,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             >
                                 <DialogContent className="sm:max-w-md">
                                     <DialogHeader>
-                                        <DialogTitle className="text-red-600">Anular Venta #{currentVenta.id}</DialogTitle>
+                                        <DialogTitle className="text-red-600">
+                                            {isVentaCompletada ? `Devolución - Venta #${currentVenta.id}` : `Anular Venta #${currentVenta.id}`}
+                                        </DialogTitle>
                                         <DialogDescription>
-                                            Esta acción es <strong>irreversible</strong>. Se revertirá el stock reservado.
-                                            Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.
+                                            Esta acción es <strong>irreversible</strong>.{' '}
+                                            {isVentaCompletada
+                                                ? 'Se revertirá el stock, el saldo de las cuentas, la comisión del vendedor, el gestor y el mensajero — exactamente como se registraron cuando se aprobó esta venta.'
+                                                : 'Se revertirá el stock reservado. Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.'}
                                         </DialogDescription>
                                     </DialogHeader>
 
                                     <div className="space-y-4 py-2">
                                         <div className="space-y-1">
                                             <Label htmlFor="motivo-anulacion">
-                                                Motivo de anulación <span className="text-red-500">*</span>
+                                                {isVentaCompletada ? 'Motivo de la devolución' : 'Motivo de anulación'} <span className="text-red-500">*</span>
                                             </Label>
                                             <Select
                                                 value={motivoAnulacion}
@@ -2379,10 +2388,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             {isCancelling ? (
                                                 <div className="flex items-center gap-2">
                                                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                                    Anulando...
+                                                    {isVentaCompletada ? 'Procesando devolución...' : 'Anulando...'}
                                                 </div>
                                             ) : (
-                                                'Confirmar Anulación'
+                                                isVentaCompletada ? 'Confirmar Devolución' : 'Confirmar Anulación'
                                             )}
                                         </Button>
                                     </DialogFooter>
@@ -3640,10 +3649,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </div>
                             )}
 
-                            {isVentaCancelada && (
+                            {(isVentaCancelada || isVentaDevuelta) && (
                                 <div className="mt-4 space-y-1 rounded-md bg-red-50 p-3">
                                     <p className="text-sm text-red-800">
-                                        <strong>Venta Anulada:</strong> Esta venta fue cancelada y el stock fue revertido.
+                                        <strong>{isVentaDevuelta ? 'Venta Devuelta:' : 'Venta Anulada:'}</strong>{' '}
+                                        {isVentaDevuelta
+                                            ? 'Esta venta fue devuelta y el stock, las cuentas y la comisión fueron revertidos.'
+                                            : 'Esta venta fue cancelada y el stock fue revertido.'}
                                     </p>
                                     {currentVenta.motivo_anulacion && (
                                         <p className="text-sm text-red-700">
