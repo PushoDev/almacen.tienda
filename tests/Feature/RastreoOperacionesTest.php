@@ -10,6 +10,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\PagoVenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
+use App\Models\Remesa;
 use App\Models\TurnoVendedor;
 use App\Models\User;
 use App\Models\Venta;
@@ -731,9 +732,10 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'Ingreso' => 2,
         'Transferencia' => 1,
         'Ajuste' => 1,
-        // Admin ve la clave Compra aunque no haya ninguna — a diferencia de vendedor, que
-        // no la ve en absoluto (ver test de acceso de Compra más abajo).
+        // Admin ve las claves Compra/Remesa aunque no haya ninguna — a diferencia de
+        // vendedor, que no las ve en absoluto (ver tests de acceso más abajo).
         'Compra' => 0,
+        'Remesa' => 0,
     ]);
 
     // Filtrar por tipo=Venta no debe "colapsar" el conteo de los otros tipos a cero —
@@ -746,6 +748,7 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'Transferencia' => 1,
         'Ajuste' => 1,
         'Compra' => 0,
+        'Remesa' => 0,
     ]);
     expect(collect($responseFiltrada->json('props.operaciones.data')))->toHaveCount(3);
 });
@@ -1147,6 +1150,158 @@ test('cliente_direccion=envia solo encuentra una Compra financiada por ese clien
 
     expect($operaciones->contains(fn ($op) => $op['id'] === $compra->id && $op['tipo'] === 'Compra'))->toBeTrue();
     expect($operaciones->pluck('tipo'))->not->toContain('Venta');
+});
+
+test('el reporte incluye una Remesa (Operación Múltiple) en el listado, con el detalle de sus 3 patas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaEntrada = crearCuentaEnMoneda(crearMonedaUsd());
+    $cuentaSalida = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $remesa = Remesa::create([
+        'user_id' => $admin->id,
+        'entrada_tipo' => 'cuenta',
+        'entrada_cuenta_id' => $cuentaEntrada->id,
+        'entrada_monto' => 100,
+        'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 500,
+        'entrada_saldo_posterior' => 600,
+        'salida_tipo' => 'cuenta',
+        'salida_cuenta_id' => $cuentaSalida->id,
+        'salida_monto' => 95,
+        'salida_moneda' => 'USD',
+        'salida_saldo_anterior' => 300,
+        'salida_saldo_posterior' => 205,
+        'notas' => 'Remesa de prueba',
+        'fecha_operacion' => now(),
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $remesa->id);
+
+    expect($fila)->not->toBeNull();
+    expect($fila['tipo'])->toBe('Remesa');
+    expect($fila['referencia'])->toBe("Operación Múltiple #{$remesa->id}");
+    expect($fila['descripcion'])->toBe('Remesa de prueba');
+    expect($fila['detalle_venta'])->toBeNull();
+    expect($fila['detalle_compra'])->toBeNull();
+    expect($fila['detalle_movimiento'])->toBeNull();
+    expect($fila['detalle_remesa'])->not->toBeNull();
+
+    $movimientos = collect($fila['detalle_remesa']['movimientos_saldo']);
+    $entrada = $movimientos->firstWhere('etiqueta', 'Entrada');
+    expect($entrada['nombre'])->toBe($cuentaEntrada->nombre_cuenta);
+    expect($entrada['saldo_anterior'])->toEqual(500.0);
+    expect($entrada['saldo_posterior'])->toEqual(600.0);
+
+    $salida = $movimientos->firstWhere('etiqueta', 'Salida');
+    expect($salida['nombre'])->toBe($cuentaSalida->nombre_cuenta);
+    expect($salida['saldo_anterior'])->toEqual(300.0);
+    expect($salida['saldo_posterior'])->toEqual(205.0);
+});
+
+test('el filtro por tipo=Remesa aísla la Operación Múltiple del resto del listado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    Venta::factory()->create();
+
+    Remesa::create([
+        'user_id' => $admin->id,
+        'entrada_tipo' => 'cuenta',
+        'entrada_cuenta_id' => $cuenta->id,
+        'entrada_monto' => 100,
+        'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 0,
+        'entrada_saldo_posterior' => 100,
+        'salida_tipo' => 'cuenta',
+        'salida_cuenta_id' => $cuenta->id,
+        'salida_monto' => 100,
+        'salida_moneda' => 'USD',
+        'salida_saldo_anterior' => 100,
+        'salida_saldo_posterior' => 0,
+        'fecha_operacion' => now(),
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['tipo' => 'Remesa']), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(1);
+    expect($operaciones->first()['tipo'])->toBe('Remesa');
+});
+
+test('Remesa es visible solo para admin/moderador — vendedor no la ve ni puede forzarla con ?tipo=Remesa', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    Remesa::create([
+        'user_id' => $vendedor->id,
+        'entrada_tipo' => 'cuenta',
+        'entrada_cuenta_id' => $cuenta->id,
+        'entrada_monto' => 100,
+        'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 0,
+        'entrada_saldo_posterior' => 100,
+        'salida_tipo' => 'cuenta',
+        'salida_cuenta_id' => $cuenta->id,
+        'salida_monto' => 100,
+        'salida_moneda' => 'USD',
+        'salida_saldo_anterior' => 100,
+        'salida_saldo_posterior' => 0,
+        'fecha_operacion' => now(),
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    expect(collect($response->json('props.operaciones.data')))->toHaveCount(0);
+    expect($response->json('props.conteoPorTipo'))->not->toHaveKey('Remesa');
+
+    $responseForzada = $this->get(route('reportes.rastreo_operaciones', ['tipo' => 'Remesa']), ['X-Inertia' => 'true']);
+    $responseForzada->assertOk();
+    expect(collect($responseForzada->json('props.operaciones.data')))->toHaveCount(0);
+});
+
+test('un moderador sí ve las Remesas en el reporte, igual que admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $remesa = Remesa::create([
+        'user_id' => $moderador->id,
+        'entrada_tipo' => 'cuenta',
+        'entrada_cuenta_id' => $cuenta->id,
+        'entrada_monto' => 100,
+        'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 0,
+        'entrada_saldo_posterior' => 100,
+        'salida_tipo' => 'cuenta',
+        'salida_cuenta_id' => $cuenta->id,
+        'salida_monto' => 100,
+        'salida_moneda' => 'USD',
+        'salida_saldo_anterior' => 100,
+        'salida_saldo_posterior' => 0,
+        'fecha_operacion' => now(),
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones->pluck('id'))->toContain($remesa->id);
+    expect($response->json('props.conteoPorTipo.Remesa'))->toBe(1);
 });
 
 test('proveedor_direccion=envia siempre da cero resultados, sin importar el tipo (un proveedor nunca "envía")', function () {

@@ -4,6 +4,8 @@ import {
     DetalleCompraExpandido,
     DetalleMovimiento,
     DetalleMovimientoExpandido,
+    DetalleRemesa,
+    DetalleRemesaExpandido,
     DetalleVenta,
     DetalleVentaExpandido,
     fmt,
@@ -40,7 +42,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, Shuffle, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -69,6 +71,7 @@ interface Operacion {
     detalle_venta: DetalleVenta | null;
     detalle_movimiento: DetalleMovimiento | null;
     detalle_compra: DetalleCompra | null;
+    detalle_remesa: DetalleRemesa | null;
 }
 
 // Forma mínima que manda el backend para los combobox de filtro (id + nombre) — no hace
@@ -107,15 +110,20 @@ interface RastreoOperacionesPageProps {
         cuenta_direccion?: Direccion;
     };
     puedeVerCosto: boolean;
+    // Mismo valor que puedeVerCosto hoy (ambos son admin/moderador), con su propio nombre
+    // porque Remesa no es dato de costo — es el mismo gate que ya usan Cuentas/Clientes/
+    // Proveedores Show para su historial de Remesas.
+    puedeVerRemesas: boolean;
     conteoPorTipo: {
         Venta: number;
         Gasto: number;
         Ingreso: number;
         Transferencia: number;
         Ajuste: number;
-        // Ausente por completo para vendedor (Compra es admin/moderador-only) — nunca 0
-        // implícito, la clave simplemente no viene en el payload.
+        // Ausentes por completo para vendedor (Compra/Remesa son admin/moderador-only) —
+        // nunca 0 implícito, la clave simplemente no viene en el payload.
         Compra?: number;
+        Remesa?: number;
     };
 }
 
@@ -135,6 +143,8 @@ const colorTipo = (tipo: string) => {
             return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300';
         case 'Ajuste':
             return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300';
+        case 'Remesa':
+            return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300';
         default:
             return 'border-border bg-muted text-foreground';
     }
@@ -202,6 +212,28 @@ const montoPendienteCompra = (op: Operacion) =>
 // no hace falta badges acá, un nombre y el total alcanzan.
 const cuentaRecibeCompra = (op: Operacion) => op.detalle_compra?.proveedor ?? op.detalle_compra?.cliente ?? '—';
 
+// Remesa ("Operación Múltiple"): Salida = pata que envía (dinero SALE de esa entidad,
+// pago al destinatario final) → columna "Cuenta Envía". Entrada = pata que recibe (dinero
+// ENTRA a esa entidad) → columna "Cuenta que Recibe" — ver comentario en
+// RastreoOperacionesController::construirSubqueryRemesa(). El monto de cada pata se deriva
+// del propio saldo_anterior/saldo_posterior que ya trae movimientos_saldo (sin pedirle un
+// campo nuevo a detalleRemesa(), que es compartido con Cuentas/Clientes/Proveedores Show).
+const remesaLeg = (op: Operacion, etiqueta: 'Entrada' | 'Salida') => op.detalle_remesa?.movimientos_saldo.find((m) => m.etiqueta === etiqueta);
+
+const cuentaEnviaRemesa = (op: Operacion) => remesaLeg(op, 'Salida')?.nombre ?? '—';
+
+const montoEnviaRemesa = (op: Operacion) => {
+    const leg = remesaLeg(op, 'Salida');
+    return leg ? formatMonto(Math.abs((leg.saldo_posterior ?? 0) - (leg.saldo_anterior ?? 0)), leg.moneda ?? op.moneda) : '—';
+};
+
+const cuentaRecibeRemesa = (op: Operacion) => remesaLeg(op, 'Entrada')?.nombre ?? '—';
+
+const montoRecibeRemesa = (op: Operacion) => {
+    const leg = remesaLeg(op, 'Entrada');
+    return leg ? formatMonto(Math.abs((leg.saldo_posterior ?? 0) - (leg.saldo_anterior ?? 0)), leg.moneda ?? op.moneda) : '—';
+};
+
 // Widgets informativos sobre el filtro: mismo orden fijo y familia de color que colorTipo()
 // arriba, solo que como ícono en vez de texto (el valor grande se queda en tinta neutra —
 // el color identifica la categoría, no decora el número).
@@ -212,6 +244,7 @@ const resumenTipos = [
     { tipo: 'Transferencia' as const, label: 'Transferencias', icon: ArrowLeftRight, iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' },
     { tipo: 'Compra' as const, label: 'Compras', icon: PackagePlus, iconClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400' },
     { tipo: 'Ajuste' as const, label: 'Ajustes', icon: Edit3, iconClass: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400' },
+    { tipo: 'Remesa' as const, label: 'Operaciones Múltiples', icon: Shuffle, iconClass: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-400' },
 ];
 
 // ─── Componente: ComboboxFiltro (multiselect con chips, para Cliente/Proveedor/Cuenta) ──
@@ -293,6 +326,7 @@ export default function RastreoOperacionesPage({
     cuentas,
     filtros,
     puedeVerCosto,
+    puedeVerRemesas,
     conteoPorTipo,
 }: RastreoOperacionesPageProps) {
     const [fecha, setFecha] = useState(filtros.fecha || '');
@@ -371,6 +405,9 @@ export default function RastreoOperacionesPage({
 
             return pagos.length > 0 ? pagos.map((p) => p.origen).join(', ') : '—';
         }
+        if (op.tipo === 'Remesa') {
+            return cuentaEnviaRemesa(op);
+        }
 
         return cuentaEnvia(op);
     };
@@ -383,6 +420,9 @@ export default function RastreoOperacionesPage({
 
             return partes.length > 0 ? partes.join(', ') : '—';
         }
+        if (op.tipo === 'Remesa') {
+            return montoEnviaRemesa(op);
+        }
 
         return montoEnvia(op);
     };
@@ -393,6 +433,9 @@ export default function RastreoOperacionesPage({
         }
         if (op.tipo === 'Compra') {
             return cuentaRecibeCompra(op);
+        }
+        if (op.tipo === 'Remesa') {
+            return cuentaRecibeRemesa(op);
         }
 
         return cuentaRecibeMovimiento(op);
@@ -406,6 +449,9 @@ export default function RastreoOperacionesPage({
         }
         if (op.tipo === 'Compra') {
             return formatMonto(op.monto, op.moneda);
+        }
+        if (op.tipo === 'Remesa') {
+            return montoRecibeRemesa(op);
         }
 
         return montoRecibeMovimiento(op);
@@ -476,7 +522,7 @@ export default function RastreoOperacionesPage({
                         title="Auditoría General de Operaciones"
                         description={
                             puedeVerCosto
-                                ? 'Ventas, Gastos, Ingresos, Transferencias y Compras del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
+                                ? 'Ventas, Gastos, Ingresos, Transferencias, Compras y Operaciones Múltiples del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
                                 : 'Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
                         }
                     />
@@ -493,20 +539,22 @@ export default function RastreoOperacionesPage({
                     admin/moderador — conteoPorTipo.Compra ni viene en el payload para
                     vendedor (ver RastreoOperacionesController), mismo gate que el resto de
                     los datos de Compra en este reporte. */}
-                <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${puedeVerCosto ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
-                    {resumenTipos.filter(({ tipo }) => tipo !== 'Compra' || puedeVerCosto).map(({ tipo, label, icon: Icon, iconClass }) => (
-                        <Card key={tipo}>
-                            <CardContent className="flex items-center gap-3 p-4">
-                                <div className={`rounded-lg p-2 ${iconClass}`}>
-                                    <Icon className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</p>
-                                    <p className="text-2xl font-semibold">{conteoPorTipo[tipo]}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${puedeVerCosto ? 'lg:grid-cols-7' : 'lg:grid-cols-5'}`}>
+                    {resumenTipos
+                        .filter(({ tipo }) => (tipo !== 'Compra' || puedeVerCosto) && (tipo !== 'Remesa' || puedeVerRemesas))
+                        .map(({ tipo, label, icon: Icon, iconClass }) => (
+                            <Card key={tipo}>
+                                <CardContent className="flex items-center gap-3 p-4">
+                                    <div className={`rounded-lg p-2 ${iconClass}`}>
+                                        <Icon className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</p>
+                                        <p className="text-2xl font-semibold">{conteoPorTipo[tipo]}</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))}
                 </div>
 
                 {/* Filtros */}
@@ -549,6 +597,7 @@ export default function RastreoOperacionesPage({
                                         <SelectItem value="Transferencia">Transferencia</SelectItem>
                                         <SelectItem value="Ajuste">Ajuste</SelectItem>
                                         {puedeVerCosto && <SelectItem value="Compra">Compra</SelectItem>}
+                                        {puedeVerRemesas && <SelectItem value="Remesa">Operación Múltiple</SelectItem>}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -631,7 +680,8 @@ export default function RastreoOperacionesPage({
                                     ) : (
                                         ops.map((op, idx) => {
                                             const rowKey = `${op.tipo}-${op.id}-${idx}`;
-                                            const esColapsable = Boolean(op.detalle_venta) || Boolean(op.detalle_movimiento) || Boolean(op.detalle_compra);
+                                            const esColapsable =
+                                                Boolean(op.detalle_venta) || Boolean(op.detalle_movimiento) || Boolean(op.detalle_compra) || Boolean(op.detalle_remesa);
                                             const expandida = expandedRow === rowKey;
                                             return (
                                                 <React.Fragment key={rowKey}>
@@ -666,6 +716,8 @@ export default function RastreoOperacionesPage({
                                                                           ))
                                                                         : '—'}
                                                                 </div>
+                                                            ) : op.tipo === 'Remesa' ? (
+                                                                cuentaEnviaRemesa(op)
                                                             ) : (
                                                                 cuentaEnvia(op)
                                                             )}
@@ -688,6 +740,8 @@ export default function RastreoOperacionesPage({
                                                                     )}
                                                                     {pagosCompraConOrigen(op).length === 0 && montoPendienteCompra(op) === 0 && '—'}
                                                                 </div>
+                                                            ) : op.tipo === 'Remesa' ? (
+                                                                montoEnviaRemesa(op)
                                                             ) : (
                                                                 montoEnvia(op)
                                                             )}
@@ -703,6 +757,8 @@ export default function RastreoOperacionesPage({
                                                                 </div>
                                                             ) : op.tipo === 'Compra' ? (
                                                                 cuentaRecibeCompra(op)
+                                                            ) : op.tipo === 'Remesa' ? (
+                                                                cuentaRecibeRemesa(op)
                                                             ) : (
                                                                 cuentaRecibeMovimiento(op)
                                                             )}
@@ -731,6 +787,8 @@ export default function RastreoOperacionesPage({
                                                                 >
                                                                     {formatMonto(op.monto, op.moneda)}
                                                                 </span>
+                                                            ) : op.tipo === 'Remesa' ? (
+                                                                montoRecibeRemesa(op)
                                                             ) : (
                                                                 montoRecibeMovimiento(op)
                                                             )}
@@ -771,6 +829,8 @@ export default function RastreoOperacionesPage({
                                                                         monto={parseFloat(op.monto.toString())}
                                                                         usuario={op.usuario}
                                                                     />
+                                                                ) : op.detalle_remesa ? (
+                                                                    <DetalleRemesaExpandido detalle={op.detalle_remesa} usuario={op.usuario} />
                                                                 ) : null}
                                                             </td>
                                                         </tr>
