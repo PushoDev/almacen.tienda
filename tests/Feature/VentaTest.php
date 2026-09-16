@@ -9,6 +9,7 @@ use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
+use App\Models\VentaDetalle;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -1493,4 +1494,179 @@ test('un admin sí recibe la ganancia de la agencia en el listado', function () 
         ->where('ventas.data.0.total_ganancia', '100.00')
         ->where('ventas.data.0.ganancia_real_total', '85.00')
     );
+});
+
+// ─── RBAC: endpoints de datos del POS (sin cobertura hasta ahora) ──────────
+
+test('getAlmacenes() devuelve todos los almacenes a un admin, incluso uno sin asignar', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    Almacen::factory()->count(2)->create();
+
+    $response = $this->getJson(route('ventas.getAlmacenes'));
+
+    $response->assertOk();
+    expect($response->json())->toHaveCount(2);
+});
+
+test('getAlmacenes() solo devuelve al vendedor los almacenes que tiene asignados', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $asignado = Almacen::factory()->create(['nombre_almacen' => 'Asignado']);
+    Almacen::factory()->create(['nombre_almacen' => 'No Asignado']);
+    $vendedor->almacenes()->attach($asignado->id);
+
+    $response = $this->getJson(route('ventas.getAlmacenes'));
+
+    $response->assertOk();
+    $nombres = collect($response->json())->pluck('nombre_almacen');
+    expect($nombres->all())->toBe(['Asignado']);
+});
+
+test('getCuentas() devuelve todas las cuentas a un admin', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearCuentaCup();
+    crearCuentaCup();
+
+    $response = $this->getJson(route('ventas.getCuentas'));
+
+    $response->assertOk();
+    expect($response->json())->toHaveCount(2);
+});
+
+test('getCuentas() solo devuelve al vendedor las cuentas que tiene asignadas', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $cuentaAsignada = crearCuentaCup();
+    crearCuentaCup();
+    $vendedor->cuentas()->attach($cuentaAsignada->id);
+
+    $response = $this->getJson(route('ventas.getCuentas'));
+
+    $response->assertOk();
+    $ids = collect($response->json())->pluck('id');
+    expect($ids->all())->toBe([$cuentaAsignada->id]);
+});
+
+test('getCuentasFiltradas() solo devuelve al vendedor sus propias cuentas, aunque otra coincida en moneda', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $monedaCup = Moneda::firstOrCreate(
+        ['codigo_moneda' => 'CUP'],
+        ['nombre_moneda' => 'Peso Cubano', 'simbolo_moneda' => 'CUP', 'tasa_cambio' => 365, 'estado' => true, 'principal' => false]
+    );
+    $cuentaAsignada = crearCuentaCup();
+    $cuentaAjena = crearCuentaCup();
+    $vendedor->cuentas()->attach($cuentaAsignada->id);
+
+    $response = $this->getJson(route('ventas.getCuentasFiltradas', ['moneda_id' => $monedaCup->id]));
+
+    $response->assertOk();
+    $ids = collect($response->json())->pluck('id');
+    expect($ids->all())->toBe([$cuentaAsignada->id]);
+    expect($ids)->not->toContain($cuentaAjena->id);
+});
+
+test('getCuentasParaGestor() solo devuelve al vendedor sus propias cuentas', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $cuentaAsignada = crearCuentaCup();
+    crearCuentaCup();
+    $vendedor->cuentas()->attach($cuentaAsignada->id);
+
+    $response = $this->getJson(route('ventas.getCuentasParaGestor'));
+
+    $response->assertOk();
+    $ids = collect($response->json())->pluck('id');
+    expect($ids->all())->toBe([$cuentaAsignada->id]);
+});
+
+test('getProductosPorAlmacen() rechaza con 403 a un vendedor sin acceso al almacén', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->create();
+    crearProductoConPrecio($almacen, 10, 20);
+
+    $response = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id));
+
+    $response->assertStatus(403);
+});
+
+test('getProductosPorAlmacen() oculta precio_compra_producto a un vendedor con acceso al almacén', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    crearProductoConPrecio($almacen, 10, 20);
+
+    $response = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id));
+
+    $response->assertOk();
+    expect($response->json('0.precio_compra_producto'))->toBeNull();
+});
+
+test('getProductosPorAlmacen() muestra precio_compra_producto real a admin y moderador', function () {
+    $almacen = Almacen::factory()->create();
+    crearProductoConPrecio($almacen, 10, 20);
+
+    foreach (['admin', 'moderador'] as $rol) {
+        $user = User::factory()->{$rol}()->create();
+        $this->actingAs($user);
+
+        $response = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id));
+
+        $response->assertOk();
+        expect((float) $response->json('0.precio_compra_producto'))->toEqual(10.0);
+    }
+});
+
+test('show() oculta costo_unitario a un vendedor, incluso en su propia venta', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, 10, 20);
+
+    $venta = Venta::factory()->create(['user_id' => $vendedor->id, 'almacen_id' => $almacen->id]);
+    VentaDetalle::factory()->create([
+        'venta_id' => $venta->id,
+        'producto_id' => $producto->id,
+        'producto_codigo_id' => $codigo->id,
+        'costo_unitario' => 10,
+    ]);
+
+    $response = $this->get(route('ventas.show', $venta->id));
+
+    $response->assertInertia(fn ($page) => $page->where('venta.items.0.costo_unitario', null));
+});
+
+test('show() muestra costo_unitario real a admin y moderador', function () {
+    $almacen = Almacen::factory()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, 10, 20);
+    $venta = Venta::factory()->create(['almacen_id' => $almacen->id]);
+    VentaDetalle::factory()->create([
+        'venta_id' => $venta->id,
+        'producto_id' => $producto->id,
+        'producto_codigo_id' => $codigo->id,
+        'costo_unitario' => 10,
+    ]);
+
+    foreach (['admin', 'moderador'] as $rol) {
+        $user = User::factory()->{$rol}()->create();
+        $this->actingAs($user);
+
+        $response = $this->get(route('ventas.show', $venta->id));
+
+        $response->assertInertia(fn ($page) => $page->where('venta.items.0.costo_unitario', 10));
+    }
 });

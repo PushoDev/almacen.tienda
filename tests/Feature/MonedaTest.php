@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\HistorialTasaCambio;
 use App\Models\Moneda;
 use App\Models\User;
 
@@ -102,6 +103,82 @@ test('update() cambia la insignia asignada a una moneda existente', function () 
 
     $response->assertRedirect(route('monedas.index'));
     $this->assertDatabaseHas('monedas', ['id' => $moneda->id, 'imagen' => 'brl']);
+});
+
+// ==========================================================================
+// HISTORIAL DE CAMBIO DE TASA — impacto financiero (sin cobertura hasta ahora)
+// ==========================================================================
+
+test('update() registra un HistorialTasaCambio cuando la tasa realmente cambia', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 100]);
+
+    $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => $moneda->nombre_moneda,
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 200,
+        'commission' => 0,
+        'estado' => true,
+        'principal' => false,
+    ]);
+
+    expect(HistorialTasaCambio::count())->toBe(1);
+
+    $historial = HistorialTasaCambio::first();
+    expect($historial->moneda_id)->toBe($moneda->id);
+    expect($historial->user_id)->toBe($admin->id);
+    expect((float) $historial->tasa_anterior)->toEqual(100.0);
+    expect((float) $historial->tasa_nueva)->toEqual(200.0);
+    expect((float) $historial->diferencia_tasa)->toEqual(100.0);
+    expect((float) $historial->porcentaje_cambio)->toEqual(100.0);
+});
+
+test('update() no registra ningún HistorialTasaCambio cuando la tasa no cambia', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 100, 'nombre_moneda' => 'Original']);
+
+    $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => 'Nombre Cambiado',
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 100,
+        'commission' => 0,
+        'estado' => true,
+        'principal' => false,
+    ]);
+
+    expect(HistorialTasaCambio::count())->toBe(0);
+    $this->assertDatabaseHas('monedas', ['id' => $moneda->id, 'nombre_moneda' => 'Nombre Cambiado']);
+});
+
+test('update() calcula el impacto financiero sobre el capital total de las cuentas en esa moneda', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 100]);
+    crearCuentaEnMoneda($moneda, 1000);
+
+    $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => $moneda->nombre_moneda,
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 200,
+        'commission' => 0,
+        'estado' => true,
+        'principal' => false,
+    ]);
+
+    // Capital antes: 1000/100 = 10 (equivalente USD). Capital después: 1000/200 = 5.
+    // Impacto: 5 - 10 = -5 (la cuenta "pierde" poder de compra al depreciarse su moneda).
+    $historial = HistorialTasaCambio::first();
+    expect((float) $historial->impacto_financiero)->toEqual(-5.0);
+    expect((float) $historial->impacto_porcentaje)->toEqual(-50.0);
+    expect($historial->numero_cuentas_afectadas)->toBe(1);
 });
 
 test('create() y edit() exponen el catálogo de insignias de moneda, incluyendo MXN y BRL aunque no existan todavía como registros', function () {

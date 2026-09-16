@@ -36,57 +36,6 @@ class VentaController extends Controller
     // MÉTODOS DE CARGA DE DATOS (API / JSON)
     // ========================================================================
 
-    /**
-     * Store a newly created cliente for use during venta process.
-     *
-     * @return JsonResponse
-     */
-    public function storeClienteForVenta(Request $request)
-    {
-        // Primero, verificar si el cliente ya existe (por nombre O teléfono)
-        $clienteExistente = Cliente::where('nombre_cliente', $request->nombre_cliente)
-            ->orWhere('telefono_cliente', $request->telefono_cliente)
-            ->first();
-
-        // Si el cliente ya existe, retornarlo inmediatamente
-        if ($clienteExistente) {
-            return response()->json([
-                'message' => 'Cliente ya existe en el sistema. Usando cliente existente.',
-                'cliente' => $clienteExistente,
-                'existe' => true,
-            ], 200);
-        }
-
-        // Validación de datos
-        $validator = Validator::make($request->all(), [
-            'nombre_cliente' => ['required', 'string'],
-            'tipo_cliente' => ['required', 'in:fisico,asociado'],
-            'telefono_cliente' => ['required', 'string'],
-            'direccion_cliente' => ['nullable', 'string'],
-            'ciudad_cliente' => ['nullable', 'string'],
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        // Crear el cliente con deuda_pago_cliente en 0
-        $cliente = Cliente::create([
-            'nombre_cliente' => $request->nombre_cliente,
-            'tipo_cliente' => $request->tipo_cliente ?? 'fisico',
-            'deuda_pago_cliente' => 0,
-            'telefono_cliente' => $request->telefono_cliente,
-            'direccion_cliente' => $request->direccion_cliente ?? null,
-            'ciudad_cliente' => $request->ciudad_cliente ?? null,
-        ]);
-
-        return response()->json([
-            'message' => 'Cliente creado exitosamente para la venta.',
-            'cliente' => $cliente,
-            'existe' => false,
-        ], 201);
-    }
-
     public function getClientesFisicosParaPago()
     {
         $clientes = Cliente::where('tipo_cliente', 'fisico')
@@ -226,13 +175,6 @@ class VentaController extends Controller
     /**
      * Cargar todos los Clientes.
      */
-    public function getClientes()
-    {
-        $clientes = Cliente::select('id', 'nombre_cliente')->get();
-
-        return response()->json($clientes);
-    }
-
     /**
      * Cargar Cuentas accesibles para el usuario autenticado.
      */

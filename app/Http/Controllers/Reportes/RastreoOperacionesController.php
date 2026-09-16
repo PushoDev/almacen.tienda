@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AjusteSaldoCuenta;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
+use App\Models\Remesa;
 use App\Models\Venta;
 use App\Services\DetalleOperacionService;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class RastreoOperacionesController extends Controller
         $request->validate([
             'fecha' => 'nullable|date',
             'user_id' => 'nullable|exists:users,id',
-            'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia,Compra,Ajuste',
+            'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia,Compra,Ajuste,Remesa',
             'buscar' => 'nullable|string|max:255',
             'cliente_ids' => 'nullable|array',
             'cliente_ids.*' => 'integer|exists:clientes,id',
@@ -154,6 +155,12 @@ class RastreoOperacionesController extends Controller
         // así ?tipo=Compra por URL directa devuelve vacío en vez de filtrar nada.
         $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion) : null;
 
+        // Remesa ("Operaciones Múltiples" en el texto de cara al usuario, el código sigue
+        // usando el nombre original — ver memoria del proyecto) es admin/moderador-only en
+        // TODAS las demás pantallas donde aparece su historial (Cuentas/Clientes/Proveedores
+        // Show, ver `puedeVerRemesas` ahí) — mismo gate que Compra acá, por consistencia.
+        $remesasSub = $puedeVerCosto ? $this->construirSubqueryRemesa($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion) : null;
+
         // Ajuste manual de saldo — solo toca Cuentas, nunca Cliente/Proveedor (ver
         // construirSubqueryAjuste). Disponible para todos los roles, igual que Gasto/
         // Ingreso/Transferencia: no es dato de costo como Compra, y el userIdFiltro de
@@ -175,10 +182,16 @@ class RastreoOperacionesController extends Controller
         if ($comprasSub) {
             $conteoPorTipo['Compra'] = (clone $comprasSub)->distinct()->count('compras.id');
         }
+        if ($remesasSub) {
+            $conteoPorTipo['Remesa'] = (clone $remesasSub)->distinct()->count('remesas.id');
+        }
 
         $unionQuery = $ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub)->unionAll($ajustesSub);
         if ($comprasSub) {
             $unionQuery->unionAll($comprasSub);
+        }
+        if ($remesasSub) {
+            $unionQuery->unionAll($remesasSub);
         }
 
         $pagina = DB::query()
@@ -192,7 +205,8 @@ class RastreoOperacionesController extends Controller
         $ventaIds = $filas->where('tipo', 'Venta')->pluck('id')->all();
         $compraIds = $filas->where('tipo', 'Compra')->pluck('id')->all();
         $ajusteIds = $filas->where('tipo', 'Ajuste')->pluck('id')->all();
-        $movimientoIds = $filas->whereNotIn('tipo', ['Venta', 'Compra', 'Ajuste'])->pluck('id')->all();
+        $remesaIds = $filas->where('tipo', 'Remesa')->pluck('id')->all();
+        $movimientoIds = $filas->whereNotIn('tipo', ['Venta', 'Compra', 'Ajuste', 'Remesa'])->pluck('id')->all();
 
         $ventasPorId = Venta::with([
             'usuario',
@@ -229,7 +243,19 @@ class RastreoOperacionesController extends Controller
 
         $ajustesPorId = AjusteSaldoCuenta::with(['user', 'cuenta.moneda'])->whereIn('id', $ajusteIds)->get()->keyBy('id');
 
-        $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $comprasPorId, $ajustesPorId, $puedeVerCosto) {
+        $remesasPorId = Remesa::with([
+            'user',
+            'turnoVendedor',
+            'entradaCuenta',
+            'entradaCliente',
+            'entradaProveedor',
+            'salidaCuenta',
+            'salidaCliente',
+            'salidaProveedor',
+            'mensajeroCuenta',
+        ])->whereIn('id', $remesaIds)->get()->keyBy('id');
+
+        $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $comprasPorId, $ajustesPorId, $remesasPorId, $puedeVerCosto) {
             if ($fila->tipo === 'Venta') {
                 return $this->transformarVenta($ventasPorId[$fila->id], $puedeVerCosto);
             }
@@ -240,6 +266,10 @@ class RastreoOperacionesController extends Controller
 
             if ($fila->tipo === 'Ajuste') {
                 return $this->transformarAjuste($ajustesPorId[$fila->id]);
+            }
+
+            if ($fila->tipo === 'Remesa') {
+                return $this->transformarRemesa($remesasPorId[$fila->id]);
             }
 
             return $this->transformarMovimiento($movimientosPorId[$fila->id], $fila->tipo);
@@ -261,6 +291,10 @@ class RastreoOperacionesController extends Controller
             'cuentas' => DB::table('cuentas')->select('id', 'nombre_cuenta as nombre')->orderBy('nombre_cuenta')->get(),
             'filtros' => $request->except('page'),
             'puedeVerCosto' => $puedeVerCosto,
+            // Mismo valor que puedeVerCosto hoy (ambos son admin/moderador), pero con su
+            // propio nombre — Remesa no es dato de costo, es dato restringido por otra razón
+            // (mismo gate que ya usan Cuentas/Clientes/Proveedores Show como `puedeVerRemesas`).
+            'puedeVerRemesas' => $puedeVerCosto,
             'conteoPorTipo' => $conteoPorTipo,
         ]);
     }
@@ -460,6 +494,80 @@ class RastreoOperacionesController extends Controller
             });
     }
 
+    /**
+     * Subquery de remesas ("Operaciones Múltiples") — solo se invoca cuando $puedeVerCosto
+     * (ver comentario junto a su llamada en __invoke), mismo criterio que Compra.
+     *
+     * Entrada = dinero que ENTRA a esa entidad ("recibe", ver RemesaController::store() ->
+     * aplicarIngreso incrementa la entrada). Salida = dinero que SALE de esa entidad
+     * ("envía", aplicarEgreso la decrementa) — es el pago al destinatario final de la
+     * remesa. Mensajero es una tercera pata opcional, sin lado envía/recibe fijo, así que
+     * calza en cualquier dirección de cuenta_ids.
+     */
+    private function construirSubqueryRemesa(
+        Request $request,
+        ?string $buscar,
+        ?int $buscarId,
+        $userIdFiltro,
+        array $clienteIds,
+        array $proveedorIds,
+        array $cuentaIds,
+        string $clienteDireccion,
+        string $proveedorDireccion,
+        string $cuentaDireccion,
+    ) {
+        return DB::table('remesas')
+            ->leftJoin('users', 'users.id', '=', 'remesas.user_id')
+            ->leftJoin('turnos_vendedor as turno_remesa', 'turno_remesa.id', '=', 'remesas.turno_vendedor_id')
+            ->leftJoin('cuentas as cuenta_entrada', 'cuenta_entrada.id', '=', 'remesas.entrada_cuenta_id')
+            ->leftJoin('cuentas as cuenta_salida', 'cuenta_salida.id', '=', 'remesas.salida_cuenta_id')
+            ->leftJoin('cuentas as cuenta_mensajero', 'cuenta_mensajero.id', '=', 'remesas.mensajero_cuenta_id')
+            ->leftJoin('clientes as cliente_entrada', 'cliente_entrada.id', '=', 'remesas.entrada_cliente_id')
+            ->leftJoin('clientes as cliente_salida', 'cliente_salida.id', '=', 'remesas.salida_cliente_id')
+            ->leftJoin('proveedors as proveedor_entrada', 'proveedor_entrada.id', '=', 'remesas.entrada_proveedor_id')
+            ->leftJoin('proveedors as proveedor_salida', 'proveedor_salida.id', '=', 'remesas.salida_proveedor_id')
+            ->select('remesas.id', 'remesas.fecha_operacion as fecha', DB::raw("'Remesa' as tipo"))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('remesas.fecha_operacion', $request->input('fecha')))
+            ->when($userIdFiltro, fn ($q) => $q->where('remesas.user_id', $userIdFiltro))
+            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
+                $qq->where('users.name', 'like', "%{$buscar}%")
+                    ->orWhere('turno_remesa.nombre_vendedor', 'like', "%{$buscar}%")
+                    ->orWhere('remesas.notas', 'like', "%{$buscar}%")
+                    ->orWhere('cuenta_entrada.nombre_cuenta', 'like', "%{$buscar}%")
+                    ->orWhere('cuenta_salida.nombre_cuenta', 'like', "%{$buscar}%")
+                    ->orWhere('cliente_entrada.nombre_cliente', 'like', "%{$buscar}%")
+                    ->orWhere('cliente_salida.nombre_cliente', 'like', "%{$buscar}%")
+                    ->orWhere('proveedor_entrada.nombre_proveedor', 'like', "%{$buscar}%")
+                    ->orWhere('proveedor_salida.nombre_proveedor', 'like', "%{$buscar}%")
+                    ->when($buscarId, fn ($q2) => $q2->orWhere('remesas.id', $buscarId));
+            }))
+            ->when($clienteIds, fn ($q) => $q->where(function ($qq) use ($clienteIds, $clienteDireccion) {
+                if ($clienteDireccion !== 'envia') {
+                    $qq->orWhereIn('cliente_entrada.id', $clienteIds);
+                }
+                if ($clienteDireccion !== 'recibe') {
+                    $qq->orWhereIn('cliente_salida.id', $clienteIds);
+                }
+            }))
+            ->when($proveedorIds, fn ($q) => $q->where(function ($qq) use ($proveedorIds, $proveedorDireccion) {
+                if ($proveedorDireccion !== 'envia') {
+                    $qq->orWhereIn('proveedor_entrada.id', $proveedorIds);
+                }
+                if ($proveedorDireccion !== 'recibe') {
+                    $qq->orWhereIn('proveedor_salida.id', $proveedorIds);
+                }
+            }))
+            ->when($cuentaIds, fn ($q) => $q->where(function ($qq) use ($cuentaIds, $cuentaDireccion) {
+                if ($cuentaDireccion !== 'envia') {
+                    $qq->orWhereIn('cuenta_entrada.id', $cuentaIds);
+                }
+                if ($cuentaDireccion !== 'recibe') {
+                    $qq->orWhereIn('cuenta_salida.id', $cuentaIds);
+                }
+                $qq->orWhereIn('cuenta_mensajero.id', $cuentaIds);
+            }));
+    }
+
     private function transformarMovimiento(MovimientoFinanciero $mov, string $tipo): array
     {
         return [
@@ -475,6 +583,7 @@ class RastreoOperacionesController extends Controller
             'detalle_venta' => null,
             'detalle_compra' => null,
             'detalle_movimiento' => $this->detalleOperacionService->detalleMovimiento($mov),
+            'detalle_remesa' => null,
         ];
     }
 
@@ -492,6 +601,7 @@ class RastreoOperacionesController extends Controller
             'descripcion' => $venta->estado,
             'detalle_venta' => $this->detalleOperacionService->detalleVenta($venta, $puedeVerCosto),
             'detalle_movimiento' => null,
+            'detalle_remesa' => null,
         ];
     }
 
@@ -525,6 +635,7 @@ class RastreoOperacionesController extends Controller
             'detalle_venta' => null,
             'detalle_movimiento' => null,
             'detalle_compra' => $this->detalleOperacionService->detalleCompra($compra),
+            'detalle_remesa' => null,
         ];
     }
 
@@ -543,6 +654,32 @@ class RastreoOperacionesController extends Controller
             'detalle_venta' => null,
             'detalle_compra' => null,
             'detalle_movimiento' => $this->detalleOperacionService->detalleAjuste($ajuste),
+            'detalle_remesa' => null,
+        ];
+    }
+
+    /**
+     * Remesa ("Operaciones Múltiples") no tiene un origen/destino único ni el patrón
+     * "un solo receptor + pagos" de Compra — tiene 3 patas independientes (entrada/salida/
+     * mensajero), igual que ya modela `detalleRemesa()` en DetalleOperacionService (reusado
+     * tal cual, sin cambios — ese mismo shape ya alimenta Cuentas/Clientes/Proveedores Show).
+     */
+    private function transformarRemesa(Remesa $remesa): array
+    {
+        return [
+            'id' => $remesa->id,
+            'fecha' => $remesa->fecha_operacion,
+            'tipo' => 'Remesa',
+            'monto' => (float) $remesa->entrada_monto,
+            'moneda' => $remesa->entrada_moneda,
+            'usuario' => $remesa->user?->name ?? '—',
+            'user_id' => $remesa->user_id,
+            'referencia' => "Operación Múltiple #{$remesa->id}",
+            'descripcion' => $remesa->estado === 'anulada' ? 'Anulada' : ($remesa->notas ?: '—'),
+            'detalle_venta' => null,
+            'detalle_compra' => null,
+            'detalle_movimiento' => null,
+            'detalle_remesa' => $this->detalleOperacionService->detalleRemesa($remesa),
         ];
     }
 }

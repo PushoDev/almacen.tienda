@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,14 +38,12 @@ import {
     Info,
     Minus,
     Plus,
-    PlusCircle,
     Search,
     ShoppingBag,
     ShoppingCart,
     Store,
     Trash2,
     Truck,
-    Users,
     X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -155,13 +153,11 @@ export default function PuntoVentaOficial({
     };
 }) {
     const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
-    const [clientes, setClientes] = useState<Cliente[]>([]);
     const [monedas, setMonedas] = useState<Moneda[]>(meta.monedas || []);
     const [monedaPrincipal, setMonedaPrincipal] = useState<Moneda | null>(null);
     const [tasaCambioPrincipal, setTasaCambioPrincipal] = useState<number>(1);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
-    const [clienteSeleccionado, setClienteSeleccionado] = useState<string>('');
     const [busqueda, setBusqueda] = useState<string>('');
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
@@ -179,10 +175,14 @@ export default function PuntoVentaOficial({
     // Valores de texto del input de precio por item — se aplican solo al salir del campo
     const [preciosInput, setPreciosInput] = useState<Record<string, string>>({});
 
+    // Diálogo para editar directamente la cantidad de un item del carrito (id del item
+    // abierto, o null si el diálogo está cerrado) — el valor de texto es aparte porque
+    // mientras se escribe puede no ser un número válido todavía.
+    const [itemCantidadEditando, setItemCantidadEditando] = useState<string | null>(null);
+    const [cantidadInputValor, setCantidadInputValor] = useState<string>('');
+
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
-
-    const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
     const [productoVistaRapida, setProductoVistaRapida] = useState<Producto | null>(null);
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
@@ -216,16 +216,6 @@ export default function PuntoVentaOficial({
         } catch (error) {
             console.error('Error al cargar almacenes:', error);
             sileo.error({ title: 'No se pudieron cargar los almacenes' });
-        }
-    };
-
-    const cargarClientes = async () => {
-        try {
-            const response = await axios.get(route('ventas.getClientes'));
-            setClientes(response.data);
-        } catch (error) {
-            console.error('Error al cargar clientes:', error);
-            sileo.error({ title: 'No se pudieron cargar los clientes' });
         }
     };
 
@@ -278,7 +268,6 @@ export default function PuntoVentaOficial({
 
     useEffect(() => {
         cargarAlmacenes();
-        cargarClientes();
         cargarClientesFisicos();
     }, []);
 
@@ -297,11 +286,6 @@ export default function PuntoVentaOficial({
         setCodigoSeleccionadoPorProducto({});
         setTieneMensajero(false);
         setMensajeroMonto('');
-    };
-
-    const handleClienteChange = (value: string) => {
-        console.log('Cliente seleccionado:', value);
-        setClienteSeleccionado(value);
     };
 
     const productosFiltrados = useMemo(() => {
@@ -553,6 +537,25 @@ export default function PuntoVentaOficial({
         }
     };
 
+    const abrirDialogoCantidad = (id: string) => {
+        const item = carrito.find((item) => item.id === id);
+        if (!item) return;
+        setCantidadInputValor(item.cantidad.toString());
+        setItemCantidadEditando(id);
+    };
+
+    // Reusa actualizarCantidad(), que ya valida contra el stock disponible del producto y
+    // del código de barras exacto usado, y ya avisa por toast si se excede — sin duplicar
+    // esa lógica acá.
+    const confirmarCantidadDialogo = () => {
+        if (!itemCantidadEditando) return;
+        const nuevaCantidad = parseInt(cantidadInputValor, 10);
+        if (!isNaN(nuevaCantidad) && nuevaCantidad >= 1) {
+            actualizarCantidad(itemCantidadEditando, nuevaCantidad);
+        }
+        setItemCantidadEditando(null);
+    };
+
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
@@ -640,7 +643,9 @@ export default function PuntoVentaOficial({
 
         const datosVenta = {
             almacen_id: almacenSeleccionado,
-            cliente_id: clienteSeleccionado || null,
+            // El comprador ya no se selecciona al crear la venta (confundía al vendedor con
+            // el Destinatario, que se captura después) — cliente_id queda null desde el POS.
+            cliente_id: null,
             items: carrito.map((item) => ({
                 producto_id: item.producto.id,
                 producto_codigo_id: item.producto_codigo_id,
@@ -683,7 +688,6 @@ export default function PuntoVentaOficial({
                 setCarrito([]);
                 setPayments([]);
                 setAlmacenSeleccionado('');
-                setClienteSeleccionado('');
                 setProductos([]);
                 setCodigoSeleccionadoPorProducto({});
                 setEsVentaEspecial(false);
@@ -720,170 +724,6 @@ export default function PuntoVentaOficial({
     };
 
     const selectedAlmacen = almacenes.find((almacen) => almacen.id.toString() === almacenSeleccionado) || null;
-    const selectedCliente = clientes.find((cliente) => cliente.id.toString() === clienteSeleccionado) || null;
-
-    const CrearClienteDialogContent = () => {
-        const [localCliente, setLocalCliente] = useState({
-            nombre_cliente: '',
-            telefono_cliente: '',
-            direccion_cliente: '',
-            ciudad_cliente: '',
-        });
-
-        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
-
-        const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-            const { name, value } = e.target;
-            setLocalCliente((prev) => ({
-                ...prev,
-                [name]: value,
-            }));
-        };
-
-        const crearClienteLocal = async () => {
-            if (!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()) {
-                sileo.error({ title: 'Nombre y teléfono son requeridos' });
-                return;
-            }
-
-            try {
-                const response = await axios.post(route('ventas.cliente.store'), {
-                    ...localCliente,
-                    tipo_cliente: 'fisico',
-                });
-
-                const { cliente, existe, message } = response.data;
-
-                if (existe) {
-                    sileo.info({ title: message, description: 'El cliente ya existía en el sistema. Se ha seleccionado automáticamente.' });
-                } else {
-                    sileo.success({ title: message, description: 'Cliente creado exitosamente.' });
-                    setClientes((prev) => [...prev, cliente]);
-                    setClientesFisicos((prev) => [...prev, cliente]);
-                }
-
-                setClienteSeleccionado(cliente.id.toString());
-
-                setLocalCliente({
-                    nombre_cliente: '',
-                    telefono_cliente: '',
-                    direccion_cliente: '',
-                    ciudad_cliente: '',
-                });
-
-                setLocalErrors({});
-                setIsCrearClienteDialogOpen(false);
-            } catch (error: unknown) {
-                console.error('Error al crear cliente:', error);
-                if (axios.isAxiosError(error) && error.response?.data?.errors) {
-                    const errores = error.response.data.errors as Record<string, string[]>;
-                    setLocalErrors(
-                        Object.fromEntries(Object.entries(errores).map(([campo, mensajes]) => [campo, mensajes[0]])),
-                    );
-                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
-                } else {
-                    sileo.error({ title: 'Error al crear cliente', description: 'Intenta nuevamente o contacta al administrador.' });
-                }
-            }
-        };
-
-        const resetDialog = () => {
-            setLocalCliente({
-                nombre_cliente: '',
-                telefono_cliente: '',
-                direccion_cliente: '',
-                ciudad_cliente: '',
-            });
-            setLocalErrors({});
-            setIsCrearClienteDialogOpen(false);
-        };
-        return (
-            <DialogContent className="overflow-hidden p-0 sm:max-w-lg">
-                <DialogHeader className="border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                            <Users className="h-5 w-5" />
-                        </div>
-                        <div>
-                            <DialogTitle className="text-xl text-white">Crear Nuevo Cliente</DialogTitle>
-                            <DialogDescription className="text-cyan-100">
-                                Añade un nuevo cliente al sistema para asociarlo a esta venta.
-                            </DialogDescription>
-                        </div>
-                    </div>
-                </DialogHeader>
-                <div className="grid gap-4 px-6 py-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="dialog-nombre-cliente">
-                            Nombre Completo <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                            id="dialog-nombre-cliente"
-                            name="nombre_cliente"
-                            value={localCliente.nombre_cliente}
-                            onChange={handleLocalChange}
-                            placeholder="Ej: Juan Pérez"
-                            className={localErrors.nombre_cliente ? 'border-red-500' : ''}
-                        />
-                        {localErrors.nombre_cliente && <p className="text-sm text-red-500">{localErrors.nombre_cliente}</p>}
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="dialog-telefono-cliente">
-                            Teléfono <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                            id="dialog-telefono-cliente"
-                            name="telefono_cliente"
-                            value={localCliente.telefono_cliente}
-                            onChange={handleLocalChange}
-                            placeholder="Ej: 555-1234"
-                            className={localErrors.telefono_cliente ? 'border-red-500' : ''}
-                        />
-                        {localErrors.telefono_cliente && <p className="text-sm text-red-500">{localErrors.telefono_cliente}</p>}
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="dialog-ciudad-cliente">Ciudad</Label>
-                        <Input
-                            id="dialog-ciudad-cliente"
-                            name="ciudad_cliente"
-                            value={localCliente.ciudad_cliente}
-                            onChange={handleLocalChange}
-                            placeholder="Ej: La Habana"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="dialog-direccion-cliente">Dirección</Label>
-                        <textarea
-                            id="dialog-direccion-cliente"
-                            name="direccion_cliente"
-                            value={localCliente.direccion_cliente}
-                            onChange={handleLocalChange}
-                            placeholder="Dirección completa"
-                            rows={3}
-                            className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                        />
-                    </div>
-                </div>
-
-                <DialogFooter className="gap-2 border-t px-6 py-4">
-                    <Button type="button" variant="outline" onClick={resetDialog}>
-                        Cancelar
-                    </Button>
-                    <Button
-                        type="button"
-                        onClick={crearClienteLocal}
-                        className="bg-cyan-600 hover:bg-cyan-700"
-                        disabled={!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()}
-                    >
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Crear Cliente
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        );
-    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -949,13 +789,13 @@ export default function PuntoVentaOficial({
                                         <div>
                                             <CardTitle className="text-base font-semibold text-white">Configuración de Venta</CardTitle>
                                             <CardDescription className="text-xs text-blue-100">
-                                                Seleccione almacén y cliente para comenzar
+                                                Seleccione el almacén para comenzar
                                             </CardDescription>
                                         </div>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="pt-5">
-                                    <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="grid gap-4">
                                         {/* Seleccionar Almacen */}
                                         <div className="space-y-2">
                                             <Label htmlFor="almacen" className="text-sm font-medium">
@@ -982,43 +822,6 @@ export default function PuntoVentaOficial({
                                                             </ComboboxItem>
                                                         )}
                                                     </ComboboxList>
-                                                </ComboboxContent>
-                                            </Combobox>
-                                        </div>
-                                        {/* Seleccionar Cliente registrado del sistema */}
-                                        <div className="space-y-2">
-                                            <Label htmlFor="cliente" className="text-sm font-medium">
-                                                Cliente
-                                            </Label>
-                                            <Combobox
-                                                items={clientes}
-                                                itemToStringLabel={(item) => item.nombre_cliente}
-                                                itemToStringValue={(item) => item.nombre_cliente}
-                                                value={selectedCliente}
-                                                onValueChange={(cliente) => handleClienteChange(cliente ? cliente.id.toString() : '')}
-                                            >
-                                                <ComboboxInput
-                                                    placeholder="Seleccionar cliente (Opcional)"
-                                                    showClear={!!clienteSeleccionado}
-                                                    className="uppercase"
-                                                />
-                                                <ComboboxContent>
-                                                    <ComboboxEmpty>No se encontraron clientes.</ComboboxEmpty>
-                                                    <ComboboxList>
-                                                        {(cliente) => (
-                                                            <ComboboxItem key={cliente.id} value={cliente}>
-                                                                <span className="uppercase">{cliente.nombre_cliente}</span>
-                                                            </ComboboxItem>
-                                                        )}
-                                                    </ComboboxList>
-                                                    <Separator className="my-1" />
-                                                    <div
-                                                        className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
-                                                        onClick={() => setIsCrearClienteDialogOpen(true)}
-                                                    >
-                                                        <PlusCircle className="h-4 w-4" />
-                                                        Crear Nuevo Cliente
-                                                    </div>
                                                 </ComboboxContent>
                                             </Combobox>
                                         </div>
@@ -1359,7 +1162,14 @@ export default function PuntoVentaOficial({
                                                             >
                                                                 <Minus className="h-3 w-3" />
                                                             </Button>
-                                                            <span className="w-8 text-center font-medium">{item.cantidad}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => abrirDialogoCantidad(item.id)}
+                                                                className="hover:bg-accent w-8 rounded text-center font-medium"
+                                                                title="Editar cantidad"
+                                                            >
+                                                                {item.cantidad}
+                                                            </button>
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
@@ -1664,10 +1474,41 @@ export default function PuntoVentaOficial({
                     </div>
                 </div>
             </div>
-            <Dialog open={isCrearClienteDialogOpen} onOpenChange={setIsCrearClienteDialogOpen}>
-                <CrearClienteDialogContent />
-            </Dialog>
             <Toaster position="top-center" />
+            {/* Diálogo para editar la cantidad de un item del carrito directamente */}
+            <Dialog open={!!itemCantidadEditando} onOpenChange={(open) => !open && setItemCantidadEditando(null)}>
+                <DialogContent className="sm:max-w-xs">
+                    <DialogHeader>
+                        <DialogTitle>Editar cantidad</DialogTitle>
+                        {itemCantidadEditando && (
+                            <DialogDescription>
+                                {carrito.find((item) => item.id === itemCantidadEditando)?.producto.nombre_producto}
+                            </DialogDescription>
+                        )}
+                    </DialogHeader>
+                    <div className="py-2">
+                        <Label htmlFor="cantidad-dialog-input">Cantidad</Label>
+                        <Input
+                            id="cantidad-dialog-input"
+                            type="number"
+                            min="1"
+                            autoFocus
+                            value={cantidadInputValor}
+                            onChange={(e) => setCantidadInputValor(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') confirmarCantidadDialogo();
+                            }}
+                            className="mt-2"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setItemCantidadEditando(null)}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={confirmarCantidadDialogo}>Guardar</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
             {/* Modal de Vista Rápida */}
             <Dialog open={isVistaRapidaOpen} onOpenChange={setIsVistaRapidaOpen}>
                 <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl">

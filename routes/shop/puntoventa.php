@@ -26,7 +26,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // ========================================================================
 
     Route::get('/ventas/reporte-data', [VentaController::class, 'getVentasReporte'])->name('ventas.reporte.data');
-    Route::post('/ventas/clientes/store', [VentaController::class, 'storeClienteForVenta'])->name('ventas.cliente.store');
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
     Route::get('/ventas/almacenes/{id}/productos', [VentaController::class, 'getProductosPorAlmacen'])->name('ventas.getProductosPorAlmacen');
     Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
@@ -34,7 +33,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/ventas/cuentas/gestor', [VentaController::class, 'getCuentasParaGestor'])->name('ventas.getCuentasParaGestor');
     Route::get('/ventas/monedas', [VentaController::class, 'getMonedas'])->name('ventas.getMonedas');
 
-    Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
     // ✅ NUEVA RUTA PARA CLIENTES FÍSICOS EN PAGOS
     Route::get('/ventas/clientes-fisicos-pago', [VentaController::class, 'getClientesFisicosParaPago'])->name('ventas.getClientesFisicosParaPago');
     Route::get('/ventas/destinatarios/buscar', [VentaController::class, 'buscarDestinatarios'])->name('ventas.destinatarios.buscar');
