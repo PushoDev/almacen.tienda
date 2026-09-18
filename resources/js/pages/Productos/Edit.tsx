@@ -5,10 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
-import { CategoriasProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { CategoriasProps, FichaHermanaProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { FileBox, Package, QrCode, ArrowRightLeft, ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { FileBox, Package, QrCode, ArrowRightLeft, ShieldAlert, Eye, EyeOff, Layers } from 'lucide-react';
 import { useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -19,7 +19,15 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Editar Producto', href: '#' },
 ];
 
-export default function EditarProductosPage({ producto, categorias }: { producto: ProductoProps; categorias: CategoriasProps[] }) {
+export default function EditarProductosPage({
+    producto,
+    categorias,
+    fichas_hermanas,
+}: {
+    producto: ProductoProps;
+    categorias: CategoriasProps[];
+    fichas_hermanas: FichaHermanaProps[];
+}) {
     const { auth } = usePage<SharedData>().props;
     const isPrivileged = auth.user.role === 'admin';
 
@@ -278,6 +286,19 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     )}
                                     <InputError message={errors.precio_compra_producto} />
                                     <InputError message={errors.password_confirmacion} />
+                                    {fichas_hermanas.length > 0 && (
+                                        <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
+                                            <Layers size={14} className="mt-0.5 shrink-0" />
+                                            <span>
+                                                Este campo solo cambia el costo de esta ficha — hay {fichas_hermanas.length} ficha
+                                                {fichas_hermanas.length === 1 ? '' : 's'} más del mismo producto a otro costo (de otras compras).{' '}
+                                                <Link href={route('productos.show', { producto: producto.id })} className="underline">
+                                                    Ver el detalle
+                                                </Link>
+                                                .
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {isPrivileged && priceChanged && (

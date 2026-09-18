@@ -80,3 +80,69 @@ test('un moderador puede seguir editando otros campos del producto sin tocar el 
     $response->assertSessionDoesntHaveErrors();
     expect($producto->fresh()->nombre_producto)->toBe('Actualizado');
 });
+
+// ==========================================================================
+// FICHAS HERMANAS — mismo nombre+marca+modelo+capacidad+categoría, costo distinto
+// (cada compra crea siempre una ficha nueva desde 2026-09-18, ver CompraController).
+// ==========================================================================
+
+test('show() incluye las fichas hermanas del mismo producto a otro costo, ordenadas por precio, sin incluirse a sí misma', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $atributos = [
+        'nombre_producto' => 'Producto Hermano',
+        'marca_producto' => 'MarcaX',
+        'modelo_producto' => 'ModeloY',
+        'capacidad_producto' => '128GB',
+    ];
+
+    $principal = Producto::factory()->create($atributos + ['categoria_id' => Producto::factory()->create()->categoria_id, 'precio_compra_producto' => 20]);
+    $hermanoCaro = Producto::factory()->create($atributos + ['categoria_id' => $principal->categoria_id, 'precio_compra_producto' => 30]);
+    $hermanoBarato = Producto::factory()->create($atributos + ['categoria_id' => $principal->categoria_id, 'precio_compra_producto' => 15]);
+    // Mismo nombre pero distinta marca — no es hermano, no debe aparecer.
+    Producto::factory()->create(['nombre_producto' => 'Producto Hermano', 'marca_producto' => 'Otra', 'categoria_id' => $principal->categoria_id]);
+
+    $response = $this->get(route('productos.show', $principal));
+
+    $response->assertInertia(fn ($page) => $page
+        ->has('fichas_hermanas', 2)
+        ->where('fichas_hermanas.0.id', $hermanoBarato->id)
+        ->where('fichas_hermanas.0.precio_compra_producto', 15)
+        ->where('fichas_hermanas.1.id', $hermanoCaro->id)
+        ->where('fichas_hermanas.1.precio_compra_producto', 30)
+    );
+});
+
+test('show() no incluye fichas_hermanas cuando el producto no tiene ninguna', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['nombre_producto' => 'Producto Único']);
+
+    $response = $this->get(route('productos.show', $producto));
+
+    $response->assertInertia(fn ($page) => $page->has('fichas_hermanas', 0));
+});
+
+test('edit() también incluye las fichas hermanas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $atributos = [
+        'nombre_producto' => 'Producto Hermano Edit',
+        'marca_producto' => 'MarcaX',
+        'modelo_producto' => 'ModeloY',
+        'capacidad_producto' => '128GB',
+    ];
+
+    $principal = Producto::factory()->create($atributos + ['categoria_id' => Producto::factory()->create()->categoria_id, 'precio_compra_producto' => 20]);
+    $hermano = Producto::factory()->create($atributos + ['categoria_id' => $principal->categoria_id, 'precio_compra_producto' => 25]);
+
+    $response = $this->get(route('productos.edit', $principal));
+
+    $response->assertInertia(fn ($page) => $page
+        ->has('fichas_hermanas', 1)
+        ->where('fichas_hermanas.0.id', $hermano->id)
+    );
+});

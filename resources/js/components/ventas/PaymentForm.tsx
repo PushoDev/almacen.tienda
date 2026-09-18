@@ -59,15 +59,16 @@ interface PaymentFormProps {
 // ─── Vías de pago disponibles ─────────────────────────────────────────────────
 
 const PAYMENT_VIAS = [
-    { id: 'zelle',          name: 'Zelle' },
-    { id: 'cashapp',        name: 'CashApp' },
-    { id: 'visa',           name: 'Visa' },
-    { id: 'mastercard',     name: 'MasterCard' },
-    { id: 'stripe',         name: 'Stripe' },
-    { id: 'paypal',         name: 'Paypal' },
-    { id: 'qvapay',         name: 'QvaPay' },
-    { id: 'enzona',         name: 'EnZona' },
-    { id: 'transfermovil',  name: 'Transfermóvil' },
+    { id: 'zelle', name: 'Zelle' },
+    { id: 'cashapp', name: 'CashApp' },
+    { id: 'square', name: 'Square' },
+    { id: 'visa', name: 'Visa' },
+    { id: 'mastercard', name: 'MasterCard' },
+    { id: 'stripe', name: 'Stripe' },
+    { id: 'paypal', name: 'Paypal' },
+    { id: 'qvapay', name: 'QvaPay' },
+    { id: 'enzona', name: 'EnZona' },
+    { id: 'transfermovil', name: 'Transfermóvil' },
 ];
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -97,9 +98,9 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
         referencia: '',
     });
 
-    const [cuentasFiltradas, setCuentasFiltradas]   = useState<Cuenta[]>([]);
-    const [cargandoCuentas, setCargandoCuentas]     = useState(false);
-    const [destinoSearch, setDestinoSearch]         = useState('');
+    const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
+    const [cargandoCuentas, setCargandoCuentas] = useState(false);
+    const [destinoSearch, setDestinoSearch] = useState('');
     const [conversionCalculada, setConversionCalculada] = useState<{
         montoOriginal: number;
         montoUSD: number;
@@ -115,7 +116,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             symbol: m.simbolo_moneda,
             exchangeRate: m.tasa_cambio,
         })),
-    [monedas]);
+        [monedas]);
 
     const selectedCurrencyInfo = currentPayment.moneda_id
         ? currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString())
@@ -132,10 +133,10 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
         }));
         const clientes = selectedCurrencyInfo?.code === 'USD'
             ? clientesFisicos.map((c) => ({
-                  value: `cliente_${c.id}`,
-                  label: `👤 ${c.nombre_cliente}`,
-                  nombre: c.nombre_cliente,
-              }))
+                value: `cliente_${c.id}`,
+                label: `👤 ${c.nombre_cliente}`,
+                nombre: c.nombre_cliente,
+            }))
             : [];
         return [...cuentas, ...clientes];
     }, [cuentasFiltradas, clientesFisicos, selectedCurrencyInfo]);
@@ -146,15 +147,15 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
     // Recalcula conversión cuando cambia monto / moneda / tasa
     useEffect(() => {
-        const amount      = parseFloat(currentPayment.amount);
-        const rate        = parseFloat(currentPayment.exchangeRate);
-        const currency    = currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString());
+        const amount = parseFloat(currentPayment.amount);
+        const rate = parseFloat(currentPayment.exchangeRate);
+        const currency = currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString());
 
         if (currentPayment.moneda_id && amount > 0 && rate > 0 && currency) {
             setConversionCalculada({
                 montoOriginal: amount,
-                montoUSD:      amount / rate,
-                tasaCambio:    rate,
+                montoUSD: amount / rate,
+                tasaCambio: rate,
                 monedaSimbolo: currency.symbol,
             });
         } else {
@@ -164,10 +165,10 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
     // Recalcula monto cuando el usuario cambia la tasa manualmente
     useEffect(() => {
-        const currency    = currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString());
+        const currency = currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString());
         const tasaOriginal = currency?.exchangeRate ?? 0;
-        const tasaActual   = parseFloat(currentPayment.exchangeRate) || 0;
-        const tasaEditada  = Math.abs(tasaActual - tasaOriginal) > 0.0001;
+        const tasaActual = parseFloat(currentPayment.exchangeRate) || 0;
+        const tasaEditada = Math.abs(tasaActual - tasaOriginal) > 0.0001;
 
         if (
             currentPayment.moneda_id &&
@@ -177,7 +178,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             remainingInUsd > 0 &&
             parseFloat(currentPayment.amount) > 0
         ) {
-            const calculado   = remainingInUsd * tasaActual;
+            const calculado = remainingInUsd * tasaActual;
             const montoActual = parseFloat(currentPayment.amount) || 0;
             if (Math.abs(montoActual - calculado) > 0.01) {
                 setCurrentPayment((prev) => ({ ...prev, amount: calculado.toFixed(2) }));
@@ -217,17 +218,17 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
     const handleMonedaChange = (monedaId: string) => {
         const currency = currencies.find((c) => c.id.toString() === monedaId.toString());
-        const monto    = remainingInUsd > 0 && currency
+        const monto = remainingInUsd > 0 && currency
             ? (remainingInUsd * currency.exchangeRate).toFixed(2)
             : '';
 
         setCurrentPayment((prev) => ({
             ...prev,
-            moneda_id:    monedaId,
+            moneda_id: monedaId,
             exchangeRate: currency ? currency.exchangeRate.toString() : '',
-            amount:       monto,
-            cuenta_id:    '',
-            cliente_id:   '',
+            amount: monto,
+            cuenta_id: '',
+            cliente_id: '',
         }));
         setDestinoSearch('');
         cargarCuentasFiltradas(monedaId, currentPayment.method);
@@ -263,9 +264,9 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
         const currency = currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString());
         if (!currency) { sileo.error({ title: 'Error en la selección de moneda' }); return; }
 
-        const amount      = parseFloat(currentPayment.amount);
+        const amount = parseFloat(currentPayment.amount);
         const exchangeRate = parseFloat(currentPayment.exchangeRate);
-        const amountInUsd  = amount / exchangeRate;
+        const amountInUsd = amount / exchangeRate;
 
         if (!amountInUsd || isNaN(amountInUsd)) {
             sileo.error({ title: 'Tasa de cambio inválida.' });
@@ -273,17 +274,17 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
         }
 
         const newPayment: Payment = {
-            id:           crypto.randomUUID(),
-            method:       currentPayment.method,
-            moneda_id:    currentPayment.moneda_id,
+            id: crypto.randomUUID(),
+            method: currentPayment.method,
+            moneda_id: currentPayment.moneda_id,
             amount,
-            via:          currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
+            via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
             exchangeRate,
             amountInUsd,
-            cuenta_id:    currentPayment.cuenta_id || null,
-            cliente_id:   currentPayment.cliente_id || null,
-            referencia:   currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
-            moneda_info:  { codigo: currency.code, nombre: currency.name, simbolo: currency.symbol },
+            cuenta_id: currentPayment.cuenta_id || null,
+            cliente_id: currentPayment.cliente_id || null,
+            referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
+            moneda_info: { codigo: currency.code, nombre: currency.name, simbolo: currency.symbol },
         };
 
         onAddPayment(newPayment);

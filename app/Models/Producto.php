@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
+use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Milon\Barcode\Facades\DNS1DFacade as DNS1D;
-use Illuminate\Support\Facades\Storage;
-use Exception;
+use Illuminate\Support\Facades\Cache;
 
 class Producto extends Model
 {
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'productos';
 
     protected $fillable = [
@@ -38,7 +38,7 @@ class Producto extends Model
         'imagen_url',
         'cantidad_total',
         'stock_bajo',
-        'barcode_image_url'
+        'barcode_image_url',
     ];
 
     protected static function boot()
@@ -48,31 +48,31 @@ class Producto extends Model
         // Limpiar cache relacionado con el catálogo público cuando cambia un producto
         static::saved(function ($producto) {
             try {
-                $cache = \Illuminate\Support\Facades\Cache::getStore();
+                $cache = Cache::getStore();
 
                 if (method_exists($cache, 'tags')) {
-                    \Illuminate\Support\Facades\Cache::tags(['catalogo', 'productos'])->flush();
-                    \Illuminate\Support\Facades\Cache::tags(['catalogo', "producto:{$producto->id}"])->forget("catalogo:producto:{$producto->id}");
+                    Cache::tags(['catalogo', 'productos'])->flush();
+                    Cache::tags(['catalogo', "producto:{$producto->id}"])->forget("catalogo:producto:{$producto->id}");
                 } else {
-                    \Illuminate\Support\Facades\Cache::forget("catalogo:producto:{$producto->id}");
+                    Cache::forget("catalogo:producto:{$producto->id}");
                 }
-            } catch (\Exception $e) {
-                logger()->warning('No se pudo limpiar cache de producto: ' . $e->getMessage());
+            } catch (Exception $e) {
+                logger()->warning('No se pudo limpiar cache de producto: '.$e->getMessage());
             }
         });
 
         static::deleted(function ($producto) {
             try {
-                $cache = \Illuminate\Support\Facades\Cache::getStore();
+                $cache = Cache::getStore();
 
                 if (method_exists($cache, 'tags')) {
-                    \Illuminate\Support\Facades\Cache::tags(['catalogo', 'productos'])->flush();
-                    \Illuminate\Support\Facades\Cache::tags(['catalogo', "producto:{$producto->id}"])->forget("catalogo:producto:{$producto->id}");
+                    Cache::tags(['catalogo', 'productos'])->flush();
+                    Cache::tags(['catalogo', "producto:{$producto->id}"])->forget("catalogo:producto:{$producto->id}");
                 } else {
-                    \Illuminate\Support\Facades\Cache::forget("catalogo:producto:{$producto->id}");
+                    Cache::forget("catalogo:producto:{$producto->id}");
                 }
-            } catch (\Exception $e) {
-                logger()->warning('No se pudo limpiar cache de producto: ' . $e->getMessage());
+            } catch (Exception $e) {
+                logger()->warning('No se pudo limpiar cache de producto: '.$e->getMessage());
             }
         });
     }
@@ -115,6 +115,37 @@ class Producto extends Model
         return $this->hasMany(CostoHistorial::class, 'product_id')->orderBy('created_at');
     }
 
+    // Lotes de stock (trazabilidad de costo por almacén, ver LoteStock).
+    public function lotesStock()
+    {
+        return $this->hasMany(LoteStock::class, 'producto_id');
+    }
+
+    /**
+     * Costo real de este producto en un almacén puntual — promedio ponderado de los lotes que
+     * llegaron ahí (por compra directa o por movimiento recibido), no el costo global de la
+     * ficha. Dos almacenes pueden tener costo distinto del mismo producto cuando un traslado
+     * entre ellos se prorrateó (o no) de forma independiente.
+     *
+     * Sin lotes registrados para ese almacén (producto nunca aprobado/recibido, o dato de antes
+     * de que lotes_stock existiera, 2026-09-07) cae al costo global de la ficha — mejor
+     * aproximación disponible, nunca un error.
+     */
+    public function costoEnAlmacen(int $almacenId): float
+    {
+        $lotes = $this->lotesStock()->where('almacen_id', $almacenId)->get();
+
+        $cantidadTotal = $lotes->sum('cantidad');
+
+        if ($lotes->isEmpty() || $cantidadTotal <= 0) {
+            return (float) $this->precio_compra_producto;
+        }
+
+        $costoTotal = $lotes->sum(fn (LoteStock $lote) => $lote->cantidad * (float) $lote->precio_costo);
+
+        return round($costoTotal / $cantidadTotal, 2);
+    }
+
     // 🔥 Cantidad total en todos los almacenes
     public function getCantidadTotalAttribute(): int
     {
@@ -130,7 +161,7 @@ class Producto extends Model
     // 🔥 Accesor para URL de imagen
     public function getImagenUrlAttribute(): string
     {
-        if (!$this->imagen_producto) {
+        if (! $this->imagen_producto) {
             return asset('productos/producto-default.png');
         }
 
@@ -139,7 +170,7 @@ class Producto extends Model
 
     public function getBarcodeImageUrlAttribute(): ?string
     {
-        if (!$this->barcode_image || !file_exists(public_path($this->barcode_image))) {
+        if (! $this->barcode_image || ! file_exists(public_path($this->barcode_image))) {
             return null;
         }
 
@@ -197,6 +228,7 @@ class Producto extends Model
         if ($this->barcode_image && file_exists(public_path($this->barcode_image))) {
             return unlink(public_path($this->barcode_image));
         }
+
         return false;
     }
 }

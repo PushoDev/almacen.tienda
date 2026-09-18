@@ -3,8 +3,9 @@
 use App\Models\Almacen;
 use App\Models\Compra;
 use App\Models\CostDistribution;
-use App\Models\CostDistributionMovimiento;
 use App\Models\Cuenta;
+use App\Models\LoteStock;
+use App\Models\Moneda;
 use App\Models\Movimiento;
 use App\Models\Producto;
 use App\Models\TipoMovimientoFinanciero;
@@ -23,7 +24,7 @@ function asegurarTipoMovimientoFinancieroGasto(): void
 function crearCuentaUsdParaProrrateo(float $saldo): Cuenta
 {
     return Cuenta::factory()
-        ->for(\App\Models\Moneda::factory()->state(['codigo_moneda' => 'USD', 'estado' => true]), 'moneda')
+        ->for(Moneda::factory()->state(['codigo_moneda' => 'USD', 'estado' => true]), 'moneda')
         ->create(['saldo_cuenta' => $saldo]);
 }
 
@@ -44,6 +45,25 @@ function crearMovimientoConDetalle(Almacen $origen, Almacen $destino, User $crea
     return $movimiento;
 }
 
+/**
+ * Simula lo que MovimientosController::recibir() crea desde 2026-09-18: un lote_stock en el
+ * almacén destino, con el costo de origen (sin prorratear todavía). El prorrateo, cuando se
+ * aplica, incrementa ESTE lote — nunca el costo global de la ficha (ver
+ * distribuirLoteMovimientos()). Se crea a mano en vez de llamar recibir() para aislar la prueba
+ * del prorrateo de la del flujo de recepción, que ya tiene su propia cobertura.
+ */
+function crearLoteStockRecibido(Movimiento $movimiento, Producto $producto, Almacen $destino, int $cantidad): LoteStock
+{
+    return LoteStock::create([
+        'codigo' => LoteStock::generarCodigoMovimiento($movimiento->id, 1),
+        'movimiento_id' => $movimiento->id,
+        'producto_id' => $producto->id,
+        'almacen_id' => $destino->id,
+        'cantidad' => $cantidad,
+        'precio_costo' => $producto->precio_compra_producto,
+    ]);
+}
+
 // ==========================================================================
 // DISTRIBUIR — lote de movimientos aplica la misma fórmula automática que compras
 // ==========================================================================
@@ -57,6 +77,7 @@ test('admin distribuye un lote de un movimiento: aplica la fórmula, actualiza e
     $destino = Almacen::factory()->almacen()->create();
     $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
     $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $lote = crearLoteStockRecibido($movimiento, $producto, $destino, 10);
     $cuenta = crearCuentaUsdParaProrrateo(1000);
 
     $response = $this->post(route('distribucion-costos.distribuir'), [
@@ -68,8 +89,13 @@ test('admin distribuye un lote de un movimiento: aplica la fórmula, actualiza e
 
     $response->assertRedirect(route('distribucion-costos.index'));
 
-    // peso=1 (único producto) → monto_asignado=50 → incremento_unitario=5 → nuevo_costo=105
-    $this->assertEquals(105.0, (float) $producto->fresh()->precio_compra_producto);
+    // peso=1 (único producto) → monto_asignado=50 → incremento_unitario=5 → nuevo_costo=105.
+    // Va al lote del almacén destino de ESTE movimiento — el costo global de la ficha NO se
+    // toca (a diferencia de Compras): un movimiento no es dueño exclusivo del producto, el
+    // almacén de origen nunca incurrió este transporte.
+    $this->assertEquals(105.0, (float) $lote->fresh()->precio_costo);
+    $this->assertEquals(100.0, (float) $producto->fresh()->precio_compra_producto);
+    $this->assertEquals(105.0, $producto->fresh()->costoEnAlmacen($destino->id));
 
     $this->assertDatabaseHas('movimientos', [
         'id' => $movimiento->id,
@@ -101,6 +127,8 @@ test('lote de varios movimientos reparte proporcionalmente: mismo % de aumento p
     // línea A = 100 x 10 = 1000, línea B = 50 x 20 = 1000, total lote = 2000
     $mov1 = crearMovimientoConDetalle($origen, $destino, $admin, $productoA, cantidadDespachada: 10);
     $mov2 = crearMovimientoConDetalle($origen, $destino, $admin, $productoB, cantidadDespachada: 20);
+    $loteA = crearLoteStockRecibido($mov1, $productoA, $destino, 10);
+    $loteB = crearLoteStockRecibido($mov2, $productoB, $destino, 20);
 
     $cuenta = crearCuentaUsdParaProrrateo(1000);
 
@@ -111,9 +139,12 @@ test('lote de varios movimientos reparte proporcionalmente: mismo % de aumento p
         'details' => 'Prorrateo lote',
     ])->assertRedirect(route('distribucion-costos.index'));
 
-    // peso 0.5 cada uno → monto 100 cada uno → A: +10 (110, +10%) / B: +5 (55, +10%)
-    $this->assertEquals(110.0, (float) $productoA->fresh()->precio_compra_producto);
-    $this->assertEquals(55.0, (float) $productoB->fresh()->precio_compra_producto);
+    // peso 0.5 cada uno → monto 100 cada uno → A: +10 (110, +10%) / B: +5 (55, +10%) — en los
+    // lotes del destino, la ficha global de cada producto no se toca.
+    $this->assertEquals(110.0, (float) $loteA->fresh()->precio_costo);
+    $this->assertEquals(55.0, (float) $loteB->fresh()->precio_costo);
+    $this->assertEquals(100.0, (float) $productoA->fresh()->precio_compra_producto);
+    $this->assertEquals(50.0, (float) $productoB->fresh()->precio_compra_producto);
 
     $this->assertDatabaseHas('movimientos', ['id' => $mov1->id, 'prorrateo_decision' => 'aplicado']);
     $this->assertDatabaseHas('movimientos', ['id' => $mov2->id, 'prorrateo_decision' => 'aplicado']);
@@ -198,6 +229,7 @@ test('un movimiento ya recibido (recibido_completo) sigue apareciendo pendiente 
     $movimiento->detalles()->create([
         'producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10, 'cantidad_recibida' => 10,
     ]);
+    $lote = crearLoteStockRecibido($movimiento, $producto, $destino, 10);
 
     // Aparece en la cola de pendientes del index() a pesar de ya estar recibido.
     $this->get(route('distribucion-costos.index'))->assertInertia(
@@ -213,7 +245,8 @@ test('un movimiento ya recibido (recibido_completo) sigue apareciendo pendiente 
         'details' => 'Prorrateo post-recepción',
     ])->assertRedirect(route('distribucion-costos.index'));
 
-    $this->assertEquals(105.0, (float) $producto->fresh()->precio_compra_producto);
+    $this->assertEquals(105.0, (float) $lote->fresh()->precio_costo);
+    $this->assertEquals(100.0, (float) $producto->fresh()->precio_compra_producto);
 });
 
 test('un movimiento rechazado no aparece como pendiente y no se puede prorratear', function () {

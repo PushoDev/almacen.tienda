@@ -185,11 +185,52 @@ class ProductoController extends Controller
                     'correo_almacen' => $almacen->correo_almacen,
                     'cantidad' => $almacen->pivot->cantidad,
                     'stock_bajo' => $almacen->pivot->cantidad < 3,
+                    // Costo real en ESTE almacén (promedio ponderado de lotes_stock) — puede
+                    // diferir del costo global de la ficha si un traslado hacia acá se
+                    // prorrateó de forma independiente. Ver Producto::costoEnAlmacen().
+                    'costo' => $producto->costoEnAlmacen($almacen->id),
                 ]),
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
             ],
+            'fichas_hermanas' => $this->fichasHermanas($producto),
         ]);
+    }
+
+    /**
+     * Otras fichas de Producto con la misma identidad descriptiva (nombre+marca+modelo+
+     * capacidad+categoría) pero costo distinto — desde el 2026-09-18 cada compra crea siempre
+     * una ficha nueva (ver CompraController::procesarLineasProducto()), así que "el mismo
+     * artículo" comprado más de una vez a precios distintos queda repartido en varias fichas.
+     * Mostrarlas juntas es lo que evita que el catálogo dé la impresión de un solo costo
+     * cuando en realidad varía por lote/compra.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function fichasHermanas(Producto $producto): array
+    {
+        return Producto::where('id', '!=', $producto->id)
+            ->where('nombre_producto', $producto->nombre_producto)
+            ->where('categoria_id', $producto->categoria_id)
+            ->where('marca_producto', $producto->marca_producto)
+            ->where('modelo_producto', $producto->modelo_producto)
+            ->where('capacidad_producto', $producto->capacidad_producto)
+            ->with('almacenes')
+            ->get()
+            ->map(fn (Producto $hermana) => [
+                'id' => $hermana->id,
+                'codigo_producto' => $hermana->codigo_producto,
+                'precio_compra_producto' => (float) $hermana->precio_compra_producto,
+                'cantidad_total' => $hermana->cantidad_total,
+                'almacenes' => $hermana->almacenes->map(fn ($almacen) => [
+                    'id' => $almacen->id,
+                    'nombre_almacen' => $almacen->nombre_almacen,
+                    'cantidad' => $almacen->pivot->cantidad,
+                ])->filter(fn ($a) => $a['cantidad'] > 0)->values(),
+            ])
+            ->sortBy('precio_compra_producto')
+            ->values()
+            ->all();
     }
 
     /**
@@ -226,6 +267,7 @@ class ProductoController extends Controller
                 ]),
             ],
             'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
+            'fichas_hermanas' => $this->fichasHermanas($producto),
         ]);
     }
 

@@ -12,6 +12,7 @@ class LoteStock extends Model
     protected $fillable = [
         'codigo',
         'compra_producto_id',
+        'movimiento_id',
         'producto_id',
         'almacen_id',
         'cantidad',
@@ -26,6 +27,11 @@ class LoteStock extends Model
     public function compraProducto(): BelongsTo
     {
         return $this->belongsTo(CompraProducto::class, 'compra_producto_id');
+    }
+
+    public function movimiento(): BelongsTo
+    {
+        return $this->belongsTo(Movimiento::class);
     }
 
     public function producto(): BelongsTo
@@ -46,5 +52,10 @@ class LoteStock extends Model
     public static function generarCodigo(int $compraId, int $numeroLinea): string
     {
         return sprintf('LOTE-%d-%03d', $compraId, $numeroLinea);
+    }
+
+    public static function generarCodigoMovimiento(int $movimientoId, int $numeroLinea): string
+    {
+        return sprintf('LOTE-MOV-%d-%03d', $movimientoId, $numeroLinea);
     }
 }
