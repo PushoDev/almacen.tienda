@@ -1,17 +1,20 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import AppLayout from '@/layouts/app-layout';
+import { sileo } from '@/lib/sileo';
 import { CategoriasProps, FichaHermanaProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { FileBox, Package, QrCode, ArrowRightLeft, ShieldAlert, Eye, EyeOff, Layers } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CheckCircle2, Eye, EyeOff, FileBox, Layers, Package, QrCode, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
-import { sileo } from '@/lib/sileo';
-import { Toaster } from '@/components/ui/sileo-toaster';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
@@ -90,7 +93,7 @@ export default function EditarProductosPage({
     };
 
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-    
+
     const transferForm = useForm({
         codigo_origen_id: '',
         nuevo_codigo: '',
@@ -108,7 +111,7 @@ export default function EditarProductosPage({
             onError: (errors) => {
                 if (errors.cantidad) sileo.error({ title: 'Cantidad inválida', description: errors.cantidad });
                 else sileo.error({ title: 'Error al transferir', description: 'No se pudo transferir el código de barras' });
-            }
+            },
         });
     };
 
@@ -128,264 +131,291 @@ export default function EditarProductosPage({
 
                 {/* Información del Producto */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div className="flex items-center justify-between rounded-lg bg-blue-100 p-4 dark:bg-blue-900">
-                        <div>
-                            <h3 className="font-semibold">Stock Actual</h3>
-                            <p className="text-2xl">{producto.cantidad_total}</p>
-                        </div>
-                        <Package className="text-blue-500" size={32} />
-                    </div>
+                    <Card className="relative overflow-hidden">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Stock Actual</CardTitle>
+                            <Package className="text-muted-foreground h-4 w-4" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{producto.cantidad_total}</div>
+                            <p className="text-muted-foreground text-xs">unidades en todos los almacenes</p>
+                        </CardContent>
+                    </Card>
 
-                    <div
-                        className={`flex items-center justify-between rounded-lg p-4 ${producto.stock_bajo ? 'bg-red-100 dark:bg-red-900' : 'bg-green-100 dark:bg-green-900'}`}
-                    >
-                        <div>
-                            <h3 className="font-semibold">Estado Stock</h3>
-                            <p className="text-2xl">{producto.stock_bajo ? 'Bajo' : 'Normal'}</p>
-                        </div>
-                        <Package className={producto.stock_bajo ? 'text-red-500' : 'text-green-500'} size={32} />
-                    </div>
+                    <Card className="relative overflow-hidden">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Estado Stock</CardTitle>
+                            {producto.stock_bajo ? (
+                                <AlertTriangle className="h-4 w-4 text-red-500" />
+                            ) : (
+                                <Package className="h-4 w-4 text-green-500" />
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            <div className={`text-2xl font-bold ${producto.stock_bajo ? 'text-red-600' : 'text-green-600'}`}>
+                                {producto.stock_bajo ? 'Bajo' : 'Normal'}
+                            </div>
+                            <p className="text-muted-foreground text-xs">{producto.stock_bajo ? 'Reponer pronto' : 'Nivel saludable'}</p>
+                        </CardContent>
+                    </Card>
 
-                    <div className="flex items-center justify-between rounded-lg bg-purple-100 p-4 dark:bg-purple-900">
-                        <div>
-                            <h3 className="font-semibold">Código</h3>
-                            <p className="font-mono text-lg">{producto.codigo_producto}</p>
-                        </div>
-                        <QrCode className="text-purple-500" size={32} />
-                    </div>
+                    <Card className="relative overflow-hidden">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Código</CardTitle>
+                            <QrCode className="text-muted-foreground h-4 w-4" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="font-mono text-lg font-bold">{producto.codigo_producto}</div>
+                            <p className="text-muted-foreground text-xs">código por defecto</p>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 {/* Formulario */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
-                    <form onSubmit={submit} className="space-y-6 p-6">
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                            {/* Columna 1 */}
-                            <div className="space-y-4">
-                                <div>
-                                    <Label htmlFor="nombre_producto">Nombre del Producto *</Label>
-                                    <Input
-                                        id="nombre_producto"
-                                        value={data.nombre_producto}
-                                        onChange={(e) => setData('nombre_producto', e.target.value)}
-                                        placeholder="Ingrese el nombre del producto"
-                                        className="mt-1"
-                                    />
-                                    <InputError message={errors.nombre_producto} />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="marca_producto">Marca del Producto</Label>
-                                    <Input
-                                        id="marca_producto"
-                                        value={data.marca_producto}
-                                        onChange={(e) => setData('marca_producto', e.target.value)}
-                                        placeholder="Ingrese la marca del producto"
-                                        className="mt-1"
-                                    />
-                                    <InputError message={errors.marca_producto} />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="modelo_producto">Modelo del Producto</Label>
-                                    <Input
-                                        id="modelo_producto"
-                                        value={data.modelo_producto}
-                                        onChange={(e) => setData('modelo_producto', e.target.value)}
-                                        placeholder="Ingrese el modelo del producto"
-                                        className="mt-1"
-                                    />
-                                    <InputError message={errors.modelo_producto} />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="capacidad_producto">Capacidad del Producto</Label>
-                                    <Input
-                                        id="capacidad_producto"
-                                        value={data.capacidad_producto}
-                                        onChange={(e) => setData('capacidad_producto', e.target.value)}
-                                        placeholder="Ej: 500GB, 1TB, 16GB, etc."
-                                        className="mt-1"
-                                    />
-                                    <InputError message={errors.capacidad_producto} />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="color_producto">Color del Producto</Label>
-                                    <Input
-                                        id="color_producto"
-                                        value={data.color_producto}
-                                        onChange={(e) => setData('color_producto', e.target.value)}
-                                        placeholder="Ej: Negro, Rojo, Azul, etc."
-                                        className="mt-1"
-                                    />
-                                    <InputError message={errors.color_producto} />
-                                </div>
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <FileBox className="h-5 w-5" />
                             </div>
-
-                            {/* Columna 2 */}
-                            <div className="space-y-4">
-                                <div>
-                                    <Label htmlFor="categoria_id">Categoría *</Label>
-                                    <Select value={data.categoria_id} onValueChange={(value) => setData('categoria_id', value)}>
-                                        <SelectTrigger className="mt-1">
-                                            <SelectValue placeholder="Selecciona una categoría" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {categorias.map((categoria) => (
-                                                <SelectItem key={categoria.id} value={categoria.id.toString()}>
-                                                    {categoria.nombre_categoria}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError message={errors.categoria_id} />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="codigo_producto">Código del Producto (Por defecto)</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            id="codigo_producto"
-                                            value={data.codigo_producto}
-                                            disabled
-                                            className="mt-1 flex-1 bg-gray-50 text-gray-500"
-                                        />
-                                    </div>
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        Para transferir cantidades o ver otros códigos, ve al detalle del producto.
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="precio_compra_producto">
-                                        Precio de Costo *
-                                        {isPrivileged && (
-                                            <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
-                                                (requiere contraseña para cambiar)
-                                            </span>
-                                        )}
-                                    </Label>
-                                    <Input
-                                        id="precio_compra_producto"
-                                        disabled={!isPrivileged}
-                                        inputMode="decimal"
-                                        value={data.precio_compra_producto}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                                setData('precio_compra_producto', value);
-                                            }
-                                        }}
-                                        placeholder="0.00"
-                                        className={`mt-1 ${priceChanged ? 'border-amber-500 ring-1 ring-amber-400' : ''}`}
-                                    />
-                                    {priceChanged && (
-                                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                                            El precio cambia de {producto.precio_compra_producto} → {data.precio_compra_producto}. Se pedirá contraseña al guardar.
-                                        </p>
-                                    )}
-                                    <InputError message={errors.precio_compra_producto} />
-                                    <InputError message={errors.password_confirmacion} />
-                                    {fichas_hermanas.length > 0 && (
-                                        <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
-                                            <Layers size={14} className="mt-0.5 shrink-0" />
-                                            <span>
-                                                Este campo solo cambia el costo de esta ficha — hay {fichas_hermanas.length} ficha
-                                                {fichas_hermanas.length === 1 ? '' : 's'} más del mismo producto a otro costo (de otras compras).{' '}
-                                                <Link href={route('productos.show', { producto: producto.id })} className="underline">
-                                                    Ver el detalle
-                                                </Link>
-                                                .
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {isPrivileged && priceChanged && (
+                            <div>
+                                <CardTitle className="text-white">Información del Producto</CardTitle>
+                                <CardDescription className="text-blue-100">Editá los datos y guardá los cambios</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                        <form onSubmit={submit} className="space-y-6">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                {/* Columna 1 */}
+                                <div className="space-y-4">
                                     <div>
-                                        <Label htmlFor="motivo_cambio_costo">Motivo del cambio (opcional)</Label>
+                                        <Label htmlFor="nombre_producto">Nombre del Producto *</Label>
                                         <Input
-                                            id="motivo_cambio_costo"
-                                            value={data.motivo_cambio_costo}
-                                            onChange={(e) => setData('motivo_cambio_costo', e.target.value)}
-                                            placeholder="Ej: Nuevo proveedor, ajuste de mercado..."
+                                            id="nombre_producto"
+                                            value={data.nombre_producto}
+                                            onChange={(e) => setData('nombre_producto', e.target.value)}
+                                            placeholder="Ingrese el nombre del producto"
                                             className="mt-1"
                                         />
+                                        <InputError message={errors.nombre_producto} />
                                     </div>
-                                )}
 
-                                <div>
-                                    <Label htmlFor="imagen_producto">Imagen del Producto</Label>
-                                    <Input
-                                        id="imagen_producto"
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            const file = e.target.files ? e.target.files[0] : null;
-                                            setData('imagen_producto', file);
-                                            if (file) {
-                                                setPreview(URL.createObjectURL(file));
-                                            }
-                                        }}
-                                        className="mt-1"
-                                    />
-                                    <InputError message={errors.imagen_producto} />
+                                    <div>
+                                        <Label htmlFor="marca_producto">Marca del Producto</Label>
+                                        <Input
+                                            id="marca_producto"
+                                            value={data.marca_producto}
+                                            onChange={(e) => setData('marca_producto', e.target.value)}
+                                            placeholder="Ingrese la marca del producto"
+                                            className="mt-1"
+                                        />
+                                        <InputError message={errors.marca_producto} />
+                                    </div>
 
-                                    {/* Preview de imagen */}
-                                    <div className="mt-3 flex items-center gap-4">
-                                        {preview && (
-                                            <div className="flex flex-col items-center">
-                                                <p className="mb-2 text-sm font-medium">Vista previa:</p>
-                                                <img src={preview} alt={data.nombre_producto} className="h-24 w-24 rounded-lg border object-cover" />
+                                    <div>
+                                        <Label htmlFor="modelo_producto">Modelo del Producto</Label>
+                                        <Input
+                                            id="modelo_producto"
+                                            value={data.modelo_producto}
+                                            onChange={(e) => setData('modelo_producto', e.target.value)}
+                                            placeholder="Ingrese el modelo del producto"
+                                            className="mt-1"
+                                        />
+                                        <InputError message={errors.modelo_producto} />
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="capacidad_producto">Capacidad del Producto</Label>
+                                        <Input
+                                            id="capacidad_producto"
+                                            value={data.capacidad_producto}
+                                            onChange={(e) => setData('capacidad_producto', e.target.value)}
+                                            placeholder="Ej: 500GB, 1TB, 16GB, etc."
+                                            className="mt-1"
+                                        />
+                                        <InputError message={errors.capacidad_producto} />
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="color_producto">Color del Producto</Label>
+                                        <Input
+                                            id="color_producto"
+                                            value={data.color_producto}
+                                            onChange={(e) => setData('color_producto', e.target.value)}
+                                            placeholder="Ej: Negro, Rojo, Azul, etc."
+                                            className="mt-1"
+                                        />
+                                        <InputError message={errors.color_producto} />
+                                    </div>
+                                </div>
+
+                                {/* Columna 2 */}
+                                <div className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="categoria_id">Categoría *</Label>
+                                        <Select value={data.categoria_id} onValueChange={(value) => setData('categoria_id', value)}>
+                                            <SelectTrigger className="mt-1">
+                                                <SelectValue placeholder="Selecciona una categoría" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {categorias.map((categoria) => (
+                                                    <SelectItem key={categoria.id} value={categoria.id.toString()}>
+                                                        {categoria.nombre_categoria}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError message={errors.categoria_id} />
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="codigo_producto">Código del Producto (Por defecto)</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="codigo_producto"
+                                                value={data.codigo_producto}
+                                                disabled
+                                                className="mt-1 flex-1 bg-gray-50 text-gray-500"
+                                            />
+                                        </div>
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Para transferir cantidades o ver otros códigos, ve al detalle del producto.
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="precio_compra_producto">
+                                            Precio de Costo *
+                                            {isPrivileged && (
+                                                <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                                    (requiere contraseña para cambiar)
+                                                </span>
+                                            )}
+                                        </Label>
+                                        <Input
+                                            id="precio_compra_producto"
+                                            disabled={!isPrivileged}
+                                            inputMode="decimal"
+                                            value={data.precio_compra_producto}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                                    setData('precio_compra_producto', value);
+                                                }
+                                            }}
+                                            placeholder="0.00"
+                                            className={`mt-1 ${priceChanged ? 'border-amber-500 ring-1 ring-amber-400' : ''}`}
+                                        />
+                                        {priceChanged && (
+                                            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                                El precio cambia de {producto.precio_compra_producto} → {data.precio_compra_producto}. Se pedirá
+                                                contraseña al guardar.
+                                            </p>
+                                        )}
+                                        <InputError message={errors.precio_compra_producto} />
+                                        <InputError message={errors.password_confirmacion} />
+                                        {fichas_hermanas.length > 0 && (
+                                            <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
+                                                <Layers size={14} className="mt-0.5 shrink-0" />
+                                                <span className="flex flex-wrap items-center gap-1">
+                                                    Este campo solo cambia el costo de esta ficha — hay
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="gap-1 border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                                    >
+                                                        <Layers size={11} />
+                                                        {fichas_hermanas.length} ficha{fichas_hermanas.length === 1 ? '' : 's'} más
+                                                    </Badge>
+                                                    del mismo producto a otro costo (de otras compras).{' '}
+                                                    <Link href={route('productos.show', { producto: producto.id })} className="underline">
+                                                        Ver el detalle
+                                                    </Link>
+                                                    .
+                                                </span>
                                             </div>
                                         )}
                                     </div>
+
+                                    {isPrivileged && priceChanged && (
+                                        <div>
+                                            <Label htmlFor="motivo_cambio_costo">Motivo del cambio (opcional)</Label>
+                                            <Input
+                                                id="motivo_cambio_costo"
+                                                value={data.motivo_cambio_costo}
+                                                onChange={(e) => setData('motivo_cambio_costo', e.target.value)}
+                                                placeholder="Ej: Nuevo proveedor, ajuste de mercado..."
+                                                className="mt-1"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <Label htmlFor="imagen_producto">Imagen del Producto</Label>
+                                        <Input
+                                            id="imagen_producto"
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                                const file = e.target.files ? e.target.files[0] : null;
+                                                setData('imagen_producto', file);
+                                                if (file) {
+                                                    setPreview(URL.createObjectURL(file));
+                                                }
+                                            }}
+                                            className="mt-1"
+                                        />
+                                        <InputError message={errors.imagen_producto} />
+
+                                        {/* Preview de imagen */}
+                                        <div className="mt-3 flex items-center gap-4">
+                                            {preview && (
+                                                <div className="flex flex-col items-center">
+                                                    <p className="mb-2 text-sm font-medium">Vista previa:</p>
+                                                    <img
+                                                        src={preview}
+                                                        alt={data.nombre_producto}
+                                                        className="h-24 w-24 rounded-lg border object-cover"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Información adicional */}
-                        <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-                            <h3 className="mb-2 font-semibold">Información Adicional</h3>
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                <div>
-                                    <Label className="text-sm">Stock Total:</Label>
-                                    <p className="font-semibold">{producto.cantidad_total} unidades</p>
-                                </div>
-                                <div>
-                                    <Label className="text-sm">Código Actual:</Label>
-                                    <p className="font-mono font-semibold">{producto.codigo_producto}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-sm">Estado:</Label>
-                                    <p className={`font-semibold ${producto.stock_bajo ? 'text-red-600' : 'text-green-600'}`}>
-                                        {producto.stock_bajo ? 'Stock Bajo' : 'Stock Normal'}
-                                    </p>
-                                </div>
+                            <Separator />
+
+                            <div className="flex justify-end gap-3">
+                                <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                                    Cancelar
+                                </Button>
+                                <Button type="submit" disabled={processing} className="bg-blue-600 hover:bg-blue-700">
+                                    {processing ? 'Actualizando...' : 'Actualizar Producto'}
+                                </Button>
                             </div>
-                        </div>
+                        </form>
+                    </CardContent>
+                </Card>
 
-                        <div className="flex justify-end gap-3">
-                            <Button type="button" variant="outline" onClick={() => window.history.back()}>
-                                Cancelar
-                            </Button>
-                            <Button type="submit" disabled={processing} className="bg-blue-600 hover:bg-blue-700">
-                                {processing ? 'Actualizando...' : 'Actualizar Producto'}
-                            </Button>
-                        </div>
-                    </form>
-                </div>
-
-                {/* Sección de Gestión de Códigos de Barras */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border mt-6 overflow-hidden rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-900">
-                    <div className="flex flex-row items-center justify-between mb-4">
-                        <div className="flex items-center gap-2 text-xl font-semibold">
-                            <QrCode size={24} />
-                            Gestión de Códigos de Barras ({producto.codigos?.length || 0})
+                {/* Gestión de Códigos de Barras */}
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <QrCode className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Gestión de Códigos de Barras</CardTitle>
+                                <CardDescription className="text-purple-100">
+                                    {producto.codigos?.length || 0} código{producto.codigos?.length === 1 ? '' : 's'} asignado
+                                    {producto.codigos?.length === 1 ? '' : 's'}
+                                </CardDescription>
+                            </div>
                         </div>
                         <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
                             <DialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-9 gap-2">
+                                <Button size="sm" className="h-9 gap-2 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
                                     <ArrowRightLeft size={16} />
                                     Asignar / Transferir
                                 </Button>
@@ -409,11 +439,13 @@ export default function EditarProductosPage({
                                                     <SelectValue placeholder="Selecciona el código origen" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {producto.codigos?.filter(c => c.cantidad > 0).map((codigo) => (
-                                                        <SelectItem key={codigo.id} value={codigo.id.toString()}>
-                                                            {codigo.codigo_barras} ({codigo.cantidad} disponibles)
-                                                        </SelectItem>
-                                                    ))}
+                                                    {producto.codigos
+                                                        ?.filter((c) => c.cantidad > 0)
+                                                        .map((codigo) => (
+                                                            <SelectItem key={codigo.id} value={codigo.id.toString()}>
+                                                                {codigo.codigo_barras} ({codigo.cantidad} disponibles)
+                                                            </SelectItem>
+                                                        ))}
                                                 </SelectContent>
                                             </Select>
                                             {transferForm.errors.codigo_origen_id && (
@@ -442,9 +474,7 @@ export default function EditarProductosPage({
                                                 value={transferForm.data.cantidad}
                                                 onChange={(e) => transferForm.setData('cantidad', parseInt(e.target.value))}
                                             />
-                                            {transferForm.errors.cantidad && (
-                                                <p className="text-xs text-red-500">{transferForm.errors.cantidad}</p>
-                                            )}
+                                            {transferForm.errors.cantidad && <p className="text-xs text-red-500">{transferForm.errors.cantidad}</p>}
                                         </div>
                                     </div>
                                     <DialogFooter>
@@ -455,49 +485,62 @@ export default function EditarProductosPage({
                                 </form>
                             </DialogContent>
                         </Dialog>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                        {producto.codigos && producto.codigos.length > 0 ? (
-                            producto.codigos.map((codigo) => (
-                                <div key={codigo.id} className="flex flex-col items-center rounded-lg border p-4 bg-gray-50 dark:bg-gray-800">
-                                    {codigo.imagen_barcode ? (
-                                        <img
-                                            src={codigo.imagen_barcode}
-                                            alt={`Código de barras ${codigo.codigo_barras}`}
-                                            className="h-24 w-full rounded-md border object-contain bg-white mb-3"
-                                        />
-                                    ) : (
-                                        <div className="flex h-24 w-full items-center justify-center rounded-md border border-dashed bg-white mb-3">
-                                            <QrCode size={32} className="text-gray-400" />
-                                        </div>
-                                    )}
-                                    <div className="w-full space-y-1 text-center">
-                                        <p className="font-mono font-semibold">{codigo.codigo_barras}</p>
-                                        <div className="flex items-center justify-between mt-2 text-sm">
-                                            <span className="text-muted-foreground">Cantidad:</span>
-                                            <span className="font-medium bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-100">
-                                                {codigo.cantidad}
-                                            </span>
-                                        </div>
-                                        {codigo.es_default && (
-                                            <span className="inline-block mt-2 text-xs font-medium text-purple-600 bg-purple-100 px-2 py-1 rounded dark:bg-purple-900 dark:text-purple-100">
-                                                Código por defecto
-                                            </span>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                            {producto.codigos && producto.codigos.length > 0 ? (
+                                producto.codigos.map((codigo) => (
+                                    <div key={codigo.id} className="flex flex-col items-center rounded-lg border bg-gray-50 p-4 dark:bg-gray-800">
+                                        {codigo.imagen_barcode ? (
+                                            <img
+                                                src={codigo.imagen_barcode}
+                                                alt={`Código de barras ${codigo.codigo_barras}`}
+                                                className="mb-3 h-24 w-full rounded-md border bg-white object-contain"
+                                            />
+                                        ) : (
+                                            <div className="mb-3 flex h-24 w-full items-center justify-center rounded-md border border-dashed bg-white">
+                                                <QrCode size={32} className="text-gray-400" />
+                                            </div>
                                         )}
+                                        <div className="w-full space-y-2 text-center">
+                                            <p className="font-mono font-semibold">{codigo.codigo_barras}</p>
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="text-muted-foreground">Cantidad:</span>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                >
+                                                    <Package size={12} />
+                                                    {codigo.cantidad}
+                                                </Badge>
+                                            </div>
+                                            {codigo.es_default && (
+                                                <Badge className="gap-1 bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300">
+                                                    <CheckCircle2 size={12} />
+                                                    Código por defecto
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="col-span-full py-8 text-center text-gray-500">
-                                No hay códigos de barras asignados
-                            </div>
-                        )}
-                    </div>
-                </div>
+                                ))
+                            ) : (
+                                <div className="col-span-full py-8 text-center text-gray-500">No hay códigos de barras asignados</div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Dialog de confirmación de contraseña para cambio de precio de costo */}
-                <Dialog open={passwordDialog} onOpenChange={(open) => { setPasswordDialog(open); if (!open) { setPasswordInput(''); setShowPassword(false); } }}>
+                <Dialog
+                    open={passwordDialog}
+                    onOpenChange={(open) => {
+                        setPasswordDialog(open);
+                        if (!open) {
+                            setPasswordInput('');
+                            setShowPassword(false);
+                        }
+                    }}
+                >
                     <DialogContent className="sm:max-w-[400px]">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
@@ -505,10 +548,9 @@ export default function EditarProductosPage({
                                 Confirmar cambio de precio de costo
                             </DialogTitle>
                             <DialogDescription>
-                                Estás cambiando el precio de costo de{' '}
-                                <strong>${producto.precio_compra_producto}</strong> a{' '}
-                                <strong>${data.precio_compra_producto}</strong>.
-                                Esta acción queda registrada en el historial. Ingresa tu contraseña para confirmar.
+                                Estás cambiando el precio de costo de <strong>${producto.precio_compra_producto}</strong> a{' '}
+                                <strong>${data.precio_compra_producto}</strong>. Esta acción queda registrada en el historial. Ingresa tu contraseña
+                                para confirmar.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
@@ -520,7 +562,9 @@ export default function EditarProductosPage({
                                         type={showPassword ? 'text' : 'password'}
                                         value={passwordInput}
                                         onChange={(e) => setPasswordInput(e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' && passwordInput) confirmAndSubmit(); }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && passwordInput) confirmAndSubmit();
+                                        }}
                                         placeholder="Ingresa tu contraseña"
                                         className="pr-10 normal-case"
                                         autoFocus
@@ -528,7 +572,7 @@ export default function EditarProductosPage({
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword((v) => !v)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                                         tabIndex={-1}
                                     >
                                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -540,7 +584,11 @@ export default function EditarProductosPage({
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => { setPasswordDialog(false); setPasswordInput(''); setShowPassword(false); }}
+                                onClick={() => {
+                                    setPasswordDialog(false);
+                                    setPasswordInput('');
+                                    setShowPassword(false);
+                                }}
                             >
                                 Cancelar
                             </Button>

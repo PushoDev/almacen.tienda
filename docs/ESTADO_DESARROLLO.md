@@ -1,7 +1,7 @@
 # Estado del Desarrollo — almacen.tienda
 
 > **Actualizar este archivo cada vez que se resuelva un bug, se complete una feature o aparezca algo nuevo.**
-> Fecha de última actualización: 2026-09-18 (Fix de seguridad B15: `/monedas` ahora admin-only + páginas de error 404/403/419/500/503 personalizadas con la mascota, wired por primera vez)
+> Fecha de última actualización: 2026-09-18 (Productos/Edit.tsx — pasada visual a patrón de Card degradado + badges; pendiente Show.tsx e Index.tsx para mañana)
 
 ---
 
@@ -220,6 +220,7 @@ Durante la verificación en navegador el cliente preguntó *"¿agregaste un bot�
 
 ## 📋 Pendientes menores conocidos
 
+- [ ] **Productos — pasada visual a patrón de Card degradado (2026-09-18).** `Edit.tsx` completado y verificado en navegador: form + "Gestión de Códigos de Barras" con `CardHeader` degradado (azul/púrpura) + icono en círculo; las 3 KPI cards (Stock Actual/Estado Stock/Código) usan el patrón real de KPI widget (Card plana, ícono y valor coloreados — igual que `Clientes/Index.tsx`, NO degradado de fondo); badges con icono (`Badge` de shadcn) en cantidad/código-por-defecto de los barcodes y en el aviso de "fichas hermanas". **Pendiente para mañana: `Show.tsx` e `Index.tsx` de Productos**, mismo criterio (todas las Card del módulo, sin excepción).
 - [ ] El comando `/reporte` del bot no filtra por almacén del usuario — devuelve todos los almacenes. Considerar filtro para admins con almacenes asignados.
 - [ ] Ecommerce: vista pública del catálogo está en desarrollo, no vinculada al POS.
 - [ ] **Reportes — prioridad bajada explícitamente por el cliente 2026-09-05**: los 14 reportes restantes se trabajan solo bajo petición, no proactivamente. Ver `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md` (índice con hallazgos por reporte). **Rastreo de Operaciones** (el que más le interesaba al cliente) tiene Fases 0-3, 5, 7, 8, 9 cerradas, más el fix de `exportToPDF` del 2026-09-05; quedan Fase 4 (stock final) y parte de Fase 6 (drill-down), ambas baja prioridad — detalle en `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md`. **Bug real confirmado 2026-09-08**: `Reportes/Report/ProductosMasVendidos.tsx` existe como archivo pero tiene **0 líneas** — el reporte se rompe al abrirlo. Varios reportes siguen sin paginación/límite.
