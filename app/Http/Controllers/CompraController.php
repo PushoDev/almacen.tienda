@@ -9,6 +9,7 @@ use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraEdicion;
 use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
+use App\Models\CompraProducto;
 use App\Models\Cuenta;
 use App\Models\LoteStock;
 use App\Models\Producto;
@@ -515,28 +516,19 @@ class CompraController extends Controller
         foreach ($productos as $item) {
             $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
-            $searchAttributes = [
-                'nombre_producto' => $item['producto'],
-                'categoria_id' => $categoria->id,
-                'marca_producto' => $item['marca'] ?? null,
-                'modelo_producto' => $item['modelo'] ?? null,
-                'capacidad_producto' => $item['capacidad'] ?? null,
-            ];
-
-            // El precio de costo es parte de la identidad del producto: si el mismo
-            // producto (mismo nombre+categoría+marca+modelo+capacidad) se compra a un
-            // precio distinto — misma compra para llenar un contenedor, compra separada,
-            // u otro proveedor — es legalmente otro producto. No se pisa el costo del
-            // existente: se crea una ficha aparte. Comparación exacta, sin margen de
-            // tolerancia (decisión explícita del cliente).
-            $producto = Producto::where($searchAttributes)
-                ->where('precio_compra_producto', $item['precio'])
-                ->first();
-            $isNew = ! $producto;
-
-            if ($isNew) {
-                $producto = new Producto;
-            }
+            // Cada línea de compra crea SIEMPRE una ficha de Producto nueva, sin buscar ni
+            // reutilizar una existente — aunque nombre+categoría+marca+modelo+capacidad+precio
+            // coincidan exacto con una ya registrada. Decisión explícita del cliente
+            // (2026-09-18, ver docs/arreglos-pendientes/costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md):
+            // cada compra es un lote físico distinto, y Distribución de Costos puede aplicarse
+            // a una compra sí y a otra no (el prorrateo es opcional). Si dos compras "iguales"
+            // compartieran una sola ficha, prorratear una le cambiaría el costo también al
+            // stock de la otra, que nunca fue parte de ese prorrateo — bug real reportado por
+            // el cliente. Con ficha siempre nueva, un prorrateo solo puede tocar su propio lote.
+            // El catálogo puede terminar con fichas repetidas del mismo artículo — para eso
+            // existe la herramienta de detección y fusión de duplicados en Productos/Index.tsx.
+            $producto = new Producto;
+            $isNew = true;
 
             $producto->fill([
                 'nombre_producto' => $item['producto'],
@@ -800,6 +792,11 @@ class CompraController extends Controller
             $tipoProveedor = $comprar->proveedor_id ? 'proveedor' : 'cliente';
             $entidad = $comprar->proveedor_id ? $comprar->proveedor : $comprar->cliente;
 
+            // Fichas que esta MISMA compra había creado antes de esta edición (cada línea crea
+            // siempre una ficha nueva, ver procesarLineasProducto) — si esta edición ya no las
+            // usa, quedan huérfanas más abajo y se limpian.
+            $productosAntesDeEditar = $comprar->productos()->pluck('productos.id')->all();
+
             $this->revertirEfectosMonetarios($comprar);
             // A diferencia de anular(), aquí sí se borran — se está reemplazando todo por datos
             // nuevos, no dejando un registro histórico de una compra que queda cerrada.
@@ -815,6 +812,29 @@ class CompraController extends Controller
             $this->crearRegistrosPago($comprar, $comprar->tipo_compra, $resultadoPagos);
 
             $productosConAlmacen = $this->procesarLineasProducto($comprar, $validated['productos']);
+
+            // Limpieza de fichas huérfanas: una compra pendiente nunca tuvo AlmacenProducto/
+            // ProductoCodigo/LoteStock (eso solo lo crea aprobar(), y una compra aprobada ya no
+            // se puede editar) — así que una ficha de una edición anterior que esta edición ya
+            // no usa es segura de borrar, salvo que algo más la haya referenciado mientras tanto
+            // (ej. un precio de vendedor asignado a mano).
+            if (! empty($productosAntesDeEditar)) {
+                $siguenEnUso = CompraProducto::whereIn('producto_id', $productosAntesDeEditar)
+                    ->pluck('producto_id');
+                // Consulta directa a la tabla, no la relación Producto::vendedores() — esa
+                // relación sigue asumiendo la columna producto_vendedors.user_id, que la
+                // migración 2026_05_30_000001_refactor_producto_vendedors_unico_por_almacen ya
+                // quitó (hoy la PK real es producto_id+almacen_id); usarla revienta con
+                // "no such column" (hallazgo aparte, no se toca aquí).
+                $conPrecioAsignado = DB::table('producto_vendedors')
+                    ->whereIn('producto_id', $productosAntesDeEditar)
+                    ->pluck('producto_id');
+                $huerfanos = array_diff($productosAntesDeEditar, $siguenEnUso->all(), $conPrecioAsignado->all());
+
+                if (! empty($huerfanos)) {
+                    Producto::whereIn('id', $huerfanos)->delete();
+                }
+            }
 
             CompraEdicion::create([
                 'compra_id' => $comprar->id,

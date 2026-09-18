@@ -3,7 +3,9 @@
 use App\Http\Controllers\MonedaController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->group(function () {
+// 'admin.only' (EnsureUserIsAdminOnly) exige estrictamente el rol 'admin' — coincide con lo
+// que el sidebar ya asume (roles: ['admin']), moderador y vendedor quedan fuera.
+Route::middleware(['auth', 'verified', 'admin.only'])->group(function () {
     Route::resource('monedas', MonedaController::class)->parameters([
         'monedas' => 'moneda',
     ]);

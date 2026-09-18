@@ -15,6 +15,7 @@ use App\Models\Moneda;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
+use App\Models\TipoMovimientoFinanciero;
 use App\Models\User;
 
 test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', function () {
@@ -552,7 +553,7 @@ test('comprar el mismo producto dos veces en una misma compra, a precios distint
         ->toBe(['20.00', '25.00']);
 });
 
-test('una compra con el mismo costo que ya tenía el producto reutiliza la misma ficha, no crea una nueva', function () {
+test('una compra con el mismo costo que ya tenía el producto crea una ficha nueva y separada de todas formas', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -586,8 +587,167 @@ test('una compra con el mismo costo que ya tenía el producto reutiliza la misma
 
     $response->assertSessionHasNoErrors();
 
-    expect(Producto::where('nombre_producto', 'Producto Costo Igual')->count())->toBe(1);
+    // Cada compra es un lote físico distinto — nunca se fusiona con una ficha existente, ni
+    // siquiera cuando nombre+categoría+marca+modelo+capacidad+precio coinciden exacto. Ver
+    // docs/arreglos-pendientes/costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md.
+    expect(Producto::where('nombre_producto', 'Producto Costo Igual')->count())->toBe(2);
     expect(HistorialPrecioCosto::where('producto_id', $producto->id)->count())->toBe(0);
+});
+
+test('prorratear una compra nueva no toca el costo de una ficha vieja del mismo producto — regresión del bug real reportado por el cliente', function () {
+    // Antes de este fix, una compra nueva del "mismo" producto (mismo nombre+categoría+precio)
+    // reutilizaba la ficha existente, y prorratear esa compra nueva mutaba precio_compra_producto
+    // en esa ficha compartida — cambiando también el costo del stock viejo que ya estaba ahí,
+    // que nunca fue parte de esta compra ni de este prorrateo. Con ficha siempre nueva, cada
+    // compra tiene su propio Producto exclusivo — prorratear una nunca puede tocar el costo
+    // registrado por otra, aunque describan "el mismo artículo".
+    TipoMovimientoFinanciero::firstOrCreate(['id' => 1], ['nombre' => 'Gasto Operativo', 'efecto' => 'egreso']);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    // La ficha "vieja" ya existía en el registro, de una compra anterior.
+    $productoViejo = Producto::factory()->create([
+        'nombre_producto' => 'Producto Regresion Prorrateo',
+        'categoria_id' => $categoria->id,
+        'marca_producto' => null,
+        'modelo_producto' => null,
+        'capacidad_producto' => null,
+        'precio_compra_producto' => 10,
+    ]);
+
+    // Compra nueva del "mismo" producto, mismo precio — crea una ficha propia, separada.
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Regresion',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-18',
+        'productos' => [
+            [
+                'almacen_id' => $almacen->id,
+                'producto' => 'Producto Regresion Prorrateo',
+                'categoria' => $categoria->nombre_categoria,
+                'cantidad' => 5,
+                'precio' => 10,
+            ],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $compraNueva = Compra::latest('id')->first();
+    $productoNuevo = Producto::where('nombre_producto', 'Producto Regresion Prorrateo')
+        ->where('id', '!=', $productoViejo->id)
+        ->firstOrFail();
+
+    // Solo se puede prorratear una compra aprobada.
+    $this->post(route('comprar.aprobar', $compraNueva->id))->assertSessionHasNoErrors();
+
+    $cuenta = Cuenta::factory()
+        ->for(Moneda::factory()->state(['codigo_moneda' => 'USD', 'estado' => true]), 'moneda')
+        ->create(['saldo_cuenta' => 1000]);
+
+    // Prorratear SOLO la compra nueva.
+    $this->post(route('distribucion-costos.distribuir'), [
+        'purchase_ids' => [$compraNueva->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Prorrateo de prueba — regresión',
+    ])->assertRedirect(route('distribucion-costos.index'));
+
+    // La ficha nueva (la que se prorrateó) sí cambia de costo.
+    expect((float) $productoNuevo->fresh()->precio_compra_producto)->not->toEqual(10.0);
+
+    // La ficha vieja — que nunca fue parte de esta compra ni de este prorrateo — queda intacta.
+    expect((float) $productoViejo->fresh()->precio_compra_producto)->toEqual(10.0);
+});
+
+test('no se puede prorratear costos de una compra que sigue pendiente (sin aprobar)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Sin Aprobar',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-18',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Sin Aprobar', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $compra = Compra::latest('id')->first();
+    expect($compra->estado)->toBe('pendiente');
+    $producto = Producto::where('nombre_producto', 'Producto Sin Aprobar')->firstOrFail();
+
+    $cuenta = Cuenta::factory()
+        ->for(Moneda::factory()->state(['codigo_moneda' => 'USD', 'estado' => true]), 'moneda')
+        ->create(['saldo_cuenta' => 1000]);
+
+    // Ni el formulario...
+    $this->get(route('distribucion-costos.formulario', ['compras' => [$compra->id]]))
+        ->assertStatus(422);
+
+    // ...ni el endpoint que aplica el prorrateo lo permiten.
+    $response = $this->post(route('distribucion-costos.distribuir'), [
+        'purchase_ids' => [$compra->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'No debería aplicarse',
+    ]);
+    $response->assertSessionHas('error');
+
+    expect((float) $producto->fresh()->precio_compra_producto)->toEqual(10.0);
+});
+
+test('prorratear una compra aprobada sincroniza el lote_stock que aprobar() ya había creado, no solo el costo global', function () {
+    // Antes de este fix, ejecutarProrrateoAutomatico() solo actualizaba Producto.precio_compra_producto
+    // — el lote_stock que aprobar() crea al aprobar la compra quedaba con el costo viejo, así que
+    // costoEnAlmacen()/Show.tsx hubieran mostrado un número desincronizado del que ve Edit.tsx.
+    TipoMovimientoFinanciero::firstOrCreate(['id' => 1], ['nombre' => 'Gasto Operativo', 'efecto' => 'egreso']);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Sync Lote',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-18',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Sync Lote', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $compra = Compra::latest('id')->first();
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    $producto = Producto::where('nombre_producto', 'Producto Sync Lote')->firstOrFail();
+    $lote = LoteStock::where('producto_id', $producto->id)->firstOrFail();
+    expect((float) $lote->precio_costo)->toEqual(10.0);
+
+    $cuenta = Cuenta::factory()
+        ->for(Moneda::factory()->state(['codigo_moneda' => 'USD', 'estado' => true]), 'moneda')
+        ->create(['saldo_cuenta' => 1000]);
+
+    $this->post(route('distribucion-costos.distribuir'), [
+        'purchase_ids' => [$compra->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 25]],
+        'exchange_rate' => 400,
+        'details' => 'Prorrateo sincroniza lote',
+    ])->assertRedirect(route('distribucion-costos.index'));
+
+    // peso=1 (único producto) → incremento_unitario = 25/5 = 5 → nuevo_costo = 15, en los dos lados.
+    expect((float) $producto->fresh()->precio_compra_producto)->toEqual(15.0);
+    expect((float) $lote->fresh()->precio_costo)->toEqual(15.0);
+    expect($producto->fresh()->costoEnAlmacen($almacen->id))->toEqual(15.0);
 });
 
 test('una compra que da de alta un producto nuevo no crea entrada en historial_precio_costos', function () {
@@ -1387,6 +1547,11 @@ test('editar una compra pendiente reemplaza por completo las líneas de producto
     // La deuda con el proveedor se recalculó desde cero sobre el total nuevo, no se acumuló.
     expect($proveedor->fresh()->saldo_proveedor)->toEqual('620.00'); // 1000 - 380
 
+    // Cada línea de compra crea siempre una ficha nueva — la edición reemplaza también las
+    // fichas, no solo el pivot. La ficha de la versión anterior ("100 unidades") queda huérfana
+    // (esta misma compra era su única referencia, y nunca tuvo stock por seguir pendiente) y
+    // actualizar() la limpia — no debe quedar un duplicado fantasma en el catálogo.
+    expect(Producto::where('nombre_producto', 'Producto Editar')->count())->toBe(1);
     $productoOriginal = Producto::where('nombre_producto', 'Producto Editar')->firstOrFail();
     $productoNuevo = Producto::where('nombre_producto', 'Producto Editar Nuevo')->firstOrFail();
 
@@ -1397,6 +1562,41 @@ test('editar una compra pendiente reemplaza por completo las líneas de producto
     // El stock sigue sin tocarse — la compra editada sigue pendiente de aprobación.
     $this->assertDatabaseMissing('almacen_producto', ['producto_id' => $productoOriginal->id]);
     $this->assertDatabaseMissing('almacen_producto', ['producto_id' => $productoNuevo->id]);
+});
+
+test('editar una compra pendiente varias veces no acumula fichas huérfanas en el catálogo', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 1000]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $proveedor->nombre_proveedor,
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-18',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Huerfano', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 100, 'precio' => 5],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+
+    // 3 correcciones seguidas de la misma compra, todavía pendiente.
+    foreach ([80, 70, 60] as $cantidad) {
+        $this->post(route('comprar.actualizar', $compra->id), [
+            'productos' => [
+                ['almacen_id' => $almacen->id, 'producto' => 'Producto Huerfano', 'categoria' => $categoria->nombre_categoria, 'cantidad' => $cantidad, 'precio' => 5],
+            ],
+            'nota' => "Corrección a {$cantidad} unidades",
+        ])->assertSessionHasNoErrors();
+    }
+
+    // Ninguna de las 3 fichas intermedias quedó abandonada — solo sobrevive la última.
+    expect(Producto::where('nombre_producto', 'Producto Huerfano')->count())->toBe(1);
+    $this->assertDatabaseHas('compra_producto', ['compra_id' => $compra->id, 'cantidad' => 60]);
 });
 
 test('editar una compra pendiente pago_cash vuelve a procesar los pagos desde cero', function () {

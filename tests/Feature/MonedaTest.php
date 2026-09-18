@@ -201,3 +201,72 @@ test('create() y edit() exponen el catálogo de insignias de moneda, incluyendo 
         ->where('moneda.imagen', 'usd')
     );
 });
+
+// ==========================================================================
+// ACCESO — admin.only (routes/crud/monedas.php). Antes solo 'auth'+'verified',
+// cualquier rol autenticado podía cambiar tasa de cambio o borrar una moneda
+// por bypass directo de URL, aunque el sidebar ya lo ocultaba a todos menos admin.
+// ==========================================================================
+
+test('un admin puede acceder al listado de Monedas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $response = $this->get(route('monedas.index'), ['X-Inertia' => 'true']);
+
+    $response->assertOk();
+});
+
+test('un moderador no puede acceder al listado de Monedas (403)', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $response = $this->get(route('monedas.index'), ['X-Inertia' => 'true']);
+
+    $response->assertStatus(403);
+});
+
+test('un vendedor no puede acceder al listado de Monedas (403)', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $response = $this->get(route('monedas.index'), ['X-Inertia' => 'true']);
+
+    $response->assertStatus(403);
+});
+
+test('un vendedor no puede cambiar la tasa de cambio por bypass directo de URL (403), y no se modifica nada', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 675]);
+
+    $response = $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => $moneda->nombre_moneda,
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 999,
+        'commission' => 0,
+        'estado' => true,
+        'principal' => $moneda->principal,
+    ], ['X-Inertia' => 'true']);
+
+    $response->assertStatus(403);
+    expect($moneda->fresh()->tasa_cambio)->toEqual(675.0);
+});
+
+test('un vendedor no puede eliminar una moneda por bypass directo de URL (403), y no se borra', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $moneda = Moneda::factory()->create(['principal' => false]);
+
+    $response = $this->delete(route('monedas.destroy', $moneda), [], ['X-Inertia' => 'true']);
+
+    $response->assertStatus(403);
+    $this->assertDatabaseHas('monedas', ['id' => $moneda->id]);
+});

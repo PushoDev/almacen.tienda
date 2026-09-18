@@ -198,6 +198,7 @@ export interface ProductoProps {
         correo_almacen?: string;
         cantidad: number;
         stock_bajo: boolean;
+        costo: number;
     }>;
     codigos?: Array<{
         id: number;
@@ -205,6 +206,21 @@ export interface ProductoProps {
         cantidad: number;
         es_default: boolean;
         imagen_barcode: string | null;
+    }>;
+}
+
+// Otra ficha de Producto con la misma identidad descriptiva (nombre+marca+modelo+capacidad+
+// categoría) pero costo distinto — cada compra crea siempre una ficha nueva desde 2026-09-18,
+// así que "el mismo artículo" puede existir repartido en varias fichas a precios distintos.
+export interface FichaHermanaProps {
+    id: number;
+    codigo_producto: string;
+    precio_compra_producto: number;
+    cantidad_total: number;
+    almacenes: Array<{
+        id: number;
+        nombre_almacen: string;
+        cantidad: number;
     }>;
 }
 

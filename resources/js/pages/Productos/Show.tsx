@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
-import { ProductoProps, type BreadcrumbItem } from '@/types';
+import { FichaHermanaProps, ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { AlertTriangle, Calendar, Edit2, Package2, QrCode, Warehouse, ArrowRightLeft } from 'lucide-react';
+import { AlertTriangle, Calendar, Edit2, Package2, QrCode, Warehouse, ArrowRightLeft, Layers } from 'lucide-react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { useState } from 'react';
@@ -31,7 +31,15 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ShowPageProductos({ producto, precio_venta }: { producto: ProductoProps; precio_venta: number | null }) {
+export default function ShowPageProductos({
+    producto,
+    precio_venta,
+    fichas_hermanas,
+}: {
+    producto: ProductoProps;
+    precio_venta: number | null;
+    fichas_hermanas: FichaHermanaProps[];
+}) {
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     
     const transferForm = useForm({
@@ -61,18 +69,22 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
         return typeof precio === 'number' ? precio.toFixed(2) : '0.00';
     };
 
-    // Función segura para cálculos
+    // Valor total real: suma el costo propio de cada almacén (puede variar por traslados
+    // prorrateados de forma independiente, ver Producto::costoEnAlmacen()) — no el costo global
+    // de la ficha multiplicado por el total. Si el producto no tiene almacenes (aún sin
+    // aprobar), cae al costo global como mejor aproximación disponible.
     const calcularValorTotal = (): string => {
+        if (producto.almacenes && producto.almacenes.length > 0) {
+            return producto.almacenes.reduce((total, a) => total + a.costo * a.cantidad, 0).toFixed(2);
+        }
         const precio = producto.precio_compra_producto ?? 0;
         const cantidad = producto.cantidad_total ?? 0;
         return (precio * cantidad).toFixed(2);
     };
 
-    // Función segura para calcular valor por almacén
-    const calcularValorAlmacen = (cantidadAlmacen: number): string => {
-        const precio = producto.precio_compra_producto ?? 0;
-        const cantidad = cantidadAlmacen ?? 0;
-        return (precio * cantidad).toFixed(2);
+    // Función segura para calcular valor por almacén — usa el costo real de ESE almacén.
+    const calcularValorAlmacen = (costoAlmacen: number, cantidadAlmacen: number): string => {
+        return ((costoAlmacen ?? 0) * (cantidadAlmacen ?? 0)).toFixed(2);
     };
 
     return (
@@ -240,6 +252,49 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
                             </CardContent>
                         </Card>
 
+                        {/* Otras fichas del mismo producto, a costo distinto — cada compra crea siempre
+                            una ficha nueva desde 2026-09-18, así que "el mismo artículo" puede existir
+                            repartido en varias fichas. Sin esto, el catálogo daba la impresión de un
+                            solo costo por producto cuando en realidad varía por compra/lote. */}
+                        {fichas_hermanas.length > 0 && (
+                            <Card className="border-amber-200 dark:border-amber-900">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                                        <Layers size={20} />
+                                        Este producto tiene {fichas_hermanas.length} costo{fichas_hermanas.length === 1 ? '' : 's'} más
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Mismo nombre, marca, modelo y capacidad, comprado en lotes distintos — cada compra registra su propio costo,
+                                        nunca se mezcla con el de otra.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {fichas_hermanas.map((hermana) => (
+                                        <Link
+                                            key={hermana.id}
+                                            href={route('productos.show', { producto: hermana.id })}
+                                            className="block rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="font-mono text-xs text-muted-foreground">{hermana.codigo_producto}</p>
+                                                    <p className="font-semibold text-green-600">${formatPrecio(hermana.precio_compra_producto)}</p>
+                                                </div>
+                                                <div className="text-right text-sm">
+                                                    <p className="font-medium">{hermana.cantidad_total} unidades</p>
+                                                    <p className="text-muted-foreground">
+                                                        {hermana.almacenes.length > 0
+                                                            ? hermana.almacenes.map((a) => a.nombre_almacen).join(', ')
+                                                            : 'Sin stock'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {/* Listado de almacenes disponibles */}
                         <Card>
                             <CardHeader>
@@ -277,7 +332,7 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
 
                                                     <Separator />
 
-                                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                                    <div className="grid grid-cols-3 gap-4 text-sm">
                                                         <div>
                                                             <p className="text-muted-foreground">Disponibilidad:</p>
                                                             <p className={`font-bold ${almacen.stock_bajo ? 'text-red-600' : 'text-green-600'}`}>
@@ -285,8 +340,24 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
                                                             </p>
                                                         </div>
                                                         <div>
+                                                            <p className="text-muted-foreground">Costo aquí:</p>
+                                                            <p className="font-bold text-green-600">
+                                                                ${formatPrecio(almacen.costo)}
+                                                                {almacen.costo !== producto.precio_compra_producto && (
+                                                                    <span
+                                                                        className="ml-1 text-xs font-normal text-amber-600 dark:text-amber-400"
+                                                                        title="Distinto del costo base de la ficha — este almacén tuvo un traslado prorrateado de forma independiente"
+                                                                    >
+                                                                        (≠ base)
+                                                                    </span>
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                        <div>
                                                             <p className="text-muted-foreground">Valor en almacén:</p>
-                                                            <p className="font-bold text-purple-600">${calcularValorAlmacen(almacen.cantidad)}</p>
+                                                            <p className="font-bold text-purple-600">
+                                                                ${calcularValorAlmacen(almacen.costo, almacen.cantidad)}
+                                                            </p>
                                                         </div>
                                                     </div>
 

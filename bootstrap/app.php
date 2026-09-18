@@ -15,6 +15,9 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -55,5 +58,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('comparacion:cerrar-mes')->monthlyOn(1, '00:00');
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
+            // 419 (token CSRF vencido) solo ocurre en un envío de formulario (POST/PUT/PATCH/DELETE) —
+            // volver a la misma pantalla con un flash es mejor UX que una página completa: el usuario
+            // no pierde lo que estaba llenando. Sigue la recomendación oficial de Inertia para este caso.
+            if ($response->getStatusCode() === 419) {
+                return back()->with(['error' => 'Tu sesión expiró. Por favor, intenta de nuevo.']);
+            }
+
+            if (! app()->environment(['local', 'testing']) && in_array($response->getStatusCode(), [403, 404, 500, 503])) {
+                return Inertia::render('errors/Error', [
+                    'status' => $response->getStatusCode(),
+                    'authenticated' => $request->user() !== null,
+                ])
+                    ->toResponse($request)
+                    ->setStatusCode($response->getStatusCode());
+            }
+
+            return $response;
+        });
     })->create();

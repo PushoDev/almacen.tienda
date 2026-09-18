@@ -78,6 +78,7 @@ interface Compra {
     origen: string | null;
     almacenes: string[];
     tiene_distribucion: boolean;
+    estado: string;
 }
 
 interface ComprasPaginadas {
@@ -638,11 +639,24 @@ export default function DistribucionCostosIndex({
                                     compras.data.map((compra) => (
                                         <TableRow key={compra.id} className="group hover:bg-muted/50">
                                             <TableCell>
-                                                <Checkbox
-                                                    checked={seleccionadas.includes(compra.id)}
-                                                    onCheckedChange={() => toggleSeleccionada(compra.id)}
-                                                    className="size-5 border-2 border-slate-400 dark:border-slate-300"
-                                                />
+                                                {compra.estado === 'aprobada' ? (
+                                                    <Checkbox
+                                                        checked={seleccionadas.includes(compra.id)}
+                                                        onCheckedChange={() => toggleSeleccionada(compra.id)}
+                                                        className="size-5 border-2 border-slate-400 dark:border-slate-300"
+                                                    />
+                                                ) : (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span>
+                                                                <Checkbox disabled className="size-5 border-2" />
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            Solo se pueden prorratear compras aprobadas — esta sigue {compra.estado}.
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <Badge variant="secondary">#{compra.id}</Badge>
@@ -703,19 +717,34 @@ export default function DistribucionCostosIndex({
                                                         <div className="size-9" />
                                                     )}
 
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
-                                                                <Button
-                                                                    size="icon"
-                                                                    className="cursor-pointer bg-indigo-600 text-white shadow-sm hover:bg-indigo-700"
-                                                                >
-                                                                    <ArrowRightLeft className="h-4 w-4" />
-                                                                </Button>
-                                                            </Link>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>Distribuir</TooltipContent>
-                                                    </Tooltip>
+                                                    {compra.estado === 'aprobada' ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
+                                                                    <Button
+                                                                        size="icon"
+                                                                        className="cursor-pointer bg-indigo-600 text-white shadow-sm hover:bg-indigo-700"
+                                                                    >
+                                                                        <ArrowRightLeft className="h-4 w-4" />
+                                                                    </Button>
+                                                                </Link>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Distribuir</TooltipContent>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span>
+                                                                    <Button size="icon" disabled className="cursor-not-allowed">
+                                                                        <ArrowRightLeft className="h-4 w-4" />
+                                                                    </Button>
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                Solo se pueden prorratear compras aprobadas — esta sigue {compra.estado}.
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                         </TableRow>

@@ -10,6 +10,7 @@ use App\Models\Producto;
 use App\Models\User;
 use App\Notifications\CambioPrecioVendedorNotification;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,7 @@ class ProductoVendedorController extends Controller
 
         $almacenesQuery = Almacen::query();
 
-        if (!in_array($user->role, ['admin', 'moderador'])) {
+        if (! in_array($user->role, ['admin', 'moderador'])) {
             $almacenesIds = $user->almacenes->pluck('id');
             $almacenesQuery->whereIn('id', $almacenesIds);
         }
@@ -50,7 +51,7 @@ class ProductoVendedorController extends Controller
                     'pv.puesto_por_user_id',
                     DB::raw('u_puesto.name as puesto_por_nombre'),
                 )->with('categoria');
-            }
+            },
         ])->get();
 
         $user = Auth::user();
@@ -60,37 +61,37 @@ class ProductoVendedorController extends Controller
                 $precioVenta = $producto->precio_venta;
 
                 return [
-                    'id'                   => $producto->id,
-                    'nombre_producto'      => $producto->nombre_producto,
-                    'marca_producto'       => $producto->marca_producto,
-                    'modelo_producto'      => $producto->modelo_producto,
-                    'capacidad_producto'   => $producto->capacidad_producto,
-                    'color_producto'       => $producto->color_producto,
-                    'categoria'            => $producto->categoria->nombre_categoria ?? 'Sin categoría',
-                    'imagen_producto'      => $producto->imagen_producto,
-                    'precio_compra'        => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
-                    'stock_almacen'        => $producto->pivot->cantidad,
-                    'precio_venta'         => $precioVenta,
-                    'ganancia'             => $producto->venta_ganancia,
-                    'comision'             => round((float) ($producto->comision ?? 0), 2),
-                    'tiene_precio'         => ($precioVenta ?? 0) > 0,
-                    'almacen_id'           => $almacen->id,
-                    'puesto_por_nombre'    => $producto->puesto_por_nombre,
+                    'id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
+                    'color_producto' => $producto->color_producto,
+                    'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
+                    'imagen_producto' => $producto->imagen_producto,
+                    'precio_compra' => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
+                    'stock_almacen' => $producto->pivot->cantidad,
+                    'precio_venta' => $precioVenta,
+                    'ganancia' => $producto->venta_ganancia,
+                    'comision' => round((float) ($producto->comision ?? 0), 2),
+                    'tiene_precio' => ($precioVenta ?? 0) > 0,
+                    'almacen_id' => $almacen->id,
+                    'puesto_por_nombre' => $producto->puesto_por_nombre,
                 ];
             });
 
             return [
-                'almacen_id'     => $almacen->id,
+                'almacen_id' => $almacen->id,
                 'nombre_almacen' => $almacen->nombre_almacen,
-                'productos'      => $productos->filter(fn($p) => $p['stock_almacen'] > 0)->values(),
+                'productos' => $productos->filter(fn ($p) => $p['stock_almacen'] > 0)->values(),
             ];
         });
 
         return Inertia::render('Productos/Vendor/Index', [
-            'almacenes' => $almacenesTransformados->filter(fn($a) => $a['productos']->isNotEmpty())->values(),
+            'almacenes' => $almacenesTransformados->filter(fn ($a) => $a['productos']->isNotEmpty())->values(),
             'meta' => [
                 'total_almacenes' => $almacenesTransformados->count(),
-                'role_usuario'    => $user->role,
+                'role_usuario' => $user->role,
             ],
             'canViewSensitiveData' => in_array($user->role, ['admin', 'moderador']),
         ]);
@@ -103,18 +104,18 @@ class ProductoVendedorController extends Controller
 
         $validated = $request->validate([
             'precio_venta' => ['required', 'numeric', 'min:0.01'],
-            'almacen_id'   => ['required', 'integer', 'exists:almacens,id'],
-            'comision'     => ['nullable', 'numeric', 'min:0'],
+            'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
+            'comision' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $almacenId = $validated['almacen_id'];
 
-        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
+        if (! in_array($user->role, ['admin', 'moderador']) && ! $user->almacenes->contains($almacenId)) {
             return response()->json(['error' => 'No tienes acceso a este almacén.'], 403);
         }
 
         $precioVenta = round($validated['precio_venta'], 2);
-        $ganancia    = round($precioVenta - $producto->precio_compra_producto, 2);
+        $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
         $registroActual = DB::table('producto_vendedors')
             ->where('producto_id', $productoId)
@@ -122,13 +123,13 @@ class ProductoVendedorController extends Controller
             ->first();
 
         $precioAnterior = $registroActual?->precio_venta;
-        $precioCambio   = $precioAnterior === null || round((float) $precioAnterior, 2) != $precioVenta;
+        $precioCambio = $precioAnterior === null || round((float) $precioAnterior, 2) != $precioVenta;
 
         $updateData = [
-            'precio_venta'       => $precioVenta,
-            'venta_ganancia'     => $ganancia,
+            'precio_venta' => $precioVenta,
+            'venta_ganancia' => $ganancia,
             'puesto_por_user_id' => $user->id,
-            'updated_at'         => now(),
+            'updated_at' => now(),
         ];
 
         if (isset($validated['comision'])) {
@@ -144,20 +145,20 @@ class ProductoVendedorController extends Controller
             $comisionRegistrada = $updateData['comision'] ?? (float) ($registroActual?->comision ?? 0);
 
             PrecioHistorial::create([
-                'producto_id'    => $productoId,
-                'user_id'        => $user->id,
-                'almacen_id'     => $almacenId,
+                'producto_id' => $productoId,
+                'user_id' => $user->id,
+                'almacen_id' => $almacenId,
                 'precio_anterior' => $precioAnterior,
-                'precio_nuevo'   => $precioVenta,
-                'comision'       => $comisionRegistrada,
-                'accion'         => $precioAnterior === null
-                    ? 'Primera asignación - Almacén ID ' . $almacenId
-                    : 'Actualización - Almacén ID ' . $almacenId,
+                'precio_nuevo' => $precioVenta,
+                'comision' => $comisionRegistrada,
+                'accion' => $precioAnterior === null
+                    ? 'Primera asignación - Almacén ID '.$almacenId
+                    : 'Actualización - Almacén ID '.$almacenId,
             ]);
 
-            if (!in_array($user->role, ['admin', 'moderador'])) {
+            if (! in_array($user->role, ['admin', 'moderador'])) {
                 $almacen = Almacen::find($almacenId);
-                $admins  = User::where('role', 'admin')->get();
+                $admins = User::where('role', 'admin')->get();
                 foreach ($admins as $admin) {
                     $admin->notify(new CambioPrecioVendedorNotification(
                         $producto,
@@ -171,11 +172,11 @@ class ProductoVendedorController extends Controller
         }
 
         return response()->json([
-            'success'          => true,
-            'message'          => 'Precio actualizado correctamente',
-            'new_profit'       => $ganancia,
-            'new_price'        => $precioVenta,
-            'new_comision'     => $updateData['comision'] ?? null,
+            'success' => true,
+            'message' => 'Precio actualizado correctamente',
+            'new_profit' => $ganancia,
+            'new_price' => $precioVenta,
+            'new_comision' => $updateData['comision'] ?? null,
             'history_recorded' => $precioCambio,
             'puesto_por_nombre' => $user->name,
         ]);
@@ -191,25 +192,25 @@ class ProductoVendedorController extends Controller
         $user = Auth::user();
 
         $validated = $request->validate([
-            'producto_id'          => ['required', 'integer', 'exists:productos,id'],
-            'almacen_ids'          => ['required', 'array', 'min:1'],
-            'almacen_ids.*'        => ['integer', 'exists:almacens,id', 'distinct'],
-            'precio_venta'         => ['required', 'numeric', 'min:0.01'],
-            'comision'             => ['nullable', 'numeric', 'min:0'],
+            'producto_id' => ['required', 'integer', 'exists:productos,id'],
+            'almacen_ids' => ['required', 'array', 'min:1'],
+            'almacen_ids.*' => ['integer', 'exists:almacens,id', 'distinct'],
+            'precio_venta' => ['required', 'numeric', 'min:0.01'],
+            'comision' => ['nullable', 'numeric', 'min:0'],
             'password_confirmacion' => ['required', 'string'],
         ]);
 
-        if (!Hash::check($validated['password_confirmacion'], $user->password)) {
+        if (! Hash::check($validated['password_confirmacion'], $user->password)) {
             return response()->json([
                 'success' => false,
-                'error'   => 'Contraseña incorrecta. Los precios no fueron actualizados.',
+                'error' => 'Contraseña incorrecta. Los precios no fueron actualizados.',
             ], 422);
         }
 
-        $producto    = Producto::findOrFail($validated['producto_id']);
+        $producto = Producto::findOrFail($validated['producto_id']);
         $precioVenta = round($validated['precio_venta'], 2);
-        $ganancia    = round($precioVenta - $producto->precio_compra_producto, 2);
-        $comision    = isset($validated['comision']) ? round($validated['comision'], 2) : null;
+        $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
+        $comision = isset($validated['comision']) ? round($validated['comision'], 2) : null;
 
         $resultados = DB::transaction(function () use ($validated, $producto, $precioVenta, $ganancia, $comision, $user) {
             $resultados = [];
@@ -221,13 +222,13 @@ class ProductoVendedorController extends Controller
                     ->first();
 
                 $precioAnterior = $registroActual?->precio_venta;
-                $precioCambio   = $precioAnterior === null || round((float) $precioAnterior, 2) != $precioVenta;
+                $precioCambio = $precioAnterior === null || round((float) $precioAnterior, 2) != $precioVenta;
 
                 $updateData = [
-                    'precio_venta'       => $precioVenta,
-                    'venta_ganancia'     => $ganancia,
+                    'precio_venta' => $precioVenta,
+                    'venta_ganancia' => $ganancia,
                     'puesto_por_user_id' => $user->id,
-                    'updated_at'         => now(),
+                    'updated_at' => now(),
                 ];
 
                 if ($comision !== null) {
@@ -243,22 +244,22 @@ class ProductoVendedorController extends Controller
                     $comisionRegistrada = $comision ?? (float) ($registroActual?->comision ?? 0);
 
                     PrecioHistorial::create([
-                        'producto_id'    => $producto->id,
-                        'user_id'        => $user->id,
-                        'almacen_id'     => $almacenId,
+                        'producto_id' => $producto->id,
+                        'user_id' => $user->id,
+                        'almacen_id' => $almacenId,
                         'precio_anterior' => $precioAnterior,
-                        'precio_nuevo'   => $precioVenta,
-                        'comision'       => $comisionRegistrada,
-                        'accion'         => $precioAnterior === null
-                            ? 'Primera asignación (masiva) - Almacén ID ' . $almacenId
-                            : 'Actualización masiva - Almacén ID ' . $almacenId,
+                        'precio_nuevo' => $precioVenta,
+                        'comision' => $comisionRegistrada,
+                        'accion' => $precioAnterior === null
+                            ? 'Primera asignación (masiva) - Almacén ID '.$almacenId
+                            : 'Actualización masiva - Almacén ID '.$almacenId,
                     ]);
                 }
 
                 $resultados[] = [
-                    'almacen_id'       => $almacenId,
-                    'precio_anterior'  => $precioAnterior !== null ? round((float) $precioAnterior, 2) : null,
-                    'precio_nuevo'     => $precioVenta,
+                    'almacen_id' => $almacenId,
+                    'precio_anterior' => $precioAnterior !== null ? round((float) $precioAnterior, 2) : null,
+                    'precio_nuevo' => $precioVenta,
                     'history_recorded' => $precioCambio,
                 ];
             }
@@ -267,12 +268,12 @@ class ProductoVendedorController extends Controller
         });
 
         return response()->json([
-            'success'      => true,
-            'message'      => 'Precio actualizado en ' . count($resultados) . ' almacén(es).',
-            'new_profit'   => $ganancia,
-            'new_price'    => $precioVenta,
+            'success' => true,
+            'message' => 'Precio actualizado en '.count($resultados).' almacén(es).',
+            'new_profit' => $ganancia,
+            'new_price' => $precioVenta,
             'new_comision' => $comision,
-            'resultados'   => $resultados,
+            'resultados' => $resultados,
         ]);
     }
 
@@ -280,7 +281,7 @@ class ProductoVendedorController extends Controller
     {
         $user = Auth::user();
 
-        if (!in_array($user->role, ['admin', 'moderador'])) {
+        if (! in_array($user->role, ['admin', 'moderador'])) {
             return response()->json(['error' => 'No tienes permisos para establecer precios base.'], 403);
         }
 
@@ -288,26 +289,26 @@ class ProductoVendedorController extends Controller
 
         $validated = $request->validate([
             'precio_admin' => ['required', 'numeric', 'min:0.01'],
-            'almacen_id'   => ['required', 'integer', 'exists:almacens,id'],
+            'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
         ]);
 
-        $almacenId    = $validated['almacen_id'];
-        $precioAdmin  = round($validated['precio_admin'], 2);
+        $almacenId = $validated['almacen_id'];
+        $precioAdmin = round($validated['precio_admin'], 2);
         $gananciaAdmin = round($precioAdmin - $producto->precio_compra_producto, 2);
 
         DB::table('producto_vendedors')->updateOrInsert(
             ['producto_id' => $productoId, 'almacen_id' => $almacenId],
             [
-                'precio_admin'  => $precioAdmin,
+                'precio_admin' => $precioAdmin,
                 'ganancia_admin' => $gananciaAdmin,
-                'updated_at'    => now(),
+                'updated_at' => now(),
             ]
         );
 
         return response()->json([
-            'success'       => true,
-            'message'       => 'Precio base establecido correctamente',
-            'precio_admin'  => $precioAdmin,
+            'success' => true,
+            'message' => 'Precio base establecido correctamente',
+            'precio_admin' => $precioAdmin,
             'ganancia_admin' => $gananciaAdmin,
         ]);
     }
@@ -320,13 +321,13 @@ class ProductoVendedorController extends Controller
     {
         $user = Auth::user();
 
-        if (!in_array($user->role, ['admin', 'moderador'])) {
+        if (! in_array($user->role, ['admin', 'moderador'])) {
             return response()->json(['success' => false, 'error' => 'No tienes permisos para ver esta información.'], 403);
         }
 
         try {
             $producto = Producto::findOrFail($productoId);
-            $almacen  = Almacen::findOrFail($almacenId);
+            $almacen = Almacen::findOrFail($almacenId);
 
             $precioActual = DB::table('producto_vendedors')
                 ->leftJoin('users', 'producto_vendedors.puesto_por_user_id', '=', 'users.id')
@@ -348,71 +349,86 @@ class ProductoVendedorController extends Controller
                 ->get()
                 ->map(function ($item) {
                     return [
-                        'id'              => $item->id,
-                        'usuario'         => $item->usuario->name ?? 'Desconocido',
+                        'id' => $item->id,
+                        'usuario' => $item->usuario->name ?? 'Desconocido',
                         'precio_anterior' => $item->precio_anterior !== null ? round((float) $item->precio_anterior, 2) : null,
-                        'precio_nuevo'    => round((float) $item->precio_nuevo, 2),
-                        'comision'        => $item->comision !== null ? round((float) $item->comision, 2) : null,
-                        'accion'          => $item->accion ?? 'Actualización',
-                        'fecha'           => Carbon::parse($item->created_at)->format('d/m/Y H:i'),
+                        'precio_nuevo' => round((float) $item->precio_nuevo, 2),
+                        'comision' => $item->comision !== null ? round((float) $item->comision, 2) : null,
+                        'accion' => $item->accion ?? 'Actualización',
+                        'fecha' => Carbon::parse($item->created_at)->format('d/m/Y H:i'),
                     ];
                 });
 
             return response()->json([
                 'success' => true,
                 'producto' => [
-                    'id'           => $producto->id,
-                    'nombre'       => $producto->nombre_producto,
-                    'marca'        => $producto->marca_producto,
-                    'modelo'       => $producto->modelo_producto,
-                    'capacidad'    => $producto->capacidad_producto,
-                    'color'        => $producto->color_producto,
+                    'id' => $producto->id,
+                    'nombre' => $producto->nombre_producto,
+                    'marca' => $producto->marca_producto,
+                    'modelo' => $producto->modelo_producto,
+                    'capacidad' => $producto->capacidad_producto,
+                    'color' => $producto->color_producto,
                     'precio_compra' => round((float) $producto->precio_compra_producto, 2),
                 ],
                 'almacen' => [
-                    'id'     => $almacen->id,
+                    'id' => $almacen->id,
                     'nombre' => $almacen->nombre_almacen,
                 ],
                 'precio_actual' => $precioActual ? [
-                    'precio_venta'         => round((float) $precioActual->precio_venta, 2),
-                    'ganancia'             => round((float) $precioActual->venta_ganancia, 2),
-                    'comision'             => round((float) $precioActual->comision, 2),
-                    'puesto_por_nombre'    => $precioActual->puesto_por_nombre ?? 'Desconocido',
+                    'precio_venta' => round((float) $precioActual->precio_venta, 2),
+                    'ganancia' => round((float) $precioActual->venta_ganancia, 2),
+                    'comision' => round((float) $precioActual->comision, 2),
+                    'puesto_por_nombre' => $precioActual->puesto_por_nombre ?? 'Desconocido',
                     'ultima_actualizacion' => Carbon::parse($precioActual->ultima_actualizacion)->format('d/m/Y H:i'),
                 ] : null,
-                'historial'     => $historial,
+                'historial' => $historial,
                 'total_cambios' => $historial->count(),
             ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json(['success' => false, 'error' => 'Producto o almacén no encontrado.'], 404);
         } catch (\Exception $e) {
-            Log::error('Error al obtener historial de precios: ' . $e->getMessage(), [
+            Log::error('Error al obtener historial de precios: '.$e->getMessage(), [
                 'producto_id' => $productoId,
-                'almacen_id'  => $almacenId,
+                'almacen_id' => $almacenId,
             ]);
+
             return response()->json([
                 'success' => false,
-                'error'   => 'Error al obtener el historial de precios.',
+                'error' => 'Error al obtener el historial de precios.',
                 'details' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
 
-    public function actualizarGananciaPorCambioCosto($productoId)
+    /**
+     * Recalcula la ganancia de cada precio de vendedor asignado a este producto. Con
+     * $almacenId, usa el costo real de ESE almacén (Producto::costoEnAlmacen(), promedio
+     * ponderado de lotes_stock) en vez del costo global de la ficha — necesario desde que un
+     * mismo producto puede costar distinto según el almacén (traslados prorrateados de forma
+     * independiente, ver docs/ESTADO_DESARROLLO.md 2026-09-18). Sin $almacenId, mantiene el
+     * comportamiento viejo (costo global, todos los almacenes) — usado por callers que todavía
+     * no distinguen por almacén (ver TransaccionController).
+     */
+    public function actualizarGananciaPorCambioCosto($productoId, ?int $almacenId = null)
     {
         DB::beginTransaction();
 
         try {
-            $producto   = Producto::findOrFail($productoId);
-            $nuevoCosto = $producto->precio_compra_producto;
+            $producto = Producto::findOrFail($productoId);
+            $nuevoCosto = $almacenId !== null ? $producto->costoEnAlmacen($almacenId) : $producto->precio_compra_producto;
 
-            $updatedCount = DB::table('producto_vendedors')
+            $query = DB::table('producto_vendedors')
                 ->where('producto_id', $productoId)
-                ->whereNotNull('precio_venta')
-                ->update([
-                    'venta_ganancia' => DB::raw("ROUND(precio_venta - {$nuevoCosto}, 2)"),
-                    'updated_at'     => now(),
-                ]);
+                ->whereNotNull('precio_venta');
+
+            if ($almacenId !== null) {
+                $query->where('almacen_id', $almacenId);
+            }
+
+            $updatedCount = $query->update([
+                'venta_ganancia' => DB::raw("ROUND(precio_venta - {$nuevoCosto}, 2)"),
+                'updated_at' => now(),
+            ]);
 
             DB::commit();
 
@@ -422,9 +438,10 @@ class ProductoVendedorController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al actualizar ganancias por cambio de costo (ProductoID: ' . $productoId . '): ' . $e->getMessage());
+            Log::error('Error al actualizar ganancias por cambio de costo (ProductoID: '.$productoId.'): '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Error al actualizar las ganancias por cambio de costo.',
+                'error' => 'Error al actualizar las ganancias por cambio de costo.',
                 'details' => $e->getMessage(),
             ], 500);
         }
@@ -438,15 +455,15 @@ class ProductoVendedorController extends Controller
             ->get()
             ->map(function ($item) {
                 return [
-                    'id'              => $item->id,
-                    'producto'        => $item->producto->nombre_producto,
-                    'usuario'         => $item->usuario->name,
-                    'almacen'         => $item->almacen->nombre_almacen ?? 'General',
+                    'id' => $item->id,
+                    'producto' => $item->producto->nombre_producto,
+                    'usuario' => $item->usuario->name,
+                    'almacen' => $item->almacen->nombre_almacen ?? 'General',
                     'precio_anterior' => $item->precio_anterior,
-                    'precio_nuevo'    => $item->precio_nuevo,
-                    'comision'        => $item->comision,
-                    'accion'          => $item->accion ?? 'Desconocida',
-                    'fecha'           => $item->created_at->format('d/m/Y H:i'),
+                    'precio_nuevo' => $item->precio_nuevo,
+                    'comision' => $item->comision,
+                    'accion' => $item->accion ?? 'Desconocida',
+                    'fecha' => $item->created_at->format('d/m/Y H:i'),
                 ];
             });
 
@@ -457,14 +474,14 @@ class ProductoVendedorController extends Controller
 
     public function exportExcel(Request $request, int $almacenId)
     {
-        $user    = Auth::user();
+        $user = Auth::user();
         $almacen = Almacen::findOrFail($almacenId);
 
-        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
+        if (! in_array($user->role, ['admin', 'moderador']) && ! $user->almacenes->contains($almacenId)) {
             abort(403, 'No tienes acceso a este almacén.');
         }
 
-        $nombre = 'precios_' . str($almacen->nombre_almacen)->slug('_') . '_' . now()->format('Ymd_His') . '.xlsx';
+        $nombre = 'precios_'.str($almacen->nombre_almacen)->slug('_').'_'.now()->format('Ymd_His').'.xlsx';
 
         return Excel::download(new PreciosVendedorExport($almacenId), $nombre);
     }
@@ -481,11 +498,11 @@ class ProductoVendedorController extends Controller
         ]);
 
         $extension = strtolower($request->file('archivo')->getClientOriginalExtension());
-        if (!in_array($extension, ['xlsx', 'xls'])) {
+        if (! in_array($extension, ['xlsx', 'xls'])) {
             return response()->json(['success' => false, 'error' => 'Solo se aceptan archivos .xlsx o .xls'], 422);
         }
 
-        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
+        if (! in_array($user->role, ['admin', 'moderador']) && ! $user->almacenes->contains($almacenId)) {
             return response()->json(['success' => false, 'error' => 'No tienes acceso a este almacén.'], 403);
         }
 
@@ -494,24 +511,44 @@ class ProductoVendedorController extends Controller
             Excel::import($import, $request->file('archivo'));
 
             return response()->json([
-                'success'     => true,
+                'success' => true,
                 'actualizados' => $import->actualizados,
-                'omitidos'    => $import->omitidos,
-                'errores'     => $import->errores,
-                'message'     => "Se actualizaron {$import->actualizados} producto(s). {$import->omitidos} omitido(s) (sin cambios).",
+                'omitidos' => $import->omitidos,
+                'errores' => $import->errores,
+                'message' => "Se actualizaron {$import->actualizados} producto(s). {$import->omitidos} omitido(s) (sin cambios).",
             ]);
         } catch (\Exception $e) {
-            Log::error('Error al importar precios: ' . $e->getMessage());
+            Log::error('Error al importar precios: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'error'   => 'Error al procesar el archivo. Asegúrate de que sea el Excel exportado desde este sistema.',
+                'error' => 'Error al procesar el archivo. Asegúrate de que sea el Excel exportado desde este sistema.',
             ], 422);
         }
     }
 
-    public function create()  { abort(404); }
-    public function store(Request $request) { abort(405, 'Método no permitido'); }
-    public function show($id) { abort(404); }
-    public function edit($id) { abort(404); }
-    public function destroy($id) { abort(405, 'Método no permitido'); }
+    public function create()
+    {
+        abort(404);
+    }
+
+    public function store(Request $request)
+    {
+        abort(405, 'Método no permitido');
+    }
+
+    public function show($id)
+    {
+        abort(404);
+    }
+
+    public function edit($id)
+    {
+        abort(404);
+    }
+
+    public function destroy($id)
+    {
+        abort(405, 'Método no permitido');
+    }
 }
