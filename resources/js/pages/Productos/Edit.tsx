@@ -13,7 +13,22 @@ import AppLayout from '@/layouts/app-layout';
 import { sileo } from '@/lib/sileo';
 import { CategoriasProps, FichaHermanaProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { AlertTriangle, ArrowRightLeft, CheckCircle2, Eye, EyeOff, FileBox, Layers, Package, QrCode, ShieldAlert } from 'lucide-react';
+import {
+    AlertTriangle,
+    ArrowRightLeft,
+    CheckCircle2,
+    DollarSign,
+    Eye,
+    EyeOff,
+    FileBox,
+    Layers,
+    Package,
+    Pencil,
+    QrCode,
+    ShieldAlert,
+    Tag,
+    Warehouse,
+} from 'lucide-react';
 import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -34,6 +49,11 @@ export default function EditarProductosPage({
     const { auth } = usePage<SharedData>().props;
     const isPrivileged = auth.user.role === 'admin';
 
+    // Costo real por almacén (Producto::costoEnAlmacen()), mostrado en cards abajo — puede
+    // diferir del campo global de la ficha si ese almacén ya tiene lotes_stock propios.
+    const almacenes = producto.almacenes ?? [];
+    const tieneAlmacenes = almacenes.length > 0;
+
     const { data, setData, post, errors, processing } = useForm({
         _method: 'put',
         nombre_producto: producto.nombre_producto,
@@ -46,6 +66,8 @@ export default function EditarProductosPage({
         // String mientras se edita — convertir a número en cada tecla (parseFloat) borraba
         // el "." que el usuario acababa de escribir en cuanto no había dígitos después
         // (ej. "21." se guardaba como 21, el input se re-renderizaba sin el punto).
+        // Solo se edita aquí cuando el producto TODAVÍA no tiene ningún almacén (ficha nueva,
+        // nunca recibida) — con almacenes, la corrección es por card, ver costoForm más abajo.
         precio_compra_producto: producto.precio_compra_producto.toString(),
         imagen_producto: null as File | null,
         password_confirmacion: '',
@@ -57,7 +79,58 @@ export default function EditarProductosPage({
     const [passwordInput, setPasswordInput] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    const priceChanged = isPrivileged && parseFloat(data.precio_compra_producto) !== producto.precio_compra_producto;
+    const priceChanged = isPrivileged && !tieneAlmacenes && parseFloat(data.precio_compra_producto) !== producto.precio_compra_producto;
+
+    // Corrección de costo por almacén (card) — form independiente del de arriba: no depende de
+    // cambios sin guardar en nombre/marca/etc, y manda los datos fijos del producto tal cual
+    // están en el servidor porque el backend los exige igual en cada actualización.
+    type AlmacenItem = NonNullable<ProductoProps['almacenes']>[number];
+    const [editingAlmacen, setEditingAlmacen] = useState<AlmacenItem | null>(null);
+
+    const costoForm = useForm({
+        _method: 'put',
+        nombre_producto: producto.nombre_producto,
+        marca_producto: producto.marca_producto || '',
+        modelo_producto: producto.modelo_producto || '',
+        capacidad_producto: producto.capacidad_producto || '',
+        color_producto: producto.color_producto || '',
+        codigo_producto: producto.codigo_producto || '',
+        categoria_id: producto.categoria_id.toString(),
+        almacen_id: '',
+        precio_compra_producto: '',
+        password_confirmacion: '',
+        motivo_cambio_costo: '',
+    });
+
+    const abrirEdicionCosto = (almacen: AlmacenItem) => {
+        setEditingAlmacen(almacen);
+        costoForm.clearErrors();
+        costoForm.setData({
+            ...costoForm.data,
+            almacen_id: almacen.id.toString(),
+            precio_compra_producto: almacen.costo.toString(),
+            password_confirmacion: '',
+            motivo_cambio_costo: '',
+        });
+    };
+
+    const costoCambiado = editingAlmacen !== null && parseFloat(costoForm.data.precio_compra_producto || '0') !== editingAlmacen.costo;
+
+    const guardarCosto = () => {
+        if (!editingAlmacen) return;
+        costoForm.post(route('productos.update', { producto: producto.id }), {
+            preserveScroll: true,
+            onSuccess: () => {
+                sileo.success({ title: 'Costo actualizado', description: `Corregido en ${editingAlmacen.nombre_almacen}` });
+                setEditingAlmacen(null);
+            },
+            onError: (errs) => {
+                if (!errs.password_confirmacion) {
+                    sileo.error({ title: 'Error al actualizar', description: 'No se pudo corregir el costo' });
+                }
+            },
+        });
+    };
 
     const doPost = () => {
         post(route('productos.update', { producto: producto.id }), {
@@ -284,58 +357,60 @@ export default function EditarProductosPage({
                                         </p>
                                     </div>
 
-                                    <div>
-                                        <Label htmlFor="precio_compra_producto">
-                                            Precio de Costo *
-                                            {isPrivileged && (
-                                                <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
-                                                    (requiere contraseña para cambiar)
-                                                </span>
+                                    {!tieneAlmacenes && (
+                                        <div>
+                                            <Label htmlFor="precio_compra_producto">
+                                                Precio de Costo *
+                                                {isPrivileged && (
+                                                    <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                                        (requiere contraseña para cambiar)
+                                                    </span>
+                                                )}
+                                            </Label>
+                                            <Input
+                                                id="precio_compra_producto"
+                                                disabled={!isPrivileged}
+                                                inputMode="decimal"
+                                                value={data.precio_compra_producto}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                                        setData('precio_compra_producto', value);
+                                                    }
+                                                }}
+                                                placeholder="0.00"
+                                                className={`mt-1 ${priceChanged ? 'border-amber-500 ring-1 ring-amber-400' : ''}`}
+                                            />
+                                            {priceChanged && (
+                                                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                                    El precio cambia de {producto.precio_compra_producto} → {data.precio_compra_producto}. Se
+                                                    pedirá contraseña al guardar.
+                                                </p>
                                             )}
-                                        </Label>
-                                        <Input
-                                            id="precio_compra_producto"
-                                            disabled={!isPrivileged}
-                                            inputMode="decimal"
-                                            value={data.precio_compra_producto}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                                                    setData('precio_compra_producto', value);
-                                                }
-                                            }}
-                                            placeholder="0.00"
-                                            className={`mt-1 ${priceChanged ? 'border-amber-500 ring-1 ring-amber-400' : ''}`}
-                                        />
-                                        {priceChanged && (
-                                            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                                                El precio cambia de {producto.precio_compra_producto} → {data.precio_compra_producto}. Se pedirá
-                                                contraseña al guardar.
-                                            </p>
-                                        )}
-                                        <InputError message={errors.precio_compra_producto} />
-                                        <InputError message={errors.password_confirmacion} />
-                                        {fichas_hermanas.length > 0 && (
-                                            <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
-                                                <Layers size={14} className="mt-0.5 shrink-0" />
-                                                <span className="flex flex-wrap items-center gap-1">
-                                                    Este campo solo cambia el costo de esta ficha — hay
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="gap-1 border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                                                    >
-                                                        <Layers size={11} />
-                                                        {fichas_hermanas.length} ficha{fichas_hermanas.length === 1 ? '' : 's'} más
-                                                    </Badge>
-                                                    del mismo producto a otro costo (de otras compras).{' '}
-                                                    <Link href={route('productos.show', { producto: producto.id })} className="underline">
-                                                        Ver el detalle
-                                                    </Link>
-                                                    .
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
+                                            <InputError message={errors.precio_compra_producto} />
+                                            <InputError message={errors.password_confirmacion} />
+                                            {fichas_hermanas.length > 0 && (
+                                                <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
+                                                    <Layers size={14} className="mt-0.5 shrink-0" />
+                                                    <span className="flex flex-wrap items-center gap-1">
+                                                        Este campo solo cambia el costo de esta ficha — hay
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="gap-1 border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                                        >
+                                                            <Layers size={11} />
+                                                            {fichas_hermanas.length} ficha{fichas_hermanas.length === 1 ? '' : 's'} más
+                                                        </Badge>
+                                                        del mismo producto a otro costo (de otras compras).{' '}
+                                                        <Link href={route('productos.show', { producto: producto.id })} className="underline">
+                                                            Ver el detalle
+                                                        </Link>
+                                                        .
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {isPrivileged && priceChanged && (
                                         <div>
@@ -397,6 +472,109 @@ export default function EditarProductosPage({
                         </form>
                     </CardContent>
                 </Card>
+
+                {/* Costo y Precio por Almacén */}
+                {tieneAlmacenes && (
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Warehouse className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Costo y Precio por Almacén</CardTitle>
+                                    <CardDescription className="text-emerald-100">
+                                        Cada almacén puede tener un costo real distinto — corrígelo aquí sin afectar a los demás
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                {almacenes.map((almacen) => (
+                                    <div
+                                        key={almacen.id}
+                                        className={`rounded-lg border p-4 ${almacen.stock_bajo ? 'border-red-200 bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-800'}`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900/30">
+                                                    <Warehouse className="text-sky-600 dark:text-sky-400" size={16} />
+                                                </div>
+                                                <h4 className="text-sidebar-accent font-medium">{almacen.nombre_almacen}</h4>
+                                            </div>
+                                            {almacen.stock_bajo && (
+                                                <Badge variant="destructive" className="flex items-center gap-1">
+                                                    <AlertTriangle size={12} />
+                                                    Stock Bajo
+                                                </Badge>
+                                            )}
+                                        </div>
+
+                                        <Separator className="my-3" />
+
+                                        <div className="grid grid-cols-3 gap-3 text-sm">
+                                            <div>
+                                                <p className="text-muted-foreground mb-1">Disponibilidad</p>
+                                                <Badge
+                                                    variant="outline"
+                                                    className={
+                                                        almacen.stock_bajo
+                                                            ? 'gap-1 border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                            : 'gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                    }
+                                                >
+                                                    <Package size={12} />
+                                                    {almacen.cantidad} uds.
+                                                </Badge>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground mb-1">Costo de Compra</p>
+                                                <div className="flex items-center gap-1">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                    >
+                                                        <DollarSign size={12} />${almacen.costo}
+                                                    </Badge>
+                                                    {isPrivileged && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => abrirEdicionCosto(almacen)}
+                                                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                                            title="Corregir costo en este almacén"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="text-muted-foreground mb-1">Precio de Venta</p>
+                                                {almacen.precio_venta !== null && almacen.precio_venta !== undefined ? (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                    >
+                                                        <Tag size={12} />${almacen.precio_venta}
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                    >
+                                                        <AlertTriangle size={11} />
+                                                        Sin precio
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Gestión de Códigos de Barras */}
                 <Card className="overflow-hidden border-0 pt-0 shadow-lg">
@@ -549,8 +727,8 @@ export default function EditarProductosPage({
                             </DialogTitle>
                             <DialogDescription>
                                 Estás cambiando el precio de costo de <strong>${producto.precio_compra_producto}</strong> a{' '}
-                                <strong>${data.precio_compra_producto}</strong>. Esta acción queda registrada en el historial. Ingresa tu contraseña
-                                para confirmar.
+                                <strong>${data.precio_compra_producto}</strong>. Esta acción queda registrada en el historial. Ingresa tu
+                                contraseña para confirmar.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
@@ -599,6 +777,80 @@ export default function EditarProductosPage({
                                 className="bg-amber-600 hover:bg-amber-700"
                             >
                                 {processing ? 'Guardando...' : 'Confirmar cambio'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Dialog de corrección de costo por almacén (card) */}
+                <Dialog open={editingAlmacen !== null} onOpenChange={(open) => !open && setEditingAlmacen(null)}>
+                    <DialogContent className="sm:max-w-[400px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <ShieldAlert className="text-amber-500" size={20} />
+                                Corregir costo en {editingAlmacen?.nombre_almacen}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Este cambio afecta solo a <strong>{editingAlmacen?.nombre_almacen}</strong> — los demás almacenes de este
+                                producto no se ven afectados. Queda registrado en el historial.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="costo-almacen">Precio de Costo</Label>
+                                <Input
+                                    id="costo-almacen"
+                                    inputMode="decimal"
+                                    value={costoForm.data.precio_compra_producto}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                            costoForm.setData('precio_compra_producto', value);
+                                        }
+                                    }}
+                                    placeholder="0.00"
+                                    autoFocus
+                                />
+                                <InputError message={costoForm.errors.precio_compra_producto} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="motivo-costo-almacen">Motivo del cambio (opcional)</Label>
+                                <Input
+                                    id="motivo-costo-almacen"
+                                    value={costoForm.data.motivo_cambio_costo}
+                                    onChange={(e) => costoForm.setData('motivo_cambio_costo', e.target.value)}
+                                    placeholder="Ej: Nuevo proveedor, ajuste de mercado..."
+                                />
+                            </div>
+                            {costoCambiado && (
+                                <div className="grid gap-2">
+                                    <Label htmlFor="password-costo-almacen">Contraseña</Label>
+                                    <Input
+                                        id="password-costo-almacen"
+                                        type="password"
+                                        value={costoForm.data.password_confirmacion}
+                                        onChange={(e) => costoForm.setData('password_confirmacion', e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && costoForm.data.password_confirmacion) guardarCosto();
+                                        }}
+                                        placeholder="Ingresa tu contraseña"
+                                        className="normal-case"
+                                    />
+                                    <InputError message={costoForm.errors.password_confirmacion} />
+                                </div>
+                            )}
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditingAlmacen(null)}>
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={!costoCambiado || !costoForm.data.password_confirmacion || costoForm.processing}
+                                onClick={guardarCosto}
+                                className="bg-amber-600 hover:bg-amber-700"
+                            >
+                                {costoForm.processing ? 'Guardando...' : 'Guardar'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

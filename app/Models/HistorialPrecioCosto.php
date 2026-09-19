@@ -11,6 +11,7 @@ class HistorialPrecioCosto extends Model
 
     protected $fillable = [
         'producto_id',
+        'almacen_id',
         'user_id',
         'precio_anterior',
         'precio_nuevo',
@@ -22,19 +23,24 @@ class HistorialPrecioCosto extends Model
     ];
 
     protected $casts = [
-        'precio_anterior'    => 'decimal:4',
-        'precio_nuevo'       => 'decimal:4',
-        'diferencia'         => 'decimal:4',
-        'stock_momento'      => 'integer',
+        'precio_anterior' => 'decimal:4',
+        'precio_nuevo' => 'decimal:4',
+        'diferencia' => 'decimal:4',
+        'stock_momento' => 'integer',
         'impacto_financiero' => 'decimal:4',
-        'es_perdida'         => 'boolean',
-        'created_at'         => 'datetime',
-        'updated_at'         => 'datetime',
+        'es_perdida' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     public function producto(): BelongsTo
     {
         return $this->belongsTo(Producto::class);
+    }
+
+    public function almacen(): BelongsTo
+    {
+        return $this->belongsTo(Almacen::class);
     }
 
     public function user(): BelongsTo
@@ -50,7 +56,8 @@ class HistorialPrecioCosto extends Model
     public function getImpactoFormateadoAttribute(): string
     {
         $signo = (float) $this->impacto_financiero >= 0 ? '+' : '';
-        return $signo . number_format((float) $this->impacto_financiero, 2);
+
+        return $signo.number_format((float) $this->impacto_financiero, 2);
     }
 
     public function scopeGanancias($query)

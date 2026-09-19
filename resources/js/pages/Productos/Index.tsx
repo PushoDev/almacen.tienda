@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -708,20 +709,21 @@ export default function ProductosPage({
                     </div>
                 </div>
 
-                {/* Buscador - Fila 1 */}
-                <div className="relative">
-                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
-                    <input
-                        type="text"
-                        placeholder="Buscar productos por nombre, código, marca o modelo..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-lg border px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:outline-none"
-                    />
-                </div>
+                {/* Buscador y Filtros */}
+                <Card>
+                    <CardContent className="space-y-3 p-4">
+                        <div className="relative">
+                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
+                            <input
+                                type="text"
+                                placeholder="Buscar productos por nombre, código, marca o modelo..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-lg border px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:outline-none"
+                            />
+                        </div>
 
-                {/* Filtros y Acciones - Fila 2 */}
-                <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                     {/* Filtro por categoría */}
                     <select
                         value={selectedCategoria}
@@ -835,11 +837,28 @@ export default function ProductosPage({
                         </TooltipTrigger>
                         <TooltipContent>Limpiar duplicados</TooltipContent>
                     </Tooltip>
-                </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                {/* Tabla de Productos - Responsive sin scroll horizontal */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative w-full overflow-auto rounded-xl border">
-                    <Table>
+                {/* Tabla de Productos */}
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Lista de Productos</CardTitle>
+                                <CardDescription className="text-teal-100">
+                                    {productos.total} producto{productos.total === 1 ? '' : 's'} en total
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0 pt-5">
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative w-full overflow-auto rounded-b-xl border-t">
+                            <Table>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead className="w-[180px] cursor-pointer whitespace-nowrap" onClick={() => handleSort('nombre_producto')}>
@@ -1052,7 +1071,9 @@ export default function ProductosPage({
                             </TableRow>
                         </TableFooter>
                     </Table>
-                </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Controles de Paginación */}
                 {productos.links && productos.links.length > 3 && (

@@ -58,4 +58,15 @@ class LoteStock extends Model
     {
         return sprintf('LOTE-MOV-%d-%03d', $movimientoId, $numeroLinea);
     }
+
+    /**
+     * Código para el lote que se crea cuando un admin corrige el costo de un producto en un
+     * almacén que todavía no tenía ningún lote (ver ProductoController::corregirCostoEnAlmacen()).
+     * Determinístico por producto+almacén: solo se genera la primera vez, porque una vez creado
+     * ese lote las correcciones siguientes actualizan su `precio_costo` en vez de crear otro.
+     */
+    public static function generarCodigoAjuste(int $productoId, int $almacenId): string
+    {
+        return sprintf('AJUSTE-%d-%d', $productoId, $almacenId);
+    }
 }

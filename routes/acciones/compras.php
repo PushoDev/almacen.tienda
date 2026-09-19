@@ -11,8 +11,17 @@ Route::middleware(['auth', 'verified', 'admin'])->group(
     function () {
         /**
          * Iniciar Compra
+         *
+         * Antes `Route::resource('comprar', CompraController::class)` — registraba también
+         * create/edit/update/destroy, que el controller nunca implementó (daban 500 si se
+         * accedía directo por URL). El flujo real es: Comprar/Index.tsx (listado + formulario
+         * de alta combinados) → store(); Comprar/Show.tsx (detalle) → actualizar()/aprobar()/
+         * anular() (rutas nombradas abajo). Confirmado por grep: ningún archivo de
+         * resources/js/ referencia comprar.create/edit/update/destroy.
          */
-        Route::resource('comprar', CompraController::class);
+        Route::get('/comprar', [CompraController::class, 'index'])->name('comprar.index');
+        Route::post('/comprar', [CompraController::class, 'store'])->name('comprar.store');
+        Route::get('/comprar/{comprar}', [CompraController::class, 'show'])->name('comprar.show');
 
         // Flujo de estados de una compra pendiente (dinero ya movido en store(), stock diferido)
         Route::post('/comprar/{comprar}/actualizar', [CompraController::class, 'actualizar'])->name('comprar.actualizar');
