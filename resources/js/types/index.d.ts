@@ -199,6 +199,7 @@ export interface ProductoProps {
         cantidad: number;
         stock_bajo: boolean;
         costo: number;
+        precio_venta?: number | null;
     }>;
     codigos?: Array<{
         id: number;

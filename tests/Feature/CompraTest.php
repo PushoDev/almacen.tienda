@@ -331,6 +331,20 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
 
 // ─── Acceso: admin y moderador (vendedor no tiene acceso a Compras) ────
 
+test('las rutas comprar.create/edit/update/destroy ya no existen (el controller nunca las implementó)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    expect(fn () => route('comprar.create'))->toThrow(Exception::class);
+    expect(fn () => route('comprar.edit', ['comprar' => 1]))->toThrow(Exception::class);
+    expect(fn () => route('comprar.update', ['comprar' => 1]))->toThrow(Exception::class);
+    expect(fn () => route('comprar.destroy', ['comprar' => 1]))->toThrow(Exception::class);
+
+    // Antes con Route::resource() esta URL llamaba a CompraController::create() (inexistente)
+    // y daba 500 — ahora simplemente no matchea con ninguna ruta real.
+    $this->get('/comprar/create')->assertNotFound();
+});
+
 test('un admin sí puede acceder a la vista de Compras', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

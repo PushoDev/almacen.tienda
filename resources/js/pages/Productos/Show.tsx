@@ -7,7 +7,22 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { FichaHermanaProps, ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { AlertTriangle, Calendar, Edit2, Package2, QrCode, Warehouse, ArrowRightLeft, Layers } from 'lucide-react';
+import {
+    AlertTriangle,
+    ArrowRightLeft,
+    Calendar,
+    CheckCircle2,
+    ClipboardList,
+    DollarSign,
+    Edit2,
+    Image as ImageIcon,
+    Layers,
+    Package,
+    Package2,
+    QrCode,
+    Tag,
+    Warehouse,
+} from 'lucide-react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { useState } from 'react';
@@ -33,11 +48,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function ShowPageProductos({
     producto,
-    precio_venta,
     fichas_hermanas,
 }: {
     producto: ProductoProps;
-    precio_venta: number | null;
     fichas_hermanas: FichaHermanaProps[];
 }) {
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -126,11 +139,14 @@ export default function ShowPageProductos({
                     {/* Columna Izquierda - Información General */}
                     <div className="space-y-6 lg:col-span-2">
                         {/* Detalles del Producto */}
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Package2 className="h-5 w-5" />
+                                    </div>
                                     <div>
-                                        <CardTitle className="text-sidebar-accent flex items-center gap-2">
+                                        <CardTitle className="flex items-center gap-2 text-white">
                                             {producto.nombre_producto}
                                             {producto.stock_bajo && (
                                                 <Badge variant="destructive" className="flex items-center gap-1">
@@ -139,11 +155,11 @@ export default function ShowPageProductos({
                                                 </Badge>
                                             )}
                                         </CardTitle>
-                                        <CardDescription>Información general del producto</CardDescription>
+                                        <CardDescription className="text-blue-100">Información general del producto</CardDescription>
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="pt-6">
                                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                     {/* Columna 1 */}
                                     <div className="space-y-4">
@@ -172,8 +188,11 @@ export default function ShowPageProductos({
                                     {/* Columna 2 */}
                                     <div className="space-y-4">
                                         <div>
-                                            <p className="text-muted-foreground text-sm">Categoría</p>
-                                            <p className="font-medium">{producto.categoria}</p>
+                                            <p className="text-muted-foreground text-sm mb-1">Categoría</p>
+                                            <Badge variant="outline" className="gap-1">
+                                                <Tag size={12} />
+                                                {producto.categoria}
+                                            </Badge>
                                         </div>
                                         <div>
                                             <p className="text-muted-foreground text-sm">Código de Producto</p>
@@ -183,13 +202,16 @@ export default function ShowPageProductos({
                                             </div>
                                         </div>
                                         <div>
-                                            <p className="text-muted-foreground text-sm">Precio de Compra</p>
-                                            <p className="font-medium text-green-600">${formatPrecio(producto.precio_compra_producto)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-muted-foreground text-sm">Precio de Venta (Vendedor)</p>
-                                            <p className="font-medium text-blue-600">
-                                                {precio_venta !== null ? `$${formatPrecio(precio_venta)}` : 'No asignado'}
+                                            <p className="text-muted-foreground text-sm mb-1">Precio de Compra (base de la ficha)</p>
+                                            <Badge
+                                                variant="outline"
+                                                className="gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                            >
+                                                <DollarSign size={12} />
+                                                {formatPrecio(producto.precio_compra_producto)}
+                                            </Badge>
+                                            <p className="text-muted-foreground mt-1 text-xs">
+                                                El costo y precio de venta reales por almacén están abajo, en "Distribución en Almacenes".
                                             </p>
                                         </div>
                                     </div>
@@ -214,7 +236,11 @@ export default function ShowPageProductos({
                                                     Stock Bajo
                                                 </Badge>
                                             ) : (
-                                                <Badge variant="outline" className="bg-green-100 text-green-800">
+                                                <Badge
+                                                    variant="outline"
+                                                    className="gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                                >
+                                                    <CheckCircle2 size={12} />
                                                     Stock Normal
                                                 </Badge>
                                             )}
@@ -257,18 +283,24 @@ export default function ShowPageProductos({
                             repartido en varias fichas. Sin esto, el catálogo daba la impresión de un
                             solo costo por producto cuando en realidad varía por compra/lote. */}
                         {fichas_hermanas.length > 0 && (
-                            <Card className="border-amber-200 dark:border-amber-900">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                                        <Layers size={20} />
-                                        Este producto tiene {fichas_hermanas.length} costo{fichas_hermanas.length === 1 ? '' : 's'} más
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Mismo nombre, marca, modelo y capacidad, comprado en lotes distintos — cada compra registra su propio costo,
-                                        nunca se mezcla con el de otra.
-                                    </CardDescription>
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                                <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Layers className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">
+                                                Este producto tiene {fichas_hermanas.length} costo{fichas_hermanas.length === 1 ? '' : 's'} más
+                                            </CardTitle>
+                                            <CardDescription className="text-amber-100">
+                                                Mismo nombre, marca, modelo y capacidad, comprado en lotes distintos — cada compra registra su
+                                                propio costo, nunca se mezcla con el de otra.
+                                            </CardDescription>
+                                        </div>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
+                                <CardContent className="space-y-3 pt-6">
                                     {fichas_hermanas.map((hermana) => (
                                         <Link
                                             key={hermana.id}
@@ -296,15 +328,19 @@ export default function ShowPageProductos({
                         )}
 
                         {/* Listado de almacenes disponibles */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-sidebar-accent flex items-center gap-2">
-                                    <Warehouse size={20} />
-                                    Distribución en Almacenes
-                                </CardTitle>
-                                <CardDescription>Stock del producto en cada almacén</CardDescription>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Warehouse className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Distribución en Almacenes</CardTitle>
+                                        <CardDescription className="text-emerald-100">Stock del producto en cada almacén</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="pt-6">
                                 {producto.almacenes && producto.almacenes.length > 0 ? (
                                     <div className="space-y-4">
                                         {producto.almacenes.map((almacen) => (
@@ -332,29 +368,61 @@ export default function ShowPageProductos({
 
                                                     <Separator />
 
-                                                    <div className="grid grid-cols-3 gap-4 text-sm">
+                                                    <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                                                         <div>
-                                                            <p className="text-muted-foreground">Disponibilidad:</p>
-                                                            <p className={`font-bold ${almacen.stock_bajo ? 'text-red-600' : 'text-green-600'}`}>
-                                                                {almacen.cantidad ?? 0} unidades
-                                                            </p>
+                                                            <p className="text-muted-foreground mb-1">Disponibilidad</p>
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={
+                                                                    almacen.stock_bajo
+                                                                        ? 'gap-1 border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                                        : 'gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                                }
+                                                            >
+                                                                <Package size={12} />
+                                                                {almacen.cantidad ?? 0} uds.
+                                                            </Badge>
                                                         </div>
                                                         <div>
-                                                            <p className="text-muted-foreground">Costo aquí:</p>
-                                                            <p className="font-bold text-green-600">
-                                                                ${formatPrecio(almacen.costo)}
+                                                            <p className="text-muted-foreground mb-1">Costo aquí</p>
+                                                            <div className="flex items-center gap-1">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                >
+                                                                    <DollarSign size={12} />${formatPrecio(almacen.costo)}
+                                                                </Badge>
                                                                 {almacen.costo !== producto.precio_compra_producto && (
                                                                     <span
-                                                                        className="ml-1 text-xs font-normal text-amber-600 dark:text-amber-400"
+                                                                        className="text-xs font-normal text-amber-600 dark:text-amber-400"
                                                                         title="Distinto del costo base de la ficha — este almacén tuvo un traslado prorrateado de forma independiente"
                                                                     >
                                                                         (≠ base)
                                                                     </span>
                                                                 )}
-                                                            </p>
+                                                            </div>
                                                         </div>
                                                         <div>
-                                                            <p className="text-muted-foreground">Valor en almacén:</p>
+                                                            <p className="text-muted-foreground mb-1">Precio de Venta</p>
+                                                            {almacen.precio_venta !== null && almacen.precio_venta !== undefined ? (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                                >
+                                                                    <Tag size={12} />${formatPrecio(almacen.precio_venta)}
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                >
+                                                                    <AlertTriangle size={11} />
+                                                                    Sin precio
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-muted-foreground mb-1">Valor en almacén</p>
                                                             <p className="font-bold text-purple-600">
                                                                 ${calcularValorAlmacen(almacen.costo, almacen.cantidad)}
                                                             </p>
@@ -399,11 +467,16 @@ export default function ShowPageProductos({
                     {/* Columna Derecha - Información Visual */}
                     <div className="space-y-6">
                         {/* Imagen del Producto */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-sidebar-accent">Imagen del Producto</CardTitle>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <ImageIcon className="h-5 w-5" />
+                                    </div>
+                                    <CardTitle className="text-white">Imagen del Producto</CardTitle>
+                                </div>
                             </CardHeader>
-                            <CardContent className="flex justify-center">
+                            <CardContent className="flex justify-center pt-6">
                                 {producto.imagen_url ? (
                                     <img
                                         src={producto.imagen_url}
@@ -420,15 +493,17 @@ export default function ShowPageProductos({
                         </Card>
 
                         {/* Códigos de Barras */}
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sidebar-accent flex items-center gap-2">
-                                    <QrCode size={20} />
-                                    Códigos de Barras ({producto.codigos?.length || 0})
-                                </CardTitle>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <QrCode className="h-5 w-5" />
+                                    </div>
+                                    <CardTitle className="text-white">Códigos de Barras ({producto.codigos?.length || 0})</CardTitle>
+                                </div>
                                 <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
                                     <DialogTrigger asChild>
-                                        <Button variant="outline" size="sm" className="h-8 gap-1">
+                                        <Button size="sm" className="h-8 gap-1 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
                                             <ArrowRightLeft size={14} />
                                             Asignar / Transferir
                                         </Button>
@@ -499,30 +574,37 @@ export default function ShowPageProductos({
                                     </DialogContent>
                                 </Dialog>
                             </CardHeader>
-                            <CardContent className="flex flex-col gap-4 pt-4">
+                            <CardContent className="flex flex-col gap-4 pt-6">
                                 {producto.codigos && producto.codigos.length > 0 ? (
-                                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                    <div className="max-h-[400px] space-y-4 overflow-y-auto pr-2">
                                         {producto.codigos.map((codigo) => (
                                             <div key={codigo.id} className="flex flex-col items-center rounded-lg border p-3">
                                                 {codigo.imagen_barcode ? (
                                                     <img
                                                         src={codigo.imagen_barcode}
                                                         alt={`Código de barras ${codigo.codigo_barras}`}
-                                                        className="h-20 w-full rounded-md border object-contain bg-white"
+                                                        className="h-20 w-full rounded-md border bg-white object-contain"
                                                     />
                                                 ) : (
                                                     <div className="flex h-20 w-full items-center justify-center rounded-md border border-dashed bg-gray-50">
                                                         <QrCode size={24} className="text-gray-400" />
                                                     </div>
                                                 )}
-                                                <div className="mt-3 flex w-full justify-between items-center px-1">
-                                                    <div className="flex flex-col">
+                                                <div className="mt-3 flex w-full items-center justify-between px-1">
+                                                    <div className="flex flex-col gap-1">
                                                         <span className="font-mono text-sm font-semibold">{codigo.codigo_barras}</span>
                                                         {codigo.es_default && (
-                                                            <span className="text-xs text-blue-600 font-medium">Por defecto</span>
+                                                            <Badge className="w-fit gap-1 bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300">
+                                                                <CheckCircle2 size={11} />
+                                                                Por defecto
+                                                            </Badge>
                                                         )}
                                                     </div>
-                                                    <Badge variant="secondary" className="text-sm">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                    >
+                                                        <Package size={12} />
                                                         {codigo.cantidad} uds
                                                     </Badge>
                                                 </div>
@@ -539,31 +621,47 @@ export default function ShowPageProductos({
                         </Card>
 
                         {/* Resumen Rápido */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-sidebar-accent">Resumen Rápido</CardTitle>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-rose-600 to-rose-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <ClipboardList className="h-5 w-5" />
+                                    </div>
+                                    <CardTitle className="text-white">Resumen Rápido</CardTitle>
+                                </div>
                             </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div className="flex justify-between">
+                            <CardContent className="space-y-3 pt-6">
+                                <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Código:</span>
                                     <span className="font-mono font-medium">{producto.codigo_producto}</span>
                                 </div>
-                                <div className="flex justify-between">
+                                <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Categoría:</span>
-                                    <span className="font-medium">{producto.categoria}</span>
+                                    <Badge variant="outline" className="gap-1">
+                                        <Tag size={12} />
+                                        {producto.categoria}
+                                    </Badge>
                                 </div>
-                                <div className="flex justify-between">
+                                <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Stock Total:</span>
-                                    <span className={`font-bold ${producto.stock_bajo ? 'text-red-600' : 'text-green-600'}`}>
+                                    <Badge
+                                        variant="outline"
+                                        className={
+                                            producto.stock_bajo
+                                                ? 'gap-1 border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                : 'gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                        }
+                                    >
+                                        <Package size={12} />
                                         {producto.cantidad_total ?? 0}
-                                    </span>
+                                    </Badge>
                                 </div>
-                                <div className="flex justify-between">
+                                <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Valor Total:</span>
                                     <span className="font-bold text-purple-600">${calcularValorTotal()}</span>
                                 </div>
                                 <Separator />
-                                <div className="flex justify-between">
+                                <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">Estado:</span>
                                     {producto.stock_bajo ? (
                                         <Badge variant="destructive" className="flex items-center gap-1">
@@ -571,7 +669,11 @@ export default function ShowPageProductos({
                                             Stock Bajo
                                         </Badge>
                                     ) : (
-                                        <Badge variant="outline" className="bg-green-100 text-green-800">
+                                        <Badge
+                                            variant="outline"
+                                            className="gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300"
+                                        >
+                                            <CheckCircle2 size={12} />
                                             Stock Normal
                                         </Badge>
                                     )}

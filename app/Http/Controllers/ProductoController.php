@@ -9,6 +9,7 @@ use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\HistorialPrecioCosto;
+use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use Illuminate\Http\Request;
@@ -153,6 +154,12 @@ class ProductoController extends Controller
             }
         }
 
+        // Precio de venta por almacén (producto_vendedors, clave real producto_id+almacen_id
+        // pese al nombre de la tabla) — igual que el costo, no es un solo valor por producto.
+        $preciosVenta = DB::table('producto_vendedors')
+            ->where('producto_id', $producto->id)
+            ->pluck('precio_venta', 'almacen_id');
+
         return Inertia::render('Productos/Show', [
             'producto' => [
                 'id' => $producto->id,
@@ -189,6 +196,7 @@ class ProductoController extends Controller
                     // diferir del costo global de la ficha si un traslado hacia acá se
                     // prorrateó de forma independiente. Ver Producto::costoEnAlmacen().
                     'costo' => $producto->costoEnAlmacen($almacen->id),
+                    'precio_venta' => isset($preciosVenta[$almacen->id]) ? (float) $preciosVenta[$almacen->id] : null,
                 ]),
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
@@ -241,6 +249,13 @@ class ProductoController extends Controller
         // ✅ FORZAR recarga de relaciones
         $producto->load(['almacenes', 'categoria', 'codigos']);
 
+        // Precio de venta ya asignado por almacén (producto_vendedors, clave real
+        // producto_id+almacen_id pese al nombre de la tabla) — solo para mostrarlo junto al
+        // costo; asignarlo/editarlo sigue siendo trabajo de /disponibles, no de esta pantalla.
+        $preciosVenta = DB::table('producto_vendedors')
+            ->where('producto_id', $producto->id)
+            ->pluck('precio_venta', 'almacen_id');
+
         return Inertia::render('Productos/Edit', [
             'producto' => [
                 'id' => $producto->id,
@@ -265,6 +280,18 @@ class ProductoController extends Controller
                     'es_default' => $codigo->es_default,
                     'imagen_barcode' => $codigo->imagen_barcode ? asset($codigo->imagen_barcode) : null,
                 ]),
+                // Costo real por almacén (ver Producto::costoEnAlmacen()) — permite corregir el
+                // precio de costo acotado a un solo almacén en vez del campo global de la ficha.
+                'almacenes' => $producto->almacenes->map(fn ($almacen) => [
+                    'id' => $almacen->id,
+                    'nombre_almacen' => $almacen->nombre_almacen,
+                    'ciudad_almacen' => $almacen->ciudad_almacen,
+                    'provincia_almacen' => $almacen->provincia_almacen,
+                    'cantidad' => $almacen->pivot->cantidad,
+                    'stock_bajo' => $almacen->pivot->cantidad < 3,
+                    'costo' => $producto->costoEnAlmacen($almacen->id),
+                    'precio_venta' => isset($preciosVenta[$almacen->id]) ? (float) $preciosVenta[$almacen->id] : null,
+                ]),
             ],
             'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
             'fichas_hermanas' => $this->fichasHermanas($producto),
@@ -276,6 +303,10 @@ class ProductoController extends Controller
      */
     public function update(Request $request, Producto $producto)
     {
+        // Inertia manda '' (nunca ausente) cuando el producto no tiene almacenes que elegir —
+        // 'nullable' de Laravel solo perdona null real, no string vacío.
+        $request->merge(['almacen_id' => $request->input('almacen_id') ?: null]);
+
         $validatedData = $request->validate([
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
@@ -290,6 +321,10 @@ class ProductoController extends Controller
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
+            // Almacén a corregir cuando el nuevo costo debe acotarse a uno solo (ver
+            // corregirCostoEnAlmacen()) — nulo cuando el producto no tiene ningún almacén todavía
+            // y el campo global de la ficha sigue siendo la única fuente de costo posible.
+            'almacen_id' => ['nullable', 'integer', 'exists:almacens,id'],
             'activo' => ['nullable', 'boolean'],
             'descripcion_producto' => ['nullable', 'string'],
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
@@ -299,7 +334,17 @@ class ProductoController extends Controller
 
         $user = Auth::user();
 
-        $precioCostoAnterior = (float) $producto->precio_compra_producto;
+        $almacenId = isset($validatedData['almacen_id']) ? (int) $validatedData['almacen_id'] : null;
+
+        if ($almacenId !== null && ! $producto->almacenes()->where('almacens.id', $almacenId)->exists()) {
+            return redirect()->back()
+                ->with('error', 'Ese almacén no corresponde a este producto.')
+                ->withInput();
+        }
+
+        $precioCostoAnterior = $almacenId !== null
+            ? $producto->costoEnAlmacen($almacenId)
+            : (float) $producto->precio_compra_producto;
         $precioCostoNuevo = (float) $validatedData['precio_compra_producto'];
         $precioCostoChanged = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
 
@@ -333,12 +378,21 @@ class ProductoController extends Controller
                 $imagenPath = 'productos/'.$filename;
             }
 
-            $stockMomento = $producto->cantidad_total;
+            $stockMomento = $almacenId !== null
+                ? (int) (AlmacenProducto::where('producto_id', $producto->id)->where('almacen_id', $almacenId)->value('cantidad') ?? 0)
+                : $producto->cantidad_total;
 
             $updateData = $validatedData;
             unset($updateData['password_confirmacion']);
             unset($updateData['motivo_cambio_costo']);
+            unset($updateData['almacen_id']);
             $updateData['imagen_producto'] = $imagenPath;
+
+            // Corrección acotada a un almacén: el costo se corrige en lotes_stock (ver abajo),
+            // el campo global de la ficha no se toca — los demás almacenes quedan intactos.
+            if ($almacenId !== null) {
+                unset($updateData['precio_compra_producto']);
+            }
 
             // Restringir campos de ecommerce solo a admin/moderador
             if (! in_array($user->role, ['admin', 'moderador'])) {
@@ -348,12 +402,23 @@ class ProductoController extends Controller
 
             $producto->update($updateData);
 
+            if ($precioCostoChanged && $almacenId !== null) {
+                $this->corregirCostoEnAlmacen($producto, $almacenId, $precioCostoNuevo);
+            }
+
+            // Mismo patrón que DistribucionCostosController: la ganancia guardada en
+            // producto_vendedors (precio_venta - costo) queda vieja si no se recalcula aquí.
+            if ($precioCostoChanged) {
+                app(ProductoVendedorController::class)->actualizarGananciaPorCambioCosto($producto->id, $almacenId);
+            }
+
             if ($precioCostoChanged) {
                 $diferencia = $precioCostoNuevo - $precioCostoAnterior;
                 $impactoFinanciero = $diferencia * $stockMomento;
 
                 HistorialPrecioCosto::create([
                     'producto_id' => $producto->id,
+                    'almacen_id' => $almacenId,
                     'user_id' => $user->id,
                     'precio_anterior' => $precioCostoAnterior,
                     'precio_nuevo' => $precioCostoNuevo,
@@ -367,6 +432,14 @@ class ProductoController extends Controller
 
             DB::commit();
 
+            // Corrección de costo por almacén (desde una card en Edit): se queda en la misma
+            // ficha para ver el resto de los almacenes, no vuelve al listado como el guardado
+            // completo del formulario principal.
+            if ($almacenId !== null) {
+                return redirect()->route('productos.edit', $producto)
+                    ->with('success', 'Costo actualizado correctamente.');
+            }
+
             return redirect()->route('productos.index')
                 ->with('success', 'Producto actualizado correctamente.');
         } catch (\Exception $e) {
@@ -375,6 +448,39 @@ class ProductoController extends Controller
             return redirect()->back()
                 ->with('error', 'Error al actualizar el producto: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Corrige el costo real de un producto en UN almacén puntual, sin tocar el campo global de
+     * la ficha ni los demás almacenes. Sobrescribe el `precio_costo` de todos los lotes ya
+     * registrados ahí (sin ponderar contra el valor viejo — el admin está corrigiendo, no
+     * promediando). Si el almacén todavía no tiene ningún lote, se crea uno de ajuste manual
+     * (sin compra ni movimiento de origen) con la cantidad actual, para que
+     * Producto::costoEnAlmacen() deje de caer al fallback global.
+     */
+    private function corregirCostoEnAlmacen(Producto $producto, int $almacenId, float $nuevoCosto): void
+    {
+        $lotesActualizados = LoteStock::where('producto_id', $producto->id)
+            ->where('almacen_id', $almacenId)
+            ->update(['precio_costo' => $nuevoCosto]);
+
+        if ($lotesActualizados > 0) {
+            return;
+        }
+
+        $cantidadActual = (int) (AlmacenProducto::where('producto_id', $producto->id)
+            ->where('almacen_id', $almacenId)
+            ->value('cantidad') ?? 0);
+
+        LoteStock::create([
+            'codigo' => LoteStock::generarCodigoAjuste($producto->id, $almacenId),
+            'compra_producto_id' => null,
+            'movimiento_id' => null,
+            'producto_id' => $producto->id,
+            'almacen_id' => $almacenId,
+            'cantidad' => max($cantidadActual, 0),
+            'precio_costo' => $nuevoCosto,
+        ]);
     }
 
     /**
