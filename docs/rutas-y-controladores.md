@@ -94,6 +94,11 @@
 | GET | `/comprar` | `CompraController@index` | `Comprar/Index` |
 | GET | `/comprar/{comprar}` | `CompraController@show` | `Comprar/Show` |
 | POST | `/comprar` | `CompraController@store` | JSON |
+| POST | `/comprar/{comprar}/actualizar` | `CompraController@actualizar` | redirect |
+| POST | `/comprar/{comprar}/aprobar` | `CompraController@aprobar` | redirect |
+| POST | `/comprar/{comprar}/anular` | `CompraController@anular` | redirect |
+
+> **2026-09-19:** `routes/acciones/compras.php` usaba `Route::resource('comprar', CompraController::class)`, que además registraba `comprar.create`/`edit`/`update`/`destroy` — ninguno existe en el controller, daban Error 500 si se accedían directo. Reemplazado por las 3 rutas explícitas de arriba (index/store/show), que es lo único que el controller implementa fuera de actualizar/aprobar/anular. Ver B16 en `ESTADO_DESARROLLO.md`.
 
 ### Endpoints JSON de Compras
 
@@ -265,15 +270,13 @@
 
 ## Módulo de Logística
 
+Pantalla puramente informativa (dashboard) — no tiene create/edit/show/update/destroy, nunca los tuvo en uso real.
+
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
 |--------|------|-------------------|-------------------|
 | GET | `/logistica` | `LogisticaController@index` | `Logistica/Index` |
-| GET | `/logistica/create` | `LogisticaController@create` | `Logistica/Create` |
-| POST | `/logistica` | `LogisticaController@store` | redirect |
-| GET | `/logistica/{logistica}` | `LogisticaController@show` | `Logistica/Show` |
-| GET | `/logistica/{logistica}/edit` | `LogisticaController@edit` | `Logistica/Edit` |
-| PUT | `/logistica/{logistica}` | `LogisticaController@update` | redirect |
-| DELETE | `/logistica/{logistica}` | `LogisticaController@destroy` | redirect |
+
+> **2026-09-19:** esta tabla documentaba antes las 7 rutas de un `Route::resource()` completo, pero `LogisticaController` **solo implementa `index()`** — las otras 6 (`create`/`store`/`show`/`edit`/`update`/`destroy`) daban Error 500 si se accedían directo por URL, y nunca estuvieron enlazadas desde ningún lado del frontend. `Create.tsx`/`Edit.tsx`/`Show.tsx` eran el boilerplate de scaffold sin modificar (confirmado por `diff`, los 3 idénticos). Ruta reducida a solo `index`, los 3 archivos borrados. Ver B17 en `ESTADO_DESARROLLO.md`.
 
 ---
 

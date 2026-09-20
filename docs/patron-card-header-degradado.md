@@ -65,8 +65,13 @@ className="border-white/30 bg-white/20 text-white placeholder:text-white/70 back
 
 ## Dónde ya se aplicó
 
+> **Nota:** esta lista históricamente se quedó corta — el patrón se aplicó también en `Vendor/Index.tsx`/`Show.tsx`, `Comprar/Index.tsx`/`Show.tsx` y `Clientes/Index.tsx` en sesiones que no actualizaron este archivo. No asumir que esta lista es exhaustiva; si vas a reusar el recipe en un módulo nuevo, primero `grep -rn "bg-gradient-to-r from-" resources/js/pages/` para ver el estado real antes de decidir qué color usar (evita repetir un color ya "reservado" para el mismo tipo de card en otro módulo, ej. "Lista de X" tiende a ser teal).
+
 - `resources/js/pages/dashboard.tsx`, todas 2026-08-12: Tabla 1 "Resumen Financiero" (verde/emerald), Tabla 2 "Comparación Mensual" (azul/blue), "Información de Monedas" (violeta/violet), "Area Interactiva" (cyan), "Historial de Cambios de Tasa" (naranja/orange), "Cambios de Precio de Costo" (ámbar/amber), "Estados Financieros" (rosa/rose).
+- `resources/js/pages/Productos/Edit.tsx` (2026-09-18) — "Información del Producto" (azul), "Costo y Precio por Almacén" (esmeralda), "Gestión de Códigos de Barras" (púrpura); KPI widgets (Stock Actual/Estado Stock/Código) a propósito planos, sin degradado (patrón de KPI, no de contenido).
+- `resources/js/pages/Productos/Show.tsx` (2026-09-19) — "Detalles del Producto" (azul), "Fichas hermanas" si hay (ámbar), "Distribución en Almacenes" (esmeralda), "Imagen del Producto" (índigo), "Códigos de Barras" (púrpura), "Resumen Rápido" (rosa).
+- `resources/js/pages/Productos/Index.tsx` (2026-09-19) — tabla "Lista de Productos" (teal, mismo color que "Lista de Clientes"/"Lista de Productos" en Comprar), buscador+filtros en Card plana sin degradado (mismo criterio que `Clientes/Index.tsx`).
 
 ## Dónde falta aplicarlo (pendiente, no arrancar sin que el cliente lo pida)
 
-`dashboard.tsx` ya quedó completo (las 7 cards de la página, 2026-08-12). El cliente mencionó en su momento que "existen otros lugares donde debemos arreglar eso también" pero no dijo cuáles fuera de esta página — no asumir qué pantalla sigue, preguntar primero. **`Logistica/Index.tsx` queda explícitamente fuera** — el cliente pidió no tocarla en esta ronda (ver [[project_dashboard_resumen_financiero]]).
+El cliente mencionó en su momento que "existen otros lugares donde debemos arreglar eso también" pero no dijo cuáles — no asumir qué pantalla sigue, preguntar primero. **`Logistica/Index.tsx` queda explícitamente fuera** — el cliente pidió no tocarla en esta ronda (ver [[project_dashboard_resumen_financiero]]).
