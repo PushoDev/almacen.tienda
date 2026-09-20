@@ -418,7 +418,16 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 
 ## Branch Actual
 
-`feature/desarrollo-caliente` — Trabajo activo (2026-09-05):
+`feature/desarrollo-caliente` — Trabajo activo (2026-09-20, sesión larga — empezar por `docs/arreglos-pendientes/resumen-cambios-2026-09-20.md` para continuar):
+
+1. **Backfill de lotes de ajuste para stock viejo sin `lotes_stock` propio**: 1,512 lotes creados en todo el catálogo (comando `lotes:backfill-ajustes-legado`), cierra el hueco de stock previo al 2026-09-07 que caía al costo global sin lote propio.
+2. **"Opción A" — precio de venta con override opcional por lote**: `lotes_stock.precio_venta` nullable, hereda el precio del almacén salvo que se corrija a mano por lote puntual (POS + `Show.tsx`/`Edit.tsx`).
+3. **Movimiento #209 (Bejucal→Manzanillo) — prorrateo confirmado**, quedaba pendiente de la sesión anterior. Verificado en navegador.
+4. **3 decisiones de diseño pendientes para mañana, sin implementar**: costo global en `Productos/Index.tsx` (también alcanzable desde Compras ahora), precio de venta al recibir en almacén nuevo vía Movimiento, y desglose por lote + atajo de fusión en `/disponibles`.
+
+Detalle completo en `docs/arreglos-pendientes/resumen-cambios-2026-09-20.md` y memoria `project_compras_ficha_nueva_siempre_2026_09_18`.
+
+Track anterior (2026-09-05):
 
 1. **Impresión de venta por duplicado**: `Vendor/Imprimir.tsx` imprimía Ticket(interno, se queda en el punto de venta)/Factura+Garantía(se la lleva el cliente) en la mitad superior de la hoja A4, dejando la mitad inferior en blanco. A pedido del cliente, ahora se repite el mismo contenido (Ticket+Factura y las 31 cláusulas de garantía) en ambas mitades — al cortar por la línea ya marcada salen dos copias físicas idénticas. Contenido extraído a variables reutilizables, cada copia anclada por offset fijo en mm (no por alto renderizado) para evitar el bug de Chrome ya documentado. Verificado en navegador y **confirmado por el cliente en PDF real**.
 2. **`exportToPDF` de Rastreo de Operaciones corregido**: generaba un PDF con 9 columnas viejas (incluía `Fecha`/`Usuario`, retirados de la tabla en pantalla desde agosto) — ahora exporta exactamente las 7 columnas reales.
