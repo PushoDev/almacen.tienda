@@ -21,7 +21,7 @@ class TasaCambioMLC extends Model
     protected function tasaMlc(): Attribute
     {
         return Attribute::make(
-            get: fn(float $value) => number_format($value, 2, '.', ''),
+            get: fn (float $value) => number_format($value, 2, '.', ''),
         );
     }
 
@@ -29,6 +29,7 @@ class TasaCambioMLC extends Model
     public static function getTasaMLC()
     {
         $registro = static::find(1);
+
         return $registro ? $registro->tasa_mlc : 1.50;
     }
 }

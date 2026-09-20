@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
@@ -21,7 +20,7 @@ class NotificationController extends Controller
 
         return response()->json([
             'notifications' => $notifications,
-            'count' => $count
+            'count' => $count,
         ]);
     }
 
@@ -51,6 +50,7 @@ class NotificationController extends Controller
 
         return response()->json(['success' => true]);
     }
+
     /**
      * View all notifications (history) with pagination.
      */
@@ -62,7 +62,7 @@ class NotificationController extends Controller
         $notifications = $user->notifications()->paginate(20);
 
         return Inertia::render('Notifications/Index', [
-            'notifications' => $notifications
+            'notifications' => $notifications,
         ]);
     }
 }

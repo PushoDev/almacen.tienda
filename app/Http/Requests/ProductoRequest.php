@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ProductoRequest extends FormRequest
@@ -20,7 +21,7 @@ class ProductoRequest extends FormRequest
     /**
      * Obtiene las reglas de validación que se aplican a la petición.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
@@ -34,7 +35,7 @@ class ProductoRequest extends FormRequest
             'codigo_producto' => [
                 'nullable',
                 'string',
-                'unique:productos,codigo_producto,' . $productoId,
+                'unique:productos,codigo_producto,'.$productoId,
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],

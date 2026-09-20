@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import AppLayout from '@/layouts/app-layout';
 import { sileo } from '@/lib/sileo';
-import { CategoriasProps, FichaHermanaProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
+import { CategoriasProps, FichaHermanaProps, LoteStockProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
@@ -84,8 +84,13 @@ export default function EditarProductosPage({
     // Corrección de costo por almacén (card) — form independiente del de arriba: no depende de
     // cambios sin guardar en nombre/marca/etc, y manda los datos fijos del producto tal cual
     // están en el servidor porque el backend los exige igual en cada actualización.
+    //
+    // Desde 2026-09-20 el objetivo real a corregir es un LOTE, no el almacén — un almacén puede
+    // tener 2+ lotes a costo distinto bajo esta ficha (ver Show.tsx). Con 0-1 lote, se comporta
+    // como antes (un solo campo por almacén); con 2+, cada lote tiene su propio lápiz.
     type AlmacenItem = NonNullable<ProductoProps['almacenes']>[number];
-    const [editingAlmacen, setEditingAlmacen] = useState<AlmacenItem | null>(null);
+    type LoteObjetivo = { almacen: AlmacenItem; loteId: number | null; loteCodigo: string | null; costoActual: number };
+    const [editingLote, setEditingLote] = useState<LoteObjetivo | null>(null);
 
     const costoForm = useForm({
         _method: 'put',
@@ -97,37 +102,82 @@ export default function EditarProductosPage({
         codigo_producto: producto.codigo_producto || '',
         categoria_id: producto.categoria_id.toString(),
         almacen_id: '',
+        lote_id: '',
         precio_compra_producto: '',
         password_confirmacion: '',
         motivo_cambio_costo: '',
     });
 
-    const abrirEdicionCosto = (almacen: AlmacenItem) => {
-        setEditingAlmacen(almacen);
+    // `lote` explícito cuando se hace click en la fila de un lote puntual (almacén con 2+); sin
+    // él, se resuelve solo si el almacén tiene exactamente 1 (mismo lote que costo() promedia).
+    const abrirEdicionCosto = (almacen: AlmacenItem, lote?: LoteStockProps) => {
+        const loteResuelto = lote ?? (almacen.lotes.length === 1 ? almacen.lotes[0] : null);
+
+        const objetivo: LoteObjetivo = {
+            almacen,
+            loteId: loteResuelto?.id ?? null,
+            loteCodigo: loteResuelto?.codigo ?? null,
+            costoActual: loteResuelto?.costo ?? almacen.costo,
+        };
+
+        setEditingLote(objetivo);
         costoForm.clearErrors();
         costoForm.setData({
             ...costoForm.data,
             almacen_id: almacen.id.toString(),
-            precio_compra_producto: almacen.costo.toString(),
+            lote_id: objetivo.loteId !== null ? objetivo.loteId.toString() : '',
+            precio_compra_producto: objetivo.costoActual.toString(),
             password_confirmacion: '',
             motivo_cambio_costo: '',
         });
     };
 
-    const costoCambiado = editingAlmacen !== null && parseFloat(costoForm.data.precio_compra_producto || '0') !== editingAlmacen.costo;
+    const costoCambiado = editingLote !== null && parseFloat(costoForm.data.precio_compra_producto || '0') !== editingLote.costoActual;
 
     const guardarCosto = () => {
-        if (!editingAlmacen) return;
+        if (!editingLote) return;
         costoForm.post(route('productos.update', { producto: producto.id }), {
             preserveScroll: true,
             onSuccess: () => {
-                sileo.success({ title: 'Costo actualizado', description: `Corregido en ${editingAlmacen.nombre_almacen}` });
-                setEditingAlmacen(null);
+                sileo.success({ title: 'Costo actualizado', description: `Corregido en ${editingLote.almacen.nombre_almacen}` });
+                setEditingLote(null);
             },
             onError: (errs) => {
                 if (!errs.password_confirmacion) {
                     sileo.error({ title: 'Error al actualizar', description: 'No se pudo corregir el costo' });
                 }
+            },
+        });
+    };
+
+    // "Opción A" (2026-09-20): override opcional de precio de venta por LOTE puntual — form
+    // separado y más simple que costoForm (endpoint dedicado, sin contraseña: es una decisión
+    // comercial, no un cambio de costo). Mismo umbral de permisos que la corrección de costo en
+    // esta pantalla (admin) — el backend además acepta moderador/vendedor del almacén, igual que
+    // /disponibles, por si se expone desde ahí más adelante.
+    type PrecioLoteObjetivo = { almacen: AlmacenItem; loteId: number; loteCodigo: string; precioActual: number | null };
+    const [editingPrecioLote, setEditingPrecioLote] = useState<PrecioLoteObjetivo | null>(null);
+    const precioVentaForm = useForm({ precio_venta: '' });
+
+    const abrirEdicionPrecioVenta = (almacen: AlmacenItem, lote: LoteStockProps) => {
+        setEditingPrecioLote({ almacen, loteId: lote.id, loteCodigo: lote.codigo, precioActual: lote.precio_venta });
+        precioVentaForm.clearErrors();
+        precioVentaForm.setData('precio_venta', lote.precio_venta !== null ? lote.precio_venta.toString() : '');
+    };
+
+    const guardarPrecioVentaLote = () => {
+        if (!editingPrecioLote) return;
+        precioVentaForm.put(route('productos.lotes.precio-venta', { producto: producto.id, lote: editingPrecioLote.loteId }), {
+            preserveScroll: true,
+            onSuccess: () => {
+                sileo.success({
+                    title: precioVentaForm.data.precio_venta ? 'Precio actualizado' : 'Precio del almacén restaurado',
+                    description: `Lote ${editingPrecioLote.loteCodigo}`,
+                });
+                setEditingPrecioLote(null);
+            },
+            onError: () => {
+                sileo.error({ title: 'Error al actualizar', description: 'No se pudo corregir el precio de venta' });
             },
         });
     };
@@ -529,7 +579,9 @@ export default function EditarProductosPage({
                                                 </Badge>
                                             </div>
                                             <div>
-                                                <p className="text-muted-foreground mb-1">Costo de Compra</p>
+                                                <p className="text-muted-foreground mb-1">
+                                                    {almacen.lotes.length > 1 ? 'Costo promedio' : 'Costo de Compra'}
+                                                </p>
                                                 <div className="flex items-center gap-1">
                                                     <Badge
                                                         variant="outline"
@@ -537,7 +589,7 @@ export default function EditarProductosPage({
                                                     >
                                                         <DollarSign size={12} />${almacen.costo}
                                                     </Badge>
-                                                    {isPrivileged && (
+                                                    {isPrivileged && almacen.lotes.length <= 1 && (
                                                         <button
                                                             type="button"
                                                             onClick={() => abrirEdicionCosto(almacen)}
@@ -569,6 +621,69 @@ export default function EditarProductosPage({
                                                 )}
                                             </div>
                                         </div>
+
+                                        {almacen.lotes.length > 1 && (
+                                            <div className="mt-3 space-y-1.5">
+                                                {almacen.lotes.map((lote) => (
+                                                    <div
+                                                        key={lote.id}
+                                                        className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                                                    >
+                                                        <span className="font-mono text-muted-foreground">{lote.codigo}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="outline" className="gap-1">
+                                                                <Package size={10} />
+                                                                {lote.cantidad} uds.
+                                                            </Badge>
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                            >
+                                                                <DollarSign size={10} />${lote.costo}
+                                                            </Badge>
+                                                            {isPrivileged && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => abrirEdicionCosto(almacen, lote)}
+                                                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                                                    title={`Corregir costo del lote ${lote.codigo}`}
+                                                                >
+                                                                    <Pencil size={12} />
+                                                                </button>
+                                                            )}
+                                                            {lote.precio_venta !== null ? (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                                    title="Precio de venta propio de este lote"
+                                                                >
+                                                                    <Tag size={10} />${lote.precio_venta}
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="gap-1 text-muted-foreground"
+                                                                    title="Sin precio propio — vende al precio del almacén"
+                                                                >
+                                                                    <Tag size={10} />
+                                                                    {lote.precio_venta_efectivo !== null ? `$${lote.precio_venta_efectivo}` : 'Sin precio'}
+                                                                </Badge>
+                                                            )}
+                                                            {isPrivileged && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => abrirEdicionPrecioVenta(almacen, lote)}
+                                                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                                                    title={`Corregir precio de venta del lote ${lote.codigo}`}
+                                                                >
+                                                                    <Pencil size={12} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -782,17 +897,27 @@ export default function EditarProductosPage({
                     </DialogContent>
                 </Dialog>
 
-                {/* Dialog de corrección de costo por almacén (card) */}
-                <Dialog open={editingAlmacen !== null} onOpenChange={(open) => !open && setEditingAlmacen(null)}>
+                {/* Dialog de corrección de costo por lote/almacén (card) */}
+                <Dialog open={editingLote !== null} onOpenChange={(open) => !open && setEditingLote(null)}>
                     <DialogContent className="sm:max-w-[400px]">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
                                 <ShieldAlert className="text-amber-500" size={20} />
-                                Corregir costo en {editingAlmacen?.nombre_almacen}
+                                Corregir costo en {editingLote?.almacen.nombre_almacen}
                             </DialogTitle>
                             <DialogDescription>
-                                Este cambio afecta solo a <strong>{editingAlmacen?.nombre_almacen}</strong> — los demás almacenes de este
-                                producto no se ven afectados. Queda registrado en el historial.
+                                {editingLote?.loteCodigo ? (
+                                    <>
+                                        Este cambio afecta solo al lote <strong>{editingLote.loteCodigo}</strong> — los demás lotes de este
+                                        almacén (si hay más) y los demás almacenes de este producto no se ven afectados.
+                                    </>
+                                ) : (
+                                    <>
+                                        Este cambio afecta solo a <strong>{editingLote?.almacen.nombre_almacen}</strong> — los demás almacenes de
+                                        este producto no se ven afectados.
+                                    </>
+                                )}{' '}
+                                Queda registrado en el historial.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-2">
@@ -841,7 +966,7 @@ export default function EditarProductosPage({
                             )}
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setEditingAlmacen(null)}>
+                            <Button type="button" variant="outline" onClick={() => setEditingLote(null)}>
                                 Cancelar
                             </Button>
                             <Button
@@ -851,6 +976,50 @@ export default function EditarProductosPage({
                                 className="bg-amber-600 hover:bg-amber-700"
                             >
                                 {costoForm.processing ? 'Guardando...' : 'Guardar'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Dialog de override de precio de venta por lote ("Opción A", 2026-09-20) */}
+                <Dialog open={editingPrecioLote !== null} onOpenChange={(open) => !open && setEditingPrecioLote(null)}>
+                    <DialogContent className="sm:max-w-[400px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Tag className="text-blue-500" size={20} />
+                                Precio de venta del lote {editingPrecioLote?.loteCodigo}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Opcional — por defecto este lote vende al mismo precio que el resto de{' '}
+                                <strong>{editingPrecioLote?.almacen.nombre_almacen}</strong>. Solo tiene sentido ponerle uno propio cuando el
+                                costo de este lote deja muy poco margen con el precio general. Dejalo vacío para que vuelva a heredarlo.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="precio-venta-lote">Precio de Venta (vacío = usar el del almacén)</Label>
+                                <Input
+                                    id="precio-venta-lote"
+                                    inputMode="decimal"
+                                    value={precioVentaForm.data.precio_venta}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                            precioVentaForm.setData('precio_venta', value);
+                                        }
+                                    }}
+                                    placeholder="0.00"
+                                    autoFocus
+                                />
+                                <InputError message={precioVentaForm.errors.precio_venta} />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditingPrecioLote(null)}>
+                                Cancelar
+                            </Button>
+                            <Button type="button" disabled={precioVentaForm.processing} onClick={guardarPrecioVentaLote} className="bg-blue-600 hover:bg-blue-700">
+                                {precioVentaForm.processing ? 'Guardando...' : 'Guardar'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

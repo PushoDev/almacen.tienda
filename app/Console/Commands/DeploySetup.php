@@ -3,12 +3,12 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 
 class DeploySetup extends Command
 {
     protected $signature = 'deploy:setup';
+
     protected $description = 'Configura el entorno de producción después de un despliegue';
 
     public function handle()
@@ -22,14 +22,14 @@ class DeploySetup extends Command
         ];
 
         foreach ($directories as $dir) {
-            if (!File::exists($dir)) {
+            if (! File::exists($dir)) {
                 File::makeDirectory($dir, 0755, true);
                 $this->info("Carpeta creada: $dir");
             }
         }
 
         // 2. Ejecutar storage:link si no existe
-        if (!File::exists(public_path('storage'))) {
+        if (! File::exists(public_path('storage'))) {
             $this->call('storage:link');
             $this->info('storage:link ejecutado.');
         } else {

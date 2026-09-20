@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 class RecorregirComisionesCierre extends Command
 {
     protected $signature = 'cierres:recorregir-comisiones {--dry-run : Solo mostrar cambios sin escribir}';
+
     protected $description = 'Corrige las comisiones en productos_resumen usando venta_ids del JSON almacenado';
 
     public function handle()
@@ -22,25 +23,31 @@ class RecorregirComisionesCierre extends Command
 
         foreach ($cierres as $cierre) {
             $detalles = $cierre->detalles;
-            if (empty($detalles) || !is_array($detalles)) continue;
+            if (empty($detalles) || ! is_array($detalles)) {
+                continue;
+            }
 
             $modificado = false;
 
             $ventaIds = [];
             foreach ($detalles as $monedaData) {
-                if (!empty($monedaData['items_ventas'])) {
+                if (! empty($monedaData['items_ventas'])) {
                     foreach ($monedaData['items_ventas'] as $iv) {
                         $ventaIds[(int) $iv['venta_id']] = true;
                     }
                 }
             }
 
-            if (empty($ventaIds)) continue;
+            if (empty($ventaIds)) {
+                continue;
+            }
 
             $ventaIds = array_keys($ventaIds);
 
             foreach ($detalles as &$monedaData) {
-                if (empty($monedaData['productos_resumen'])) continue;
+                if (empty($monedaData['productos_resumen'])) {
+                    continue;
+                }
 
                 foreach ($monedaData['productos_resumen'] as $key => &$prod) {
                     $productoId = (int) $prod['id'];
@@ -48,7 +55,7 @@ class RecorregirComisionesCierre extends Command
 
                     $correcta = (float) VentaDetalle::whereIn('venta_id', $ventaIds)
                         ->where('producto_id', $productoId)
-                        ->whereHas('venta', fn($q) => $q->where('almacen_id', $almacenId))
+                        ->whereHas('venta', fn ($q) => $q->where('almacen_id', $almacenId))
                         ->selectRaw('COALESCE(SUM(comision_unitaria * cantidad), 0) as total')
                         ->value('total');
 
@@ -65,7 +72,7 @@ class RecorregirComisionesCierre extends Command
 
             if ($modificado) {
                 $actualizados++;
-                if (!$dryRun) {
+                if (! $dryRun) {
                     $cierre->detalles = $detalles;
                     $cierre->save();
                     $this->info("  ✅ Cierre #{$cierre->id} actualizado");
@@ -75,6 +82,6 @@ class RecorregirComisionesCierre extends Command
             }
         }
 
-        $this->info("Completado. {$actualizados} de {$total} cierres " . ($dryRun ? 'requieren correccion.' : 'actualizados.'));
+        $this->info("Completado. {$actualizados} de {$total} cierres ".($dryRun ? 'requieren correccion.' : 'actualizados.'));
     }
 }

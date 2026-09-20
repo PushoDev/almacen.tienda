@@ -18,24 +18,24 @@ class ProfileController extends Controller
     {
         return Inertia::render('settings/profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
-            'status'          => $request->session()->get('status'),
-            'telegramToken'   => $request->user()->telegram_link_token,
+            'status' => $request->session()->get('status'),
+            'telegramToken' => $request->user()->telegram_link_token,
         ]);
     }
 
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $user      = $request->user();
+        $user = $request->user();
         $validated = $request->validated();
 
         if ($request->hasFile('avatar')) {
             if ($user->avatar && file_exists(public_path($user->avatar))) {
                 unlink(public_path($user->avatar));
             }
-            $file     = $request->file('avatar');
-            $filename = 'avatar_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $file = $request->file('avatar');
+            $filename = 'avatar_'.uniqid().'.'.$file->getClientOriginalExtension();
             $file->move(public_path('avatars'), $filename);
-            $validated['avatar'] = 'avatars/' . $filename;
+            $validated['avatar'] = 'avatars/'.$filename;
         } else {
             unset($validated['avatar']);
         }
@@ -62,7 +62,7 @@ class ProfileController extends Controller
     public function disconnectTelegram(Request $request): RedirectResponse
     {
         $request->user()->update([
-            'telegram_chat_id'    => null,
+            'telegram_chat_id' => null,
             'telegram_link_token' => null,
         ]);
 

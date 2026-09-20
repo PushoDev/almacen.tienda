@@ -35,9 +35,9 @@ class ProfileUpdateRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'avatar.image'  => 'El archivo debe ser una imagen.',
-            'avatar.mimes'  => 'La imagen debe ser jpg, png, gif o webp.',
-            'avatar.max'    => 'La imagen no debe superar los 5 MB.',
+            'avatar.image' => 'El archivo debe ser una imagen.',
+            'avatar.mimes' => 'La imagen debe ser jpg, png, gif o webp.',
+            'avatar.max' => 'La imagen no debe superar los 5 MB.',
         ];
     }
 }

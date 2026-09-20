@@ -6,8 +6,8 @@ use App\Models\Almacen;
 use App\Models\Cuenta;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Inertia;
 
 class UserController extends Controller
 {
@@ -34,6 +34,7 @@ class UserController extends Controller
     {
         $almacenes = Almacen::all();
         $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')->get();
+
         return Inertia::render('Empleados/Create', [
             'almacenes' => $almacenes,
             'cuentas' => $cuentas,
@@ -62,16 +63,16 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
-            'telegram_chat_id' => !empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
+            'telegram_chat_id' => ! empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
         ]);
 
         // Asignar almacenes (solo si no es admin/moderador)
-        if (!in_array($validated['role'], ['admin', 'moderador']) && !empty($validated['almacenes'])) {
+        if (! in_array($validated['role'], ['admin', 'moderador']) && ! empty($validated['almacenes'])) {
             $user->almacenes()->sync($validated['almacenes']);
         }
 
         // Asignar cuentas (solo si no es admin/moderador)
-        if (!in_array($validated['role'], ['admin', 'moderador']) && !empty($validated['cuentas'])) {
+        if (! in_array($validated['role'], ['admin', 'moderador']) && ! empty($validated['cuentas'])) {
             $user->cuentas()->sync($validated['cuentas']);
         }
 
@@ -85,6 +86,7 @@ class UserController extends Controller
     {
         // Si necesitas mostrar detalles individuales
         $empleado = User::with('almacenes')->findOrFail($id);
+
         return Inertia::render('Empleados/Show', [
             'empleado' => $empleado,
         ]);
@@ -116,7 +118,7 @@ class UserController extends Controller
         // Validación
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
+            'email' => 'required|email|unique:users,email,'.$user->id,
             'password' => 'nullable|min:8',
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
@@ -130,18 +132,18 @@ class UserController extends Controller
             'email' => $validated['email'],
             'role' => $validated['role'],
             'password' => $validated['password'] ? Hash::make($validated['password']) : $user->password,
-            'telegram_chat_id' => !empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
+            'telegram_chat_id' => ! empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
         ]);
 
         // Actualizar almacenes (solo si no es admin/moderador)
-        if (!in_array($validated['role'], ['admin', 'moderador'])) {
+        if (! in_array($validated['role'], ['admin', 'moderador'])) {
             $user->almacenes()->sync($validated['almacenes'] ?? []);
         } else {
             $user->almacenes()->detach();
         }
 
         // Actualizar cuentas (solo si no es admin/moderador)
-        if (!in_array($validated['role'], ['admin', 'moderador'])) {
+        if (! in_array($validated['role'], ['admin', 'moderador'])) {
             $user->cuentas()->sync($validated['cuentas'] ?? []);
         } else {
             $user->cuentas()->detach();

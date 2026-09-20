@@ -21,7 +21,6 @@ return new class extends Migration
             // CAMPO EXISTENTE
             $table->double('saldo_cuenta', 15, 8)->nullable()->default(0.00);
 
-
             // CAMPOS EXISTENTES
             $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
             $table->double('deuda', 15, 8)->default(0)->nullable();

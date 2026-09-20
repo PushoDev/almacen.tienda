@@ -29,7 +29,7 @@ class TelegramChannel
         try {
             Telegram::sendMessage(array_merge(['chat_id' => $chatId], $payload));
         } catch (\Exception $e) {
-            Log::error('Error enviando notificación Telegram: ' . $e->getMessage());
+            Log::error('Error enviando notificación Telegram: '.$e->getMessage());
         }
     }
 }

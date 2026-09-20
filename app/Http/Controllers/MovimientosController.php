@@ -12,6 +12,7 @@ use App\Models\Producto;
 use App\Models\User;
 use App\Notifications\MovimientoStockNotification;
 use App\Notifications\ProrrateoRequeridoNotification;
+use App\Services\LoteConsumoService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -498,21 +499,34 @@ class MovimientosController extends Controller
                         $nuevaCantidad = $almacenProductoDestino->cantidad + $cantidadRecibida;
                         $almacenProductoDestino->update(['cantidad' => $nuevaCantidad]);
 
-                        // Trazabilidad de costo por almacén: nace con el costo actual del producto
-                        // (el mismo de donde vino, sin prorratear todavía) — si más tarde se aplica
-                        // Distribución de Costos a este movimiento, ese prorrateo actualiza este
-                        // lote puntual, nunca el costo global del producto. El prorrateo es
-                        // opcional: si nunca se aplica, este lote queda con el costo de origen
-                        // igual, visible en la ficha del producto por almacén.
-                        $numeroLinea++;
-                        LoteStock::create([
-                            'codigo' => LoteStock::generarCodigoMovimiento($movimiento->id, $numeroLinea),
-                            'movimiento_id' => $movimiento->id,
-                            'producto_id' => $producto['id'],
-                            'almacen_id' => $movimiento->almacen_destino_id,
-                            'cantidad' => $cantidadRecibida,
-                            'precio_costo' => Producto::find($producto['id'])->precio_compra_producto,
-                        ]);
+                        // Consume del/los lote(s) reales del almacén origen (FIFO — más viejo
+                        // primero) en vez de asumir el costo global del producto: si el origen
+                        // tenía 2+ lotes a precio distinto, el traslado puede cruzar más de uno.
+                        // Nace en destino UN lote por cada origen consumido, preservando su
+                        // costo real y trazando `lote_origen_id` — necesario para que
+                        // Distribución de Costos ubique la cadena completa cuando prorratea por
+                        // compra (ver LoteStock::idsConDescendientes()). Sin lotes registrados
+                        // en origen (producto viejo, o dato de antes de 2026-09-07) cae al costo
+                        // global de la ficha, igual que siempre.
+                        $consumido = app(LoteConsumoService::class)->consumir(
+                            $producto['id'],
+                            $movimiento->almacen_origen_id,
+                            $cantidadRecibida
+                        );
+
+                        foreach ($consumido as $parte) {
+                            $numeroLinea++;
+                            LoteStock::create([
+                                'codigo' => LoteStock::generarCodigoMovimiento($movimiento->id, $numeroLinea),
+                                'movimiento_id' => $movimiento->id,
+                                'lote_origen_id' => $parte['lote']?->id,
+                                'producto_id' => $producto['id'],
+                                'almacen_id' => $movimiento->almacen_destino_id,
+                                'cantidad' => $parte['cantidad'],
+                                'cantidad_disponible' => $parte['cantidad'],
+                                'precio_costo' => $parte['costo_unitario'],
+                            ]);
+                        }
                     }
 
                     // Al enviar, se incrementó cantidad_en_transito pero se mantuvo cantidad

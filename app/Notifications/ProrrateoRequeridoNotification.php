@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Channels\TelegramChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
@@ -26,7 +27,7 @@ class ProrrateoRequeridoNotification extends Notification
         $channels = ['database'];
 
         if ($notifiable->telegram_chat_id) {
-            $channels[] = \App\Channels\TelegramChannel::class;
+            $channels[] = TelegramChannel::class;
         }
 
         return $channels;
@@ -43,15 +44,15 @@ class ProrrateoRequeridoNotification extends Notification
         $destino = $this->movimiento->almacenDestino->nombre_almacen ?? 'Desconocido';
         $vendedor = $this->movimiento->usuario->name ?? 'Desconocido';
 
-        $texto  = "⚖️ <b>Prorrateo de costos disponible</b>\n";
+        $texto = "⚖️ <b>Prorrateo de costos disponible</b>\n";
         $texto .= "Movimiento #{$this->movimiento->id}\n";
         $texto .= "📤 De: {$origen}\n";
         $texto .= "📥 A: {$destino}\n";
         $texto .= "👤 Solicitado por: {$vendedor}\n";
-        $texto .= "Es opcional — se decide desde Distribución de Costos, no bloquea la recepción.";
+        $texto .= 'Es opcional — se decide desde Distribución de Costos, no bloquea la recepción.';
 
         return [
-            'text'       => $texto,
+            'text' => $texto,
             'parse_mode' => 'HTML',
         ];
     }

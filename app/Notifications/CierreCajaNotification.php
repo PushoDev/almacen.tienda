@@ -2,9 +2,8 @@
 
 namespace App\Notifications;
 
+use App\Channels\TelegramChannel;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class CierreCajaNotification extends Notification
@@ -33,16 +32,16 @@ class CierreCajaNotification extends Notification
     {
         $channels = ['database'];
 
-        if (!$notifiable->telegram_chat_id) {
+        if (! $notifiable->telegram_chat_id) {
             return $channels;
         }
 
         if ($notifiable->role === 'admin') {
-            $channels[] = \App\Channels\TelegramChannel::class;
+            $channels[] = TelegramChannel::class;
         } elseif ($notifiable->role === 'vendedor') {
             $esSuCuenta = $notifiable->cuentas()->where('cuentas.id', $this->cierre->cuenta_id)->exists();
             if ($esSuCuenta) {
-                $channels[] = \App\Channels\TelegramChannel::class;
+                $channels[] = TelegramChannel::class;
             }
         }
 
@@ -52,20 +51,20 @@ class CierreCajaNotification extends Notification
     public function toTelegram(object $notifiable): array
     {
         $esDescuadre = abs($this->cierre->diferencia) > 0.01;
-        $icon        = $esDescuadre ? '⚠️' : '✅';
-        $diferencia  = number_format(abs($this->cierre->diferencia), 2);
+        $icon = $esDescuadre ? '⚠️' : '✅';
+        $diferencia = number_format(abs($this->cierre->diferencia), 2);
 
-        $texto  = "{$icon} <b>Cierre de Caja #{$this->cierre->id}</b>\n";
+        $texto = "{$icon} <b>Cierre de Caja #{$this->cierre->id}</b>\n";
         $texto .= "👤 Vendedor: {$this->cierre->usuario->name}\n";
         $texto .= "💰 Saldo esperado: $ {$this->cierre->saldo_esperado}\n";
         $texto .= "💵 Saldo contado: $ {$this->cierre->saldo_contado}\n";
         $texto .= $esDescuadre
             ? "❌ Descuadre: $ {$diferencia}\n"
             : "✅ Sin descuadre\n";
-        $texto .= "🕐 " . now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.now()->format('d/m/Y H:i');
 
         return [
-            'text'       => $texto,
+            'text' => $texto,
             'parse_mode' => 'HTML',
         ];
     }
@@ -78,7 +77,7 @@ class CierreCajaNotification extends Notification
     public function toArray(object $notifiable): array
     {
         $esDescuadre = abs($this->cierre->diferencia) > 0.01;
-        
+
         $base = [
             'type' => 'cierre_caja',
             'cierre_id' => $this->cierre->id,
@@ -86,14 +85,14 @@ class CierreCajaNotification extends Notification
             'diferencia' => $this->cierre->diferencia,
             'is_alert' => $esDescuadre,
             'icon' => 'lock',
-            'color' => $esDescuadre ? 'red' : 'purple'
+            'color' => $esDescuadre ? 'red' : 'purple',
         ];
 
         // Mensaje personalizado según el rol del notificado
         if ($notifiable->role === 'vendedor') {
             // Verificar si es de su cuenta
             $esSuCuenta = $notifiable->cuentas()->where('cuentas.id', $this->cierre->cuenta_id)->exists();
-            
+
             if ($esSuCuenta) {
                 $mensaje = $esDescuadre
                     ? "⚠️ Descuadre en tu cuenta Cierre #{$this->cierre->id}: {$this->cierre->diferencia}"

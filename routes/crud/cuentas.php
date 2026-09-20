@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth', 'verified'])->group(
     function () {
         Route::resource('cuentas', CuentaController::class, [
-            'except' => ['show', 'edit', 'update', 'destroy']
+            'except' => ['show', 'edit', 'update', 'destroy'],
         ]);
 
         // show() valida acceso internamente (admin/moderador siempre, vendedor solo sus cuentas)

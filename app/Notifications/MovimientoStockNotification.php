@@ -3,8 +3,6 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class MovimientoStockNotification extends Notification
@@ -15,6 +13,7 @@ class MovimientoStockNotification extends Notification
      * Create a new notification instance.
      */
     public $movimiento;
+
     public $mensaje;
 
     /**
@@ -52,17 +51,17 @@ class MovimientoStockNotification extends Notification
             'almacen_origen_id' => $this->movimiento->almacen_origen_id,
             'almacen_destino_id' => $this->movimiento->almacen_destino_id,
             'icon' => 'truck',
-            'color' => 'blue'
+            'color' => 'blue',
         ];
 
         // Mensaje personalizado según el rol del notificado
         if ($notifiable->role === 'vendedor') {
             // Verificar si involucra sus almacenes
-            $esSuAlmacenOrigen = $this->movimiento->almacen_origen_id && 
+            $esSuAlmacenOrigen = $this->movimiento->almacen_origen_id &&
                                 $notifiable->almacenes()->where('almacens.id', $this->movimiento->almacen_origen_id)->exists();
-            $esSuAlmacenDestino = $this->movimiento->almacen_destino_id && 
+            $esSuAlmacenDestino = $this->movimiento->almacen_destino_id &&
                                  $notifiable->almacenes()->where('almacens.id', $this->movimiento->almacen_destino_id)->exists();
-            
+
             if ($esSuAlmacenOrigen || $esSuAlmacenDestino) {
                 $base['message'] = "Movimiento #{$this->movimiento->id} en tus áreas: {$this->movimiento->estado}";
                 $base['context'] = 'tu_operacion';

@@ -10,7 +10,7 @@ class CuentaFactory extends Factory
     public function definition(): array
     {
         return [
-            'nombre_cuenta' => fake()->unique()->word() . ' ' . strtoupper(fake()->lexify('???')),
+            'nombre_cuenta' => fake()->unique()->word().' '.strtoupper(fake()->lexify('???')),
             'tipo' => fake()->randomElement(['caja', 'banco', 'tarjeta', 'efectivo']),
             'saldo_cuenta' => fake()->randomFloat(2, 0, 100000),
             'tipo_moneda' => fake()->randomElement(['USD', 'EUR', 'MLC', 'CUP']),

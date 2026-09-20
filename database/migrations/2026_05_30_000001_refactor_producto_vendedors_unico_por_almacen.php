@@ -9,23 +9,23 @@ return new class extends Migration
 {
     private function indexExists(string $table, string $index): bool
     {
-        return (bool) DB::selectOne("
+        return (bool) DB::selectOne('
             SELECT 1 FROM information_schema.STATISTICS
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = ? AND INDEX_NAME = ?
             LIMIT 1
-        ", [$table, $index]);
+        ', [$table, $index]);
     }
 
     private function fkExists(string $table, string $column): bool
     {
-        return (bool) DB::selectOne("
+        return (bool) DB::selectOne('
             SELECT 1 FROM information_schema.KEY_COLUMN_USAGE
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = ? AND COLUMN_NAME = ?
               AND REFERENCED_TABLE_NAME IS NOT NULL
             LIMIT 1
-        ", [$table, $column]);
+        ', [$table, $column]);
     }
 
     private function pkColumns(string $table): array
@@ -36,6 +36,7 @@ return new class extends Migration
               AND TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY'
             ORDER BY ORDINAL_POSITION
         ", [$table]);
+
         return array_column($rows, 'COLUMN_NAME');
     }
 
@@ -46,7 +47,7 @@ return new class extends Migration
         }
 
         // ── 1. Agregar puesto_por_user_id si no existe ──────────────────────────
-        if (!Schema::hasColumn('producto_vendedors', 'puesto_por_user_id')) {
+        if (! Schema::hasColumn('producto_vendedors', 'puesto_por_user_id')) {
             Schema::table('producto_vendedors', function (Blueprint $table) {
                 $table->unsignedBigInteger('puesto_por_user_id')->nullable()->after('comision');
             });
@@ -109,12 +110,12 @@ return new class extends Migration
 
             // 7. Crear índice temporal en producto_id antes de eliminar la PK
             //    (MySQL exige que toda FK esté respaldada por un índice)
-            if (!$this->indexExists('producto_vendedors', 'tmp_producto_id_idx')) {
+            if (! $this->indexExists('producto_vendedors', 'tmp_producto_id_idx')) {
                 DB::statement('CREATE INDEX tmp_producto_id_idx ON producto_vendedors (producto_id)');
             }
 
             // 8. Eliminar la PK compuesta (si aún existe)
-            if (!empty($this->pkColumns('producto_vendedors'))) {
+            if (! empty($this->pkColumns('producto_vendedors'))) {
                 DB::statement('ALTER TABLE producto_vendedors DROP PRIMARY KEY');
             }
 
@@ -122,9 +123,13 @@ return new class extends Migration
             Schema::table('producto_vendedors', function (Blueprint $table) {
                 $cols = [];
                 foreach (['user_id', 'precio_admin', 'ganancia_admin'] as $col) {
-                    if (Schema::hasColumn('producto_vendedors', $col)) $cols[] = $col;
+                    if (Schema::hasColumn('producto_vendedors', $col)) {
+                        $cols[] = $col;
+                    }
                 }
-                if (!empty($cols)) $table->dropColumn($cols);
+                if (! empty($cols)) {
+                    $table->dropColumn($cols);
+                }
             });
         }
 
@@ -141,14 +146,14 @@ return new class extends Migration
         }
 
         // ── 12. FK para puesto_por_user_id si no existe ─────────────────────────
-        if (!$this->fkExists('producto_vendedors', 'puesto_por_user_id')) {
+        if (! $this->fkExists('producto_vendedors', 'puesto_por_user_id')) {
             Schema::table('producto_vendedors', function (Blueprint $table) {
                 $table->foreign('puesto_por_user_id')->references('id')->on('users')->nullOnDelete();
             });
         }
 
         // ── 13. Índice auxiliar si no existe ────────────────────────────────────
-        if (!$this->indexExists('producto_vendedors', 'producto_vendedors_almacen_id_precio_venta_index')) {
+        if (! $this->indexExists('producto_vendedors', 'producto_vendedors_almacen_id_precio_venta_index')) {
             Schema::table('producto_vendedors', function (Blueprint $table) {
                 $table->index(['almacen_id', 'precio_venta']);
             });

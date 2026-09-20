@@ -14,7 +14,7 @@ class LogisticaController extends Controller
     public function index(DashboardStatsService $dashboardStatsService)
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return redirect()->route('login');
         }
 

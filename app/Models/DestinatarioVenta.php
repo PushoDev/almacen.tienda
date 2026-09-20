@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +16,7 @@ class DestinatarioVenta extends Model
         'direccion_residencia',
         'telefono_contacto',
         'parentesco_cliente',
-        'observaciones'
+        'observaciones',
     ];
 
     public function venta()

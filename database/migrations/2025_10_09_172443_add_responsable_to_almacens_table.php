@@ -31,7 +31,7 @@ return new class extends Migration
                 'nombre_responsable',
                 'apellido_responsable',
                 'carnet_responsable',
-                'telefono_responsable'
+                'telefono_responsable',
             ]);
         });
     }

@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
 use App\Models\Producto;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
 class RegenerateBarcodes extends Command
@@ -44,9 +44,10 @@ class RegenerateBarcodes extends Command
             foreach ($productos as $producto) {
                 try {
                     // Si no forzamos y la imagen ya existe, saltar
-                    if (!$force && $producto->barcodeImageExists()) {
+                    if (! $force && $producto->barcodeImageExists()) {
                         $skippedCount++;
                         $bar->advance();
+
                         continue;
                     }
 
@@ -59,7 +60,7 @@ class RegenerateBarcodes extends Command
                     }
                 } catch (\Exception $e) {
                     $errorCount++;
-                    Log::error("Error regenerando barcode ID {$producto->id}: " . $e->getMessage());
+                    Log::error("Error regenerando barcode ID {$producto->id}: ".$e->getMessage());
                 }
 
                 $bar->advance();
@@ -69,7 +70,7 @@ class RegenerateBarcodes extends Command
         $bar->finish();
         $this->newLine();
 
-        $this->info("Proceso finalizado.");
+        $this->info('Proceso finalizado.');
         $this->table(
             ['Resultado', 'Cantidad'],
             [

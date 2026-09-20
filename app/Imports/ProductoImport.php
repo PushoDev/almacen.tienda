@@ -2,31 +2,33 @@
 
 namespace App\Imports;
 
-use App\Models\Producto;
-use App\Models\Categoria;
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
+use App\Models\Categoria;
+use App\Models\Producto;
+use App\Models\ProductoCodigo;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Illuminate\Support\Facades\Log;
 
-class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChunkReading
+class ProductoImport implements ToModel, WithChunkReading, WithHeadingRow, WithValidation
 {
     private $almacenId;
+
     private $estadisticas = [
-        'productos_creados'      => 0,
+        'productos_creados' => 0,
         'productos_actualizados' => 0,
-        'filas_procesadas'       => 0,
-        'filas_omitidas'         => 0,
+        'filas_procesadas' => 0,
+        'filas_omitidas' => 0,
     ];
 
     public function __construct($almacenId = 1)
     {
         $this->almacenId = $almacenId;
 
-        if (!Almacen::find($almacenId)) {
+        if (! Almacen::find($almacenId)) {
             throw new \Exception("El almacén con ID {$almacenId} no existe.");
         }
     }
@@ -44,6 +46,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             if (empty($row['nombre_producto'])) {
                 $this->estadisticas['filas_omitidas']++;
                 Log::warning('Fila omitida - nombre_producto vacío', ['fila' => $this->estadisticas['filas_procesadas']]);
+
                 return null;
             }
 
@@ -54,14 +57,15 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             if (is_null($precio)) {
                 $this->estadisticas['filas_omitidas']++;
                 Log::warning('Fila omitida - precio_compra vacío o inválido', [
-                    'nombre'        => $row['nombre_producto'],
-                    'precio_raw'    => $precioRaw,
+                    'nombre' => $row['nombre_producto'],
+                    'precio_raw' => $precioRaw,
                 ]);
+
                 return null;
             }
 
             // Categoría: opcional, default "Sin Categoría"
-            $categoriaNombre = !empty($row['categoria']) ? $row['categoria'] : 'Sin Categoría';
+            $categoriaNombre = ! empty($row['categoria']) ? $row['categoria'] : 'Sin Categoría';
 
             $categoria = Categoria::firstOrCreate(
                 ['nombre_categoria' => $categoriaNombre],
@@ -70,11 +74,11 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             $categoriaId = $categoria->id;
 
             $nombreProducto = $row['nombre_producto'];
-            $marca          = !empty($row['marca'])     ? $row['marca']     : null;
-            $modelo         = !empty($row['modelo'])    ? $row['modelo']    : null;
-            $capacidad      = !empty($row['capacidad']) ? $row['capacidad'] : null;
-            $color          = !empty($row['color'])     ? $row['color']     : null;
-            $cantidad       = $this->normalizarCantidad($row['cantidad'] ?? null);
+            $marca = ! empty($row['marca']) ? $row['marca'] : null;
+            $modelo = ! empty($row['modelo']) ? $row['modelo'] : null;
+            $capacidad = ! empty($row['capacidad']) ? $row['capacidad'] : null;
+            $color = ! empty($row['color']) ? $row['color'] : null;
+            $cantidad = $this->normalizarCantidad($row['cantidad'] ?? null);
 
             // Búsqueda correcta con NULL: where('col', null) no funciona en SQL
             $query = Producto::where('nombre_producto', $nombreProducto);
@@ -105,57 +109,57 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
 
             $producto = $query->first();
 
-            if (!$producto) {
+            if (! $producto) {
                 $producto = Producto::create([
-                    'nombre_producto'         => $nombreProducto,
-                    'marca_producto'          => $marca,
-                    'modelo_producto'         => $modelo,
-                    'capacidad_producto'      => $capacidad,
-                    'color_producto'          => $color,
-                    'categoria_id'            => $categoriaId,
-                    'precio_compra_producto'  => $precio,
-                    'imagen_producto'         => 'productos/producto-default.png',
+                    'nombre_producto' => $nombreProducto,
+                    'marca_producto' => $marca,
+                    'modelo_producto' => $modelo,
+                    'capacidad_producto' => $capacidad,
+                    'color_producto' => $color,
+                    'categoria_id' => $categoriaId,
+                    'precio_compra_producto' => $precio,
+                    'imagen_producto' => 'productos/producto-default.png',
                 ]);
                 $this->estadisticas['productos_creados']++;
                 Log::info("Producto creado: {$nombreProducto}", [
                     'producto_id' => $producto->id,
-                    'almacen_id'  => $this->almacenId,
-                    'cantidad'    => $cantidad,
+                    'almacen_id' => $this->almacenId,
+                    'cantidad' => $cantidad,
                 ]);
             } else {
                 $producto->update([
-                    'categoria_id'           => $categoriaId,
+                    'categoria_id' => $categoriaId,
                     'precio_compra_producto' => $precio,
                 ]);
                 $this->estadisticas['productos_actualizados']++;
                 Log::info("Producto actualizado: {$nombreProducto}", [
                     'producto_id' => $producto->id,
-                    'almacen_id'  => $this->almacenId,
+                    'almacen_id' => $this->almacenId,
                 ]);
             }
 
             // Códigos de barras
             $codigoBarrasInput = trim((string) ($row['codigo_barras'] ?? ''));
             if ($codigoBarrasInput !== '') {
-                $esPrimerCodigo = !\App\Models\ProductoCodigo::where('producto_id', $producto->id)->exists();
-                $productoCodigo = \App\Models\ProductoCodigo::firstOrNew([
-                    'producto_id'    => $producto->id,
-                    'codigo_barras'  => $codigoBarrasInput,
+                $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
+                $productoCodigo = ProductoCodigo::firstOrNew([
+                    'producto_id' => $producto->id,
+                    'codigo_barras' => $codigoBarrasInput,
                 ]);
                 $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
-                if (!$productoCodigo->exists) {
+                if (! $productoCodigo->exists) {
                     $productoCodigo->es_default = $esPrimerCodigo;
                 }
                 $productoCodigo->save();
             } else {
-                $defaultCodigo = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
+                $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
                     ->where('es_default', true)
                     ->first();
 
                 if ($defaultCodigo) {
                     $defaultCodigo->increment('cantidad', $cantidad);
                 } else {
-                    \App\Models\ProductoCodigo::generarYGuardarDefault($producto, $cantidad);
+                    ProductoCodigo::generarYGuardarDefault($producto, $cantidad);
                 }
             }
 
@@ -167,33 +171,34 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             if ($almacenProducto) {
                 $cantidadAnterior = $almacenProducto->cantidad;
                 $almacenProducto->increment('cantidad', $cantidad);
-                Log::info("Cantidad incrementada en almacén", [
-                    'producto_id'       => $producto->id,
+                Log::info('Cantidad incrementada en almacén', [
+                    'producto_id' => $producto->id,
                     'cantidad_anterior' => $cantidadAnterior,
                     'cantidad_agregada' => $cantidad,
-                    'cantidad_total'    => $cantidadAnterior + $cantidad,
-                    'almacen_id'        => $this->almacenId,
+                    'cantidad_total' => $cantidadAnterior + $cantidad,
+                    'almacen_id' => $this->almacenId,
                 ]);
             } else {
                 AlmacenProducto::create([
-                    'almacen_id'  => $this->almacenId,
+                    'almacen_id' => $this->almacenId,
                     'producto_id' => $producto->id,
-                    'cantidad'    => $cantidad,
+                    'cantidad' => $cantidad,
                 ]);
-                Log::info("Producto asignado al almacén", [
+                Log::info('Producto asignado al almacén', [
                     'producto_id' => $producto->id,
-                    'cantidad'    => $cantidad,
-                    'almacen_id'  => $this->almacenId,
+                    'cantidad' => $cantidad,
+                    'almacen_id' => $this->almacenId,
                 ]);
             }
 
             return null;
         } catch (\Exception $e) {
-            Log::error("Error procesando fila: " . $e->getMessage(), [
-                'fila'       => $row,
+            Log::error('Error procesando fila: '.$e->getMessage(), [
+                'fila' => $row,
                 'almacen_id' => $this->almacenId,
             ]);
             $this->estadisticas['filas_omitidas']++;
+
             return null;
         }
     }
@@ -219,7 +224,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             return null;
         }
 
-        $hasComma  = strpos($val, ',') !== false;
+        $hasComma = strpos($val, ',') !== false;
         $hasPeriod = strpos($val, '.') !== false;
 
         if ($hasComma && $hasPeriod) {
@@ -236,7 +241,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             // Solo coma: puede ser decimal (45,00) o miles (1,234)
             $partes = explode(',', $val);
             if (count($partes) === 2 && strlen($partes[1]) <= 2) {
-                $val = $partes[0] . '.' . $partes[1];
+                $val = $partes[0].'.'.$partes[1];
             } else {
                 $val = str_replace(',', '', $val);
             }
@@ -254,6 +259,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
         if (is_null($value) || trim((string) $value) === '') {
             return 0;
         }
+
         return (int) floatval($value);
     }
 
@@ -261,21 +267,21 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
     {
         return [
             'nombre_producto' => 'sometimes|nullable|string|max:255',
-            'categoria'       => 'sometimes|nullable|string|max:255',
-            'marca'           => 'sometimes|nullable|string|max:255',
-            'modelo'          => 'sometimes|nullable|string|max:255',
-            'capacidad'       => 'sometimes|nullable|string|max:255',
-            'color'           => 'sometimes|nullable|string|max:100',
-            'precio_compra'   => 'sometimes|nullable',
-            'cantidad'        => 'sometimes|nullable',
-            'codigo_barras'   => 'sometimes|nullable|string|max:255',
+            'categoria' => 'sometimes|nullable|string|max:255',
+            'marca' => 'sometimes|nullable|string|max:255',
+            'modelo' => 'sometimes|nullable|string|max:255',
+            'capacidad' => 'sometimes|nullable|string|max:255',
+            'color' => 'sometimes|nullable|string|max:100',
+            'precio_compra' => 'sometimes|nullable',
+            'cantidad' => 'sometimes|nullable',
+            'codigo_barras' => 'sometimes|nullable|string|max:255',
         ];
     }
 
     public function prepareForValidation($data, $index)
     {
         foreach (['nombre_producto', 'categoria', 'marca', 'modelo', 'capacidad', 'color'] as $field) {
-            if (array_key_exists($field, $data) && !is_null($data[$field])) {
+            if (array_key_exists($field, $data) && ! is_null($data[$field])) {
                 $data[$field] = trim((string) $data[$field]) ?: null;
             }
         }
@@ -296,7 +302,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
     {
         return [
             'nombre_producto.string' => 'El nombre debe ser texto',
-            'nombre_producto.max'    => 'El nombre no puede superar 255 caracteres',
+            'nombre_producto.max' => 'El nombre no puede superar 255 caracteres',
         ];
     }
 

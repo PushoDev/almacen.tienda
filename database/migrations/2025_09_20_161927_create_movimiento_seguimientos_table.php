@@ -21,7 +21,7 @@ return new class extends Migration
                 'recibido_parcial',
                 'recibido_completo',
                 'rechazado',
-                'cancelado'
+                'cancelado',
             ]);
             $table->text('observaciones')->nullable();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');

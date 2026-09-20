@@ -197,6 +197,13 @@ class ProductoController extends Controller
                     // prorrateó de forma independiente. Ver Producto::costoEnAlmacen().
                     'costo' => $producto->costoEnAlmacen($almacen->id),
                     'precio_venta' => isset($preciosVenta[$almacen->id]) ? (float) $preciosVenta[$almacen->id] : null,
+                    // Desglose por lote (2026-09-20) — un mismo almacén puede tener 2+ lotes a
+                    // costo distinto bajo esta ficha (compras/traslados que llegaron en momentos
+                    // o precios distintos). `costo` de arriba sigue siendo el promedio, para no
+                    // romper nada que ya lo use — esto es lo que permite mostrarlos por separado
+                    // cuando hay más de uno. Vacío para productos viejos sin lotes_stock, que
+                    // caen al fallback de costoEnAlmacen().
+                    'lotes' => $this->lotesParaVista($producto, $almacen->id),
                 ]),
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
@@ -207,11 +214,11 @@ class ProductoController extends Controller
 
     /**
      * Otras fichas de Producto con la misma identidad descriptiva (nombre+marca+modelo+
-     * capacidad+categoría) pero costo distinto — desde el 2026-09-18 cada compra crea siempre
-     * una ficha nueva (ver CompraController::procesarLineasProducto()), así que "el mismo
-     * artículo" comprado más de una vez a precios distintos queda repartido en varias fichas.
-     * Mostrarlas juntas es lo que evita que el catálogo dé la impresión de un solo costo
-     * cuando en realidad varía por lote/compra.
+     * capacidad+categoría) pero costo global distinto — CompraController::procesarLineasProducto()
+     * reusa una ficha existente cuando coincide esta misma identidad (2026-09-20), así que esto
+     * ya solo debería aparecer para catálogo viejo, de antes de ese cambio (entre 2026-09-18 y
+     * 2026-09-20 cada compra creaba siempre una ficha nueva). Se deja tal cual a propósito — no
+     * se fusiona automáticamente el catálogo viejo, ver conversación 2026-09-20.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -237,6 +244,32 @@ class ProductoController extends Controller
                 ])->filter(fn ($a) => $a['cantidad'] > 0)->values(),
             ])
             ->sortBy('precio_compra_producto')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Desglose por lote de un producto en un almacén puntual (ver Producto::lotesActivosEnAlmacen())
+     * — para Show.tsx/Edit.tsx, que muestran cada lote por separado cuando hay más de uno en vez
+     * del promedio único de costoEnAlmacen(). Vacío para catálogo viejo sin lotes_stock.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function lotesParaVista(Producto $producto, int $almacenId): array
+    {
+        return $producto->lotesActivosEnAlmacen($almacenId)
+            ->map(fn (LoteStock $lote) => [
+                'id' => $lote->id,
+                'codigo' => $lote->codigo,
+                'cantidad' => $lote->cantidad_disponible,
+                'costo' => (float) $lote->precio_costo,
+                // Precio de venta "Opción A" (2026-09-20): 'precio_venta' es el override propio
+                // de ESTE lote (null si no tiene, el caso normal) — 'precio_venta_efectivo' ya
+                // resuelto contra el precio del almacén, para no obligar al frontend a repetir
+                // esa lógica. Ver Producto::precioVentaEfectivo().
+                'precio_venta' => $lote->precio_venta !== null ? (float) $lote->precio_venta : null,
+                'precio_venta_efectivo' => $producto->precioVentaEfectivo($lote),
+            ])
             ->values()
             ->all();
     }
@@ -291,6 +324,7 @@ class ProductoController extends Controller
                     'stock_bajo' => $almacen->pivot->cantidad < 3,
                     'costo' => $producto->costoEnAlmacen($almacen->id),
                     'precio_venta' => isset($preciosVenta[$almacen->id]) ? (float) $preciosVenta[$almacen->id] : null,
+                    'lotes' => $this->lotesParaVista($producto, $almacen->id),
                 ]),
             ],
             'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
@@ -325,6 +359,11 @@ class ProductoController extends Controller
             // corregirCostoEnAlmacen()) — nulo cuando el producto no tiene ningún almacén todavía
             // y el campo global de la ficha sigue siendo la única fuente de costo posible.
             'almacen_id' => ['nullable', 'integer', 'exists:almacens,id'],
+            // Lote puntual a corregir (2026-09-20) — cuando el almacén tiene 2+ lotes, Edit.tsx
+            // manda cuál. Nulo cuando el almacén no tiene ningún lote todavía (crea uno de
+            // ajuste, ver corregirCostoEnAlmacen()) o para datos viejos con un solo lote sin id
+            // explícito en la card.
+            'lote_id' => ['nullable', 'integer', 'exists:lotes_stock,id'],
             'activo' => ['nullable', 'boolean'],
             'descripcion_producto' => ['nullable', 'string'],
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
@@ -335,6 +374,7 @@ class ProductoController extends Controller
         $user = Auth::user();
 
         $almacenId = isset($validatedData['almacen_id']) ? (int) $validatedData['almacen_id'] : null;
+        $loteId = isset($validatedData['lote_id']) ? (int) $validatedData['lote_id'] : null;
 
         if ($almacenId !== null && ! $producto->almacenes()->where('almacens.id', $almacenId)->exists()) {
             return redirect()->back()
@@ -342,9 +382,28 @@ class ProductoController extends Controller
                 ->withInput();
         }
 
-        $precioCostoAnterior = $almacenId !== null
-            ? $producto->costoEnAlmacen($almacenId)
-            : (float) $producto->precio_compra_producto;
+        $loteAEditar = null;
+        if ($loteId !== null) {
+            $loteAEditar = LoteStock::where('id', $loteId)
+                ->where('producto_id', $producto->id)
+                ->where('almacen_id', $almacenId)
+                ->first();
+
+            if (! $loteAEditar) {
+                return redirect()->back()
+                    ->with('error', 'Ese lote no corresponde a este producto/almacén.')
+                    ->withInput();
+            }
+        }
+
+        // "Anterior" es el dato real de lo que se está corrigiendo: el costo de ESE lote
+        // puntual si se eligió uno, o el promedio del almacén si no (almacén con 0-1 lote,
+        // o corrección legado sin selector).
+        $precioCostoAnterior = match (true) {
+            $loteAEditar !== null => (float) $loteAEditar->precio_costo,
+            $almacenId !== null => $producto->costoEnAlmacen($almacenId),
+            default => (float) $producto->precio_compra_producto,
+        };
         $precioCostoNuevo = (float) $validatedData['precio_compra_producto'];
         $precioCostoChanged = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
 
@@ -378,9 +437,13 @@ class ProductoController extends Controller
                 $imagenPath = 'productos/'.$filename;
             }
 
-            $stockMomento = $almacenId !== null
-                ? (int) (AlmacenProducto::where('producto_id', $producto->id)->where('almacen_id', $almacenId)->value('cantidad') ?? 0)
-                : $producto->cantidad_total;
+            // El impacto financiero de corregir UN lote solo aplica a las unidades de ESE lote,
+            // no a todo el almacén (que puede tener otros lotes a otro costo, sin tocar).
+            $stockMomento = match (true) {
+                $loteAEditar !== null => $loteAEditar->cantidad_disponible,
+                $almacenId !== null => (int) (AlmacenProducto::where('producto_id', $producto->id)->where('almacen_id', $almacenId)->value('cantidad') ?? 0),
+                default => $producto->cantidad_total,
+            };
 
             $updateData = $validatedData;
             unset($updateData['password_confirmacion']);
@@ -403,7 +466,7 @@ class ProductoController extends Controller
             $producto->update($updateData);
 
             if ($precioCostoChanged && $almacenId !== null) {
-                $this->corregirCostoEnAlmacen($producto, $almacenId, $precioCostoNuevo);
+                $this->corregirCostoEnAlmacen($producto, $almacenId, $precioCostoNuevo, $loteId);
             }
 
             // Mismo patrón que DistribucionCostosController: la ganancia guardada en
@@ -451,15 +514,58 @@ class ProductoController extends Controller
     }
 
     /**
-     * Corrige el costo real de un producto en UN almacén puntual, sin tocar el campo global de
-     * la ficha ni los demás almacenes. Sobrescribe el `precio_costo` de todos los lotes ya
-     * registrados ahí (sin ponderar contra el valor viejo — el admin está corrigiendo, no
-     * promediando). Si el almacén todavía no tiene ningún lote, se crea uno de ajuste manual
-     * (sin compra ni movimiento de origen) con la cantidad actual, para que
-     * Producto::costoEnAlmacen() deje de caer al fallback global.
+     * "Opción A" (2026-09-20): override opcional del precio de venta de UN lote puntual, sin
+     * tocar `producto_vendedors` (el precio general del almacén, que sigue siendo el default
+     * para el resto de los lotes). Enviar `precio_venta` vacío/null quita el override — el lote
+     * vuelve a heredar el precio del almacén. Mismo criterio de permisos que
+     * ProductoVendedorController (precio de venta es decisión comercial, no requiere contraseña
+     * como el costo): admin/moderador, o el vendedor asignado a ese almacén.
      */
-    private function corregirCostoEnAlmacen(Producto $producto, int $almacenId, float $nuevoCosto): void
+    public function actualizarPrecioVentaLote(Request $request, Producto $producto, LoteStock $lote)
     {
+        if ($lote->producto_id !== $producto->id) {
+            abort(404);
+        }
+
+        $user = Auth::user();
+        if (! in_array($user->role, ['admin', 'moderador']) && ! $user->almacenes->contains($lote->almacen_id)) {
+            abort(403, 'No tienes acceso a este almacén.');
+        }
+
+        $validated = $request->validate([
+            'precio_venta' => 'nullable|numeric|min:0',
+        ]);
+
+        $lote->update(['precio_venta' => $validated['precio_venta'] ?? null]);
+
+        return redirect()->route('productos.edit', $producto)
+            ->with('success', $validated['precio_venta'] !== null
+                ? "Precio de venta corregido para el lote {$lote->codigo}."
+                : "El lote {$lote->codigo} vuelve a usar el precio del almacén.");
+    }
+
+    /**
+     * Corrige el costo real de un producto en UN almacén puntual, sin tocar el campo global de
+     * la ficha ni los demás almacenes.
+     *
+     * Con `$loteId` (2026-09-20, cuando Edit.tsx ofrece elegir de cuál lote — ya validado en
+     * update() que pertenece a este producto/almacén): corrige SOLO ese lote, el resto del
+     * almacén queda intacto aunque tenga más lotes a otro costo.
+     *
+     * Sin `$loteId` (legado, o un almacén con un solo lote sin selector): sobrescribe el
+     * `precio_costo` de TODOS los lotes de ese almacén al mismo valor (sin ponderar contra el
+     * valor viejo — el admin está corrigiendo, no promediando). Si el almacén todavía no tiene
+     * ningún lote, se crea uno de ajuste manual (sin compra ni movimiento de origen) con la
+     * cantidad actual, para que Producto::costoEnAlmacen() deje de caer al fallback global.
+     */
+    private function corregirCostoEnAlmacen(Producto $producto, int $almacenId, float $nuevoCosto, ?int $loteId = null): void
+    {
+        if ($loteId !== null) {
+            LoteStock::where('id', $loteId)->update(['precio_costo' => $nuevoCosto]);
+
+            return;
+        }
+
         $lotesActualizados = LoteStock::where('producto_id', $producto->id)
             ->where('almacen_id', $almacenId)
             ->update(['precio_costo' => $nuevoCosto]);
@@ -479,6 +585,7 @@ class ProductoController extends Controller
             'producto_id' => $producto->id,
             'almacen_id' => $almacenId,
             'cantidad' => max($cantidadActual, 0),
+            'cantidad_disponible' => max($cantidadActual, 0),
             'precio_costo' => $nuevoCosto,
         ]);
     }

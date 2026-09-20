@@ -2,10 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Models\PrecioHistorial;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\PrecioHistorial>
+ * @extends Factory<PrecioHistorial>
  */
 class PrecioHistorialFactory extends Factory
 {

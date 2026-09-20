@@ -17,7 +17,7 @@ class MovimientoDetalle extends Model
         'cantidad_despachada',
         'cantidad_recibida',
         'costo_unitario',
-        'observaciones'
+        'observaciones',
     ];
 
     public function movimiento(): BelongsTo

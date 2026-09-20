@@ -4,6 +4,7 @@ use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Cliente;
 use App\Models\Cuenta;
+use App\Models\LoteStock;
 use App\Models\Moneda;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
@@ -163,6 +164,124 @@ test('el stock se descuenta inmediatamente al crear una venta pendiente', functi
         'id' => $cuenta->id,
         'saldo_cuenta' => 10000,
     ]);
+});
+
+// ==========================================================================
+// LOTES — consumo FIFO/manual y ganancia real por lote (2026-09-20)
+// ==========================================================================
+
+test('vender con lote_id explícito consume ese lote (no el más viejo) y calcula la ganancia con su costo real', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    // El costo global de la ficha (10) queda desactualizado a propósito frente a los lotes
+    // reales — así la prueba distingue "usó el lote elegido" de "usó el campo global".
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+
+    $loteViejo = LoteStock::create([
+        'codigo' => 'LOTE-TEST-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 60, 'precio_costo' => 12,
+    ]);
+    $loteNuevo = LoteStock::create([
+        'codigo' => 'LOTE-TEST-NUEVO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 40, 'precio_costo' => 18,
+    ]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $loteNuevo->id;
+    $cuenta = crearCuentaUsd();
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 150,
+        'tasa_cambio' => 1, 'monto_equivalente' => 150, 'cuenta_id' => $cuenta->id,
+    ]];
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+    $response->assertOk();
+
+    // Se consumió el lote elegido a mano, no el más viejo.
+    expect($loteNuevo->fresh()->cantidad_disponible)->toBe(35); // 40 - 5
+    expect($loteViejo->fresh()->cantidad_disponible)->toBe(60); // intacto
+
+    $detalle = VentaDetalle::where('producto_id', $producto->id)->sole();
+    expect((float) $detalle->costo_unitario)->toBe(18.0); // costo del lote elegido, no el global (10)
+    expect((float) $detalle->ganancia)->toBe((30 - 18) * 5.0);
+
+    $this->assertDatabaseHas('venta_detalle_lotes', [
+        'venta_detalle_id' => $detalle->id,
+        'lote_stock_id' => $loteNuevo->id,
+        'cantidad' => 5,
+    ]);
+});
+
+test('vender sin elegir lote consume FIFO (el más viejo primero), pudiendo cruzar dos lotes', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+
+    $loteViejo = LoteStock::create([
+        'codigo' => 'LOTE-TEST-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 3, 'precio_costo' => 12, 'created_at' => now()->subDay(),
+    ]);
+    $loteNuevo = LoteStock::create([
+        'codigo' => 'LOTE-TEST-NUEVO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 40, 'precio_costo' => 18,
+    ]);
+
+    // Pide 5 — el lote viejo solo tiene 3, así que cruza al nuevo por las 2 restantes.
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $cuenta = crearCuentaUsd();
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 150,
+        'tasa_cambio' => 1, 'monto_equivalente' => 150, 'cuenta_id' => $cuenta->id,
+    ]];
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+    $response->assertOk();
+
+    expect($loteViejo->fresh()->cantidad_disponible)->toBe(0); // agotado primero
+    expect($loteNuevo->fresh()->cantidad_disponible)->toBe(38); // 40 - 2
+
+    $detalle = VentaDetalle::where('producto_id', $producto->id)->sole();
+    // Costo ponderado: (3×12 + 2×18) / 5 = 14.40.
+    expect((float) $detalle->costo_unitario)->toBe(14.4);
+
+    expect(DB::table('venta_detalle_lotes')->where('venta_detalle_id', $detalle->id)->count())->toBe(2);
+});
+
+test('anular una venta con lote_id explícito revierte el consumo de ese lote', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-TEST-ANULAR', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 40, 'precio_costo' => 18,
+    ]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $lote->id;
+    $cuenta = crearCuentaUsd();
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 150,
+        'tasa_cambio' => 1, 'monto_equivalente' => 150, 'cuenta_id' => $cuenta->id,
+    ]];
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    expect($lote->fresh()->cantidad_disponible)->toBe(35);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $response = $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio']);
+    $response->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(40); // vuelve completo
 });
 
 test('rechaza la venta si no hay stock suficiente', function () {
@@ -1627,6 +1746,37 @@ test('getProductosPorAlmacen() muestra precio_compra_producto real a admin y mod
         $response->assertOk();
         expect((float) $response->json('0.precio_compra_producto'))->toEqual(10.0);
     }
+});
+
+test('getProductosPorAlmacen() expone el precio de venta efectivo de cada lote ("Opción A")', function () {
+    $almacen = Almacen::factory()->create();
+    [$producto] = crearProductoConPrecio($almacen, 10, 20);
+
+    $loteNormal = LoteStock::create([
+        'codigo' => 'LOTE-POS-NORMAL',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 12,
+    ]);
+    $loteConOverride = LoteStock::create([
+        'codigo' => 'LOTE-POS-OVERRIDE',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+        'precio_venta' => 25,
+    ]);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $response = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id));
+
+    $response->assertOk();
+    $lotes = collect($response->json('0.lotes'))->keyBy('id');
+    expect((float) $lotes[$loteNormal->id]['precio_venta'])->toBe(20.0); // hereda el del almacén
+    expect((float) $lotes[$loteConOverride->id]['precio_venta'])->toBe(25.0); // su propio override
 });
 
 test('show() oculta costo_unitario a un vendedor, incluso en su propia venta', function () {

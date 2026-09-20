@@ -5,24 +5,18 @@ namespace App\Exports;
 use App\Models\Almacen;
 use App\Models\Producto;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Protection;
-use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithColumnWidths;
-use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class PreciosVendedorExport implements
-    FromCollection,
-    WithHeadings,
-    WithStyles,
-    WithEvents
+class PreciosVendedorExport implements FromCollection, WithEvents, WithHeadings, WithStyles
 {
     public function __construct(
         private int $almacenId
@@ -53,7 +47,7 @@ class PreciosVendedorExport implements
             )
             ->orderBy('productos.nombre_producto')
             ->get()
-            ->map(fn($row) => [
+            ->map(fn ($row) => [
                 $row->producto_id,
                 $row->nombre_producto,
                 $row->nombre_categoria ?? 'Sin categoría',

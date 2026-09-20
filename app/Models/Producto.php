@@ -5,7 +5,9 @@ namespace App\Models;
 use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class Producto extends Model
 {
@@ -122,28 +124,81 @@ class Producto extends Model
     }
 
     /**
-     * Costo real de este producto en un almacén puntual — promedio ponderado de los lotes que
-     * llegaron ahí (por compra directa o por movimiento recibido), no el costo global de la
-     * ficha. Dos almacenes pueden tener costo distinto del mismo producto cuando un traslado
+     * Costo real de este producto en un almacén puntual — promedio ponderado de los lotes con
+     * stock disponible ahí (por compra directa o por movimiento recibido), no el costo global de
+     * la ficha. Dos almacenes pueden tener costo distinto del mismo producto cuando un traslado
      * entre ellos se prorrateó (o no) de forma independiente.
      *
-     * Sin lotes registrados para ese almacén (producto nunca aprobado/recibido, o dato de antes
-     * de que lotes_stock existiera, 2026-09-07) cae al costo global de la ficha — mejor
-     * aproximación disponible, nunca un error.
+     * Pondera sobre `cantidad_disponible` (lo que realmente queda de cada lote), no `cantidad`
+     * (lo que entró originalmente) — un lote ya parcial o totalmente consumido por una venta/
+     * traslado posterior no debe seguir pesando en el promedio como si siguiera completo.
+     *
+     * Sin lotes con `cantidad_disponible` > 0 en ese almacén (producto nunca aprobado/recibido,
+     * o dato de antes de que lotes_stock existiera, 2026-09-07) cae al costo global de la ficha —
+     * mejor aproximación disponible, nunca un error.
      */
     public function costoEnAlmacen(int $almacenId): float
     {
-        $lotes = $this->lotesStock()->where('almacen_id', $almacenId)->get();
+        $lotes = $this->lotesStock()->where('almacen_id', $almacenId)->where('cantidad_disponible', '>', 0)->get();
 
-        $cantidadTotal = $lotes->sum('cantidad');
+        $cantidadTotal = $lotes->sum('cantidad_disponible');
 
         if ($lotes->isEmpty() || $cantidadTotal <= 0) {
             return (float) $this->precio_compra_producto;
         }
 
-        $costoTotal = $lotes->sum(fn (LoteStock $lote) => $lote->cantidad * (float) $lote->precio_costo);
+        $costoTotal = $lotes->sum(fn (LoteStock $lote) => $lote->cantidad_disponible * (float) $lote->precio_costo);
 
         return round($costoTotal / $cantidadTotal, 2);
+    }
+
+    /**
+     * Lotes con stock disponible de este producto en un almacén, más viejo primero (orden FIFO
+     * — ver LoteConsumoService). Usado donde hace falta mostrar/elegir el desglose real en vez
+     * del promedio de costoEnAlmacen() (Show.tsx/Edit.tsx, selector de venta).
+     *
+     * @return Collection<int, LoteStock>
+     */
+    public function lotesActivosEnAlmacen(int $almacenId)
+    {
+        return $this->lotesStock()
+            ->where('almacen_id', $almacenId)
+            ->where('cantidad_disponible', '>', 0)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Precio de venta general de este producto en un almacén — `producto_vendedors`, clave real
+     * producto_id+almacen_id (no por `vendedores()`, esa relación quedó rota desde la migración
+     * `refactor_producto_vendedors_unico_por_almacen`, columna `user_id` ya no existe). Null si
+     * nunca se le asignó precio ahí (producto sin publicar para venta en ese almacén).
+     */
+    public function precioVentaEnAlmacen(int $almacenId): ?float
+    {
+        $precio = DB::table('producto_vendedors')
+            ->where('producto_id', $this->id)
+            ->where('almacen_id', $almacenId)
+            ->value('precio_venta');
+
+        return $precio !== null ? (float) $precio : null;
+    }
+
+    /**
+     * Precio de venta efectivo de un lote puntual — "Opción A" (2026-09-20): por defecto hereda
+     * el precio general del almacén (mismo para el 95% del catálogo, que nunca necesita un precio
+     * distinto por lote), salvo que el lote tenga su propio `precio_venta` seteado a mano (cuando
+     * el costo de ese lote específico deja muy poco margen con el precio general). Nunca
+     * obligatorio: un lote recién creado (ej. por un Movimiento) nunca queda "sin precio".
+     */
+    public function precioVentaEfectivo(LoteStock $lote): ?float
+    {
+        if ($lote->precio_venta !== null) {
+            return (float) $lote->precio_venta;
+        }
+
+        return $this->precioVentaEnAlmacen($lote->almacen_id);
     }
 
     // 🔥 Cantidad total en todos los almacenes

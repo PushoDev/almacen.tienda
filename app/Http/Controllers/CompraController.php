@@ -516,27 +516,40 @@ class CompraController extends Controller
         foreach ($productos as $item) {
             $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
-            // Cada línea de compra crea SIEMPRE una ficha de Producto nueva, sin buscar ni
-            // reutilizar una existente — aunque nombre+categoría+marca+modelo+capacidad+precio
-            // coincidan exacto con una ya registrada. Decisión explícita del cliente
-            // (2026-09-18, ver docs/arreglos-pendientes/costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md):
-            // cada compra es un lote físico distinto, y Distribución de Costos puede aplicarse
-            // a una compra sí y a otra no (el prorrateo es opcional). Si dos compras "iguales"
-            // compartieran una sola ficha, prorratear una le cambiaría el costo también al
-            // stock de la otra, que nunca fue parte de ese prorrateo — bug real reportado por
-            // el cliente. Con ficha siempre nueva, un prorrateo solo puede tocar su propio lote.
-            // El catálogo puede terminar con fichas repetidas del mismo artículo — para eso
-            // existe la herramienta de detección y fusión de duplicados en Productos/Index.tsx.
-            $producto = new Producto;
-            $isNew = true;
+            $marca = $item['marca'] ?? null;
+            $modelo = $item['modelo'] ?? null;
+            $capacidad = $item['capacidad'] ?? null;
+
+            // Reusa una ficha de catálogo existente si coincide exacto en identidad (mismo
+            // criterio que ProductoController::fichasHermanas(): nombre+categoría+marca+modelo+
+            // capacidad) — hasta 2026-09-20 esto estaba desactivado a propósito porque
+            // Distribución de Costos no podía aislar el prorrateo de una compra del lote de
+            // otra que compartiera ficha (bug real reportado por el cliente, ver
+            // docs/arreglos-pendientes/costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md).
+            // Ya no aplica: cada compra sigue creando su propio lote_stock con su propio costo
+            // (ver aprobar()), y el prorrateo se scope por LoteStock::idsConDescendientes(), no
+            // por producto_id — compartir ficha es seguro de nuevo.
+            $producto = Producto::where('nombre_producto', $item['producto'])
+                ->where('categoria_id', $categoria->id)
+                ->where('marca_producto', $marca)
+                ->where('modelo_producto', $modelo)
+                ->where('capacidad_producto', $capacidad)
+                ->first();
+            $isNew = $producto === null;
+
+            if ($isNew) {
+                $producto = new Producto;
+            }
 
             $producto->fill([
                 'nombre_producto' => $item['producto'],
-                'marca_producto' => $item['marca'] ?? null,
-                'modelo_producto' => $item['modelo'] ?? null,
-                'capacidad_producto' => $item['capacidad'] ?? null,
+                'marca_producto' => $marca,
+                'modelo_producto' => $modelo,
+                'capacidad_producto' => $capacidad,
                 'color_producto' => $item['color'] ?? null,
                 'categoria_id' => $categoria->id,
+                // Referencia de "último costo conocido" — solo hace de fallback en
+                // costoEnAlmacen() cuando un almacén puntual todavía no tiene lotes propios.
                 'precio_compra_producto' => $item['precio'],
                 'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
             ]);
@@ -670,14 +683,16 @@ class CompraController extends Controller
                 $almacenProducto->save();
 
                 // Registro de trazabilidad: qué línea de qué compra trajo esta tanda de stock.
-                // No reemplaza AlmacenProducto (el total real) ni implica ningún consumo por
-                // lote todavía — es historial aditivo hacia atrás.
+                // No reemplaza AlmacenProducto (el total real), pero sí es la fuente real de
+                // consumo por lote — cantidad_disponible se decrementa por Ventas/Movimientos
+                // (ver LoteConsumoService), cantidad se queda fija como dato histórico.
                 LoteStock::create([
                     'codigo' => LoteStock::generarCodigo($comprar->id, $numeroLinea),
                     'compra_producto_id' => $producto->pivot->id,
                     'producto_id' => $producto->id,
                     'almacen_id' => $almacenId,
                     'cantidad' => $cantidad,
+                    'cantidad_disponible' => $cantidad,
                     'precio_costo' => $producto->pivot->precio,
                 ]);
             }

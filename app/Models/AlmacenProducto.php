@@ -25,7 +25,7 @@ class AlmacenProducto extends Model
             if ($model->cantidad < 0) {
                 Log::warning("Intento de guardar cantidad negativa para producto {$model->producto_id} en almacén {$model->almacen_id}", [
                     'cantidad' => $model->cantidad,
-                    'user' => auth()->id() ?? 'system'
+                    'user' => auth()->id() ?? 'system',
                 ]);
                 $model->cantidad = 0;
             }

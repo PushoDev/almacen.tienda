@@ -24,7 +24,6 @@ return new class extends Migration
             $table->decimal('precio_venta', 10, 2)->default(0.00)->comment('Precio asignado por el vendedor');
             $table->decimal('venta_ganancia', 10, 2)->default(0.00);
 
-
             // 🚨 CLAVE COMPUESTA MODIFICADA: Ahora incluye el almacén_id
             // La clave única es: este producto, para este vendedor, en este almacén.
             $table->primary(['producto_id', 'user_id', 'almacen_id']);
