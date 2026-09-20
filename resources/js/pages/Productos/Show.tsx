@@ -384,7 +384,9 @@ export default function ShowPageProductos({
                                                             </Badge>
                                                         </div>
                                                         <div>
-                                                            <p className="text-muted-foreground mb-1">Costo aquí</p>
+                                                            <p className="text-muted-foreground mb-1">
+                                                                {almacen.lotes.length > 1 ? 'Costo promedio' : 'Costo aquí'}
+                                                            </p>
                                                             <div className="flex items-center gap-1">
                                                                 <Badge
                                                                     variant="outline"
@@ -392,7 +394,7 @@ export default function ShowPageProductos({
                                                                 >
                                                                     <DollarSign size={12} />${formatPrecio(almacen.costo)}
                                                                 </Badge>
-                                                                {almacen.costo !== producto.precio_compra_producto && (
+                                                                {almacen.costo !== producto.precio_compra_producto && almacen.lotes.length <= 1 && (
                                                                     <span
                                                                         className="text-xs font-normal text-amber-600 dark:text-amber-400"
                                                                         title="Distinto del costo base de la ficha — este almacén tuvo un traslado prorrateado de forma independiente"
@@ -428,6 +430,57 @@ export default function ShowPageProductos({
                                                             </p>
                                                         </div>
                                                     </div>
+
+                                                    {almacen.lotes.length > 1 && (
+                                                        <div className="rounded-md border border-dashed bg-white/60 p-3 dark:bg-black/10">
+                                                            <p className="mb-2 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                                                                <Layers size={12} />
+                                                                Este almacén tiene {almacen.lotes.length} lotes a costo distinto
+                                                            </p>
+                                                            <div className="space-y-1.5">
+                                                                {almacen.lotes.map((lote) => (
+                                                                    <div
+                                                                        key={lote.id}
+                                                                        className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                                                                    >
+                                                                        <span className="font-mono text-muted-foreground">{lote.codigo}</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Badge variant="outline" className="gap-1">
+                                                                                <Package size={10} />
+                                                                                {lote.cantidad} uds.
+                                                                            </Badge>
+                                                                            <Badge
+                                                                                variant="outline"
+                                                                                className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                            >
+                                                                                <DollarSign size={10} />${formatPrecio(lote.costo)}
+                                                                            </Badge>
+                                                                            {lote.precio_venta !== null ? (
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                                                                    title="Precio de venta propio de este lote — no usa el precio general del almacén"
+                                                                                >
+                                                                                    <Tag size={10} />${formatPrecio(lote.precio_venta)}
+                                                                                </Badge>
+                                                                            ) : (
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="gap-1 text-muted-foreground"
+                                                                                    title="Sin precio propio — vende al precio general del almacén"
+                                                                                >
+                                                                                    <Tag size={10} />
+                                                                                    {lote.precio_venta_efectivo !== null
+                                                                                        ? `$${formatPrecio(lote.precio_venta_efectivo)} (almacén)`
+                                                                                        : 'Sin precio'}
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
 
                                                     <Accordion type="single" collapsible className="w-full">
                                                         <AccordionItem value="contact-info">

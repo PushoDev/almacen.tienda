@@ -200,6 +200,10 @@ export interface ProductoProps {
         stock_bajo: boolean;
         costo: number;
         precio_venta?: number | null;
+        // Desglose por lote (2026-09-20) — un mismo almacén puede tener 2+ lotes a costo
+        // distinto bajo esta ficha. `costo` sigue siendo el promedio ponderado de todos ellos.
+        // Vacío para catálogo viejo sin lotes_stock (costo cae al fallback global).
+        lotes: LoteStockProps[];
     }>;
     codigos?: Array<{
         id: number;
@@ -208,6 +212,18 @@ export interface ProductoProps {
         es_default: boolean;
         imagen_barcode: string | null;
     }>;
+}
+
+// Un lote de costo dentro de un almacén (ver Producto::lotesActivosEnAlmacen()).
+export interface LoteStockProps {
+    id: number;
+    codigo: string;
+    cantidad: number;
+    costo: number;
+    // "Opción A" (2026-09-20): 'precio_venta' es el override propio de este lote (null = no
+    // tiene, hereda el del almacén); 'precio_venta_efectivo' ya viene resuelto por el backend.
+    precio_venta: number | null;
+    precio_venta_efectivo: number | null;
 }
 
 // Otra ficha de Producto con la misma identidad descriptiva (nombre+marca+modelo+capacidad+

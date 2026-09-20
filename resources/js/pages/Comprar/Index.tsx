@@ -1914,14 +1914,25 @@ export default function ComprarPage() {
 
                             {productoCoincidente &&
                                 (() => {
-                                    // El stock es por almacén; el costo (precio_compra_producto) es un solo dato por
-                                    // producto. Cada compra crea SIEMPRE una ficha nueva y separada — aunque nombre,
-                                    // marca, modelo y precio coincidan exacto con esta — porque cada compra es un
-                                    // lote físico distinto que puede terminar prorrateado (Distribución de Costos)
-                                    // de forma independiente al resto.
+                                    // El stock es por almacén; el costo (precio_compra_producto) es la última
+                                    // referencia conocida, no un solo dato fijo por producto. Desde 2026-09-20,
+                                    // CompraController::procesarLineasProducto() reusa la ficha existente cuando
+                                    // nombre+categoría+marca+modelo+capacidad coinciden EXACTO (mismo criterio que
+                                    // Producto::fichasHermanas()) — esta compra pasa a ser un lote nuevo bajo esa
+                                    // misma ficha, con su propio costo real por almacén (ver
+                                    // Producto::costoEnAlmacen()), en vez de duplicar el catálogo. Si algún campo
+                                    // no coincide exacto (aunque la búsqueda de arriba haya encontrado la
+                                    // sugerencia por coincidencia parcial), sí crea una ficha separada.
                                     const stockEnEsteAlmacen = selectedAlmacen
                                         ? (productoCoincidente.stock_por_almacen.find((s) => s.almacen_id === selectedAlmacen.id)?.cantidad ?? 0)
                                         : null;
+
+                                    const esIdentidadExacta =
+                                        productoCoincidente.nombre_producto === tempFormData.producto.trim() &&
+                                        (productoCoincidente.marca_producto || '') === tempFormData.marca.trim() &&
+                                        (productoCoincidente.modelo_producto || '') === tempFormData.modelo.trim() &&
+                                        (productoCoincidente.capacidad_producto || '') === tempFormData.capacidad.trim() &&
+                                        (productoCoincidente.categoria || '') === tempFormData.categoria.trim();
 
                                     return (
                                         <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
@@ -1944,10 +1955,19 @@ export default function ComprarPage() {
                                                         específicamente.{' '}
                                                     </>
                                                 )}
-                                                Su costo actual es <strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong>. Esta
-                                                compra va a registrar una ficha nueva y separada de todas formas, con el costo de este lote — si
-                                                terminan siendo el mismo artículo, se pueden unificar después desde la herramienta de fusión de
-                                                duplicados en Productos.
+                                                Su costo actual es <strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong>.{' '}
+                                                {esIdentidadExacta ? (
+                                                    <>
+                                                        Esta compra va a sumar un <strong>lote nuevo</strong> a esta misma ficha (no un duplicado) —
+                                                        con su propio costo real en el almacén que elijas, sin tocar los demás.
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Marca, modelo, capacidad o categoría no coinciden exacto con esta ficha, así que esta compra
+                                                        va a registrar una ficha nueva y separada. Si terminan siendo el mismo artículo, se pueden
+                                                        unificar después desde la herramienta de fusión de duplicados en Productos.
+                                                    </>
+                                                )}
                                             </p>
                                         </div>
                                     );

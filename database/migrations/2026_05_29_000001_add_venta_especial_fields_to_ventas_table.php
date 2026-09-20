@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::table('ventas', function (Blueprint $table) {
             // es_venta_especial y nota_venta_especial ya existen en la tabla
             // Solo se agrega el flag para saber si el vendedor ya vio el veredicto
-            if (!Schema::hasColumn('ventas', 'decision_notificada')) {
+            if (! Schema::hasColumn('ventas', 'decision_notificada')) {
                 $column = $table->boolean('decision_notificada')->default(false);
 
                 if (Schema::hasColumn('ventas', 'nota_venta_especial')) {

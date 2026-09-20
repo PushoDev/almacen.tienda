@@ -40,8 +40,9 @@ class CuentasCorregirMonedaCup extends Command
         $monedaEfectivo = Moneda::where('codigo_moneda', 'CUP')->where('nombre_moneda', 'Peso Cubano MN')->first();
         $monedaTarjeta = Moneda::where('codigo_moneda', 'CUP')->where('nombre_moneda', 'TARJETA DE MONEDA NACIONAL')->first();
 
-        if (!$monedaEfectivo || !$monedaTarjeta) {
+        if (! $monedaEfectivo || ! $monedaTarjeta) {
             $this->error('No se encontraron las 2 monedas CUP esperadas ("Peso Cubano MN" / "TARJETA DE MONEDA NACIONAL"). Nada que corregir.');
+
             return self::FAILURE;
         }
 
@@ -57,6 +58,7 @@ class CuentasCorregirMonedaCup extends Command
             $linea = "  🔷 #{$cuenta->id} {$cuenta->nombre_cuenta} (tarjeta) — moneda_id {$monedaEfectivo->id} (675) → {$monedaTarjeta->id} (685)";
             if ($dryRun) {
                 $this->line($linea);
+
                 continue;
             }
             $cuenta->update(['moneda_id' => $monedaTarjeta->id]);
@@ -68,13 +70,14 @@ class CuentasCorregirMonedaCup extends Command
             $linea = "  🔷 #{$cuenta->id} {$cuenta->nombre_cuenta} (efectivo) — moneda_id {$monedaTarjeta->id} (685) → {$monedaEfectivo->id} (675)";
             if ($dryRun) {
                 $this->line($linea);
+
                 continue;
             }
             $cuenta->update(['moneda_id' => $monedaEfectivo->id]);
             $this->info(str_replace('🔷', '✅', $linea));
         }
 
-        $this->info("Completado. {$cambiados} cuenta(s) " . ($dryRun ? 'cambiarían.' : 'corregidas.'));
+        $this->info("Completado. {$cambiados} cuenta(s) ".($dryRun ? 'cambiarían.' : 'corregidas.'));
 
         return self::SUCCESS;
     }

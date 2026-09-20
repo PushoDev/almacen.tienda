@@ -23,10 +23,13 @@ Route::middleware(['auth', 'verified'])->group(
             'destroy' => 'productos.destroy',
         ]);
 
-
         // Ruta para transferir cantidad entre códigos o agregar un nuevo código escaneado
         Route::post('/listado-productos/{producto}/transferir-codigo', [ProductoController::class, 'transferirCodigo'])
             ->name('productos.transferir-codigo');
+
+        // Override opcional de precio de venta por lote puntual ("Opción A", ver Edit.tsx/Show.tsx)
+        Route::put('/listado-productos/{producto}/lotes/{lote}/precio-venta', [ProductoController::class, 'actualizarPrecioVentaLote'])
+            ->name('productos.lotes.precio-venta');
 
         // Rutas para importar/exportar
         // Exportar productos

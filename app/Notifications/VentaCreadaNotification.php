@@ -3,8 +3,6 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class VentaCreadaNotification extends Notification
@@ -49,16 +47,16 @@ class VentaCreadaNotification extends Notification
             'almacen_id' => $this->venta->almacen_id,
             'cuenta_id' => $this->venta->cuenta_id,
             'icon' => 'shopping-cart',
-            'color' => 'green'
+            'color' => 'green',
         ];
 
         // Mensaje personalizado según el rol del notificado
         if ($notifiable->role === 'vendedor') {
             // Verificar si es en su almacén o cuenta
             $esSuAlmacen = $notifiable->almacenes()->where('almacens.id', $this->venta->almacen_id)->exists();
-            $esSuCuenta = $this->venta->cuenta_id && 
+            $esSuCuenta = $this->venta->cuenta_id &&
                           $notifiable->cuentas()->where('cuentas.id', $this->venta->cuenta_id)->exists();
-            
+
             if ($esSuAlmacen || $esSuCuenta) {
                 $base['message'] = "Nueva venta #{$this->venta->id} en tus áreas por {$this->venta->usuario->name}";
                 $base['context'] = 'tu_operacion';

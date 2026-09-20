@@ -6,9 +6,9 @@ use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
 class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
@@ -21,7 +21,7 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
         ['Mouse Inalámbrico',    'Periféricos',          'Logitech', 'M185',       '',         'Gris',  125.50,  5, ''],
         ['Teclado Mecánico USB', 'Periféricos',          'Redragon', 'K552',       '',         '',       89.99,  3, '7891234500001'],
         ['Memoria USB 32GB',     'Almacenamiento',       'Kingston', 'DT50',       '32GB',     'Azul',   55.00, 15, ''],
-        ['Disco Duro Externo',   'Almacenamiento',       'Seagate',  'Backup Plus','1TB',      '',      350.00,  2, '7501098765432'],
+        ['Disco Duro Externo',   'Almacenamiento',       'Seagate',  'Backup Plus', '1TB',      '',      350.00,  2, '7501098765432'],
     ];
 
     public function array(): array
@@ -56,22 +56,22 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
-                $sheet    = $event->sheet->getDelegate();
-                $maxRow   = self::MAX_ROWS + 1;
+                $sheet = $event->sheet->getDelegate();
+                $maxRow = self::MAX_ROWS + 1;
                 $examples = count(self::EXAMPLE_ROWS);
 
                 // ── Estilos de cabecera ───────────────────────────────────────
                 $requiredStyle = [
-                    'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
-                    'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'C0392B']],
+                    'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'C0392B']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-                    'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '999999']]],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '999999']]],
                 ];
                 $optionalStyle = [
-                    'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
-                    'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2980B9']],
+                    'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2980B9']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-                    'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '999999']]],
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '999999']]],
                 ];
 
                 $sheet->getStyle('A1')->applyFromArray($requiredStyle);

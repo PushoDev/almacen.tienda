@@ -78,6 +78,16 @@ interface ProductoCodigoVenta {
     cantidad: number;
     es_default?: boolean;
 }
+interface LoteVenta {
+    id: number;
+    codigo: string;
+    cantidad: number;
+    // Precio de venta efectivo de este lote ("Opción A", 2026-09-20) — ya resuelto por el
+    // backend (override propio del lote, o el precio general del almacén si no tiene). Casi
+    // siempre igual a `producto.precio_venta`; solo difiere cuando un admin/moderador le puso
+    // un precio propio a este lote puntual.
+    precio_venta: number | null;
+}
 interface Producto {
     id: number | string;
     nombre_producto: string;
@@ -97,6 +107,11 @@ interface Producto {
     precio_base: number | null;
     comision: number;
     es_precio_vendedor: boolean;
+    // Lotes activos en el almacén seleccionado (2026-09-20) — cuando hay 2+, se puede elegir de
+    // cuál vender; por defecto el precio de venta es el mismo sin importar el lote (solo cambia
+    // de dónde sale el costo real, ver LoteConsumoService, FIFO si no se elige ninguno), salvo
+    // que ese lote tenga su propio precio_venta seteado a mano ("Opción A") — ver agregarAlCarrito.
+    lotes?: LoteVenta[];
 }
 interface ItemCarrito {
     id: string;
@@ -108,6 +123,7 @@ interface ItemCarrito {
     precio_base: number;
     comision: number;
     subtotal: number;
+    lote_id?: number;
 }
 interface Moneda {
     id: number | string;
@@ -161,6 +177,7 @@ export default function PuntoVentaOficial({
     const [busqueda, setBusqueda] = useState<string>('');
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
+    const [loteSeleccionadoPorProducto, setLoteSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
 
@@ -345,7 +362,7 @@ export default function PuntoVentaOficial({
         return codigosDisponibles.find((codigo) => codigo.es_default) || codigosDisponibles[0];
     };
 
-    const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number) => {
+    const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number, loteForzadoId?: number) => {
         if (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) {
             sileo.error({ title: 'Este producto no tiene un precio de venta configurado' });
             return;
@@ -383,7 +400,14 @@ export default function PuntoVentaOficial({
                 ),
             );
         } else {
-            const precioVenta = producto.precio_venta ?? 0;
+            // Sin elección explícita, queda undefined — el backend consume FIFO automático
+            // (LoteConsumoService), no bloquea el flujo rápido de escanear-y-agregar.
+            const loteId = loteForzadoId ?? loteSeleccionadoPorProducto[String(producto.id)];
+            // "Opción A" (2026-09-20): si el lote elegido tiene su propio precio_venta, se usa
+            // ese en vez del precio general del almacén — el vendedor lo puede seguir corrigiendo
+            // a mano después, como con cualquier otro item del carrito.
+            const loteElegido = loteId ? producto.lotes?.find((lote) => lote.id === loteId) : undefined;
+            const precioVenta = loteElegido?.precio_venta ?? producto.precio_venta ?? 0;
             const precioBase = producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
@@ -395,6 +419,7 @@ export default function PuntoVentaOficial({
                 precio_base: precioBase,
                 comision: producto.comision ?? 0,
                 subtotal: precioVenta,
+                lote_id: loteId,
             };
             setCarrito([...carrito, nuevoItem]);
             sileo.success({
@@ -575,6 +600,17 @@ export default function PuntoVentaOficial({
         }));
     };
 
+    const handleSeleccionLoteProducto = (productoId: string | number, loteId: string) => {
+        if (!loteId) {
+            return;
+        }
+
+        setLoteSeleccionadoPorProducto((prev) => ({
+            ...prev,
+            [String(productoId)]: Number(loteId),
+        }));
+    };
+
     const handleAgregarDesdeBusqueda = () => {
         const termino = busqueda.trim().toLowerCase();
         if (!termino) {
@@ -653,6 +689,7 @@ export default function PuntoVentaOficial({
                 precio_venta: item.precio_venta,
                 precio_base: item.precio_base, // Usar el precio original guardado
                 subtotal: item.subtotal,
+                lote_id: item.lote_id,
             })),
             total: calcularTotal,
             mensajero_monto: mensajeroMontoUSD > 0 ? mensajeroMontoUSD : undefined,
@@ -1002,6 +1039,29 @@ export default function PuntoVentaOficial({
                                                                                 {codigosDisponibles.map((codigo) => (
                                                                                     <SelectItem key={codigo.id} value={codigo.id.toString()}>
                                                                                         {codigo.codigo_barras} ({codigo.cantidad})
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
+                                                                )}
+                                                                {(producto.lotes || []).length > 1 && (
+                                                                    <div className="mt-3 space-y-1">
+                                                                        <Label className="text-xs">Vender de este lote</Label>
+                                                                        <Select
+                                                                            value={loteSeleccionadoPorProducto[String(producto.id)]?.toString() || ''}
+                                                                            onValueChange={(value) => handleSeleccionLoteProducto(producto.id, value)}
+                                                                        >
+                                                                            <SelectTrigger className="h-8 text-xs">
+                                                                                <SelectValue placeholder="Cualquiera (el más viejo primero)" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {(producto.lotes || []).map((lote) => (
+                                                                                    <SelectItem key={lote.id} value={lote.id.toString()}>
+                                                                                        {lote.codigo} ({lote.cantidad})
+                                                                                        {lote.precio_venta !== null && lote.precio_venta !== producto.precio_venta
+                                                                                            ? ` · $${lote.precio_venta.toFixed(2)}`
+                                                                                            : ''}
                                                                                     </SelectItem>
                                                                                 ))}
                                                                             </SelectContent>
@@ -1530,6 +1590,8 @@ export default function PuntoVentaOficial({
                         (() => {
                             const codigosDisponiblesModal = (productoVistaRapida.codigos || []).filter((c) => c.cantidad > 0);
                             const codigoSeleccionadoModal = codigoSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
+                            const lotesDisponiblesModal = productoVistaRapida.lotes || [];
+                            const loteSeleccionadoModal = loteSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
                             return (
                                 <div className="grid grid-cols-1 gap-6 px-6 py-4 md:grid-cols-2">
                                     {/* Columna de Imagen */}
@@ -1607,6 +1669,36 @@ export default function PuntoVentaOficial({
                                             </div>
                                         </div>
 
+                                        {lotesDisponiblesModal.length > 1 && (
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">
+                                                    Vender de este lote
+                                                </p>
+                                                <Select
+                                                    value={loteSeleccionadoModal}
+                                                    onValueChange={(value) => handleSeleccionLoteProducto(productoVistaRapida.id, value)}
+                                                >
+                                                    <SelectTrigger className="h-8 text-xs">
+                                                        <SelectValue placeholder="Cualquiera (el más viejo primero)" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {lotesDisponiblesModal.map((lote) => (
+                                                            <SelectItem key={lote.id} value={lote.id.toString()}>
+                                                                {lote.codigo} ({lote.cantidad} disponibles)
+                                                                {lote.precio_venta !== null && lote.precio_venta !== productoVistaRapida.precio_venta
+                                                                    ? ` · $${lote.precio_venta.toFixed(2)}`
+                                                                    : ''}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-muted-foreground text-[11px]">
+                                                    Este producto tiene {lotesDisponiblesModal.length} lotes en este almacén. Sin elegir, se vende
+                                                    del más viejo automáticamente.
+                                                </p>
+                                            </div>
+                                        )}
+
                                         <Separator />
 
                                         <div className="space-y-3">
@@ -1635,7 +1727,11 @@ export default function PuntoVentaOficial({
                                             <Button
                                                 className="w-full"
                                                 onClick={() => {
-                                                    agregarAlCarrito(productoVistaRapida);
+                                                    agregarAlCarrito(
+                                                        productoVistaRapida,
+                                                        undefined,
+                                                        loteSeleccionadoModal ? Number(loteSeleccionadoModal) : undefined,
+                                                    );
                                                     setIsVistaRapidaOpen(false);
                                                 }}
                                                 disabled={

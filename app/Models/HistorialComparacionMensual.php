@@ -46,12 +46,14 @@ class HistorialComparacionMensual extends Model
     public function getDiferenciaFormateadaAttribute(): string
     {
         $signo = $this->diferencia >= 0 ? '+' : '';
-        return $signo . number_format($this->diferencia, 2);
+
+        return $signo.number_format($this->diferencia, 2);
     }
 
     public function getPorcentajeFormateadoAttribute(): string
     {
         $signo = $this->porcentaje_cambio >= 0 ? '+' : '';
-        return $signo . number_format($this->porcentaje_cambio, 2) . '%';
+
+        return $signo.number_format($this->porcentaje_cambio, 2).'%';
     }
 }

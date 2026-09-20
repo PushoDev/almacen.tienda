@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Milon\Barcode\Facades\DNS1DFacade as DNS1D;
-use Exception;
 
 class ProductoCodigo extends Model
 {
@@ -41,7 +41,7 @@ class ProductoCodigo extends Model
         $marca = str_pad($marca, 3, 'X');
         $modelo = str_pad($modelo, 3, 'X');
 
-        $parteFija = $nombre . $marca . $modelo . $capacidad;
+        $parteFija = $nombre.$marca.$modelo.$capacidad;
 
         if (strlen($parteFija) > 14) {
             $parteFija = substr($parteFija, 0, 14);
@@ -57,7 +57,7 @@ class ProductoCodigo extends Model
             $numerosAleatorios = rand($min, $max);
         }
 
-        $codigo = $parteFija . $numerosAleatorios;
+        $codigo = $parteFija.$numerosAleatorios;
 
         return substr($codigo, 0, 14);
     }
@@ -68,7 +68,7 @@ class ProductoCodigo extends Model
     public static function generarImagenBarcode($codigo)
     {
         $directory = public_path('barcodes');
-        if (!file_exists($directory)) {
+        if (! file_exists($directory)) {
             mkdir($directory, 0755, true);
         }
 
@@ -88,8 +88,8 @@ class ProductoCodigo extends Model
             throw new Exception('Error al decodificar la imagen del código de barras');
         }
 
-        $fileName = $codigo . '.png';
-        $fullPath = $directory . '/' . $fileName;
+        $fileName = $codigo.'.png';
+        $fullPath = $directory.'/'.$fileName;
 
         $saved = file_put_contents($fullPath, $imageData);
 
@@ -97,7 +97,7 @@ class ProductoCodigo extends Model
             throw new Exception('No se pudo guardar la imagen del código de barras en el almacenamiento');
         }
 
-        return 'barcodes/' . $fileName;
+        return 'barcodes/'.$fileName;
     }
 
     /**
@@ -111,7 +111,7 @@ class ProductoCodigo extends Model
         try {
             $imagen = self::generarImagenBarcode($codigo_texto);
         } catch (Exception $e) {
-            logger()->error('Error generando imagen de código de barras: ' . $e->getMessage());
+            logger()->error('Error generando imagen de código de barras: '.$e->getMessage());
         }
 
         return self::create([

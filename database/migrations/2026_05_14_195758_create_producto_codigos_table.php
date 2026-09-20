@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -22,14 +23,14 @@ return new class extends Migration
         });
 
         // Data migration
-        $productos = \Illuminate\Support\Facades\DB::table('productos')->get();
+        $productos = DB::table('productos')->get();
         foreach ($productos as $producto) {
-            if (!empty($producto->codigo_producto)) {
-                $cantidad_total = \Illuminate\Support\Facades\DB::table('almacen_producto')
+            if (! empty($producto->codigo_producto)) {
+                $cantidad_total = DB::table('almacen_producto')
                     ->where('producto_id', $producto->id)
                     ->sum('cantidad');
 
-                \Illuminate\Support\Facades\DB::table('producto_codigos')->insert([
+                DB::table('producto_codigos')->insert([
                     'producto_id' => $producto->id,
                     'codigo_barras' => $producto->codigo_producto,
                     'cantidad' => $cantidad_total,

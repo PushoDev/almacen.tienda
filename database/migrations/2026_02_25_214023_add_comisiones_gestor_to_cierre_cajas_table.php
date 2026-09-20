@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('cierre_cajas', function (Blueprint $table) {
             // Campo para total de comisiones a gestores descontadas en el turno
             $table->decimal('comisiones_gestor', 15, 2)->default(0)->after('total_devoluciones');
-            
+
             // Campo JSON para detalle de comisiones a gestores
             $table->json('comisiones_gestor_detalles')->nullable()->after('comisiones_gestor');
         });

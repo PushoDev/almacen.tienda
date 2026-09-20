@@ -5,6 +5,7 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 function payloadProducto(Producto $producto, float $precioCosto, ?string $password = null): array
 {
@@ -188,6 +189,73 @@ test('un admin corrige el costo en un almacén con lotes sin tocar el campo glob
     expect($producto->costoEnAlmacen($almacenB->id))->toBe(10.0);
 });
 
+test('con 2 lotes en el mismo almacén, corregir uno por lote_id no toca el otro', function () {
+    $admin = User::factory()->admin()->create(['password' => bcrypt('clave-admin')]);
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 8]);
+
+    $loteViejo = LoteStock::create([
+        'codigo' => 'LOTE-TEST-VIEJO',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 3,
+        'precio_costo' => 20,
+    ]);
+    $loteNuevo = LoteStock::create([
+        'codigo' => 'LOTE-TEST-NUEVO',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 25,
+    ]);
+
+    $response = $this->put(
+        route('productos.update', $producto),
+        payloadProducto($producto, 30, 'clave-admin') + ['almacen_id' => $almacen->id, 'lote_id' => $loteNuevo->id]
+    );
+
+    $response->assertSessionDoesntHaveErrors();
+
+    expect((float) $loteNuevo->fresh()->precio_costo)->toBe(30.0);
+    expect((float) $loteViejo->fresh()->precio_costo)->toBe(20.0);
+
+    // El promedio ponderado del almacén refleja solo el cambio del lote corregido.
+    expect($producto->costoEnAlmacen($almacen->id))->toBe(round((3 * 20 + 5 * 30) / 8, 2));
+
+    $historial = HistorialPrecioCosto::where('producto_id', $producto->id)->latest()->first();
+    expect((float) $historial->precio_anterior)->toBe(25.0); // el costo del lote, no el promedio del almacén (23.13)
+    expect($historial->stock_momento)->toBe(5); // solo las unidades de ESE lote, no las 8 del almacén
+});
+
+test('un lote_id que no pertenece a este producto/almacén se rechaza', function () {
+    $admin = User::factory()->admin()->create(['password' => bcrypt('clave-admin')]);
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+
+    $otroProducto = Producto::factory()->create();
+    $loteAjeno = LoteStock::create([
+        'codigo' => 'LOTE-TEST-AJENO',
+        'producto_id' => $otroProducto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 2,
+        'precio_costo' => 99,
+    ]);
+
+    $response = $this->put(
+        route('productos.update', $producto),
+        payloadProducto($producto, 30, 'clave-admin') + ['almacen_id' => $almacen->id, 'lote_id' => $loteAjeno->id]
+    );
+
+    $response->assertSessionHas('error');
+    expect((float) $loteAjeno->fresh()->precio_costo)->toBe(99.0);
+});
+
 test('corregir el costo en un almacén sin lotes todavía crea un lote de ajuste manual', function () {
     $admin = User::factory()->admin()->create(['password' => bcrypt('clave-admin')]);
     $this->actingAs($admin);
@@ -255,4 +323,175 @@ test('un admin no puede corregir el costo en un almacén que no pertenece al pro
 
     $response->assertSessionHas('error');
     expect($producto->fresh()->precio_compra_producto)->toEqual('10.00');
+});
+
+// "Opción A" (2026-09-20): override opcional de precio de venta por lote puntual.
+test('un admin puede setear un precio de venta propio para un lote, sin afectar el resto', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    DB::table('producto_vendedors')->insert([
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'precio_venta' => 20,
+        'venta_ganancia' => 10,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $loteCaro = LoteStock::create([
+        'codigo' => 'LOTE-PRECIO-CARO',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+    ]);
+
+    $response = $this->put(
+        route('productos.lotes.precio-venta', ['producto' => $producto->id, 'lote' => $loteCaro->id]),
+        ['precio_venta' => 25]
+    );
+
+    $response->assertSessionDoesntHaveErrors();
+    expect((float) $loteCaro->fresh()->precio_venta)->toBe(25.0);
+    expect($producto->precioVentaEfectivo($loteCaro->fresh()))->toBe(25.0);
+    // El precio general del almacén (producto_vendedors) no se toca.
+    expect($producto->precioVentaEnAlmacen($almacen->id))->toBe(20.0);
+});
+
+test('vaciar el precio de venta de un lote hace que vuelva a heredar el del almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    DB::table('producto_vendedors')->insert([
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'precio_venta' => 20,
+        'venta_ganancia' => 10,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-PRECIO-RESET',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+        'precio_venta' => 25,
+    ]);
+
+    $response = $this->put(
+        route('productos.lotes.precio-venta', ['producto' => $producto->id, 'lote' => $lote->id]),
+        ['precio_venta' => '']
+    );
+
+    $response->assertSessionDoesntHaveErrors();
+    expect($lote->fresh()->precio_venta)->toBeNull();
+    expect($producto->precioVentaEfectivo($lote->fresh()))->toBe(20.0);
+});
+
+test('un moderador también puede corregir el precio de venta de un lote, sin contraseña', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $producto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-PRECIO-MOD',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+    ]);
+
+    $response = $this->put(
+        route('productos.lotes.precio-venta', ['producto' => $producto->id, 'lote' => $lote->id]),
+        ['precio_venta' => 25]
+    );
+
+    $response->assertSessionDoesntHaveErrors();
+    expect((float) $lote->fresh()->precio_venta)->toBe(25.0);
+});
+
+test('un vendedor sin acceso al almacén no puede corregir el precio de venta de un lote', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $producto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-PRECIO-VEND-BLOQUEADO',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+    ]);
+
+    $response = $this->put(
+        route('productos.lotes.precio-venta', ['producto' => $producto->id, 'lote' => $lote->id]),
+        ['precio_venta' => 25]
+    );
+
+    $response->assertStatus(403);
+    expect($lote->fresh()->precio_venta)->toBeNull();
+});
+
+test('un vendedor asignado al almacén sí puede corregir el precio de venta de un lote', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $producto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-PRECIO-VEND-OK',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+    ]);
+
+    $response = $this->put(
+        route('productos.lotes.precio-venta', ['producto' => $producto->id, 'lote' => $lote->id]),
+        ['precio_venta' => 25]
+    );
+
+    $response->assertSessionDoesntHaveErrors();
+    expect((float) $lote->fresh()->precio_venta)->toBe(25.0);
+});
+
+test('un lote que no pertenece a este producto se rechaza con 404 al corregir su precio de venta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create();
+    $otroProducto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $loteAjeno = LoteStock::create([
+        'codigo' => 'LOTE-PRECIO-AJENO',
+        'producto_id' => $otroProducto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => 5,
+        'precio_costo' => 18,
+    ]);
+
+    $response = $this->put(
+        route('productos.lotes.precio-venta', ['producto' => $producto->id, 'lote' => $loteAjeno->id]),
+        ['precio_venta' => 25]
+    );
+
+    $response->assertStatus(404);
 });

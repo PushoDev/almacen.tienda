@@ -10,18 +10,18 @@ class TasaCambio extends Model
     use HasFactory;
 
     protected $table = 'tasa_cambios';
-    
+
     // ACTUALIZADO: Para incluir las monedas base y destino
     protected $fillable = ['moneda_base', 'moneda_destino', 'tasa', 'fecha_actualizacion'];
-    
+
     // Cambiamos a 'true' ya que incluimos $table->timestamps() en la migración modificada.
-    public $timestamps = true; 
+    public $timestamps = true;
 
     /**
      * Obtiene la tasa para un par específico de monedas.
-     * @param string $base Moneda base (ej: 'USD')
-     * @param string $destino Moneda destino (ej: 'CUP')
-     * @return float|null
+     *
+     * @param  string  $base  Moneda base (ej: 'USD')
+     * @param  string  $destino  Moneda destino (ej: 'CUP')
      */
     public static function getTasa($base, $destino): ?float
     {
@@ -31,9 +31,9 @@ class TasaCambio extends Model
         }
 
         $registro = static::where('moneda_base', $base)
-                          ->where('moneda_destino', $destino)
-                          ->first();
-                          
+            ->where('moneda_destino', $destino)
+            ->first();
+
         // Devolvemos la tasa o null si no se encuentra
         return $registro ? (float) $registro->tasa : null;
     }

@@ -57,7 +57,7 @@ class CategoriaController extends Controller
     public function show(Categoria $categoria)
     {
         return Inertia::render('Categorias/Show', [
-            'categoria' => $categoria
+            'categoria' => $categoria,
         ]);
     }
 
@@ -67,7 +67,7 @@ class CategoriaController extends Controller
     public function edit(Categoria $categoria)
     {
         return Inertia::render('Categorias/Edit', [
-            'categoria' => $categoria
+            'categoria' => $categoria,
         ]);
     }
 
@@ -82,7 +82,7 @@ class CategoriaController extends Controller
                 'required',
                 'string',
                 'max:20',
-                'unique:categorias,nombre_categoria,' . $categoria->id
+                'unique:categorias,nombre_categoria,'.$categoria->id,
             ],
             'descripcion_categoria' => ['nullable', 'string'],
             'activar_categoria' => ['required', 'boolean'],
@@ -108,6 +108,7 @@ class CategoriaController extends Controller
             return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
         }
         $categoria->delete();
+
         return redirect()->route('categorias.index')->with('success', 'Categoría eliminada exitosamente.');
     }
 }

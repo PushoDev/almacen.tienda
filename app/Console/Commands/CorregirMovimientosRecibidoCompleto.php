@@ -48,7 +48,7 @@ class CorregirMovimientosRecibidoCompleto extends Command
                 fn ($detalle) => (int) $detalle->cantidad_recibida !== (int) $detalle->cantidad_despachada
             );
 
-            if (!$tieneDiscrepancia) {
+            if (! $tieneDiscrepancia) {
                 continue;
             }
 
@@ -60,6 +60,7 @@ class CorregirMovimientosRecibidoCompleto extends Command
 
             if ($dryRun) {
                 $this->line("  🔷 Movimiento #{$movimiento->id} requiere corrección — {$detalleTexto}");
+
                 continue;
             }
 
@@ -70,7 +71,7 @@ class CorregirMovimientosRecibidoCompleto extends Command
                     'movimiento_id' => $movimiento->id,
                     'estado' => 'recibido_parcial',
                     'observaciones' => 'Corrección automática: quedó como recibido_completo por un bug ya corregido en recibir() '
-                        . '(comparaba solo la suma total, no cada línea) — al menos un producto no recibió exactamente lo despachado.',
+                        .'(comparaba solo la suma total, no cada línea) — al menos un producto no recibió exactamente lo despachado.',
                     'user_id' => $movimiento->user_id,
                 ]);
             });
@@ -78,7 +79,7 @@ class CorregirMovimientosRecibidoCompleto extends Command
             $this->info("  ✅ Movimiento #{$movimiento->id} corregido a recibido_parcial — {$detalleTexto}");
         }
 
-        $this->info("Completado. {$corregidos} de {$movimientos->count()} movimientos " . ($dryRun ? 'requieren corrección.' : 'corregidos.'));
+        $this->info("Completado. {$corregidos} de {$movimientos->count()} movimientos ".($dryRun ? 'requieren corrección.' : 'corregidos.'));
 
         return self::SUCCESS;
     }

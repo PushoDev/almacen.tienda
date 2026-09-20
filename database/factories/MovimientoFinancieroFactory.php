@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Cuenta;
+use App\Models\MovimientoFinanciero;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * Los tests deben insertar esas 3 filas antes de usar esta factory
  * (ver helper `crearTiposMovimientoFinanciero()` en tests/Feature/CierreCajaTest.php).
  *
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\MovimientoFinanciero>
+ * @extends Factory<MovimientoFinanciero>
  */
 class MovimientoFinancieroFactory extends Factory
 {

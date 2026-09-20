@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Almacen;
 use App\Models\Categoria;
 use App\Models\Producto;
+use Illuminate\Database\Seeder;
 
 class InitialSetupSeeder extends Seeder
 {
@@ -16,7 +16,7 @@ class InitialSetupSeeder extends Seeder
     {
         // Crear un almacén por defecto si no existe
         $almacen = Almacen::firstOrCreate([
-            'nombre_almacen' => 'Almacén Principal'
+            'nombre_almacen' => 'Almacén Principal',
         ], [
             'tipo_almacen' => 'almacen',
             'telefono_almacen' => '0000000000',
@@ -24,7 +24,7 @@ class InitialSetupSeeder extends Seeder
 
         // Crear categoría por defecto
         $categoria = Categoria::firstOrCreate([
-            'nombre_categoria' => 'General'
+            'nombre_categoria' => 'General',
         ], [
             'descripcion_categoria' => 'Categoría por defecto',
             'activar_categoria' => true,

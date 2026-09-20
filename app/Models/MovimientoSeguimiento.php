@@ -16,7 +16,7 @@ class MovimientoSeguimiento extends Model
         'observaciones',
         'user_id',
         'ubicacion',
-        'evidencia'
+        'evidencia',
     ];
 
     public function movimiento(): BelongsTo

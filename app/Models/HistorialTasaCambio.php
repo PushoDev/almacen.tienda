@@ -46,7 +46,7 @@ class HistorialTasaCambio extends Model
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class);
+        return $this->belongsTo(User::class);
     }
 
     /**
@@ -71,7 +71,8 @@ class HistorialTasaCambio extends Model
     public function getImpactoFormateadoAttribute(): string
     {
         $signo = $this->impacto_financiero >= 0 ? '+' : '';
-        return $signo . number_format($this->impacto_financiero, 2);
+
+        return $signo.number_format($this->impacto_financiero, 2);
     }
 
     /**
@@ -80,7 +81,8 @@ class HistorialTasaCambio extends Model
     public function getImpactoPorcentajeFormateadoAttribute(): string
     {
         $signo = $this->impacto_porcentaje >= 0 ? '+' : '';
-        return $signo . number_format($this->impacto_porcentaje, 2) . '%';
+
+        return $signo.number_format($this->impacto_porcentaje, 2).'%';
     }
 
     /**

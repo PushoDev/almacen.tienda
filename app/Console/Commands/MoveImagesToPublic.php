@@ -33,15 +33,16 @@ class MoveImagesToPublic extends Command
         $publicPath = public_path();
 
         foreach ($directories as $dir) {
-            $sourceDir = $storagePath . '/' . $dir;
-            $targetDir = $publicPath . '/' . $dir;
+            $sourceDir = $storagePath.'/'.$dir;
+            $targetDir = $publicPath.'/'.$dir;
 
-            if (!File::exists($sourceDir)) {
+            if (! File::exists($sourceDir)) {
                 $this->warn("El directorio origen no existe: {$sourceDir}");
+
                 continue;
             }
 
-            if (!File::exists($targetDir)) {
+            if (! File::exists($targetDir)) {
                 File::makeDirectory($targetDir, 0755, true);
                 $this->info("Directorio creado: {$targetDir}");
             }
@@ -52,11 +53,12 @@ class MoveImagesToPublic extends Command
             foreach ($files as $file) {
                 // Nombre del archivo
                 $filename = $file->getFilename();
-                $targetFile = $targetDir . '/' . $filename;
+                $targetFile = $targetDir.'/'.$filename;
 
                 // Si el archivo ya existe en destino, preguntar o saltar (aquí saltamos para evitar sobrescribir nuevos)
                 if (File::exists($targetFile)) {
                     $this->warn("El archivo ya existe en destino (saltando): {$filename}");
+
                     continue;
                 }
 

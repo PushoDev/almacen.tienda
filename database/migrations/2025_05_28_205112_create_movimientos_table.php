@@ -26,7 +26,7 @@ class CreateMovimientosTable extends Migration
                 'ajuste',
                 'venta',
                 'compra',
-                'devolucion'
+                'devolucion',
             ])->default('traslado');
 
             $table->enum('estado', [
@@ -36,7 +36,7 @@ class CreateMovimientosTable extends Migration
                 'recibido_parcial',
                 'recibido_completo',
                 'rechazado',
-                'cancelado'
+                'cancelado',
             ])->default('pendiente');
 
             // Información adicional

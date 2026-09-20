@@ -51,12 +51,13 @@ class BackfillGananciaAgencia extends Command
 
         $cuentasCache = [];
         $obtenerMonedaIdCuenta = function (?int $cuentaId) use (&$cuentasCache) {
-            if (!$cuentaId) {
+            if (! $cuentaId) {
                 return null;
             }
-            if (!array_key_exists($cuentaId, $cuentasCache)) {
+            if (! array_key_exists($cuentaId, $cuentasCache)) {
                 $cuentasCache[$cuentaId] = DB::table('cuentas')->where('id', $cuentaId)->value('moneda_id');
             }
+
             return $cuentasCache[$cuentaId];
         };
 
@@ -70,6 +71,7 @@ class BackfillGananciaAgencia extends Command
                     'ganancia_perdida_cambiaria' => 0.0,
                 ]);
                 $actualizadas++;
+
                 continue;
             }
 

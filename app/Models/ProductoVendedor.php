@@ -12,10 +12,12 @@ class ProductoVendedor extends Pivot
     use HasFactory;
 
     protected $table = 'producto_vendedors';
+
     public $timestamps = true;
 
     // 🚨 CLAVE PRIMARIA MODIFICADA: Añadimos 'almacen_id'
     protected $primaryKey = ['producto_id', 'user_id', 'almacen_id'];
+
     public $incrementing = false;
 
     // 🚨 AGREGAMOS 'almacen_id' a los campos asignables masivamente

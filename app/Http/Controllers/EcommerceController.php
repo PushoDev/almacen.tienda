@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Almacen;
+use App\Models\Categoria;
 use App\Models\Producto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,14 +30,14 @@ class EcommerceController extends Controller
     public function setAlmacenSesion(Request $request)
     {
         $validated = $request->validate([
-            'almacen_id' => 'required|exists:almacens,id'
+            'almacen_id' => 'required|exists:almacens,id',
         ]);
 
         session(['almacen_seleccionado' => $validated['almacen_id']]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Almacén seleccionado correctamente'
+            'message' => 'Almacén seleccionado correctamente',
         ]);
     }
 
@@ -47,10 +48,10 @@ class EcommerceController extends Controller
     {
         $almacenId = session('almacen_seleccionado');
 
-        if (!$almacenId) {
+        if (! $almacenId) {
             return response()->json([
                 'almacen' => null,
-                'hasSelection' => false
+                'hasSelection' => false,
             ]);
         }
 
@@ -58,7 +59,7 @@ class EcommerceController extends Controller
 
         return response()->json([
             'almacen' => $almacen,
-            'hasSelection' => true
+            'hasSelection' => true,
         ]);
     }
 
@@ -69,17 +70,17 @@ class EcommerceController extends Controller
     {
         $almacenId = session('almacen_seleccionado');
 
-        if (!$almacenId) {
+        if (! $almacenId) {
             return response()->json([
-                'error' => 'No hay almacén seleccionado'
+                'error' => 'No hay almacén seleccionado',
             ], 400);
         }
 
         $almacen = Almacen::find($almacenId);
 
-        if (!$almacen) {
+        if (! $almacen) {
             return response()->json([
-                'error' => 'Almacén no encontrado'
+                'error' => 'Almacén no encontrado',
             ], 404);
         }
 
@@ -90,11 +91,11 @@ class EcommerceController extends Controller
 
             $productos = Producto::join('almacen_producto', 'productos.id', '=', 'almacen_producto.producto_id')
                 ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
-                ->where('almacen_producto.almacen_id', (int)$almacenId)
+                ->where('almacen_producto.almacen_id', (int) $almacenId)
                 ->where('productos.activo', true)
                 ->leftJoin('producto_vendedors', function ($join) use ($almacenId) {
                     $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                        ->where('producto_vendedors.almacen_id', '=', (int)$almacenId);
+                        ->where('producto_vendedors.almacen_id', '=', (int) $almacenId);
                 })
                 ->select(
                     'productos.id',
@@ -109,10 +110,11 @@ class EcommerceController extends Controller
 
             return response()->json($productos);
         } catch (\Exception $e) {
-            Log::error('Error en EcommerceController@getProductosAlmacen: ' . $e->getMessage());
+            Log::error('Error en EcommerceController@getProductosAlmacen: '.$e->getMessage());
+
             return response()->json([
                 'error' => 'Error al obtener productos',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -124,12 +126,12 @@ class EcommerceController extends Controller
     {
         $almacenId = session('almacen_seleccionado');
         $almacen = $almacenId ? Almacen::find($almacenId) : null;
-        $categorias = \App\Models\Categoria::where('activar_categoria', true)->get();
+        $categorias = Categoria::where('activar_categoria', true)->get();
 
         return Inertia::render('Ecommerce/Index', [
             'almacenSeleccionado' => $almacen,
             'hasSelection' => (bool) $almacenId,
-            'categorias' => $categorias
+            'categorias' => $categorias,
         ]);
     }
 }

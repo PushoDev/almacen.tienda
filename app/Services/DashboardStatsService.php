@@ -6,6 +6,7 @@ use App\Models\Compra;
 use App\Models\HistorialComparacionMensual;
 use App\Models\User;
 use App\Models\Venta;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -13,13 +14,14 @@ use InvalidArgumentException;
 class DashboardStatsService
 {
     private const STOCK_BAJO_THRESHOLD = 5;
+
     /**
      * Obtiene las estadísticas del dashboard logístico según el rol.
      */
     public function getLogisticaStats(User $user): array
     {
-        $isVendor = !in_array($user->role, ['admin', 'moderador'], true);
-        $canViewFinance = !$isVendor;
+        $isVendor = ! in_array($user->role, ['admin', 'moderador'], true);
+        $canViewFinance = ! $isVendor;
 
         $totalProductos = $isVendor
             ? $this->countProductosVendedor($user->id)
@@ -299,7 +301,7 @@ class DashboardStatsService
      * (que ya cambió desde entonces). Usado por el backfill de ganancia de
      * Transferencias — no se llama desde ningún flujo normal del dashboard.
      */
-    public function tasaOficialHistorica(int $monedaId, \Carbon\Carbon $momento): float
+    public function tasaOficialHistorica(int $monedaId, Carbon $momento): float
     {
         $cambio = DB::table('historial_tasa_cambios')
             ->where('moneda_id', $monedaId)
@@ -339,7 +341,7 @@ class DashboardStatsService
      * Usado por el comando de backfill de agosto 2026 — no se llama desde
      * ningún flujo normal del dashboard.
      */
-    public function reconstruirMovimientoCuentas(\Carbon\Carbon $desde, \Carbon\Carbon $hasta): array
+    public function reconstruirMovimientoCuentas(Carbon $desde, Carbon $hasta): array
     {
         $neto = [];
 
@@ -424,13 +426,13 @@ class DashboardStatsService
      */
     public function getPeriodKpis(User $user, string $periodo): array
     {
-        if (!in_array($periodo, ['diario', 'semanal', 'mensual'], true)) {
+        if (! in_array($periodo, ['diario', 'semanal', 'mensual'], true)) {
             throw new InvalidArgumentException('Período no válido.');
         }
 
         $ventasQuery = Venta::query()->where('estado', 'completada');
 
-        if (!in_array($user->role, ['admin', 'moderador'], true)) {
+        if (! in_array($user->role, ['admin', 'moderador'], true)) {
             $ventasQuery->where('user_id', $user->id);
         }
 
@@ -689,7 +691,7 @@ class DashboardStatsService
     {
         $moneda = DB::table('monedas')->where('principal', true)->first();
 
-        if (!$moneda) {
+        if (! $moneda) {
             $moneda = DB::table('monedas')->where('estado', true)->first();
         }
 
@@ -753,10 +755,10 @@ class DashboardStatsService
             $codigoMoneda = $c->codigo_moneda ?? 'N/A';
             $nombreMoneda = $c->nombre_moneda ?? $codigoMoneda;
             $simboloMoneda = $c->simbolo_moneda ?? '$';
-            if (!isset($porTipoMoneda[$tipoCuenta])) {
+            if (! isset($porTipoMoneda[$tipoCuenta])) {
                 $porTipoMoneda[$tipoCuenta] = [];
             }
-            if (!isset($porTipoMoneda[$tipoCuenta][$claveMoneda])) {
+            if (! isset($porTipoMoneda[$tipoCuenta][$claveMoneda])) {
                 $porTipoMoneda[$tipoCuenta][$claveMoneda] = [
                     'original' => 0,
                     'equivalente' => 0,
@@ -786,15 +788,14 @@ class DashboardStatsService
                 'cantidad' => $conteoEstado[$k] ?? 0,
             ])->toArray(),
             'por_moneda_perm' => $this->getResumenPorMonedaPerm(),
-            'por_tipo_moneda' => collect($porTipoMoneda)->map(fn ($monedas) =>
-                collect($monedas)->values()->map(fn ($v) => [
-                    'original' => round($v['original'], 2),
-                    'equivalente' => round($v['equivalente'], 2),
-                    'cantidad' => $v['cantidad'],
-                    'codigo' => $v['codigo'],
-                    'nombre' => $v['nombre'],
-                    'simbolo' => $v['simbolo'],
-                ])->toArray()
+            'por_tipo_moneda' => collect($porTipoMoneda)->map(fn ($monedas) => collect($monedas)->values()->map(fn ($v) => [
+                'original' => round($v['original'], 2),
+                'equivalente' => round($v['equivalente'], 2),
+                'cantidad' => $v['cantidad'],
+                'codigo' => $v['codigo'],
+                'nombre' => $v['nombre'],
+                'simbolo' => $v['simbolo'],
+            ])->toArray()
             )->toArray(),
         ];
     }
@@ -826,7 +827,7 @@ class DashboardStatsService
             $equivalente = $tasa > 0 ? $original / $tasa : 0;
             $monedaId = $c->moneda_id ?? 'sin-moneda';
 
-            if (!isset($result[$codigo])) {
+            if (! isset($result[$codigo])) {
                 $result[$codigo] = [
                     'original' => 0,
                     'equivalente' => 0,
@@ -839,7 +840,7 @@ class DashboardStatsService
             $result[$codigo]['equivalente'] += $equivalente;
             $result[$codigo]['cantidad']++;
 
-            if (!isset($detallePorMonedaId[$codigo][$monedaId])) {
+            if (! isset($detallePorMonedaId[$codigo][$monedaId])) {
                 $detallePorMonedaId[$codigo][$monedaId] = [
                     'nombre' => $c->nombre_moneda ?? $codigo,
                     'tasa_cambio' => $tasa,
@@ -964,4 +965,3 @@ class DashboardStatsService
         ];
     }
 }
-

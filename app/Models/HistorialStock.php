@@ -20,7 +20,7 @@ class HistorialStock extends Model
         'diferencia',
         'tipo',
         'observaciones',
-        'user_id'
+        'user_id',
     ];
 
     // Relaciones

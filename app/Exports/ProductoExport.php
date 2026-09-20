@@ -47,7 +47,7 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
             'Precio de Compra',
             'Cantidad en Almacén',
             'Valor Total',
-            '¿Stock Bajo?'
+            '¿Stock Bajo?',
         ];
     }
 
@@ -79,7 +79,7 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
             number_format($producto->precio_compra_producto, 2, '.', ''),
             $cantidadAlmacen,
             number_format($valorTotal, 2, '.', ''),
-            $stockBajo
+            $stockBajo,
         ];
     }
 

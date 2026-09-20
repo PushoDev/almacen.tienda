@@ -15,7 +15,7 @@ class CerrarComparacionMensual extends Command
     {
         $resultado = $dashboardStatsService->actualizarComparacionMensual(null);
 
-        $this->info('Comparación mensual actualizada para ' . count($resultado) . ' moneda(s): ' . implode(', ', array_column($resultado, 'moneda')));
+        $this->info('Comparación mensual actualizada para '.count($resultado).' moneda(s): '.implode(', ', array_column($resultado, 'moneda')));
 
         return self::SUCCESS;
     }

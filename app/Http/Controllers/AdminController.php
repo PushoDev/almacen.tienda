@@ -2,15 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TasaCambio;
-use App\Models\TasaCambioMLC;
-use App\Models\HistorialTasaCambio;
+use App\Models\Cuenta;
 use App\Models\HistorialComparacionMensual;
 use App\Models\HistorialPrecioCosto;
+use App\Models\HistorialTasaCambio;
+use App\Models\TasaCambio;
+use App\Models\TasaCambioMLC;
 use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Auth;
 
 class AdminController extends Controller
 {
@@ -33,18 +33,20 @@ class AdminController extends Controller
                 $cuentasUsuario = $user->cuentas()->with('moneda')->get();
             } else {
                 // Admin y moderador pueden ver todas las cuentas
-                $cuentasUsuario = \App\Models\Cuenta::with('moneda')->get();
+                $cuentasUsuario = Cuenta::with('moneda')->get();
             }
 
             // Agrupar montos por moneda
             foreach ($cuentasUsuario as $cuenta) {
-                if (!$cuenta->moneda) continue;
-                
+                if (! $cuenta->moneda) {
+                    continue;
+                }
+
                 $monedaCodigo = $cuenta->moneda->codigo_moneda;
                 $monto = $cuenta->saldo_cuenta ?? 0;
                 $tasaCambio = $cuenta->moneda->tasa_cambio ?? 1;
 
-                if (!isset($montosPorMoneda[$monedaCodigo])) {
+                if (! isset($montosPorMoneda[$monedaCodigo])) {
                     $montosPorMoneda[$monedaCodigo] = [
                         'descripcion' => $cuenta->moneda->nombre_moneda,
                         'simbolo' => $cuenta->moneda->simbolo_moneda,
@@ -66,31 +68,31 @@ class AdminController extends Controller
         }
 
         $historialCostoPrecio = [];
-        $statsCostoPrecio     = [];
-        $resumenFinanciero    = null;
-        $gananciaAgenciaMes   = null;
+        $statsCostoPrecio = [];
+        $resumenFinanciero = null;
+        $gananciaAgenciaMes = null;
         if ($user && in_array($user->role, ['admin', 'moderador'])) {
             $historialCostoPrecio = $this->getHistorialCostoPrecioReciente();
-            $statsCostoPrecio     = $this->getStatsCostoPrecio();
-            $resumenFinanciero    = $dashboardStatsService->getResumenFinancieroCompacto();
+            $statsCostoPrecio = $this->getStatsCostoPrecio();
+            $resumenFinanciero = $dashboardStatsService->getResumenFinancieroCompacto();
             // Red de seguridad: si el comando programado `comparacion:cerrar-mes` no corrió
             // todavía este mes (p.ej. no hay cron configurado en el servidor), el primer
             // acceso al dashboard en el mes nuevo hace el cierre acá mismo. Llamadas
             // siguientes solo refrescan el saldo en vivo, sin tocar "Mes Anterior".
-            $comparaciones      = $dashboardStatsService->actualizarComparacionMensual(null);
+            $comparaciones = $dashboardStatsService->actualizarComparacionMensual(null);
             $gananciaAgenciaMes = $dashboardStatsService->getGananciaAgenciaMes();
         }
 
         return Inertia::render('dashboard', [
-            'userRole'            => auth()->user()->role,
-            'montosPorMoneda'     => array_values($montosPorMoneda),
-            'totalCapital'        => $totalCapital,
-            'comparaciones'       => $comparaciones,
-            'historialCambios'    => $historialCambios,
-            'historialCostoPrecio'=> $historialCostoPrecio,
-            'statsCostoPrecio'    => $statsCostoPrecio,
-            'resumenFinanciero'   => $resumenFinanciero,
-            'gananciaAgenciaMes'  => $gananciaAgenciaMes,
+            'userRole' => auth()->user()->role,
+            'montosPorMoneda' => array_values($montosPorMoneda),
+            'totalCapital' => $totalCapital,
+            'comparaciones' => $comparaciones,
+            'historialCambios' => $historialCambios,
+            'historialCostoPrecio' => $historialCostoPrecio,
+            'statsCostoPrecio' => $statsCostoPrecio,
+            'resumenFinanciero' => $resumenFinanciero,
+            'gananciaAgenciaMes' => $gananciaAgenciaMes,
         ]);
     }
 
@@ -120,7 +122,7 @@ class AdminController extends Controller
         }
 
         // Si no es admin, solo mostrar sus propias comparaciones
-        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+        if (! in_array(auth()->user()->role, ['admin', 'moderador'])) {
             $query->where('user_id', auth()->id());
         }
 
@@ -147,7 +149,6 @@ class AdminController extends Controller
 
         return response()->json($historial);
     }
-
 
     /**
      * Actualizar la tasa de cambio USD -> CUP
@@ -181,12 +182,12 @@ class AdminController extends Controller
         if ($tasaMLC) {
             // Si existe, actualizarlo
             $tasaMLC->update([
-                'tasa_mlc' => $request->input('tasa_mlc')
+                'tasa_mlc' => $request->input('tasa_mlc'),
             ]);
         } else {
             // Si no existe, crear uno nuevo
             TasaCambioMLC::create([
-                'tasa_mlc' => $request->input('tasa_mlc')
+                'tasa_mlc' => $request->input('tasa_mlc'),
             ]);
         }
 
@@ -295,19 +296,19 @@ class AdminController extends Controller
             ->get()
             ->map(function ($h) {
                 return [
-                    'id'                 => $h->id,
-                    'producto'           => ['id' => $h->producto->id, 'nombre_producto' => $h->producto->nombre_producto],
-                    'usuario'            => ['id' => $h->user->id, 'name' => $h->user->name],
-                    'precio_anterior'    => (float) $h->precio_anterior,
-                    'precio_nuevo'       => (float) $h->precio_nuevo,
-                    'diferencia'         => (float) $h->diferencia,
-                    'stock_momento'      => $h->stock_momento,
+                    'id' => $h->id,
+                    'producto' => ['id' => $h->producto->id, 'nombre_producto' => $h->producto->nombre_producto],
+                    'usuario' => ['id' => $h->user->id, 'name' => $h->user->name],
+                    'precio_anterior' => (float) $h->precio_anterior,
+                    'precio_nuevo' => (float) $h->precio_nuevo,
+                    'diferencia' => (float) $h->diferencia,
+                    'stock_momento' => $h->stock_momento,
                     'impacto_financiero' => (float) $h->impacto_financiero,
                     'impacto_formateado' => $h->getImpactoFormateadoAttribute(),
-                    'es_ganancia'        => $h->esGanancia(),
-                    'es_perdida'         => $h->es_perdida,
-                    'motivo'             => $h->motivo,
-                    'fecha_formateada'   => $h->created_at->format('d/m/Y H:i'),
+                    'es_ganancia' => $h->esGanancia(),
+                    'es_perdida' => $h->es_perdida,
+                    'motivo' => $h->motivo,
+                    'fecha_formateada' => $h->created_at->format('d/m/Y H:i'),
                 ];
             })
             ->toArray();
@@ -319,13 +320,13 @@ class AdminController extends Controller
     private function getStatsCostoPrecio(): array
     {
         $ganancias = (float) HistorialPrecioCosto::ganancias()->sum('impacto_financiero');
-        $perdidas  = abs((float) HistorialPrecioCosto::perdidas()->sum('impacto_financiero'));
+        $perdidas = abs((float) HistorialPrecioCosto::perdidas()->sum('impacto_financiero'));
 
         return [
             'total_ganancias' => $ganancias,
-            'total_perdidas'  => $perdidas,
-            'neto_impacto'    => $ganancias - $perdidas,
-            'numero_cambios'  => HistorialPrecioCosto::count(),
+            'total_perdidas' => $perdidas,
+            'neto_impacto' => $ganancias - $perdidas,
+            'numero_cambios' => HistorialPrecioCosto::count(),
         ];
     }
 
@@ -334,17 +335,17 @@ class AdminController extends Controller
      */
     public function getEstadisticasCostoPrecio()
     {
-        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+        if (! in_array(auth()->user()->role, ['admin', 'moderador'])) {
             abort(403);
         }
 
         $totalGanancias = HistorialPrecioCosto::ganancias()->sum('impacto_financiero');
-        $totalPerdidas  = abs(HistorialPrecioCosto::perdidas()->sum('impacto_financiero'));
-        $netoImpacto    = $totalGanancias - $totalPerdidas;
-        $numeroCambios  = HistorialPrecioCosto::count();
+        $totalPerdidas = abs(HistorialPrecioCosto::perdidas()->sum('impacto_financiero'));
+        $netoImpacto = $totalGanancias - $totalPerdidas;
+        $numeroCambios = HistorialPrecioCosto::count();
 
         $cambiosConGanancia = HistorialPrecioCosto::ganancias()->count();
-        $cambiosConPerdida  = HistorialPrecioCosto::perdidas()->count();
+        $cambiosConPerdida = HistorialPrecioCosto::perdidas()->count();
 
         $mayorGanancia = HistorialPrecioCosto::ganancias()
             ->with('producto:id,nombre_producto')
@@ -357,22 +358,22 @@ class AdminController extends Controller
             ->first();
 
         return response()->json([
-            'total_ganancias'       => number_format($totalGanancias, 2),
-            'total_perdidas'        => number_format($totalPerdidas, 2),
-            'neto_impacto'          => number_format($netoImpacto, 2),
-            'es_neto_positivo'      => $netoImpacto >= 0,
-            'numero_cambios'        => $numeroCambios,
-            'cambios_con_ganancia'  => $cambiosConGanancia,
-            'cambios_con_perdida'   => $cambiosConPerdida,
+            'total_ganancias' => number_format($totalGanancias, 2),
+            'total_perdidas' => number_format($totalPerdidas, 2),
+            'neto_impacto' => number_format($netoImpacto, 2),
+            'es_neto_positivo' => $netoImpacto >= 0,
+            'numero_cambios' => $numeroCambios,
+            'cambios_con_ganancia' => $cambiosConGanancia,
+            'cambios_con_perdida' => $cambiosConPerdida,
             'mayor_ganancia' => $mayorGanancia ? [
-                'monto'    => number_format($mayorGanancia->impacto_financiero, 2),
+                'monto' => number_format($mayorGanancia->impacto_financiero, 2),
                 'producto' => $mayorGanancia->producto->nombre_producto ?? '-',
-                'fecha'    => $mayorGanancia->created_at->format('d/m/Y'),
+                'fecha' => $mayorGanancia->created_at->format('d/m/Y'),
             ] : null,
             'mayor_perdida' => $mayorPerdida ? [
-                'monto'    => number_format(abs($mayorPerdida->impacto_financiero), 2),
+                'monto' => number_format(abs($mayorPerdida->impacto_financiero), 2),
                 'producto' => $mayorPerdida->producto->nombre_producto ?? '-',
-                'fecha'    => $mayorPerdida->created_at->format('d/m/Y'),
+                'fecha' => $mayorPerdida->created_at->format('d/m/Y'),
             ] : null,
         ]);
     }
@@ -385,11 +386,11 @@ class AdminController extends Controller
         $totalGanancias = HistorialTasaCambio::ganancias()->sum('impacto_financiero');
         $totalPerdidas = abs(HistorialTasaCambio::perdidas()->sum('impacto_financiero'));
         $netoImpacto = $totalGanancias - $totalPerdidas;
-        
+
         $numeroCambios = HistorialTasaCambio::count();
         $cambiosConGanancia = HistorialTasaCambio::ganancias()->count();
         $cambiosConPerdida = HistorialTasaCambio::perdidas()->count();
-        
+
         $mayorGanancia = HistorialTasaCambio::ganancias()->orderBy('impacto_financiero', 'desc')->first();
         $mayorPerdida = HistorialTasaCambio::perdidas()->orderBy('impacto_financiero', 'asc')->first();
 

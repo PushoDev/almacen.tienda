@@ -323,20 +323,30 @@ class DistribucionCostosController extends Controller
             $compraIds = $compras->pluck('id')->sort()->implode(', ');
             $productosAgrupados = $this->agruparProductosPorLinea($compras->flatMap->productos);
 
-            // Cada compra es su propia ficha de Producto desde 2026-09-18 (nunca comparte con
-            // otra) — el incremento se aplica directo al costo global de la ficha, sin
-            // ambigüedad de a qué almacén pertenece. Los lotes_stock que aprobar() ya creó para
-            // esta compra se sincronizan también (si no, Show.tsx/costoEnAlmacen() mostrarían el
-            // costo viejo pese a que la ficha ya cambió — desincronización real, ver hallazgo en
-            // docs/arreglos-pendientes/compras-estado-anulacion-lotes... y ESTADO_DESARROLLO.md).
+            // El incremento se aplica al costo global de la ficha y a los lotes_stock que
+            // descienden de ESTAS líneas de compra puntuales — nunca a "todos los lotes de este
+            // producto_id" a lo bruto: desde 2026-09-20 una ficha puede recibir de más de una
+            // compra (el catálogo vuelve a reusar fichas existentes, ver
+            // procesarLineasProducto()), así que ese producto_id podría tener lotes de OTRA
+            // compra que nunca fue parte de este prorrateo. LoteStock::idsConDescendientes()
+            // ubica solo la cadena real: el lote que aprobar() creó para esta línea, más
+            // cualquier lote hijo que un Movimiento haya creado al trasladarlo después.
             $resultado = $this->ejecutarProrrateoAutomatico(
                 $productosAgrupados,
                 $validatedData,
                 $compras->first()->id,
                 "compras #{$compraIds}",
-                function (Producto $producto, float $incrementoUnitario, float $nuevoCosto) {
+                function (Producto $producto, float $incrementoUnitario, float $nuevoCosto, $productoAgrupado) {
                     $producto->update(['precio_compra_producto' => $nuevoCosto]);
-                    LoteStock::where('producto_id', $producto->id)->increment('precio_costo', $incrementoUnitario);
+
+                    $compraProductoIds = $productoAgrupado->pivot->compra_producto_ids ?? [];
+                    $loteIds = LoteStock::whereIn('compra_producto_id', $compraProductoIds)
+                        ->get()
+                        ->flatMap(fn (LoteStock $lote) => $lote->idsConDescendientes())
+                        ->unique()
+                        ->all();
+
+                    LoteStock::whereIn('id', $loteIds)->increment('precio_costo', $incrementoUnitario);
 
                     foreach ($producto->almacenes as $almacen) {
                         app(ProductoVendedorController::class)->actualizarGananciaPorCambioCosto($producto->id, $almacen->id);
@@ -479,7 +489,7 @@ class DistribucionCostosController extends Controller
      * crea después (ver distribuirLoteCompras/distribuirLoteMovimientos).
      *
      * @param  Collection  $productosAgrupados  Producto con pivot->cantidad ya sumado (ver agruparProductosPorLinea/agruparProductosPorMovimiento).
-     * @param  callable(Producto, float, float): void  $aplicarNuevoCosto  Dónde aplicar el incremento por unidad calculado — Compras lo aplica al costo global de la ficha (cada compra es su propia ficha desde 2026-09-18, no hay ambigüedad); Movimientos lo aplica solo al lote del almacén destino de ESE traslado (ver distribuirLoteCompras/distribuirLoteMovimientos). Firma: (Producto $producto, float $incrementoUnitario, float $nuevoCostoGlobalReferencia).
+     * @param  callable(Producto, float, float, mixed): void  $aplicarNuevoCosto  Dónde aplicar el incremento por unidad calculado — Compras lo aplica al costo global de la ficha y a los lotes que descienden de las líneas de compra de este lote (ver LoteStock::idsConDescendientes(), una ficha puede recibir de más de una compra desde 2026-09-20); Movimientos lo aplica solo al lote del almacén destino de ESE traslado (ver distribuirLoteCompras/distribuirLoteMovimientos). Firma: (Producto $producto, float $incrementoUnitario, float $nuevoCostoGlobalReferencia, mixed $productoAgrupado — el elemento actual de $productosAgrupados, con su pivot).
      * @return RedirectResponse|array{distribution: CostDistribution, totalUsdSobrante: float, totalCupSobrante: float}
      */
     private function ejecutarProrrateoAutomatico($productosAgrupados, array $validatedData, ?int $purchaseIdLegado, string $etiquetaLote, callable $aplicarNuevoCosto)
@@ -608,7 +618,7 @@ class DistribucionCostosController extends Controller
                 'comentario' => "Ajuste por distribución automática de costos ({$etiquetaLote}).",
             ]);
 
-            $aplicarNuevoCosto($producto, $incrementoUnitario, $nuevoCosto);
+            $aplicarNuevoCosto($producto, $incrementoUnitario, $nuevoCosto, $productoAgrupado);
 
             $totalUsdDistribuidoProductos += $montoAsignado;
         }
@@ -865,6 +875,12 @@ class DistribucionCostosController extends Controller
             ->map(function ($lineas) {
                 $producto = $lineas->first();
                 $producto->pivot->cantidad = $lineas->sum(fn ($p) => $p->pivot->cantidad);
+                // IDs de compra_producto que aportaron a este total — desde 2026-09-20 un mismo
+                // producto_id puede recibir líneas de más de una compra (ver
+                // procesarLineasProducto()), así que distribuirLoteCompras() necesita saber
+                // exactamente cuáles para ubicar solo los lotes propios (ver
+                // LoteStock::idsConDescendientes()), no todos los del producto.
+                $producto->pivot->compra_producto_ids = $lineas->pluck('pivot.id')->filter()->values()->all();
 
                 return $producto;
             })

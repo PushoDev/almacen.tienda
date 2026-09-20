@@ -57,8 +57,8 @@ class ReconstruirMovimientoAgosto2026 extends Command
 
             $fila->update(['saldo_inicio_mes' => $anclaNueva]);
 
-            $this->line("  {$codigo}: movimiento reconstruido = " . number_format($movimiento, 2)
-                . " | ancla {$anclaAnterior} -> {$anclaNueva}");
+            $this->line("  {$codigo}: movimiento reconstruido = ".number_format($movimiento, 2)
+                ." | ancla {$anclaAnterior} -> {$anclaNueva}");
         }
 
         $dashboardStatsService->actualizarComparacionMensual(null);

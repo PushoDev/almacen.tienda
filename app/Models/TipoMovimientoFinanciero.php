@@ -16,7 +16,7 @@ class TipoMovimientoFinanciero extends Model
         'efecto',
         'descripcion',
     ];
-    
+
     // Relación: Un Tipo tiene muchos Movimientos Financieros
     public function movimientos()
     {

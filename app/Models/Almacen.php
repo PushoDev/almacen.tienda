@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class Almacen extends Model
@@ -11,6 +12,7 @@ class Almacen extends Model
     use HasFactory;
 
     protected $primaryKey = 'id';
+
     protected $table = 'almacens';
 
     protected $fillable = [
@@ -31,6 +33,7 @@ class Almacen extends Model
     /**
      * Undocumented function
      * ✅ Relación inversa con User
+     *
      * @return void
      */
     public function usuarios()
@@ -66,7 +69,7 @@ class Almacen extends Model
     /**
      * Obtiene productos con cantidad total en el almacén
      *
-     * @return \Illuminate\Support\Collection
+     * @return Collection
      */
     public function getProductosConCantidad()
     {

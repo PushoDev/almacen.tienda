@@ -51,7 +51,7 @@ class MovimientosBackfillRequiereProrrateo extends Command
 
         foreach ($movimientos as $movimiento) {
             $requiere = $movimiento->usuario->role === 'vendedor'
-                ? !$movimiento->usuario->almacenes->pluck('id')->contains($movimiento->almacen_destino_id)
+                ? ! $movimiento->usuario->almacenes->pluck('id')->contains($movimiento->almacen_destino_id)
                 : true;
 
             if ($requiere === (bool) $movimiento->requiere_prorrateo) {
@@ -62,15 +62,16 @@ class MovimientosBackfillRequiereProrrateo extends Command
 
             if ($dryRun) {
                 $this->line("  🔷 Movimiento #{$movimiento->id} ({$movimiento->usuario->role}) — requiere_prorrateo pasaría de "
-                    . ($movimiento->requiere_prorrateo ? 'true' : 'false') . ' a ' . ($requiere ? 'true' : 'false'));
+                    .($movimiento->requiere_prorrateo ? 'true' : 'false').' a '.($requiere ? 'true' : 'false'));
+
                 continue;
             }
 
             $movimiento->update(['requiere_prorrateo' => $requiere]);
-            $this->info("  ✅ Movimiento #{$movimiento->id} ({$movimiento->usuario->role}) actualizado a requiere_prorrateo=" . ($requiere ? 'true' : 'false'));
+            $this->info("  ✅ Movimiento #{$movimiento->id} ({$movimiento->usuario->role}) actualizado a requiere_prorrateo=".($requiere ? 'true' : 'false'));
         }
 
-        $this->info("Completado. {$cambiados} de {$movimientos->count()} movimientos " . ($dryRun ? 'cambiarían.' : 'actualizados.'));
+        $this->info("Completado. {$cambiados} de {$movimientos->count()} movimientos ".($dryRun ? 'cambiarían.' : 'actualizados.'));
 
         return self::SUCCESS;
     }

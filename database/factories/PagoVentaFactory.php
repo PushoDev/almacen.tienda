@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\Cuenta;
-use App\Models\Moneda;
 use App\Models\Venta;
 use Illuminate\Database\Eloquent\Factories\Factory;
 

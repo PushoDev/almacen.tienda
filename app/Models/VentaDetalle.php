@@ -36,4 +36,14 @@ class VentaDetalle extends Model
     {
         return $this->belongsTo(ProductoCodigo::class);
     }
+
+    /**
+     * De qué lote(s) salió esta línea (ver LoteConsumoService::consumir()) — puede ser más de
+     * uno si el pedido cruzó el remanente de un lote. Usado para revertir el consumo al anular
+     * la venta (ver VentaController::anularVenta()).
+     */
+    public function loteConsumos()
+    {
+        return $this->hasMany(VentaDetalleLote::class);
+    }
 }

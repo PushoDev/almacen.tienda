@@ -23,8 +23,8 @@ class AlmacenController extends Controller
         return Inertia::render('Almacenes/index', [
             'almacenes' => $almacenes,
             'permisos' => [
-                'crear' => in_array(Auth::user()->role, ['admin', 'moderador'])
-            ]
+                'crear' => in_array(Auth::user()->role, ['admin', 'moderador']),
+            ],
         ]);
     }
 
@@ -85,7 +85,7 @@ class AlmacenController extends Controller
     {
         $productos = $almacen->getProductosConCantidad()->map(function ($item) use ($almacen) {
             $imagenUrl = $item->imagen_producto
-                ? asset('storage/' . $item->imagen_producto)
+                ? asset('storage/'.$item->imagen_producto)
                 : asset('storage/productos/producto-default.png');
 
             return [
@@ -118,8 +118,8 @@ class AlmacenController extends Controller
         $cuentas = Cuenta::with('moneda')
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
             ->get()
-            ->map(fn($c) => [
-                'id'     => $c->id,
+            ->map(fn ($c) => [
+                'id' => $c->id,
                 'nombre' => $c->nombre_cuenta,
                 'moneda' => $c->moneda?->codigo_moneda ?? $c->tipo_moneda,
             ]);
@@ -141,13 +141,13 @@ class AlmacenController extends Controller
                 'required',
                 'string',
                 'max:255',
-                'unique:almacens,nombre_almacen,' . $almacen->id
+                'unique:almacens,nombre_almacen,'.$almacen->id,
             ],
             'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'],
             'telefono_almacen' => [
                 'required',
                 'string',
-                'unique:almacens,telefono_almacen,' . $almacen->id
+                'unique:almacens,telefono_almacen,'.$almacen->id,
             ],
             'correo_almacen' => ['nullable', 'email'],
             'provincia_almacen' => ['nullable', 'string'],
@@ -185,6 +185,7 @@ class AlmacenController extends Controller
     public function destroy(Almacen $almacen)
     {
         $almacen->delete();
+
         return redirect()->route('almacenes.index')->with('success', 'Almacén eliminado exitosamente.');
     }
 }

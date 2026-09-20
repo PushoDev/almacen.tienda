@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\DestinatarioVenta;
 use App\Models\HistorialStock;
+use App\Models\LoteStock;
 use App\Models\Moneda;
 use App\Models\PagoVenta;
 use App\Models\Producto;
@@ -15,12 +16,14 @@ use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
+use App\Models\VentaDetalleLote;
 use App\Notifications\VentaCreadaNotification;
 use App\Notifications\VentaDevueltaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
 use App\Services\DashboardStatsService;
+use App\Services\LoteConsumoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -136,7 +139,7 @@ class VentaController extends Controller
                 },
             ])
             ->get()
-            ->map(function ($producto) use ($preciosAlmacen) {
+            ->map(function ($producto) use ($preciosAlmacen, $id) {
                 $precioRow = $preciosAlmacen->get($producto->id);
                 $almacen = $producto->almacenes->first();
 
@@ -166,6 +169,17 @@ class VentaController extends Controller
                     'precio_base' => $precioRow ? (float) $precioRow->precio_venta : null,
                     'comision' => $precioRow ? (float) ($precioRow->comision ?? 0) : 0,
                     'es_precio_vendedor' => false,
+                    // Lotes activos en este almacén (2026-09-20) — cuando hay 2+, el picker de
+                    // venta ofrece elegir de cuál vender (LoteConsumoService consume FIFO si no
+                    // se elige ninguno). 'precio_venta' es el efectivo de ESE lote ("Opción A"):
+                    // hereda el precio general del almacén salvo que tenga override propio — el
+                    // frontend lo usa para autocompletar el precio al elegir un lote puntual.
+                    'lotes' => $producto->lotesActivosEnAlmacen($id)->map(fn ($lote) => [
+                        'id' => $lote->id,
+                        'codigo' => $lote->codigo,
+                        'cantidad' => $lote->cantidad_disponible,
+                        'precio_venta' => $producto->precioVentaEfectivo($lote),
+                    ])->values(),
                 ];
             });
 
@@ -824,6 +838,10 @@ class VentaController extends Controller
             'items.*.cantidad' => 'required|integer|min:1',
             'items.*.precio_venta' => 'required|numeric|min:0',
             'items.*.subtotal' => 'required|numeric|min:0',
+            // Opcional: lote puntual elegido a mano cuando el producto tiene 2+ lotes con stock
+            // en este almacén (ver Producto::lotesActivosEnAlmacen()). Sin este dato, el consumo
+            // cae a FIFO automático — ver LoteConsumoService.
+            'items.*.lote_id' => 'nullable|integer|exists:lotes_stock,id',
             'total' => 'required|numeric|min:0',
             'pagos' => $pagosRule,
             'pagos.*.metodo' => 'nullable|in:transferencia,efectivo',
@@ -931,11 +949,32 @@ class VentaController extends Controller
 
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
-            foreach ($validatedData['items'] as $item) {
+            $loteConsumoService = app(LoteConsumoService::class);
+            // Desglose real de lote(s) consumidos por línea (índice del item => Collection de
+            // LoteConsumoService::consumir()) — la segunda pasada (creación de VentaDetalle, más
+            // abajo) lo usa para el costo/ganancia real y para dejar auditoría en
+            // venta_detalle_lotes, en vez de recalcular con el campo global de la ficha.
+            $consumoPorIndice = [];
+            foreach ($validatedData['items'] as $idx => $item) {
                 $producto = Producto::find($item['producto_id']);
 
+                // Costo real de esta línea: consume del/los lote(s) del almacén de venta (FIFO,
+                // o el lote puntual elegido a mano vía items.*.lote_id) ANTES de validar el
+                // precio — el campo global de la ficha puede estar desactualizado si este
+                // almacén tuvo un traslado prorrateado de forma independiente (ver
+                // Producto::costoEnAlmacen()). Sin lotes registrados cae al costo global, igual
+                // que siempre.
+                $consumido = $loteConsumoService->consumir(
+                    $item['producto_id'],
+                    $validatedData['almacen_id'],
+                    $item['cantidad'],
+                    $item['lote_id'] ?? null
+                );
+                $consumoPorIndice[$idx] = $consumido;
+                $costoUnitarioReal = $loteConsumoService->costoPromedio($consumido);
+
                 // Ventas especiales permiten precio por debajo del costo
-                if (! $esEspecial && $item['precio_venta'] < $producto->precio_compra_producto) {
+                if (! $esEspecial && $item['precio_venta'] < $costoUnitarioReal) {
                     throw new \Exception("El precio de venta de \"{$producto->nombre_producto}\" no puede ser menor que su costo de compra.");
                 }
 
@@ -973,7 +1012,7 @@ class VentaController extends Controller
                     throw new \Exception("Stock insuficiente para el código {$codigoVenta->codigo_barras}.");
                 }
 
-                $costo = $producto->precio_compra_producto * $item['cantidad'];
+                $costo = $costoUnitarioReal * $item['cantidad'];
                 $costo_total_productos += $costo;
 
                 $almacenProducto->decrement('cantidad', $item['cantidad']);
@@ -1045,9 +1084,11 @@ class VentaController extends Controller
             HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
 
             // Crear detalles y calcular ganancia + comision
-            foreach ($validatedData['items'] as $item) {
+            foreach ($validatedData['items'] as $idx => $item) {
                 $producto = Producto::find($item['producto_id']);
-                $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
+                $consumido = $consumoPorIndice[$idx];
+                $costoUnitarioReal = $loteConsumoService->costoPromedio($consumido);
+                $ganancia = ($item['precio_venta'] - $costoUnitarioReal) * $item['cantidad'];
                 $total_ganancia += $ganancia;
 
                 // Usar datos precargados del almacén
@@ -1069,7 +1110,7 @@ class VentaController extends Controller
                 }
                 $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
 
-                VentaDetalle::create([
+                $ventaDetalle = VentaDetalle::create([
                     'venta_id' => $venta->id,
                     'producto_id' => $item['producto_id'],
                     'producto_codigo_id' => $item['producto_codigo_id'],
@@ -1077,10 +1118,21 @@ class VentaController extends Controller
                     'precio_venta' => $item['precio_venta'],
                     'precio_base' => $precioBase,
                     'subtotal' => $item['subtotal'],
-                    'costo_unitario' => $producto->precio_compra_producto,
+                    'costo_unitario' => $costoUnitarioReal,
                     'ganancia' => $ganancia,
                     'comision_unitaria' => $comisionUnitaria,
                 ]);
+
+                // Auditoría + reversibilidad: de qué lote(s) salió esta línea, para poder sumar
+                // cantidad_disponible de vuelta si la venta se anula (ver anularVenta()).
+                foreach ($consumido as $parte) {
+                    VentaDetalleLote::create([
+                        'venta_detalle_id' => $ventaDetalle->id,
+                        'lote_stock_id' => $parte['lote']?->id,
+                        'cantidad' => $parte['cantidad'],
+                        'costo_unitario' => $parte['costo_unitario'],
+                    ]);
+                }
             }
 
             // USD objetivo real (costo + ganancia deseada)
@@ -2056,7 +2108,7 @@ class VentaController extends Controller
         $eraCompletada = $venta->estado === 'completada';
 
         // Cargar relaciones necesarias para poder revertirlas
-        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda', 'usuario', 'moneda']);
+        $venta->load(['detalles.loteConsumos', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda', 'usuario', 'moneda']);
 
         DB::transaction(function () use ($venta, $validated, $eraCompletada) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
@@ -2066,6 +2118,16 @@ class VentaController extends Controller
 
                 if ($almacenProducto) {
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
+                }
+
+                // Revertir el consumo de lote(s) — sin esto, anular una venta dejaría
+                // lotes_stock desincronizado del stock real otra vez (ver
+                // LoteConsumoService/venta_detalle_lotes). Las partes sin lote (costo global de
+                // fallback) no tienen nada que revertir acá.
+                foreach ($detalle->loteConsumos as $consumo) {
+                    if ($consumo->lote_stock_id) {
+                        LoteStock::where('id', $consumo->lote_stock_id)->increment('cantidad_disponible', $consumo->cantidad);
+                    }
                 }
 
                 // ✅ Devolver stock al mismo código usado en la venta.

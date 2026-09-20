@@ -3,7 +3,6 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
 class CambioPrecioVendedorNotification extends Notification
@@ -11,9 +10,13 @@ class CambioPrecioVendedorNotification extends Notification
     use Queueable;
 
     public $producto;
+
     public $almacen;
+
     public $vendedor;
+
     public $precioAnterior;
+
     public $precioNuevo;
 
     public function __construct($producto, $almacen, $vendedor, $precioAnterior, $precioNuevo)
@@ -45,7 +48,7 @@ class CambioPrecioVendedorNotification extends Notification
             'precio_anterior' => $this->precioAnterior,
             'precio_nuevo' => $this->precioNuevo,
             'icon' => 'dollar-sign',
-            'color' => 'amber'
+            'color' => 'amber',
         ];
     }
 }

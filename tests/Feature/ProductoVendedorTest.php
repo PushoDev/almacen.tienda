@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Almacen;
-use App\Models\Producto;
 use App\Models\PrecioHistorial;
+use App\Models\Producto;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -18,27 +18,27 @@ test('un admin puede aplicar el mismo precio a varios almacenes a la vez', funct
     $almacenC = Almacen::factory()->create();
 
     $response = $this->put(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacenA->id, $almacenB->id, $almacenC->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacenA->id, $almacenB->id, $almacenC->id],
         'precio_venta' => 25.50,
-        'comision'     => 2,
+        'comision' => 2,
         'password_confirmacion' => 'password',
     ]);
 
     $response->assertOk();
     $response->assertJson([
-        'success'      => true,
-        'new_price'    => 25.50,
-        'new_profit'   => 15.50,
+        'success' => true,
+        'new_price' => 25.50,
+        'new_profit' => 15.50,
         'new_comision' => 2,
     ]);
 
     foreach ([$almacenA, $almacenB, $almacenC] as $almacen) {
         $this->assertDatabaseHas('producto_vendedors', [
-            'producto_id'  => $producto->id,
-            'almacen_id'   => $almacen->id,
+            'producto_id' => $producto->id,
+            'almacen_id' => $almacen->id,
             'precio_venta' => 25.50,
-            'comision'     => 2,
+            'comision' => 2,
         ]);
     }
 
@@ -50,11 +50,11 @@ test('el update masivo funciona sin comisión (opcional)', function () {
     $this->actingAs($admin);
 
     $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
-    $almacen  = Almacen::factory()->create();
+    $almacen = Almacen::factory()->create();
 
     $response = $this->put(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacen->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacen->id],
         'precio_venta' => 30,
         'password_confirmacion' => 'password',
     ]);
@@ -63,8 +63,8 @@ test('el update masivo funciona sin comisión (opcional)', function () {
     $response->assertJson(['success' => true, 'new_comision' => null]);
 
     $this->assertDatabaseHas('producto_vendedors', [
-        'producto_id'  => $producto->id,
-        'almacen_id'   => $almacen->id,
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
         'precio_venta' => 30,
     ]);
 });
@@ -79,17 +79,17 @@ test('el update masivo solo registra historial en los almacenes cuyo precio real
 
     // almacenA ya tiene ese mismo precio asignado, almacenB no tiene precio todavía.
     DB::table('producto_vendedors')->insert([
-        'producto_id'  => $producto->id,
-        'almacen_id'   => $almacenA->id,
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacenA->id,
         'precio_venta' => 20,
         'venta_ganancia' => 10,
-        'created_at'   => now(),
-        'updated_at'   => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
     ]);
 
     $response = $this->put(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacenA->id, $almacenB->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacenA->id, $almacenB->id],
         'precio_venta' => 20,
         'password_confirmacion' => 'password',
     ]);
@@ -105,11 +105,11 @@ test('el update masivo rechaza una contraseña incorrecta, y no se crea nada', f
     $this->actingAs($admin);
 
     $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
-    $almacen  = Almacen::factory()->create();
+    $almacen = Almacen::factory()->create();
 
     $response = $this->putJson(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacen->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacen->id],
         'precio_venta' => 30,
         'password_confirmacion' => 'password-incorrecta',
     ]);
@@ -125,11 +125,11 @@ test('un moderador no puede usar el update masivo (403), y no se crea nada', fun
     $this->actingAs($moderador);
 
     $producto = Producto::factory()->create();
-    $almacen  = Almacen::factory()->create();
+    $almacen = Almacen::factory()->create();
 
     $response = $this->put(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacen->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacen->id],
         'precio_venta' => 15,
         'password_confirmacion' => 'password',
     ], ['X-Inertia' => 'true']);
@@ -143,11 +143,11 @@ test('un vendedor no puede usar el update masivo por bypass directo de URL (403)
     $this->actingAs($vendedor);
 
     $producto = Producto::factory()->create();
-    $almacen  = Almacen::factory()->create();
+    $almacen = Almacen::factory()->create();
 
     $response = $this->put(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacen->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacen->id],
         'precio_venta' => 15,
         'password_confirmacion' => 'password',
     ], ['X-Inertia' => 'true']);
@@ -163,8 +163,8 @@ test('el update masivo exige al menos un almacén', function () {
     $producto = Producto::factory()->create();
 
     $response = $this->put(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [],
         'precio_venta' => 15,
         'password_confirmacion' => 'password',
     ]);
@@ -177,11 +177,11 @@ test('el update masivo rechaza un precio de venta inválido', function () {
     $this->actingAs($admin);
 
     $producto = Producto::factory()->create();
-    $almacen  = Almacen::factory()->create();
+    $almacen = Almacen::factory()->create();
 
     $response = $this->putJson(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacen->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacen->id],
         'precio_venta' => 0,
         'password_confirmacion' => 'password',
     ]);
@@ -195,11 +195,11 @@ test('el update masivo exige contraseña', function () {
     $this->actingAs($admin);
 
     $producto = Producto::factory()->create();
-    $almacen  = Almacen::factory()->create();
+    $almacen = Almacen::factory()->create();
 
     $response = $this->putJson(route('disponibles.bulk-actualizar'), [
-        'producto_id'  => $producto->id,
-        'almacen_ids'  => [$almacen->id],
+        'producto_id' => $producto->id,
+        'almacen_ids' => [$almacen->id],
         'precio_venta' => 15,
     ]);
 

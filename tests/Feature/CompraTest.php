@@ -241,7 +241,7 @@ test('rechaza precio de compra negativo', function () {
     $response->assertSessionHasErrors(['productos.0.precio']);
 });
 
-test('el mismo producto en dos almacenes distintos dentro de la misma compra, a precios distintos, queda en dos fichas separadas', function () {
+test('el mismo producto en dos almacenes distintos dentro de la misma compra, a precios distintos, comparte una sola ficha con el costo aislado por lote', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -281,52 +281,49 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
 
     $response->assertSessionHasNoErrors();
 
-    // El precio es parte de la identidad: al no coincidir (10 vs 12), son dos fichas
-    // de Producto distintas, cada una con su propia línea de pivot — no una fusionada.
-    $fichas = Producto::where('nombre_producto', 'Producto Repetido')->get();
-    expect($fichas)->toHaveCount(2);
+    // El precio NO es parte de la identidad (desde 2026-09-20): nombre+categoría+marca+modelo+
+    // capacidad coinciden, así que la segunda línea reusa la ficha de la primera — una sola fila
+    // en productos, dos líneas de compra_producto, cada una con su propio costo.
+    $producto = Producto::where('nombre_producto', 'Producto Repetido')->sole();
 
-    $productoA = $fichas->firstWhere('precio_compra_producto', '10.00');
-    $productoB = $fichas->firstWhere('precio_compra_producto', '12.00');
-    expect($productoA)->not->toBeNull();
-    expect($productoB)->not->toBeNull();
-
-    expect(CompraProducto::where('producto_id', $productoA->id)->count())->toBe(1);
-    expect(CompraProducto::where('producto_id', $productoB->id)->count())->toBe(1);
+    expect(CompraProducto::where('producto_id', $producto->id)->count())->toBe(2);
 
     $this->assertDatabaseHas('compra_producto', [
-        'producto_id' => $productoA->id,
+        'producto_id' => $producto->id,
         'almacen_id' => $almacenA->id,
         'cantidad' => 5,
         'precio' => 10,
     ]);
 
     $this->assertDatabaseHas('compra_producto', [
-        'producto_id' => $productoB->id,
+        'producto_id' => $producto->id,
         'almacen_id' => $almacenB->id,
         'cantidad' => 3,
         'precio' => 12,
     ]);
 
     // El stock queda diferido hasta aprobar — todavía no existe en ningún almacén.
-    $this->assertDatabaseMissing('almacen_producto', ['producto_id' => $productoA->id]);
-    $this->assertDatabaseMissing('almacen_producto', ['producto_id' => $productoB->id]);
+    $this->assertDatabaseMissing('almacen_producto', ['producto_id' => $producto->id]);
 
     $compra = Compra::whereHas('productos', fn ($q) => $q->where('nombre_producto', 'Producto Repetido'))->firstOrFail();
     $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
 
-    // Al aprobar, el stock queda correcto por almacén, cada ficha en el suyo.
+    // Al aprobar, el stock queda correcto por almacén — mismo producto_id en ambos.
     $this->assertDatabaseHas('almacen_producto', [
         'almacen_id' => $almacenA->id,
-        'producto_id' => $productoA->id,
+        'producto_id' => $producto->id,
         'cantidad' => 5,
     ]);
 
     $this->assertDatabaseHas('almacen_producto', [
         'almacen_id' => $almacenB->id,
-        'producto_id' => $productoB->id,
+        'producto_id' => $producto->id,
         'cantidad' => 3,
     ]);
+
+    // El costo real de cada almacén queda aislado por lote, aunque compartan ficha.
+    expect($producto->costoEnAlmacen($almacenA->id))->toBe(10.0);
+    expect($producto->costoEnAlmacen($almacenB->id))->toBe(12.0);
 });
 
 // ─── Acceso: admin y moderador (vendedor no tiene acceso a Compras) ────
@@ -474,13 +471,16 @@ test('un vendedor no puede registrar una compra por bypass directo de URL (403),
 
 // ─── Identidad de producto por precio (precio_compra_producto es parte del match) ──
 
-test('una compra del mismo producto a un precio distinto crea una ficha nueva, sin pisar el costo de la existente', function () {
+test('una compra del mismo producto a un precio distinto reusa la ficha existente, sin pisar el costo real del almacén viejo', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $almacen = Almacen::factory()->create();
+    $almacenViejo = Almacen::factory()->create();
+    $almacenNuevo = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
+    // Stock viejo con su propio lote real (no un AlmacenProducto suelto) — para que el aislamiento
+    // por almacén sea una comparación justa contra costoEnAlmacen(), no solo contra el campo global.
     $producto = Producto::factory()->create([
         'nombre_producto' => 'Producto Costo',
         'categoria_id' => $categoria->id,
@@ -489,11 +489,13 @@ test('una compra del mismo producto a un precio distinto crea una ficha nueva, s
         'capacidad_producto' => null,
         'precio_compra_producto' => 10,
     ]);
-
-    AlmacenProducto::create([
-        'almacen_id' => $almacen->id,
+    AlmacenProducto::create(['almacen_id' => $almacenViejo->id, 'producto_id' => $producto->id, 'cantidad' => 4]);
+    LoteStock::create([
+        'codigo' => 'LOTE-TEST-VIEJO',
         'producto_id' => $producto->id,
+        'almacen_id' => $almacenViejo->id,
         'cantidad' => 4,
+        'precio_costo' => 10,
     ]);
 
     $response = $this->post(route('comprar.store'), [
@@ -503,7 +505,7 @@ test('una compra del mismo producto a un precio distinto crea una ficha nueva, s
         'fecha' => '2026-08-11',
         'productos' => [
             [
-                'almacen_id' => $almacen->id,
+                'almacen_id' => $almacenNuevo->id,
                 'producto' => 'Producto Costo',
                 'categoria' => $categoria->nombre_categoria,
                 'cantidad' => 2,
@@ -514,22 +516,19 @@ test('una compra del mismo producto a un precio distinto crea una ficha nueva, s
 
     $response->assertSessionHasNoErrors();
 
-    // La ficha original no se toca.
-    expect($producto->refresh()->precio_compra_producto)->toEqual('10.00');
+    // Misma ficha reusada — no aparece una segunda.
+    expect(Producto::where('nombre_producto', 'Producto Costo')->count())->toBe(1);
 
-    // Se creó una ficha nueva, separada, con el precio de esta compra.
-    $productoNuevo = Producto::where('nombre_producto', 'Producto Costo')
-        ->where('id', '!=', $producto->id)
-        ->first();
-    expect($productoNuevo)->not->toBeNull();
-    expect($productoNuevo->precio_compra_producto)->toEqual('15.00');
+    // El campo global se actualiza como "última referencia de costo conocida"...
+    expect($producto->refresh()->precio_compra_producto)->toEqual('15.00');
 
-    // El match por precio hace que este camino ya no pise costos existentes,
-    // así que tampoco debe quedar rastro en historial_precio_costos.
-    expect(HistorialPrecioCosto::where('producto_id', $producto->id)->count())->toBe(0);
+    // ...pero el costo REAL de cada almacén queda aislado por lote: el almacén viejo no se
+    // entera de esta compra nueva.
+    expect($producto->costoEnAlmacen($almacenViejo->id))->toBe(10.0);
+    expect($producto->costoEnAlmacen($almacenNuevo->id))->toBe(15.0);
 });
 
-test('comprar el mismo producto dos veces en una misma compra, a precios distintos, crea dos fichas separadas', function () {
+test('comprar el mismo producto dos veces en una misma compra, al mismo almacén y a precios distintos, deja dos lotes bajo una sola ficha', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -561,13 +560,28 @@ test('comprar el mismo producto dos veces en una misma compra, a precios distint
 
     $response->assertSessionHasNoErrors();
 
-    $fichas = Producto::where('nombre_producto', 'Producto Contenedor')->get();
-    expect($fichas)->toHaveCount(2);
-    expect($fichas->pluck('precio_compra_producto')->map(fn ($p) => (string) $p)->sort()->values()->all())
-        ->toBe(['20.00', '25.00']);
+    $producto = Producto::where('nombre_producto', 'Producto Contenedor')->sole();
+
+    $compra = Compra::whereHas('productos', fn ($q) => $q->where('productos.id', $producto->id))->firstOrFail();
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    // Un mismo almacén, dos lotes a precio distinto bajo la misma ficha — exactamente el
+    // escenario real reportado (ver Manzanillo/Bejucal, 2026-09-20).
+    $lotes = $producto->lotesActivosEnAlmacen($almacen->id);
+    expect($lotes)->toHaveCount(2);
+    expect($lotes->pluck('precio_costo')->map(fn ($p) => (float) $p)->sort()->values()->all())->toBe([20.0, 25.0]);
+
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $almacen->id,
+        'producto_id' => $producto->id,
+        'cantidad' => 8,
+    ]);
+
+    // Promedio ponderado real: (3×20 + 5×25) / 8 = 23.13.
+    expect($producto->costoEnAlmacen($almacen->id))->toBe(23.13);
 });
 
-test('una compra con el mismo costo que ya tenía el producto crea una ficha nueva y separada de todas formas', function () {
+test('una compra con el mismo costo que ya tenía el producto también reusa la ficha existente', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -601,47 +615,40 @@ test('una compra con el mismo costo que ya tenía el producto crea una ficha nue
 
     $response->assertSessionHasNoErrors();
 
-    // Cada compra es un lote físico distinto — nunca se fusiona con una ficha existente, ni
-    // siquiera cuando nombre+categoría+marca+modelo+capacidad+precio coinciden exacto. Ver
-    // docs/arreglos-pendientes/costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md.
-    expect(Producto::where('nombre_producto', 'Producto Costo Igual')->count())->toBe(2);
-    expect(HistorialPrecioCosto::where('producto_id', $producto->id)->count())->toBe(0);
+    // El precio no es parte de la identidad — coincida o no con el que ya tenía la ficha, se
+    // reusa igual. El aislamiento de costo real ya no depende de duplicar el catálogo (ver
+    // LoteStock::idsConDescendientes() / DistribucionCostosController).
+    expect(Producto::where('nombre_producto', 'Producto Costo Igual')->count())->toBe(1);
+    expect(CompraProducto::where('producto_id', $producto->id)->count())->toBe(1);
 });
 
-test('prorratear una compra nueva no toca el costo de una ficha vieja del mismo producto — regresión del bug real reportado por el cliente', function () {
-    // Antes de este fix, una compra nueva del "mismo" producto (mismo nombre+categoría+precio)
-    // reutilizaba la ficha existente, y prorratear esa compra nueva mutaba precio_compra_producto
-    // en esa ficha compartida — cambiando también el costo del stock viejo que ya estaba ahí,
-    // que nunca fue parte de esta compra ni de este prorrateo. Con ficha siempre nueva, cada
-    // compra tiene su propio Producto exclusivo — prorratear una nunca puede tocar el costo
-    // registrado por otra, aunque describan "el mismo artículo".
+test('prorratear una compra nueva no toca el costo del lote de otra compra vieja del mismo producto — regresión del bug real reportado por el cliente', function () {
+    // El bug original (2026-09-18): una compra nueva del "mismo" producto reutilizaba la ficha
+    // existente, y prorratear esa compra nueva mutaba precio_compra_producto en esa ficha
+    // compartida — cambiando también el costo del stock viejo que ya estaba ahí, que nunca fue
+    // parte de esta compra ni de este prorrateo. El fix original evitó esto duplicando la ficha
+    // por cada compra; desde 2026-09-20 el catálogo vuelve a reusar fichas, pero el aislamiento
+    // ahora es real: DistribucionCostosController::distribuirLoteCompras() solo toca los lotes
+    // que descienden de la línea de ESTA compra (ver LoteStock::idsConDescendientes()), nunca
+    // "todos los lotes de este producto_id".
     TipoMovimientoFinanciero::firstOrCreate(['id' => 1], ['nombre' => 'Gasto Operativo', 'efecto' => 'egreso']);
 
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
-    $almacen = Almacen::factory()->create();
+    $almacenViejo = Almacen::factory()->create();
+    $almacenNuevo = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
-    // La ficha "vieja" ya existía en el registro, de una compra anterior.
-    $productoViejo = Producto::factory()->create([
-        'nombre_producto' => 'Producto Regresion Prorrateo',
-        'categoria_id' => $categoria->id,
-        'marca_producto' => null,
-        'modelo_producto' => null,
-        'capacidad_producto' => null,
-        'precio_compra_producto' => 10,
-    ]);
-
-    // Compra nueva del "mismo" producto, mismo precio — crea una ficha propia, separada.
+    // Compra vieja real, aprobada — con su propio lote.
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => 'Proveedor Regresion',
+        'proveedor' => 'Proveedor Regresion Viejo',
         'tipo_proveedor' => 'proveedor',
-        'fecha' => '2026-09-18',
+        'fecha' => '2026-09-01',
         'productos' => [
             [
-                'almacen_id' => $almacen->id,
+                'almacen_id' => $almacenViejo->id,
                 'producto' => 'Producto Regresion Prorrateo',
                 'categoria' => $categoria->nombre_categoria,
                 'cantidad' => 5,
@@ -650,13 +657,34 @@ test('prorratear una compra nueva no toca el costo de una ficha vieja del mismo 
         ],
     ])->assertSessionHasNoErrors();
 
-    $compraNueva = Compra::latest('id')->first();
-    $productoNuevo = Producto::where('nombre_producto', 'Producto Regresion Prorrateo')
-        ->where('id', '!=', $productoViejo->id)
-        ->firstOrFail();
+    $producto = Producto::where('nombre_producto', 'Producto Regresion Prorrateo')->sole();
+    $compraVieja = Compra::latest('id')->first();
+    $this->post(route('comprar.aprobar', $compraVieja->id))->assertSessionHasNoErrors();
+    $loteViejo = LoteStock::where('compra_producto_id', $compraVieja->productos->first()->pivot->id)->sole();
 
-    // Solo se puede prorratear una compra aprobada.
+    // Compra nueva del "mismo" producto — reusa la misma ficha (misma identidad), pero es su
+    // propia línea/lote, en otro almacén.
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Regresion Nuevo',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-18',
+        'productos' => [
+            [
+                'almacen_id' => $almacenNuevo->id,
+                'producto' => 'Producto Regresion Prorrateo',
+                'categoria' => $categoria->nombre_categoria,
+                'cantidad' => 5,
+                'precio' => 10,
+            ],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    expect(Producto::where('nombre_producto', 'Producto Regresion Prorrateo')->count())->toBe(1);
+
+    $compraNueva = Compra::latest('id')->first();
     $this->post(route('comprar.aprobar', $compraNueva->id))->assertSessionHasNoErrors();
+    $loteNuevo = LoteStock::where('compra_producto_id', $compraNueva->productos->first()->pivot->id)->sole();
 
     $cuenta = Cuenta::factory()
         ->for(Moneda::factory()->state(['codigo_moneda' => 'USD', 'estado' => true]), 'moneda')
@@ -670,11 +698,13 @@ test('prorratear una compra nueva no toca el costo de una ficha vieja del mismo 
         'details' => 'Prorrateo de prueba — regresión',
     ])->assertRedirect(route('distribucion-costos.index'));
 
-    // La ficha nueva (la que se prorrateó) sí cambia de costo.
-    expect((float) $productoNuevo->fresh()->precio_compra_producto)->not->toEqual(10.0);
+    // El lote de la compra nueva (la que se prorrateó) sí cambia de costo.
+    expect((float) $loteNuevo->fresh()->precio_costo)->not->toEqual(10.0);
 
-    // La ficha vieja — que nunca fue parte de esta compra ni de este prorrateo — queda intacta.
-    expect((float) $productoViejo->fresh()->precio_compra_producto)->toEqual(10.0);
+    // El lote de la compra vieja — que nunca fue parte de esta compra ni de este prorrateo —
+    // queda intacto, aunque comparta ficha con la nueva.
+    expect((float) $loteViejo->fresh()->precio_costo)->toEqual(10.0);
+    expect($producto->costoEnAlmacen($almacenViejo->id))->toBe(10.0);
 });
 
 test('no se puede prorratear costos de una compra que sigue pendiente (sin aprobar)', function () {

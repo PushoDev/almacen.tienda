@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Almacen;
+use App\Models\Categoria;
 use App\Models\Producto;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class CatalogoPublicoController extends Controller
@@ -22,16 +24,18 @@ class CatalogoPublicoController extends Controller
 
     private function cacheRemember(string $key, int $ttl, callable $callback, array $tags = [])
     {
-        if ($this->supportsCacheTags() && !empty($tags)) {
+        if ($this->supportsCacheTags() && ! empty($tags)) {
             return Cache::tags($tags)->remember($key, $ttl, $callback);
         }
+
         return Cache::remember($key, $ttl, $callback);
     }
 
     private function cacheForget(string $key, array $tags = []): void
     {
-        if ($this->supportsCacheTags() && !empty($tags)) {
+        if ($this->supportsCacheTags() && ! empty($tags)) {
             Cache::tags($tags)->forget($key);
+
             return;
         }
 
@@ -40,10 +44,6 @@ class CatalogoPublicoController extends Controller
 
     /**
      * Construye una URL de WhatsApp para un teléfono dado.
-     *
-     * @param  string|null  $phone
-     * @param  string|null  $message
-     * @return string|null
      */
     private function buildWhatsAppUrl(?string $phone, ?string $message = null): ?string
     {
@@ -59,7 +59,7 @@ class CatalogoPublicoController extends Controller
 
         $url = "https://wa.me/{$clean}";
         if ($message) {
-            $url .= '?text=' . urlencode($message);
+            $url .= '?text='.urlencode($message);
         }
 
         return $url;
@@ -70,7 +70,7 @@ class CatalogoPublicoController extends Controller
      *
      * Ruta: GET /api/tienda/almacenes
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function indexAlmacenes()
     {
@@ -93,7 +93,7 @@ class CatalogoPublicoController extends Controller
                 ->map(function (Almacen $almacen) {
                     $whatsapp = $this->buildWhatsAppUrl(
                         $almacen->telefono_almacen,
-                        "Hola, quiero información sobre los productos disponibles."
+                        'Hola, quiero información sobre los productos disponibles.'
                     );
 
                     return [
@@ -117,8 +117,7 @@ class CatalogoPublicoController extends Controller
      *
      * Ruta: GET /api/tienda/almacenes/{id}
      *
-     * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function showAlmacen(int $id)
     {
@@ -169,9 +168,7 @@ class CatalogoPublicoController extends Controller
      *  - categoria_id: filtro por categoría
      *  - per_page: cantidad por página (default 20)
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $almacenId
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function productosPorAlmacen(Request $request, int $almacenId)
     {
@@ -201,7 +198,7 @@ class CatalogoPublicoController extends Controller
         }
 
         $perPage = (int) ($request->input('per_page', 20));
-        $cacheKey = 'catalogo:productos:' . $almacenId . ':' . md5($request->fullUrl());
+        $cacheKey = 'catalogo:productos:'.$almacenId.':'.md5($request->fullUrl());
 
         $almacenMeta = [
             'id' => $almacen->id,
@@ -319,8 +316,7 @@ class CatalogoPublicoController extends Controller
      *
      * Ruta: GET /api/tienda/productos/{id}
      *
-     * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function showProducto(int $id)
     {
@@ -384,19 +380,19 @@ class CatalogoPublicoController extends Controller
      *
      * Ruta: GET /api/tienda/categorias
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function indexCategorias()
     {
         $cacheKey = 'catalogo:categorias';
 
         $categorias = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () {
-            return \App\Models\Categoria::query()
+            return Categoria::query()
                 ->where('activar_categoria', true)
                 ->select(['id', 'nombre_categoria'])
                 ->orderBy('nombre_categoria')
                 ->get()
-                ->map(fn($cat) => [
+                ->map(fn ($cat) => [
                     'id' => $cat->id,
                     'nombre' => $cat->nombre_categoria,
                 ]);
@@ -431,7 +427,7 @@ class CatalogoPublicoController extends Controller
         }
 
         $perPage = (int) ($request->input('per_page', 20));
-        $cacheKey = 'catalogo:productos:search:' . md5($request->fullUrl());
+        $cacheKey = 'catalogo:productos:search:'.md5($request->fullUrl());
 
         $productosPaginados = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($request, $perPage) {
             $query = Producto::query()
@@ -541,8 +537,7 @@ class CatalogoPublicoController extends Controller
      *
      * Ruta: GET /api/tienda/productos/{id}/stock
      *
-     * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function stockPorProducto(int $id)
     {
@@ -686,13 +681,10 @@ class CatalogoPublicoController extends Controller
 
     /**
      * Resuelve URL de imagen principal (fallback a placeholder si no existe).
-     *
-     * @param  string|null  $imagen
-     * @return string|null
      */
     private function resolveImagenPrincipal(?string $imagen): ?string
     {
-        if (!$imagen) {
+        if (! $imagen) {
             return asset('productos/producto-default.png');
         }
 
