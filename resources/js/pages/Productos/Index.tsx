@@ -13,6 +13,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -350,6 +352,15 @@ export default function ProductosPage({
 
     // Verificar si hay filtros activos
     const hayFiltrosActivos = searchTerm || selectedCategoria || selectedAlmacen || soloStockBajo;
+
+    // Con almacén filtrado, "Costo"/"Cant" de la tabla muestran el valor real de ESE almacén
+    // (ver ProductoController::index()) en vez del promedio/total global — este nombre alimenta
+    // el header para que no parezca el mismo dato de siempre.
+    const almacenFiltradoNombre = almacenes.find((a) => String(a.id) === String(selectedAlmacen))?.nombre_almacen;
+
+    // Opciones del Combobox de almacén-filtro, con "Todos" como primer ítem seleccionable
+    // (id vacío = sin filtro — mismo criterio que ya tenía el <select> nativo que reemplaza).
+    const almacenFiltroOptions = [{ id: '', nombre_almacen: 'Todos los almacenes' }, ...almacenes];
 
     // Eliminar Producto
     const deleteProducto = (id: number) => {
@@ -711,50 +722,72 @@ export default function ProductosPage({
 
                 {/* Buscador y Filtros */}
                 <Card>
-                    <CardContent className="space-y-3 p-4">
-                        <div className="relative">
-                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
-                            <input
-                                type="text"
-                                placeholder="Buscar productos por nombre, código, marca o modelo..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-lg border px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:outline-none"
-                            />
-                        </div>
+                    <CardContent className="p-4">
+                        <div className="flex flex-wrap items-end gap-3">
+                    {/* Buscador */}
+                    <div className="relative w-full sm:w-72">
+                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
+                        <input
+                            type="text"
+                            placeholder="Buscar productos por nombre, código, marca o modelo..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-lg border px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:outline-none"
+                        />
+                    </div>
 
-                        <div className="flex flex-wrap items-center gap-3">
                     {/* Filtro por categoría */}
-                    <select
-                        value={selectedCategoria}
-                        onChange={(e) => setSelectedCategoria(e.target.value)}
-                        className="border-input bg-background focus:border-primary focus:ring-primary rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
-                    >
-                        <option className="bg-background" value="">
-                            Todas las categorías
-                        </option>
-                        {categorias.map((categoria) => (
-                            <option key={categoria.id} className="bg-background" value={categoria.id}>
-                                {categoria.nombre_categoria}
+                    <div className="w-44">
+                        <Label htmlFor="categoria-filtro" className="text-muted-foreground mb-1.5 block text-xs">
+                            Categoría
+                        </Label>
+                        <select
+                            id="categoria-filtro"
+                            value={selectedCategoria}
+                            onChange={(e) => setSelectedCategoria(e.target.value)}
+                            className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
+                        >
+                            <option className="bg-background" value="">
+                                Todas las categorías
                             </option>
-                        ))}
-                    </select>
+                            {categorias.map((categoria) => (
+                                <option key={categoria.id} className="bg-background" value={categoria.id}>
+                                    {categoria.nombre_categoria}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
                     {/* Filtro por almacén */}
-                    <select
-                        value={selectedAlmacen}
-                        onChange={(e) => setSelectedAlmacen(e.target.value)}
-                        className="border-input bg-background focus:border-primary focus:ring-primary rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
-                    >
-                        <option className="bg-background" value="">
-                            Todos los almacenes
-                        </option>
-                        {almacenes.map((almacen) => (
-                            <option key={almacen.id} className="bg-background" value={almacen.id}>
-                                {almacen.nombre_almacen}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="w-48">
+                        <Label htmlFor="almacen-filtro" className="text-muted-foreground mb-1.5 block text-xs">
+                            Almacén
+                        </Label>
+                        <Combobox
+                            items={almacenFiltroOptions}
+                            itemToStringLabel={(a: (typeof almacenFiltroOptions)[number]) => a.nombre_almacen}
+                            itemToStringValue={(a: (typeof almacenFiltroOptions)[number]) => a.nombre_almacen}
+                            value={almacenFiltroOptions.find((a) => String(a.id) === String(selectedAlmacen)) ?? almacenFiltroOptions[0]}
+                            onValueChange={(a: (typeof almacenFiltroOptions)[number] | null) => setSelectedAlmacen(a ? String(a.id) : '')}
+                        >
+                            <ComboboxInput
+                                id="almacen-filtro"
+                                className="w-full"
+                                placeholder="Buscar almacén..."
+                                onFocus={(e) => e.currentTarget.select()}
+                            />
+                            <ComboboxContent>
+                                <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                                <ComboboxList>
+                                    {(a: (typeof almacenFiltroOptions)[number]) => (
+                                        <ComboboxItem key={a.id} value={a}>
+                                            {a.nombre_almacen}
+                                        </ComboboxItem>
+                                    )}
+                                </ComboboxList>
+                            </ComboboxContent>
+                        </Combobox>
+                    </div>
 
                     {/* Botón stock bajo */}
                     <Button
@@ -767,20 +800,38 @@ export default function ProductosPage({
                         {soloStockBajo ? 'Todos' : 'Stock Bajo'}
                     </Button>
 
-                    <Separator orientation="vertical" className="h-6" />
+                    <Separator orientation="vertical" className="h-9" />
 
                     {/* Selector de almacén para exportación */}
-                    <select
-                        value={almacenExportId}
-                        onChange={(e) => setAlmacenExportId(Number(e.target.value))}
-                        className="border-input bg-background focus:border-primary focus:ring-primary rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
-                    >
-                        {almacenes.map((almacen) => (
-                            <option key={almacen.id} value={almacen.id} className="bg-background">
-                                {almacen.nombre_almacen}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="w-48">
+                        <Label htmlFor="almacen-exportar" className="text-muted-foreground mb-1.5 block text-xs">
+                            Exportar a
+                        </Label>
+                        <Combobox
+                            items={almacenes}
+                            itemToStringLabel={(a: (typeof almacenes)[number]) => a.nombre_almacen}
+                            itemToStringValue={(a: (typeof almacenes)[number]) => a.nombre_almacen}
+                            value={almacenes.find((a) => a.id === almacenExportId) ?? null}
+                            onValueChange={(a: (typeof almacenes)[number] | null) => a && setAlmacenExportId(a.id)}
+                        >
+                            <ComboboxInput
+                                id="almacen-exportar"
+                                className="w-full"
+                                placeholder="Buscar almacén..."
+                                onFocus={(e) => e.currentTarget.select()}
+                            />
+                            <ComboboxContent>
+                                <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                                <ComboboxList>
+                                    {(a: (typeof almacenes)[number]) => (
+                                        <ComboboxItem key={a.id} value={a}>
+                                            {a.nombre_almacen}
+                                        </ComboboxItem>
+                                    )}
+                                </ComboboxList>
+                            </ComboboxContent>
+                        </Combobox>
+                    </div>
 
                     {/* Botones de exportación/importación - Solo icono con Tooltip */}
                     <Tooltip>
@@ -871,14 +922,19 @@ export default function ProductosPage({
                                 <TableHead className="whitespace-nowrap">Código</TableHead>
                                 <TableHead className="whitespace-nowrap">Categoría</TableHead>
                                 {canViewSensitiveData && (
-                                    <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('precio_compra_producto')}>
-                                        Precio {sort.field === 'precio_compra_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                    <TableHead
+                                        className="cursor-pointer text-right whitespace-nowrap"
+                                        onClick={() => handleSort('precio_compra_producto')}
+                                    >
+                                        {almacenFiltradoNombre ? `Costo en ${almacenFiltradoNombre.substring(0, 14)}` : 'Costo (promedio)'}{' '}
+                                        {sort.field === 'precio_compra_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
                                     </TableHead>
                                 )}
-                                <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('cantidad_total')}>
-                                    Cant {sort.field === 'cantidad_total' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                <TableHead className="cursor-pointer text-right whitespace-nowrap" onClick={() => handleSort('cantidad_total')}>
+                                    {almacenFiltradoNombre ? `Cant. en ${almacenFiltradoNombre.substring(0, 14)}` : 'Cant (total)'}{' '}
+                                    {sort.field === 'cantidad_total' && (sort.direction === 'asc' ? '↑' : '↓')}
                                 </TableHead>
-                                {canViewSensitiveData && <TableHead className="whitespace-nowrap">Importe</TableHead>}
+                                {canViewSensitiveData && <TableHead className="text-right whitespace-nowrap">Importe</TableHead>}
                                 <TableHead className="whitespace-nowrap">Img</TableHead>
                                 <TableHead className="text-right whitespace-nowrap">Acciones</TableHead>
                             </TableRow>
@@ -891,7 +947,7 @@ export default function ProductosPage({
                                 return (
                                     <TableRow
                                         key={producto.id}
-                                        className={isStockBajo ? 'animate-pulse border-l-4 border-red-500 bg-red-100 dark:bg-red-950/50' : ''}
+                                        className={isStockBajo ? 'border-l-4 border-red-500 bg-red-100 dark:bg-red-950/50' : ''}
                                     >
                                         <TableCell className="max-w-[180px]">
                                             <Tooltip>
@@ -918,34 +974,42 @@ export default function ProductosPage({
                                             </Tooltip>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="secondary" className="h-5 px-1.5 py-0 text-[10px] font-normal">
-                                                {producto.marca_producto?.substring(0, 10) || 'Sin marca'}
+                                            <Badge
+                                                variant="outline"
+                                                className="h-5 border-slate-400/50 bg-slate-100 px-1.5 py-0 text-[10px] font-normal text-slate-700 dark:border-slate-500/40 dark:bg-slate-800/70 dark:text-slate-200"
+                                            >
+                                                {truncar(producto.marca_producto, 10, 'Sin marca')}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-xs">{producto.modelo_producto?.substring(0, 12) || 'N/A'}</TableCell>
-                                        <TableCell className="text-xs">{producto.capacidad_producto?.substring(0, 8) || '-'}</TableCell>
-                                        <TableCell className="text-xs">{producto.color_producto?.substring(0, 10) || '-'}</TableCell>
+                                        <TableCell className="text-xs">{truncar(producto.modelo_producto, 12, 'N/A')}</TableCell>
+                                        <TableCell className="text-xs">{truncar(producto.capacidad_producto, 8)}</TableCell>
+                                        <TableCell className="text-xs">{truncar(producto.color_producto, 10)}</TableCell>
                                         <TableCell>
-                                            <span className="font-mono text-[10px]">{producto.codigo_producto?.substring(0, 10)}</span>
+                                            <span className="font-mono text-[10px]">{truncar(producto.codigo_producto, 10, '')}</span>
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className="h-5 px-1.5 py-0 text-[10px]">
-                                                {producto.categoria?.substring(0, 12) || '-'}
+                                                {truncar(producto.categoria, 12)}
                                             </Badge>
                                         </TableCell>
                                         {canViewSensitiveData && (
-                                            <TableCell className="whitespace-nowrap">
-                                                <span className="text-xs">${producto.precio_compra_producto.toFixed(2)}</span>
+                                            <TableCell className="text-right whitespace-nowrap">
+                                                <span className="text-xs">
+                                                    ${producto.precio_compra_producto.toLocaleString('es-VE', {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2,
+                                                    })}
+                                                </span>
                                             </TableCell>
                                         )}
-                                        <TableCell>
+                                        <TableCell className="text-right">
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <div className="flex cursor-help items-center gap-1">
+                                                    <div className="flex cursor-help items-center justify-end gap-1">
                                                         <span className={`text-xs font-medium ${isStockBajo ? 'font-bold text-red-600' : ''}`}>
                                                             {producto.cantidad_total}
                                                         </span>
-                                                        {isStockBajo && <AlertTriangle size={12} className="animate-pulse text-red-600" />}
+                                                        {isStockBajo && <AlertTriangle size={12} className="text-red-600" />}
                                                     </div>
                                                 </TooltipTrigger>
                                                 {isStockBajo && (
@@ -956,9 +1020,12 @@ export default function ProductosPage({
                                             </Tooltip>
                                         </TableCell>
                                         {canViewSensitiveData && (
-                                            <TableCell className="whitespace-nowrap">
+                                            <TableCell className="text-right whitespace-nowrap">
                                                 <span className="text-xs">
-                                                    ${(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}
+                                                    ${(producto.precio_compra_producto * producto.cantidad_total).toLocaleString('es-VE', {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2,
+                                                    })}
                                                 </span>
                                             </TableCell>
                                         )}
@@ -1058,12 +1125,15 @@ export default function ProductosPage({
                                         </span>
                                     )}
                                 </TableCell>
-                                <TableCell className="bg-sidebar-accent text-center font-bold">
+                                <TableCell className="bg-sidebar-accent text-right font-bold">
                                     {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
                                 </TableCell>
                                 {canViewSensitiveData && (
                                     <TableCell className="bg-sidebar-accent text-right font-bold">
-                                        ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
+                                        $
+                                        {productosData
+                                            .reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0)
+                                            .toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </TableCell>
                                 )}
                                 <TableCell className="bg-sidebar-accent"></TableCell>
@@ -1326,4 +1396,11 @@ const renderPaginationLabel = (label: string) => {
     if (normalized.includes('pagination.previous') || normalized.includes('previous')) return '«';
     if (normalized.includes('pagination.next') || normalized.includes('next')) return '»';
     return label.replace('&laquo;', '«').replace('&raquo;', '»');
+};
+
+// Recorta un valor de celda con "…" solo cuando de verdad se cortó — a diferencia de un
+// substring() a secas, nunca hace parecer completo un valor que en realidad quedó truncado.
+const truncar = (valor: string | null | undefined, max: number, fallback = '-'): string => {
+    if (!valor) return fallback;
+    return valor.length > max ? valor.slice(0, max) + '…' : valor;
 };
