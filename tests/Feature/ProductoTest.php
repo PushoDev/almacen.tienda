@@ -4,6 +4,7 @@ use App\Models\Almacen;
 use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Producto;
+use App\Models\ProductoCodigo;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -494,4 +495,196 @@ test('un lote que no pertenece a este producto se rechaza con 404 al corregir su
     );
 
     $response->assertStatus(404);
+});
+
+test('index() sin filtro de almacén muestra el promedio ponderado real, no el costo estático de la ficha', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10, 'nombre_producto' => 'Producto Promedio']);
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacenA->id, ['cantidad' => 5]);
+    $producto->almacenes()->attach($almacenB->id, ['cantidad' => 3]);
+
+    // Un prorrateo (ej. movimiento #209) subió el costo real del lote en almacenA sin tocar
+    // precio_compra_producto — exactamente el caso real encontrado en producción.
+    LoteStock::create([
+        'codigo' => 'LOTE-IDX-A', 'producto_id' => $producto->id, 'almacen_id' => $almacenA->id,
+        'cantidad' => 5, 'precio_costo' => 20,
+    ]);
+    LoteStock::create([
+        'codigo' => 'LOTE-IDX-B', 'producto_id' => $producto->id, 'almacen_id' => $almacenB->id,
+        'cantidad' => 3, 'precio_costo' => 10,
+    ]);
+
+    $response = $this->get(route('productos.index', ['search' => 'Producto Promedio']));
+
+    // (5*20 + 3*10) / 8 = 16.25 — no el 10.00 estático de la ficha.
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data.0.precio_compra_producto', 16.25)
+        ->where('productos.data.0.cantidad_total', 8)
+    );
+});
+
+test('index() con filtro de almacén muestra el costo y la cantidad de ESE almacén, no el global', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10, 'nombre_producto' => 'Producto Filtrado']);
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacenA->id, ['cantidad' => 5]);
+    $producto->almacenes()->attach($almacenB->id, ['cantidad' => 3]);
+
+    LoteStock::create([
+        'codigo' => 'LOTE-FLT-A', 'producto_id' => $producto->id, 'almacen_id' => $almacenA->id,
+        'cantidad' => 5, 'precio_costo' => 20,
+    ]);
+    LoteStock::create([
+        'codigo' => 'LOTE-FLT-B', 'producto_id' => $producto->id, 'almacen_id' => $almacenB->id,
+        'cantidad' => 3, 'precio_costo' => 10,
+    ]);
+
+    $response = $this->get(route('productos.index', ['almacen_id' => $almacenA->id]));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data.0.precio_compra_producto', 20)
+        ->where('productos.data.0.cantidad_total', 5)
+    );
+});
+
+test('index() cae al costo estático de la ficha cuando el producto no tiene ningún lote', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['precio_compra_producto' => 12.5, 'nombre_producto' => 'Producto Sin Lotes']);
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 4]);
+
+    $response = $this->get(route('productos.index', ['search' => 'Producto Sin Lotes']));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data.0.precio_compra_producto', 12.5)
+        ->where('productos.data.0.cantidad_total', 4)
+    );
+});
+
+test('total_importe_global del listado usa el costo real por lote, no el costo estático de la ficha', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    // Reproduce el caso real: prorrateo sube el costo del lote sin tocar la ficha.
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    LoteStock::create([
+        'codigo' => 'LOTE-TOTAL-1', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 5, 'precio_costo' => 20,
+    ]);
+
+    // Catálogo viejo sin ningún lote — debe seguir cayendo al costo de la ficha.
+    $productoViejo = Producto::factory()->create(['precio_compra_producto' => 3]);
+    $almacenViejo = Almacen::factory()->create();
+    $productoViejo->almacenes()->attach($almacenViejo->id, ['cantidad' => 2]);
+
+    $response = $this->get(route('productos.index'));
+
+    // (5*20) del lote + (2*3) del fallback = 106, no (5*10 + 2*3) = 56 que daría el cálculo viejo.
+    $response->assertInertia(fn ($page) => $page->where('total_importe_global', 106));
+});
+
+test('index() ordena por cantidad sin tirar 500 (cantidad_total no es una columna real)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $chico = Producto::factory()->create(['nombre_producto' => 'Producto Chico']);
+    $grande = Producto::factory()->create(['nombre_producto' => 'Producto Grande']);
+    $almacen = Almacen::factory()->create();
+    $chico->almacenes()->attach($almacen->id, ['cantidad' => 2]);
+    $grande->almacenes()->attach($almacen->id, ['cantidad' => 20]);
+
+    $response = $this->get(route('productos.index', ['sort_field' => 'cantidad_total', 'sort_direction' => 'asc']));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data.0.id', $chico->id)
+        ->where('productos.data.1.id', $grande->id)
+    );
+});
+
+test('index() ordena por cantidad del almacén filtrado, no por el total global', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+
+    // "Chico en A" tiene MENOS en almacenA pero MÁS en total (contando almacenB).
+    $chicoEnA = Producto::factory()->create(['nombre_producto' => 'Chico En A']);
+    $chicoEnA->almacenes()->attach($almacenA->id, ['cantidad' => 2]);
+    $chicoEnA->almacenes()->attach($almacenB->id, ['cantidad' => 50]);
+
+    $grandeEnA = Producto::factory()->create(['nombre_producto' => 'Grande En A']);
+    $grandeEnA->almacenes()->attach($almacenA->id, ['cantidad' => 10]);
+
+    $response = $this->get(route('productos.index', [
+        'almacen_id' => $almacenA->id, 'sort_field' => 'cantidad_total', 'sort_direction' => 'asc',
+    ]));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data.0.id', $chicoEnA->id) // 2 en almacenA, aunque tiene 52 en total
+        ->where('productos.data.1.id', $grandeEnA->id)
+    );
+});
+
+test('index() ordena por costo real ponderado, no por el costo estático de la ficha', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    // Ficha dice 10 pero el lote real (post-prorrateo) cuesta 50 — debe ordenar por 50.
+    $caroEnLote = Producto::factory()->create(['nombre_producto' => 'Caro En Lote', 'precio_compra_producto' => 10]);
+    $almacen = Almacen::factory()->create();
+    $caroEnLote->almacenes()->attach($almacen->id, ['cantidad' => 3]);
+    LoteStock::create([
+        'codigo' => 'LOTE-SORT-1', 'producto_id' => $caroEnLote->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 3, 'precio_costo' => 50,
+    ]);
+
+    $baratoSinLote = Producto::factory()->create(['nombre_producto' => 'Barato Sin Lote', 'precio_compra_producto' => 20]);
+    $baratoSinLote->almacenes()->attach($almacen->id, ['cantidad' => 1]);
+
+    $response = $this->get(route('productos.index', ['sort_field' => 'precio_compra_producto', 'sort_direction' => 'asc']));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data.0.id', $baratoSinLote->id) // 20 (ficha, sin lote)
+        ->where('productos.data.1.id', $caroEnLote->id) // 50 (lote real, no los 10 de la ficha)
+    );
+});
+
+test('index() manda el código de barras real (producto_codigos), no el campo vacío de la ficha', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $producto = Producto::factory()->create(['codigo_producto' => null, 'nombre_producto' => 'Producto Con Codigo']);
+    ProductoCodigo::factory()->for($producto)->create(['codigo_barras' => '1111111111111']);
+    ProductoCodigo::factory()->for($producto)->default()->create(['codigo_barras' => '2222222222222']);
+
+    $response = $this->get(route('productos.index', ['search' => 'Producto Con Codigo']));
+
+    $response->assertInertia(fn ($page) => $page->where('productos.data.0.codigo_producto', '2222222222222'));
+});
+
+test('index() no revienta cuando un producto no tiene ningún código de barras', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    Producto::factory()->create(['codigo_producto' => null, 'nombre_producto' => 'Producto Sin Codigo']);
+
+    $response = $this->get(route('productos.index', ['search' => 'Producto Sin Codigo']));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page->where('productos.data.0.codigo_producto', null));
 });

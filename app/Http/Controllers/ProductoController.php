@@ -35,7 +35,7 @@ class ProductoController extends Controller
         // No ejecutar migraciones/seed automáticamente desde la petición.
 
         // Query base con relaciones
-        $query = Producto::with(['categoria', 'almacenes']);
+        $query = Producto::with(['categoria', 'almacenes', 'codigos']);
 
         // Búsqueda
         if ($request->has('search') && $request->search != '') {
@@ -54,10 +54,10 @@ class ProductoController extends Controller
         }
 
         // Filtro por almacén
-        if ($request->has('almacen_id') && $request->almacen_id != '') {
-            $almacenId = $request->almacen_id;
-            $query->whereHas('almacenes', function ($q) use ($almacenId) {
-                $q->where('almacen_id', $almacenId);
+        $almacenFiltroId = ($request->has('almacen_id') && $request->almacen_id != '') ? (int) $request->almacen_id : null;
+        if ($almacenFiltroId !== null) {
+            $query->whereHas('almacenes', function ($q) use ($almacenFiltroId) {
+                $q->where('almacen_id', $almacenFiltroId);
             });
         }
 
@@ -66,12 +66,34 @@ class ProductoController extends Controller
         $sortDirection = $request->get('sort_direction', 'asc');
 
         if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto', 'cantidad_total'])) {
-            // El ordenamiento por cantidad_total requiere una lógica especial si no es una columna directa
             if ($sortField === 'cantidad_total') {
-                // Asumiendo que `cantidad_total` es un accesor, necesitamos ordenar por la columna real o una subconsulta
-                // Por simplicidad aquí, si `cantidad_total` no es una columna real, este orden no funcionará como se espera sin SQL más complejo.
-                // Si es una columna en la tabla `productos`, está bien.
-                $query->orderBy('cantidad_total', $sortDirection);
+                // `cantidad_total` no es una columna real (accessor de Producto), así que
+                // ordenar por ella directo tira "Unknown column" — subquery sobre
+                // almacen_producto, coherente con lo que muestra la fila: suma de todos los
+                // almacenes sin filtro, o la cantidad de ESE almacén cuando hay uno filtrado.
+                $subCantidad = DB::table('almacen_producto')
+                    ->selectRaw($almacenFiltroId !== null ? 'cantidad' : 'COALESCE(SUM(cantidad), 0)')
+                    ->whereColumn('producto_id', 'productos.id');
+
+                if ($almacenFiltroId !== null) {
+                    $subCantidad->where('almacen_id', $almacenFiltroId);
+                }
+
+                $query->orderBy($subCantidad, $sortDirection);
+            } elseif ($sortField === 'precio_compra_producto') {
+                // Mismo criterio que costosPonderadosPorProducto(): promedio ponderado real de
+                // lotes_stock (del almacén filtrado, o de todos), cayendo al costo de la ficha
+                // cuando no hay ningún lote — para que el orden coincida con el número mostrado.
+                $subCosto = DB::table('lotes_stock')
+                    ->selectRaw('COALESCE(SUM(cantidad_disponible * precio_costo) / NULLIF(SUM(cantidad_disponible), 0), productos.precio_compra_producto)')
+                    ->whereColumn('producto_id', 'productos.id')
+                    ->where('cantidad_disponible', '>', 0);
+
+                if ($almacenFiltroId !== null) {
+                    $subCosto->where('almacen_id', $almacenFiltroId);
+                }
+
+                $query->orderBy($subCosto, $sortDirection);
             } else {
                 $query->orderBy($sortField, $sortDirection);
             }
@@ -91,8 +113,26 @@ class ProductoController extends Controller
         $perPage = $request->get('per_page', 15);
         $paginatedProducts = $query->paginate($perPage)->withQueryString();
 
+        // Costo real ponderado por producto (lotes_stock), en bulk para las filas de esta
+        // página — evita N+1 de llamar Producto::costoEnAlmacen() una vez por fila. Sin
+        // filtro de almacén, pondera sobre lotes de TODOS los almacenes del producto.
+        $productoIds = $paginatedProducts->getCollection()->pluck('id')->all();
+        $costosPonderados = $this->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
+
         // Transformar los datos para la vista después de paginar
-        $paginatedProducts->getCollection()->transform(function ($producto) {
+        $paginatedProducts->getCollection()->transform(function ($producto) use ($costosPonderados, $almacenFiltroId) {
+            // Costo: promedio ponderado real de lotes_stock (ver costosPonderadosPorProducto()
+            // abajo); cae al costo estático de la ficha si el producto no tiene ningún lote
+            // (catálogo viejo, mismo fallback que Producto::costoEnAlmacen()).
+            $costo = $costosPonderados[$producto->id] ?? (float) $producto->precio_compra_producto;
+
+            // Cantidad: total en todos los almacenes sin filtro; con un almacén filtrado, la
+            // cantidad real ahí (el pivote ya está cargado en memoria por el eager load de
+            // 'almacenes' de arriba, sin query extra).
+            $cantidad = $almacenFiltroId !== null
+                ? (int) ($producto->almacenes->firstWhere('id', $almacenFiltroId)?->pivot->cantidad ?? 0)
+                : $producto->cantidad_total;
+
             return [
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
@@ -100,11 +140,14 @@ class ProductoController extends Controller
                 'modelo_producto' => $producto->modelo_producto,
                 'capacidad_producto' => $producto->capacidad_producto,
                 'color_producto' => $producto->color_producto,
-                'codigo_producto' => $producto->codigo_producto,
+                // `productos.codigo_producto` está vacío en todo el catálogo real — el código
+                // de barras real vive en `producto_codigos` (relación `codigos`, eager-loaded
+                // arriba). Se manda el marcado `es_default` (o el primero si ninguno lo está).
+                'codigo_producto' => $producto->codigos->sortByDesc('es_default')->first()?->codigo_barras,
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'categoria_id' => $producto->categoria_id,
-                'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_total' => $producto->cantidad_total,
+                'precio_compra_producto' => $costo,
+                'cantidad_total' => $cantidad,
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'stock_bajo' => $producto->stock_bajo,
@@ -116,10 +159,9 @@ class ProductoController extends Controller
         $canViewStockStats = in_array($user->role, ['admin', 'moderador']);
         $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
 
-        // Valor total del inventario global (todos los productos, sin filtros)
-        $totalImporteGlobal = DB::table('almacen_producto')
-            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
+        // Valor total del inventario global (todos los productos, sin filtros) — costo real
+        // por lote, no el costo estático de la ficha (ver valorRealInventarioTotal()).
+        $totalImporteGlobal = $this->valorRealInventarioTotal();
 
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
@@ -131,6 +173,69 @@ class ProductoController extends Controller
             'canViewSensitiveData' => $canViewSensitiveData,
             'total_importe_global' => (float) $totalImporteGlobal,
         ]);
+    }
+
+    /**
+     * Costo real ponderado por producto (`lotes_stock`, `cantidad_disponible > 0`), calculado
+     * en bulk para un lote de IDs — evita llamar Producto::costoEnAlmacen() por fila (N+1) en
+     * el listado. Sin `$almacenId`, pondera sobre lotes de todos los almacenes del producto
+     * (mismo criterio que Producto::costoEnAlmacen(), pero sin restringir por almacén).
+     *
+     * @param  array<int>  $productoIds
+     * @return array<int, float> producto_id => costo ponderado. Un producto ausente del
+     *                           resultado no tiene ningún lote — el caller debe caer al
+     *                           costo estático de la ficha (precio_compra_producto).
+     */
+    private function costosPonderadosPorProducto(array $productoIds, ?int $almacenId): array
+    {
+        if (empty($productoIds)) {
+            return [];
+        }
+
+        $query = LoteStock::whereIn('producto_id', $productoIds)
+            ->where('cantidad_disponible', '>', 0);
+
+        if ($almacenId !== null) {
+            $query->where('almacen_id', $almacenId);
+        }
+
+        return $query
+            ->selectRaw('producto_id, SUM(cantidad_disponible * precio_costo) as costo_total, SUM(cantidad_disponible) as cantidad_total')
+            ->groupBy('producto_id')
+            ->get()
+            ->mapWithKeys(fn ($fila) => [$fila->producto_id => round($fila->costo_total / $fila->cantidad_total, 2)])
+            ->all();
+    }
+
+    /**
+     * Valor real del inventario completo (todos los productos, todos los almacenes, sin
+     * filtros) — suma el costo real por lote (`lotes_stock`), no el costo estático de la
+     * ficha (`precio_compra_producto`), que puede quedar desactualizado cuando un prorrateo
+     * de Distribución de Costos sube el costo de un lote sin tocar la ficha global (caso real:
+     * movimiento #209, ver docs/arreglos-pendientes/resumen-cambios-2026-09-20.md).
+     *
+     * Combinaciones producto+almacén sin ningún lote (catálogo viejo sin backfill, o borde no
+     * cubierto) caen al costo de la ficha para esa cantidad — mismo fallback que
+     * Producto::costoEnAlmacen(), aplicado aquí a nivel de suma total.
+     */
+    private function valorRealInventarioTotal(): float
+    {
+        $conLotes = DB::table('lotes_stock')
+            ->where('cantidad_disponible', '>', 0)
+            ->sum(DB::raw('cantidad_disponible * precio_costo'));
+
+        $sinLotes = DB::table('almacen_producto')
+            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('lotes_stock')
+                    ->whereColumn('lotes_stock.producto_id', 'almacen_producto.producto_id')
+                    ->whereColumn('lotes_stock.almacen_id', 'almacen_producto.almacen_id')
+                    ->where('lotes_stock.cantidad_disponible', '>', 0);
+            })
+            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
+
+        return (float) $conLotes + (float) $sinLotes;
     }
 
     /**
