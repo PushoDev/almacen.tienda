@@ -63,6 +63,7 @@ Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cad
 - **Controller:** `ReporteController::valorInventario()` — línea 583
 - **Frontend:** `resources/js/pages/Reportes/Report/ValorInventario.tsx`
 - **Hallazgos:** ⚠️ expone `precio_compra_producto` (costo) a **cualquier rol autenticado**, sin chequeo — inconsistente con `historialCostoPrecio()` (línea 640), que sí protege el mismo tipo de dato con `abort(403)` para no-admin/moderador.
+- **Actualización 2026-09-22:** el hallazgo de acceso ya no aplica — la ruta está dentro del grupo `middleware('admin')` (admin+moderador) desde 2026-08-06. El dato ya usa el costo real por lote vía `ValorInventarioService` (una fila por producto+almacén, columna "Almacén" nueva, total igual a Productos/Dashboard). **Siguiente reporte a trabajar (pedido del cliente, Media prioridad)** — pendientes de UI/UX listados en `ESTADO_DESARROLLO.md` (formato de moneda, 1,610 filas sin paginación/filtros, sin subtotales por almacén, sin exportar, patrón visual viejo).
 
 ---
 

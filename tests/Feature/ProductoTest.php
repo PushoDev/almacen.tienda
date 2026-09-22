@@ -594,6 +594,48 @@ test('total_importe_global del listado usa el costo real por lote, no el costo e
     $response->assertInertia(fn ($page) => $page->where('total_importe_global', 106));
 });
 
+test('el widget de stock bajo del listado cuenta todo el catálogo con costo real, no solo la página visible', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->create();
+    $conProrrateo = Producto::factory()->create(['nombre_producto' => 'AAA Stock Bajo', 'precio_compra_producto' => 10]);
+    $conProrrateo->almacenes()->attach($almacen->id, ['cantidad' => 2]);
+    LoteStock::create([
+        'codigo' => 'LOTE-BAJO-1', 'producto_id' => $conProrrateo->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 2, 'precio_costo' => 20,
+    ]);
+    $enOtraPagina = Producto::factory()->create(['nombre_producto' => 'ZZZ Stock Bajo', 'precio_compra_producto' => 7]);
+    $enOtraPagina->almacenes()->attach($almacen->id, ['cantidad' => 1]);
+    $conStock = Producto::factory()->create(['nombre_producto' => 'MMM Con Stock', 'precio_compra_producto' => 1]);
+    $conStock->almacenes()->attach($almacen->id, ['cantidad' => 50]);
+
+    $response = $this->get(route('productos.index', ['per_page' => 1]));
+
+    // 2*20 (lote) + 1*7 (fallback a la ficha) = 47, aunque la página solo muestra 1 producto.
+    $response->assertInertia(fn ($page) => $page
+        ->where('resumen_stock_bajo.cantidad', 2)
+        ->where('resumen_stock_bajo.valor', 47)
+    );
+});
+
+test('un vendedor ve el conteo de stock bajo del listado pero no su valor', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 2]);
+
+    $response = $this->get(route('productos.index'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('resumen_stock_bajo.cantidad', 1)
+        ->where('resumen_stock_bajo.valor', null)
+    );
+});
+
 test('index() ordena por cantidad sin tirar 500 (cantidad_total no es una columna real)', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

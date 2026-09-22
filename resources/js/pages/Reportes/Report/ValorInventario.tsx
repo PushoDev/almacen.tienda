@@ -19,7 +19,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 interface InventarioItem {
+    producto_id: number;
     nombre_producto: string;
+    almacen_id: number;
+    nombre_almacen: string;
     cantidad: number;
     costo_unitario: number;
     valor_total_costo: number;
@@ -39,7 +42,7 @@ export default function ValorInventarioPage({ inventario, valorTotal }: ValorInv
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Reporte de Valorización de Inventario"
-                        description="Valor total del inventario actual basado en el costo de compra."
+                        description="Valor total del inventario actual basado en el costo real de cada lote (incluye prorrateos)."
                     />
                     <Archive
                         size={70}
@@ -61,6 +64,7 @@ export default function ValorInventarioPage({ inventario, valorTotal }: ValorInv
                                     <thead>
                                         <tr>
                                             <th className="px-4 py-2 text-left text-sm font-semibold">Producto</th>
+                                            <th className="px-4 py-2 text-left text-sm font-semibold">Almacén</th>
                                             <th className="px-4 py-2 text-left text-sm font-semibold">Cantidad en Stock</th>
                                             <th className="px-4 py-2 text-left text-sm font-semibold">Costo Unitario</th>
                                             <th className="px-4 py-2 text-left text-sm font-semibold">Valor Total</th>
@@ -69,14 +73,15 @@ export default function ValorInventarioPage({ inventario, valorTotal }: ValorInv
                                     <tbody className="divide-y divide-gray-700">
                                         {inventario.length === 0 ? (
                                             <tr>
-                                                <td colSpan={4} className="py-4 text-center text-gray-500">
+                                                <td colSpan={5} className="py-4 text-center text-gray-500">
                                                     No hay productos en el inventario.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            inventario.map((item, index) => (
-                                                <tr key={index}>
+                                            inventario.map((item) => (
+                                                <tr key={`${item.producto_id}-${item.almacen_id}`}>
                                                     <td className="px-4 py-2 text-sm">{item.nombre_producto}</td>
+                                                    <td className="px-4 py-2 text-sm">{item.nombre_almacen}</td>
                                                     <td className="px-4 py-2 text-sm">{item.cantidad}</td>
                                                     <td className="px-4 py-2 text-sm">${parseFloat(item.costo_unitario.toString()).toFixed(2)}</td>
                                                     <td className="px-4 py-2 text-sm">${parseFloat(item.valor_total_costo.toString()).toFixed(2)}</td>
@@ -86,7 +91,9 @@ export default function ValorInventarioPage({ inventario, valorTotal }: ValorInv
                                     </tbody>
                                     <tfoot>
                                         <tr className="font-bold">
-                                            <td colSpan={3} className="px-4 py-2 text-right text-lg">Valor Total del Inventario:</td>
+                                            <td colSpan={4} className="px-4 py-2 text-right text-lg">
+                                                Valor Total del Inventario:
+                                            </td>
                                             <td className="px-4 py-2 text-lg">${valorTotal.toFixed(2)}</td>
                                         </tr>
                                     </tfoot>

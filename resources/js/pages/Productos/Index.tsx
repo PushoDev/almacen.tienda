@@ -302,6 +302,7 @@ interface ProductosPageProps {
     canViewStockStats?: boolean;
     canViewSensitiveData?: boolean;
     total_importe_global?: number;
+    resumen_stock_bajo?: { cantidad: number; valor: number | null };
 }
 
 const defaultPaginator = {
@@ -321,6 +322,7 @@ export default function ProductosPage({
     canViewStockStats = false,
     canViewSensitiveData = false,
     total_importe_global = 0,
+    resumen_stock_bajo,
 }: ProductosPageProps) {
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
@@ -346,9 +348,9 @@ export default function ProductosPage({
 
     // Calcular estadísticas
     const productosData = productos.data || [];
-    const productosConStockBajo = productosData.filter((p) => p.stock_bajo);
-    const valorTotalInventario = productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
-    const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
+    // Widgets de stock bajo: calculados en el backend sobre todo el catálogo (no solo esta página)
+    const cantidadStockBajo = resumen_stock_bajo?.cantidad ?? 0;
+    const valorStockBajo = resumen_stock_bajo?.valor ?? 0;
 
     // Verificar si hay filtros activos
     const hayFiltrosActivos = searchTerm || selectedCategoria || selectedAlmacen || soloStockBajo;
@@ -702,7 +704,7 @@ export default function ProductosPage({
                                 <p className="text-muted-foreground text-sm font-medium">Stock Bajo</p>
                                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                             </div>
-                            <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{productosConStockBajo.length}</p>
+                            <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{cantidadStockBajo}</p>
                         </div>
 
                         {/* Widget: Valor Stock Bajo (Condicional) */}

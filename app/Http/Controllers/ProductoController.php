@@ -12,6 +12,7 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
+use App\Services\ValorInventarioService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 // NOTE: Removed automatic migration/seed calls for safety in production
@@ -28,7 +29,7 @@ class ProductoController extends Controller
     /**
      * Listado de productos con paginación y búsqueda
      */
-    public function index(Request $request)
+    public function index(Request $request, ValorInventarioService $valorInventario)
     {
         $user = Auth::user();
 
@@ -81,7 +82,7 @@ class ProductoController extends Controller
 
                 $query->orderBy($subCantidad, $sortDirection);
             } elseif ($sortField === 'precio_compra_producto') {
-                // Mismo criterio que costosPonderadosPorProducto(): promedio ponderado real de
+                // Mismo criterio que ValorInventarioService::costosPonderadosPorProducto(): promedio ponderado real de
                 // lotes_stock (del almacén filtrado, o de todos), cayendo al costo de la ficha
                 // cuando no hay ningún lote — para que el orden coincida con el número mostrado.
                 $subCosto = DB::table('lotes_stock')
@@ -117,11 +118,11 @@ class ProductoController extends Controller
         // página — evita N+1 de llamar Producto::costoEnAlmacen() una vez por fila. Sin
         // filtro de almacén, pondera sobre lotes de TODOS los almacenes del producto.
         $productoIds = $paginatedProducts->getCollection()->pluck('id')->all();
-        $costosPonderados = $this->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
+        $costosPonderados = $valorInventario->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
 
         // Transformar los datos para la vista después de paginar
         $paginatedProducts->getCollection()->transform(function ($producto) use ($costosPonderados, $almacenFiltroId) {
-            // Costo: promedio ponderado real de lotes_stock (ver costosPonderadosPorProducto()
+            // Costo: promedio ponderado real de lotes_stock (ver ValorInventarioService::costosPonderadosPorProducto()
             // abajo); cae al costo estático de la ficha si el producto no tiene ningún lote
             // (catálogo viejo, mismo fallback que Producto::costoEnAlmacen()).
             $costo = $costosPonderados[$producto->id] ?? (float) $producto->precio_compra_producto;
@@ -160,8 +161,17 @@ class ProductoController extends Controller
         $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
 
         // Valor total del inventario global (todos los productos, sin filtros) — costo real
-        // por lote, no el costo estático de la ficha (ver valorRealInventarioTotal()).
-        $totalImporteGlobal = $this->valorRealInventarioTotal();
+        // por lote, no el costo estático de la ficha (ver ValorInventarioService::valorTotal()).
+        $totalImporteGlobal = $valorInventario->valorTotal();
+
+        // Widget "Stock Bajo" / "Valor Stock Bajo" — sobre todo el catálogo, no solo las filas de
+        // la página visible. Mismo umbral e inclusión de productos sin stock que el filtro
+        // "stock bajo" de esta misma pantalla (Producto::getStockBajoAttribute()). El conteo lo ve
+        // cualquier rol (como antes); el valor, solo quien ve datos de costo.
+        $resumenStockBajo = $valorInventario->resumenStockBajo(5, incluirSinStock: true);
+        if (! $canViewStockStats) {
+            $resumenStockBajo['valor'] = null;
+        }
 
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
@@ -172,70 +182,8 @@ class ProductoController extends Controller
             'canViewStockStats' => $canViewStockStats,
             'canViewSensitiveData' => $canViewSensitiveData,
             'total_importe_global' => (float) $totalImporteGlobal,
+            'resumen_stock_bajo' => $resumenStockBajo,
         ]);
-    }
-
-    /**
-     * Costo real ponderado por producto (`lotes_stock`, `cantidad_disponible > 0`), calculado
-     * en bulk para un lote de IDs — evita llamar Producto::costoEnAlmacen() por fila (N+1) en
-     * el listado. Sin `$almacenId`, pondera sobre lotes de todos los almacenes del producto
-     * (mismo criterio que Producto::costoEnAlmacen(), pero sin restringir por almacén).
-     *
-     * @param  array<int>  $productoIds
-     * @return array<int, float> producto_id => costo ponderado. Un producto ausente del
-     *                           resultado no tiene ningún lote — el caller debe caer al
-     *                           costo estático de la ficha (precio_compra_producto).
-     */
-    private function costosPonderadosPorProducto(array $productoIds, ?int $almacenId): array
-    {
-        if (empty($productoIds)) {
-            return [];
-        }
-
-        $query = LoteStock::whereIn('producto_id', $productoIds)
-            ->where('cantidad_disponible', '>', 0);
-
-        if ($almacenId !== null) {
-            $query->where('almacen_id', $almacenId);
-        }
-
-        return $query
-            ->selectRaw('producto_id, SUM(cantidad_disponible * precio_costo) as costo_total, SUM(cantidad_disponible) as cantidad_total')
-            ->groupBy('producto_id')
-            ->get()
-            ->mapWithKeys(fn ($fila) => [$fila->producto_id => round($fila->costo_total / $fila->cantidad_total, 2)])
-            ->all();
-    }
-
-    /**
-     * Valor real del inventario completo (todos los productos, todos los almacenes, sin
-     * filtros) — suma el costo real por lote (`lotes_stock`), no el costo estático de la
-     * ficha (`precio_compra_producto`), que puede quedar desactualizado cuando un prorrateo
-     * de Distribución de Costos sube el costo de un lote sin tocar la ficha global (caso real:
-     * movimiento #209, ver docs/arreglos-pendientes/resumen-cambios-2026-09-20.md).
-     *
-     * Combinaciones producto+almacén sin ningún lote (catálogo viejo sin backfill, o borde no
-     * cubierto) caen al costo de la ficha para esa cantidad — mismo fallback que
-     * Producto::costoEnAlmacen(), aplicado aquí a nivel de suma total.
-     */
-    private function valorRealInventarioTotal(): float
-    {
-        $conLotes = DB::table('lotes_stock')
-            ->where('cantidad_disponible', '>', 0)
-            ->sum(DB::raw('cantidad_disponible * precio_costo'));
-
-        $sinLotes = DB::table('almacen_producto')
-            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('lotes_stock')
-                    ->whereColumn('lotes_stock.producto_id', 'almacen_producto.producto_id')
-                    ->whereColumn('lotes_stock.almacen_id', 'almacen_producto.almacen_id')
-                    ->where('lotes_stock.cantidad_disponible', '>', 0);
-            })
-            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
-
-        return (float) $conLotes + (float) $sinLotes;
     }
 
     /**
