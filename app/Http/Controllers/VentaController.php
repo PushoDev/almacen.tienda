@@ -2126,7 +2126,9 @@ class VentaController extends Controller
                 // fallback) no tienen nada que revertir acá.
                 foreach ($detalle->loteConsumos as $consumo) {
                     if ($consumo->lote_stock_id) {
-                        LoteStock::where('id', $consumo->lote_stock_id)->increment('cantidad_disponible', $consumo->cantidad);
+                        // Si ese lote se fusionó después de la venta, las unidades vuelven al
+                        // lote resultante (loteVigente), no al lote fusionado que quedó en 0.
+                        LoteStock::find($consumo->lote_stock_id)?->loteVigente()->increment('cantidad_disponible', $consumo->cantidad);
                     }
                 }
 

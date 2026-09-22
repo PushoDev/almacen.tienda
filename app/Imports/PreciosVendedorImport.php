@@ -86,6 +86,9 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
                     $precioCambio = $precioAnterior === null || round((float) $precioAnterior, 2) !== $precioVenta;
 
                     if ($precioCambio) {
+                        // Precio puesto a mano para esta ficha: se separa del precio del grupo de fichas hermanas.
+                        $updateData['precio_de_grupo'] = false;
+
                         PrecioHistorial::create([
                             'producto_id' => $productoId,
                             'user_id' => $this->userId,

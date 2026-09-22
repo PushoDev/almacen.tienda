@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Almacen;
+use App\Models\LoteStock;
 use App\Models\PrecioHistorial;
 use App\Models\Producto;
 use App\Models\User;
@@ -205,4 +206,206 @@ test('el update masivo exige contraseña', function () {
 
     $response->assertStatus(422);
     $this->assertDatabaseMissing('producto_vendedors', ['producto_id' => $producto->id]);
+});
+
+// ─── Precio del grupo: mismo producto repetido como 2+ fichas en un almacén ────
+
+/**
+ * Crea una ficha hermana (mismo nombre/marca/modelo/capacidad/color) con stock y lote a
+ * `$costo` en el almacén, y opcionalmente su propio precio de venta.
+ */
+function fichaHermanaEnAlmacen(Almacen $almacen, int $stock, float $costo, ?float $precio = null, bool $precioDeGrupo = false): Producto
+{
+    $ficha = Producto::factory()->create([
+        'nombre_producto' => 'ESTACION DELTA 3',
+        'marca_producto' => 'ECOFLOW',
+        'modelo_producto' => 'DELTA 3',
+        'capacidad_producto' => '1800 W',
+        'color_producto' => null,
+        'precio_compra_producto' => $costo,
+    ]);
+    $ficha->almacenes()->attach($almacen->id, ['cantidad' => $stock]);
+    LoteStock::create([
+        'codigo' => 'LOTE-GRUPO-'.$ficha->id, 'producto_id' => $ficha->id, 'almacen_id' => $almacen->id,
+        'cantidad' => $stock, 'precio_costo' => $costo,
+    ]);
+
+    if ($precio !== null) {
+        DB::table('producto_vendedors')->insert([
+            'producto_id' => $ficha->id, 'almacen_id' => $almacen->id,
+            'precio_venta' => $precio, 'comision' => 20, 'precio_de_grupo' => $precioDeGrupo,
+        ]);
+    }
+
+    return $ficha;
+}
+
+test('el precio del grupo se aplica a la ficha hermana sin precio y respeta la que tiene precio propio', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $conPrecioPropio = fichaHermanaEnAlmacen($almacen, 2, 489.84, 660);
+    $sinPrecio = fichaHermanaEnAlmacen($almacen, 75, 490.06);
+
+    $response = $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $sinPrecio->id,
+        'almacen_id' => $almacen->id,
+        'precio_venta' => 650,
+        'comision' => 15,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('fichas.0.aplicado', false)
+        ->assertJsonPath('fichas.1.aplicado', true)
+        ->assertJsonPath('fichas.1.margen_unitario', 144.94);
+    $this->assertDatabaseHas('producto_vendedors', ['producto_id' => $conPrecioPropio->id, 'precio_venta' => 660, 'precio_de_grupo' => false]);
+    $this->assertDatabaseHas('producto_vendedors', ['producto_id' => $sinPrecio->id, 'precio_venta' => 650, 'comision' => 15, 'precio_de_grupo' => true]);
+    $this->assertDatabaseHas('precio_historials', ['producto_id' => $sinPrecio->id, 'precio_anterior' => null, 'precio_nuevo' => 650, 'accion' => 'Precio de grupo - Almacén ID '.$almacen->id]);
+});
+
+test('cambiar el precio del grupo actualiza las fichas que lo siguen', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $a = fichaHermanaEnAlmacen($almacen, 4, 572.55, 750, precioDeGrupo: true);
+    $b = fichaHermanaEnAlmacen($almacen, 2, 602.14, 750, precioDeGrupo: true);
+
+    $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $a->id, 'almacen_id' => $almacen->id, 'precio_venta' => 780,
+    ])->assertOk();
+
+    expect(DB::table('producto_vendedors')->whereIn('producto_id', [$a->id, $b->id])->pluck('precio_venta')->map(fn ($p) => (float) $p)->all())
+        ->toBe([780.0, 780.0]);
+});
+
+test('editar a mano el precio de una ficha la separa del grupo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $separada = fichaHermanaEnAlmacen($almacen, 4, 572.55, 750, precioDeGrupo: true);
+    $enGrupo = fichaHermanaEnAlmacen($almacen, 2, 602.14, 750, precioDeGrupo: true);
+
+    $this->putJson(route('disponibles.update', $separada->id), ['precio_venta' => 740, 'almacen_id' => $almacen->id])->assertOk();
+    $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $enGrupo->id, 'almacen_id' => $almacen->id, 'precio_venta' => 800,
+    ])->assertOk();
+
+    $this->assertDatabaseHas('producto_vendedors', ['producto_id' => $separada->id, 'precio_venta' => 740, 'precio_de_grupo' => false]);
+    $this->assertDatabaseHas('producto_vendedors', ['producto_id' => $enGrupo->id, 'precio_venta' => 800, 'precio_de_grupo' => true]);
+});
+
+test('el precio del grupo pisa los precios propios solo si se pide explícitamente', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $a = fichaHermanaEnAlmacen($almacen, 257, 30.09, 49);
+    $b = fichaHermanaEnAlmacen($almacen, 23, 37.34, 52);
+
+    $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $a->id, 'almacen_id' => $almacen->id, 'precio_venta' => 50, 'incluir_con_precio_propio' => true,
+    ])->assertOk();
+
+    $this->assertDatabaseHas('producto_vendedors', ['producto_id' => $a->id, 'precio_venta' => 50, 'precio_de_grupo' => true]);
+    $this->assertDatabaseHas('producto_vendedors', ['producto_id' => $b->id, 'precio_venta' => 50, 'precio_de_grupo' => true]);
+});
+
+test('el precio del grupo avisa cuando queda por debajo del costo real de una ficha', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $barata = fichaHermanaEnAlmacen($almacen, 4, 572.55);
+    fichaHermanaEnAlmacen($almacen, 2, 602.14);
+
+    $response = $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $barata->id, 'almacen_id' => $almacen->id, 'precio_venta' => 590,
+    ]);
+
+    $response->assertOk()
+        ->assertJsonPath('fichas.0.bajo_costo', false)
+        ->assertJsonPath('fichas.1.bajo_costo', true);
+});
+
+test('el precio del grupo exige que haya fichas hermanas con stock en el almacén', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $unica = fichaHermanaEnAlmacen($almacen, 4, 572.55);
+
+    $response = $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $unica->id, 'almacen_id' => $almacen->id, 'precio_venta' => 700,
+    ]);
+
+    $response->assertUnprocessable();
+    $this->assertDatabaseMissing('producto_vendedors', ['producto_id' => $unica->id]);
+});
+
+test('un vendedor no puede poner el precio del grupo en un almacén que no tiene asignado', function () {
+    $this->actingAs(User::factory()->vendedor()->create());
+    $almacen = Almacen::factory()->create();
+    $a = fichaHermanaEnAlmacen($almacen, 4, 572.55);
+    fichaHermanaEnAlmacen($almacen, 2, 602.14);
+
+    $response = $this->putJson(route('disponibles.precio-grupo'), [
+        'producto_id' => $a->id, 'almacen_id' => $almacen->id, 'precio_venta' => 700,
+    ]);
+
+    $response->assertForbidden();
+    $this->assertDatabaseCount('producto_vendedors', 0);
+});
+
+test('el listado de disponibles marca las fichas hermanas del almacén con la misma clave de grupo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $a = fichaHermanaEnAlmacen($almacen, 4, 572.55, 750, precioDeGrupo: true);
+    $b = fichaHermanaEnAlmacen($almacen, 2, 602.14);
+    $sola = Producto::factory()->create(['nombre_producto' => 'OTRO PRODUCTO']);
+    $sola->almacenes()->attach($almacen->id, ['cantidad' => 3]);
+
+    $response = $this->get(route('disponibles.index'));
+
+    $response->assertInertia(fn ($page) => $page->where('almacenes.0.productos', function ($productos) use ($a, $b, $sola) {
+        $porId = collect($productos)->keyBy('id');
+
+        return $porId[$a->id]['grupo_clave'] !== null
+            && $porId[$a->id]['grupo_clave'] === $porId[$b->id]['grupo_clave']
+            && $porId[$sola->id]['grupo_clave'] === null
+            && $porId[$a->id]['precio_de_grupo'] === true
+            && $porId[$b->id]['costo_real'] === 602.14;
+    }));
+});
+
+// ─── Desglose por lote: solo productos con 2+ costos distintos en el almacén ────
+
+test('el listado de disponibles trae los lotes solo cuando el producto tiene costos distintos en el almacén', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $variosCostos = Producto::factory()->create(['nombre_producto' => 'OLLA ARROCERA']);
+    $variosCostos->almacenes()->attach($almacen->id, ['cantidad' => 78]);
+    $loteViejo = LoteStock::create(['codigo' => 'AJUSTE-LEGADO-1', 'producto_id' => $variosCostos->id, 'almacen_id' => $almacen->id, 'cantidad' => 28, 'precio_costo' => 21.38]);
+    $loteNuevo = LoteStock::create(['codigo' => 'LOTE-MOV-209-1', 'producto_id' => $variosCostos->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 21.85, 'precio_venta' => 36]);
+    $unCosto = Producto::factory()->create(['nombre_producto' => 'MICROONDAS']);
+    $unCosto->almacenes()->attach($almacen->id, ['cantidad' => 4]);
+    LoteStock::create(['codigo' => 'LOTE-A', 'producto_id' => $unCosto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
+    LoteStock::create(['codigo' => 'LOTE-B', 'producto_id' => $unCosto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
+
+    $response = $this->get(route('disponibles.index'));
+
+    $response->assertInertia(fn ($page) => $page->where('almacenes.0.productos', function ($productos) use ($variosCostos, $unCosto, $loteViejo, $loteNuevo) {
+        $porId = collect($productos)->keyBy('id');
+
+        return $porId[$unCosto->id]['lotes'] === null
+            // == (no ===): al pasar por JSON, 36.0 llega como 36.
+            && $porId[$variosCostos->id]['lotes'] == [
+                ['id' => $loteViejo->id, 'codigo' => 'AJUSTE-LEGADO-1', 'cantidad' => 28, 'costo' => 21.38, 'precio_venta' => null, 'prorrateo_pendiente' => false],
+                ['id' => $loteNuevo->id, 'codigo' => 'LOTE-MOV-209-1', 'cantidad' => 50, 'costo' => 21.85, 'precio_venta' => 36.0, 'prorrateo_pendiente' => false],
+            ];
+    }));
+});
+
+test('el precio propio de un lote se puede poner y quitar por JSON desde disponibles', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create();
+    $lote = LoteStock::create(['codigo' => 'LOTE-JSON', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 21.85]);
+
+    $poner = $this->putJson(route('productos.lotes.precio-venta', [$producto, $lote]), ['precio_venta' => 36.5]);
+    $quitar = $this->putJson(route('productos.lotes.precio-venta', [$producto, $lote]), ['precio_venta' => null]);
+
+    $poner->assertOk()->assertJson(['success' => true, 'precio_venta' => 36.5]);
+    $quitar->assertOk()->assertJson(['success' => true, 'precio_venta' => null]);
+    expect($lote->fresh()->precio_venta)->toBeNull();
 });
