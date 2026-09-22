@@ -13,6 +13,8 @@ use InvalidArgumentException;
 
 class DashboardStatsService
 {
+    public function __construct(private ValorInventarioService $valorInventario) {}
+
     private const STOCK_BAJO_THRESHOLD = 5;
 
     /**
@@ -526,14 +528,13 @@ class DashboardStatsService
         return (float) (DB::table('productos')->sum('cantidad_producto') ?? 0);
     }
 
+    /**
+     * Valor de costo del inventario — costo real por lote (ver ValorInventarioService), no el
+     * costo estático de la ficha, que no refleja los prorrateos de Distribución de Costos.
+     */
     private function calculateInversionTotal(): float
     {
-        return (float) (
-            DB::table('almacen_producto')
-                ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
-                ->selectRaw('SUM(productos.precio_compra_producto * almacen_producto.cantidad) as total_inversion')
-                ->value('total_inversion') ?? 0
-        );
+        return $this->valorInventario->valorTotal();
     }
 
     private function getBalancesPorMoneda(): array
@@ -925,14 +926,13 @@ class DashboardStatsService
 
         $totalUnidades = (int) DB::table('almacen_producto')->sum('cantidad');
 
-        $totalImporteGlobal = (float) DB::table('almacen_producto')
-            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
+        // Costo real por lote, no el costo estático de la ficha (ver ValorInventarioService).
+        $totalImporteGlobal = $this->valorInventario->valorTotal();
 
         $productosConStock = DB::table('almacen_producto')
             ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->select('productos.id', 'productos.precio_compra_producto', DB::raw('SUM(almacen_producto.cantidad) as cantidad_total'))
-            ->groupBy('productos.id', 'productos.precio_compra_producto')
+            ->select('productos.id', DB::raw('SUM(almacen_producto.cantidad) as cantidad_total'))
+            ->groupBy('productos.id')
             ->get();
 
         $sinStock = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total === 0);
@@ -949,7 +949,7 @@ class DashboardStatsService
         $unidadesConStock = (int) $conStock->sum('cantidad_total');
         $unidadesStockBajo = (int) $stockBajo->sum('cantidad_total');
 
-        $valorStockBajo = $stockBajo->sum(fn ($p) => (float) $p->precio_compra_producto * (int) $p->cantidad_total);
+        $valorStockBajo = $this->valorInventario->valorDeProductos($stockBajo->pluck('id')->all());
 
         return [
             'total_productos' => $totalProductos,

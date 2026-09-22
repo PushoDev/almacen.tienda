@@ -7,6 +7,7 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\Venta;
 use App\Services\CatalogoTarjetasService;
 use App\Services\DashboardStatsService;
+use App\Services\ValorInventarioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -589,33 +590,16 @@ class ReporteController extends Controller
     }
 
     /**
-     * Reporte del valor total del inventario.
+     * Reporte del valor total del inventario — una fila por producto+almacén con su costo real
+     * por lote (ver ValorInventarioService), mismo total que Productos y el Dashboard.
      */
-    public function valorInventario()
+    public function valorInventario(ValorInventarioService $valorInventario)
     {
-        $inventario = DB::table('almacen_producto')
-            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
-            ->select(
-                'productos.nombre_producto',
-                'almacen_producto.cantidad',
-                'productos.precio_compra_producto'
-            )
-            ->where('almacen_producto.cantidad', '>', 0)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'nombre_producto' => $item->nombre_producto,
-                    'cantidad' => $item->cantidad,
-                    'costo_unitario' => $item->precio_compra_producto,
-                    'valor_total_costo' => $item->cantidad * $item->precio_compra_producto,
-                ];
-            });
-
-        $valorTotal = $inventario->sum('valor_total_costo');
+        $inventario = $valorInventario->filasPorProductoAlmacen();
 
         return Inertia::render('Reportes/Report/ValorInventario', [
             'inventario' => $inventario,
-            'valorTotal' => $valorTotal,
+            'valorTotal' => $valorInventario->valorTotal(),
         ]);
     }
 

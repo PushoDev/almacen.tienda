@@ -14,6 +14,7 @@ class LoteStock extends Model
         'compra_producto_id',
         'movimiento_id',
         'lote_origen_id',
+        'fusionado_en_lote_id',
         'producto_id',
         'almacen_id',
         'cantidad',
@@ -140,5 +141,32 @@ class LoteStock extends Model
     public static function generarCodigoAjusteLegado(int $productoId, int $almacenId): string
     {
         return sprintf('AJUSTE-LEGADO-%d-%d', $productoId, $almacenId);
+    }
+
+    /**
+     * Código del lote que resulta de fusionar lotes (FusionLotesService). Un producto+almacén
+     * puede fusionarse más de una vez, así que lleva un correlativo.
+     */
+    public static function generarCodigoFusion(int $productoId, int $almacenId): string
+    {
+        $prefijo = sprintf('FUSION-%d-%d-', $productoId, $almacenId);
+        $siguiente = self::where('codigo', 'like', $prefijo.'%')->count() + 1;
+
+        return $prefijo.$siguiente;
+    }
+
+    /**
+     * Lote donde vive hoy el stock de este lote: él mismo, o — si se fusionó — el lote en que
+     * terminó (siguiendo la cadena, por si el resultante se volvió a fusionar). Usado al
+     * devolver unidades (anular una venta) para no revivir un lote ya fusionado.
+     */
+    public function loteVigente(): self
+    {
+        $lote = $this;
+        while ($lote->fusionado_en_lote_id !== null) {
+            $lote = self::findOrFail($lote->fusionado_en_lote_id);
+        }
+
+        return $lote;
     }
 }

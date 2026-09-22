@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Producto;
+use App\Services\ValorInventarioService;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -12,6 +13,14 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithStyles
 {
     private $almacenId;
+
+    /**
+     * Costo real por lote de cada producto en este almacén (clave "producto_id-almacen_id"),
+     * cargado una sola vez para todo el export (ver ValorInventarioService).
+     *
+     * @var array<string, array{costo: float, valor: float}>|null
+     */
+    private ?array $costosReales = null;
 
     public function __construct($almacenId = 1)
     {
@@ -44,7 +53,7 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
             'Color',
             'Código de Barras',
             'Categoría',
-            'Precio de Compra',
+            'Costo Unitario',
             'Cantidad en Almacén',
             'Valor Total',
             '¿Stock Bajo?',
@@ -62,7 +71,11 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
             ->first()
             ?->pivot->cantidad ?? 0;
 
-        $valorTotal = $producto->precio_compra_producto * $cantidadAlmacen;
+        // Costo real por lote en este almacén (incluye prorrateos); sin lotes, cae al costo de la ficha.
+        $this->costosReales ??= app(ValorInventarioService::class)->costosPorProductoAlmacen((int) $this->almacenId);
+        $costoReal = $this->costosReales[$producto->id.'-'.$this->almacenId] ?? null;
+        $costoUnitario = $costoReal['costo'] ?? (float) $producto->precio_compra_producto;
+        $valorTotal = $costoReal['valor'] ?? $costoUnitario * $cantidadAlmacen;
 
         // Determinar si tiene stock bajo (menos de 3 unidades)
         $stockBajo = $cantidadAlmacen < 3 ? 'SÍ' : 'NO';
@@ -76,7 +89,7 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
             $producto->color_producto ?? '',
             $producto->codigo_producto ?? '',
             $producto->categoria->nombre_categoria ?? 'Sin categoría',
-            number_format($producto->precio_compra_producto, 2, '.', ''),
+            number_format($costoUnitario, 2, '.', ''),
             $cantidadAlmacen,
             number_format($valorTotal, 2, '.', ''),
             $stockBajo,

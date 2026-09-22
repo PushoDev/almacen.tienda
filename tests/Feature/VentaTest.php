@@ -11,6 +11,7 @@ use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
+use App\Services\FusionLotesService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -282,6 +283,33 @@ test('anular una venta con lote_id explícito revierte el consumo de ese lote', 
     $response->assertJson(['success' => true]);
 
     expect($lote->fresh()->cantidad_disponible)->toBe(40); // vuelve completo
+});
+
+test('anular una venta de un lote que después se fusionó devuelve las unidades al lote fusionado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $loteA = LoteStock::create(['codigo' => 'LOTE-A-FUSION', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 40, 'precio_costo' => 18]);
+    $loteB = LoteStock::create(['codigo' => 'LOTE-B-FUSION', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 10, 'precio_costo' => 20]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $loteA->id;
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 150,
+        'tasa_cambio' => 1, 'monto_equivalente' => 150, 'cuenta_id' => crearCuentaUsd()->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $resultante = app(FusionLotesService::class)->fusionar($producto->id, $almacen->id, [$loteA->id, $loteB->id], null, $admin);
+    expect($resultante->cantidad_disponible)->toBe(45);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+
+    expect($resultante->fresh()->cantidad_disponible)->toBe(50)
+        ->and($loteA->fresh()->cantidad_disponible)->toBe(0);
 });
 
 test('rechaza la venta si no hay stock suficiente', function () {

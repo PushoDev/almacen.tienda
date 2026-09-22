@@ -9,6 +9,9 @@ use App\Models\PrecioHistorial;
 use App\Models\Producto;
 use App\Models\User;
 use App\Notifications\CambioPrecioVendedorNotification;
+use App\Services\FichasHermanasService;
+use App\Services\FusionLotesService;
+use App\Services\ValorInventarioService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -21,7 +24,7 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ProductoVendedorController extends Controller
 {
-    public function index()
+    public function index(FichasHermanasService $fichasHermanas, ValorInventarioService $valorInventario)
     {
         $user = Auth::user();
 
@@ -48,17 +51,33 @@ class ProductoVendedorController extends Controller
                     'pv.precio_venta',
                     'pv.venta_ganancia',
                     'pv.comision',
+                    'pv.precio_de_grupo',
                     'pv.puesto_por_user_id',
                     DB::raw('u_puesto.name as puesto_por_nombre'),
                 )->with('categoria');
             },
         ])->get();
 
-        $user = Auth::user();
+        $puedeVerCosto = in_array($user->role, ['admin', 'moderador']);
+        // Costo real por lote de cada producto+almacén, en una sola query (ver ValorInventarioService).
+        $costosReales = $puedeVerCosto ? $valorInventario->costosPorProductoAlmacen() : [];
 
-        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user) {
-            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user) {
+        // Lotes de las combinaciones producto+almacén con 2+ costos distintos (pocas: la mayoría
+        // del catálogo tiene un solo costo por almacén) — para el desglose por lote opcional.
+        $lotesVariosCostos = $this->lotesConVariosCostos($puedeVerCosto);
+
+        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user, $fichasHermanas, $puedeVerCosto, $costosReales, $lotesVariosCostos) {
+            // Fichas hermanas con stock en ESTE almacén (mismo producto repetido): comparten
+            // `grupo_clave` para mostrarse juntas y usar el precio del grupo (actualizarPrecioGrupo()).
+            $clavesRepetidas = $almacen->productos
+                ->filter(fn ($p) => $p->pivot->cantidad > 0)
+                ->map(fn ($p) => $fichasHermanas->clave($p))
+                ->countBy()
+                ->filter(fn ($veces) => $veces > 1);
+
+            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user, $fichasHermanas, $clavesRepetidas, $puedeVerCosto, $costosReales, $lotesVariosCostos) {
                 $precioVenta = $producto->precio_venta;
+                $clave = $fichasHermanas->clave($producto);
 
                 return [
                     'id' => $producto->id,
@@ -77,6 +96,13 @@ class ProductoVendedorController extends Controller
                     'tiene_precio' => ($precioVenta ?? 0) > 0,
                     'almacen_id' => $almacen->id,
                     'puesto_por_nombre' => $producto->puesto_por_nombre,
+                    'grupo_clave' => $clavesRepetidas->has($clave) ? $clave : null,
+                    'precio_de_grupo' => (bool) $producto->precio_de_grupo,
+                    'costo_real' => $puedeVerCosto
+                        ? ($costosReales[$producto->id.'-'.$almacen->id]['costo'] ?? (float) $producto->precio_compra_producto)
+                        : null,
+                    // null = un solo costo en este almacén (lo normal); si no, sus lotes con stock.
+                    'lotes' => $lotesVariosCostos[$producto->id.'-'.$almacen->id] ?? null,
                 ];
             });
 
@@ -128,6 +154,9 @@ class ProductoVendedorController extends Controller
         $updateData = [
             'precio_venta' => $precioVenta,
             'venta_ganancia' => $ganancia,
+            // Precio puesto a mano para esta ficha: se separa del precio del grupo de fichas
+            // hermanas (ver actualizarPrecioGrupo()), que ya no lo va a pisar.
+            'precio_de_grupo' => false,
             'puesto_por_user_id' => $user->id,
             'updated_at' => now(),
         ];
@@ -183,6 +212,186 @@ class ProductoVendedorController extends Controller
     }
 
     /**
+     * "Fusionar lotes" global del almacén seleccionado: une TODOS los lotes de cada producto
+     * elegido en uno solo (ver FusionLotesService::fusionarEnAlmacen()). Sigue con los demás si
+     * alguno falla y devuelve el detalle. Solo admin/moderador (ruta).
+     */
+    public function fusionarLotesAlmacen(Request $request, Almacen $almacen, FusionLotesService $fusionLotes)
+    {
+        $validated = $request->validate([
+            'producto_ids' => ['required', 'array', 'min:1'],
+            'producto_ids.*' => ['integer', 'distinct', 'exists:productos,id'],
+        ]);
+
+        $resultado = $fusionLotes->fusionarEnAlmacen(array_map('intval', $validated['producto_ids']), $almacen->id, $request->user());
+
+        $nombres = Producto::whereIn('id', $validated['producto_ids'])->pluck('nombre_producto', 'id');
+        $conNombre = fn (array $filas) => array_map(fn ($fila) => $fila + ['nombre_producto' => $nombres[$fila['producto_id']] ?? ''], $filas);
+
+        return response()->json([
+            'success' => true,
+            'message' => count($resultado['fusionados']).' producto(s) fusionado(s)'.(count($resultado['fallidos']) ? ', '.count($resultado['fallidos']).' no se pudieron fusionar.' : '.'),
+            'fusionados' => $conNombre($resultado['fusionados']),
+            'fallidos' => $conNombre($resultado['fallidos']),
+        ]);
+    }
+
+    /**
+     * Lotes con stock de cada combinación producto+almacén que tiene 2+ costos distintos, más
+     * viejo primero (orden FIFO). `precio_venta` = precio propio del lote ("Opción A"), null =
+     * hereda el precio del producto en el almacén.
+     *
+     * @return array<string, array<int, array{id: int, codigo: string, cantidad: int, costo: float|null, precio_venta: float|null, prorrateo_pendiente: bool}>> clave "producto_id-almacen_id"
+     */
+    private function lotesConVariosCostos(bool $puedeVerCosto): array
+    {
+        $combinaciones = DB::table('lotes_stock')
+            ->where('cantidad_disponible', '>', 0)
+            ->select('producto_id', 'almacen_id')
+            ->groupBy('producto_id', 'almacen_id')
+            ->havingRaw('COUNT(DISTINCT precio_costo) > 1')
+            ->get();
+
+        if ($combinaciones->isEmpty()) {
+            return [];
+        }
+
+        $movimientosPendientes = DB::table('movimientos')
+            ->where('requiere_prorrateo', true)
+            ->whereNull('prorrateo_decision')
+            ->pluck('id')
+            ->all();
+
+        return DB::table('lotes_stock')
+            ->where('cantidad_disponible', '>', 0)
+            ->where(function ($query) use ($combinaciones) {
+                foreach ($combinaciones as $c) {
+                    $query->orWhere(fn ($q) => $q->where('producto_id', $c->producto_id)->where('almacen_id', $c->almacen_id));
+                }
+            })
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn ($lote) => $lote->producto_id.'-'.$lote->almacen_id)
+            ->map(fn ($lotes) => $lotes->map(fn ($lote) => [
+                'id' => $lote->id,
+                'codigo' => $lote->codigo,
+                'cantidad' => (int) $lote->cantidad_disponible,
+                'costo' => $puedeVerCosto ? round((float) $lote->precio_costo, 2) : null,
+                'precio_venta' => $lote->precio_venta !== null ? round((float) $lote->precio_venta, 2) : null,
+                // Bloquea la fusión (FusionLotesService): el prorrateo no llegaría al lote resultante.
+                'prorrateo_pendiente' => in_array($lote->movimiento_id, $movimientosPendientes),
+            ])->values()->all())
+            ->all();
+    }
+
+    /**
+     * "Precio del grupo": mismo producto repetido como 2+ fichas con stock en este almacén
+     * (fichas hermanas, ver FichasHermanasService) — se vende igual aunque el costo de cada ficha
+     * sea distinto. Se aplica a las fichas sin precio y a las que ya siguen al grupo
+     * (`precio_de_grupo`); una ficha con precio puesto a mano no se toca, salvo que
+     * `incluir_con_precio_propio` lo pida explícitamente (y entonces vuelve a seguir al grupo).
+     */
+    public function actualizarPrecioGrupo(Request $request, FichasHermanasService $fichasHermanas)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'producto_id' => ['required', 'integer', 'exists:productos,id'],
+            'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
+            'precio_venta' => ['required', 'numeric', 'min:0.01'],
+            'comision' => ['nullable', 'numeric', 'min:0'],
+            'incluir_con_precio_propio' => ['sometimes', 'boolean'],
+        ]);
+
+        $almacenId = (int) $validated['almacen_id'];
+
+        if (! in_array($user->role, ['admin', 'moderador']) && ! $user->almacenes->contains($almacenId)) {
+            return response()->json(['error' => 'No tienes acceso a este almacén.'], 403);
+        }
+
+        $fichas = $fichasHermanas->hermanasConStockEnAlmacen(Producto::findOrFail($validated['producto_id']), $almacenId);
+
+        if ($fichas->count() < 2) {
+            return response()->json(['error' => 'Este producto no tiene otras fichas con stock en este almacén.'], 422);
+        }
+
+        $precioVenta = round($validated['precio_venta'], 2);
+        $comision = isset($validated['comision']) ? round($validated['comision'], 2) : null;
+        $incluirConPrecioPropio = (bool) ($validated['incluir_con_precio_propio'] ?? false);
+
+        $resultado = DB::transaction(function () use ($fichas, $almacenId, $precioVenta, $comision, $incluirConPrecioPropio, $user) {
+            return $fichas->map(function (Producto $ficha) use ($almacenId, $precioVenta, $comision, $incluirConPrecioPropio, $user) {
+                $registroActual = DB::table('producto_vendedors')
+                    ->where('producto_id', $ficha->id)
+                    ->where('almacen_id', $almacenId)
+                    ->first();
+
+                $tienePrecioPropio = $registroActual && (float) $registroActual->precio_venta > 0 && ! $registroActual->precio_de_grupo;
+                $aplicar = ! $tienePrecioPropio || $incluirConPrecioPropio;
+                $costoReal = $ficha->costoEnAlmacen($almacenId);
+
+                if ($aplicar) {
+                    $precioAnterior = $registroActual?->precio_venta !== null ? round((float) $registroActual->precio_venta, 2) : null;
+                    $comisionFinal = $comision ?? round((float) ($registroActual?->comision ?? 0), 2);
+
+                    DB::table('producto_vendedors')->updateOrInsert(
+                        ['producto_id' => $ficha->id, 'almacen_id' => $almacenId],
+                        [
+                            'precio_venta' => $precioVenta,
+                            'venta_ganancia' => round($precioVenta - $costoReal, 2),
+                            'comision' => $comisionFinal,
+                            'precio_de_grupo' => true,
+                            'puesto_por_user_id' => $user->id,
+                            'updated_at' => now(),
+                        ]
+                    );
+
+                    if ($precioAnterior !== $precioVenta) {
+                        PrecioHistorial::create([
+                            'producto_id' => $ficha->id,
+                            'user_id' => $user->id,
+                            'almacen_id' => $almacenId,
+                            'precio_anterior' => $precioAnterior,
+                            'precio_nuevo' => $precioVenta,
+                            'comision' => $comisionFinal,
+                            'accion' => 'Precio de grupo - Almacén ID '.$almacenId,
+                        ]);
+                    }
+                }
+
+                $precioFinal = $aplicar ? $precioVenta : round((float) $registroActual->precio_venta, 2);
+                $comisionAplicada = $aplicar ? ($comision ?? round((float) ($registroActual?->comision ?? 0), 2)) : round((float) $registroActual->comision, 2);
+
+                return [
+                    'producto_id' => $ficha->id,
+                    'aplicado' => $aplicar,
+                    'precio_venta' => $precioFinal,
+                    'precio_de_grupo' => $aplicar,
+                    // Costo/margen solo para admin/moderador (mismo criterio que el resto de /disponibles).
+                    'costo_real' => in_array($user->role, ['admin', 'moderador']) ? $costoReal : null,
+                    'margen_unitario' => in_array($user->role, ['admin', 'moderador']) ? round($precioFinal - $comisionAplicada - $costoReal, 2) : null,
+                    // El POS bloquea vender por debajo del costo real del lote (salvo venta especial).
+                    'bajo_costo' => $precioFinal < $costoReal,
+                ];
+            })->values();
+        });
+
+        if (! in_array($user->role, ['admin', 'moderador'])) {
+            $almacen = Almacen::find($almacenId);
+            foreach (User::where('role', 'admin')->get() as $admin) {
+                $admin->notify(new CambioPrecioVendedorNotification($fichas->first(), $almacen, $user, 0, $precioVenta));
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Precio del grupo aplicado a '.$resultado->where('aplicado', true)->count().' de '.$resultado->count().' fichas.',
+            'fichas' => $resultado,
+        ]);
+    }
+
+    /**
      * Aplica el mismo precio de venta (y comisión opcional) a varios almacenes
      * a la vez, para un mismo producto. Exclusivo admin (gate en la ruta, ver
      * routes/crud/productos.php, middleware 'admin.only').
@@ -227,6 +436,7 @@ class ProductoVendedorController extends Controller
                 $updateData = [
                     'precio_venta' => $precioVenta,
                     'venta_ganancia' => $ganancia,
+                    'precio_de_grupo' => false,
                     'puesto_por_user_id' => $user->id,
                     'updated_at' => now(),
                 ];

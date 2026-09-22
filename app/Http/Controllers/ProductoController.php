@@ -12,6 +12,10 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
+use App\Services\FichasHermanasService;
+use App\Services\FusionLotesService;
+use App\Services\FusionProductosService;
+use App\Services\ValorInventarioService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 // NOTE: Removed automatic migration/seed calls for safety in production
@@ -28,7 +32,7 @@ class ProductoController extends Controller
     /**
      * Listado de productos con paginación y búsqueda
      */
-    public function index(Request $request)
+    public function index(Request $request, ValorInventarioService $valorInventario)
     {
         $user = Auth::user();
 
@@ -81,7 +85,7 @@ class ProductoController extends Controller
 
                 $query->orderBy($subCantidad, $sortDirection);
             } elseif ($sortField === 'precio_compra_producto') {
-                // Mismo criterio que costosPonderadosPorProducto(): promedio ponderado real de
+                // Mismo criterio que ValorInventarioService::costosPonderadosPorProducto(): promedio ponderado real de
                 // lotes_stock (del almacén filtrado, o de todos), cayendo al costo de la ficha
                 // cuando no hay ningún lote — para que el orden coincida con el número mostrado.
                 $subCosto = DB::table('lotes_stock')
@@ -117,11 +121,11 @@ class ProductoController extends Controller
         // página — evita N+1 de llamar Producto::costoEnAlmacen() una vez por fila. Sin
         // filtro de almacén, pondera sobre lotes de TODOS los almacenes del producto.
         $productoIds = $paginatedProducts->getCollection()->pluck('id')->all();
-        $costosPonderados = $this->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
+        $costosPonderados = $valorInventario->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
 
         // Transformar los datos para la vista después de paginar
         $paginatedProducts->getCollection()->transform(function ($producto) use ($costosPonderados, $almacenFiltroId) {
-            // Costo: promedio ponderado real de lotes_stock (ver costosPonderadosPorProducto()
+            // Costo: promedio ponderado real de lotes_stock (ver ValorInventarioService::costosPonderadosPorProducto()
             // abajo); cae al costo estático de la ficha si el producto no tiene ningún lote
             // (catálogo viejo, mismo fallback que Producto::costoEnAlmacen()).
             $costo = $costosPonderados[$producto->id] ?? (float) $producto->precio_compra_producto;
@@ -160,8 +164,17 @@ class ProductoController extends Controller
         $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
 
         // Valor total del inventario global (todos los productos, sin filtros) — costo real
-        // por lote, no el costo estático de la ficha (ver valorRealInventarioTotal()).
-        $totalImporteGlobal = $this->valorRealInventarioTotal();
+        // por lote, no el costo estático de la ficha (ver ValorInventarioService::valorTotal()).
+        $totalImporteGlobal = $valorInventario->valorTotal();
+
+        // Widget "Stock Bajo" / "Valor Stock Bajo" — sobre todo el catálogo, no solo las filas de
+        // la página visible. Mismo umbral e inclusión de productos sin stock que el filtro
+        // "stock bajo" de esta misma pantalla (Producto::getStockBajoAttribute()). El conteo lo ve
+        // cualquier rol (como antes); el valor, solo quien ve datos de costo.
+        $resumenStockBajo = $valorInventario->resumenStockBajo(5, incluirSinStock: true);
+        if (! $canViewStockStats) {
+            $resumenStockBajo['valor'] = null;
+        }
 
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
@@ -172,70 +185,8 @@ class ProductoController extends Controller
             'canViewStockStats' => $canViewStockStats,
             'canViewSensitiveData' => $canViewSensitiveData,
             'total_importe_global' => (float) $totalImporteGlobal,
+            'resumen_stock_bajo' => $resumenStockBajo,
         ]);
-    }
-
-    /**
-     * Costo real ponderado por producto (`lotes_stock`, `cantidad_disponible > 0`), calculado
-     * en bulk para un lote de IDs — evita llamar Producto::costoEnAlmacen() por fila (N+1) en
-     * el listado. Sin `$almacenId`, pondera sobre lotes de todos los almacenes del producto
-     * (mismo criterio que Producto::costoEnAlmacen(), pero sin restringir por almacén).
-     *
-     * @param  array<int>  $productoIds
-     * @return array<int, float> producto_id => costo ponderado. Un producto ausente del
-     *                           resultado no tiene ningún lote — el caller debe caer al
-     *                           costo estático de la ficha (precio_compra_producto).
-     */
-    private function costosPonderadosPorProducto(array $productoIds, ?int $almacenId): array
-    {
-        if (empty($productoIds)) {
-            return [];
-        }
-
-        $query = LoteStock::whereIn('producto_id', $productoIds)
-            ->where('cantidad_disponible', '>', 0);
-
-        if ($almacenId !== null) {
-            $query->where('almacen_id', $almacenId);
-        }
-
-        return $query
-            ->selectRaw('producto_id, SUM(cantidad_disponible * precio_costo) as costo_total, SUM(cantidad_disponible) as cantidad_total')
-            ->groupBy('producto_id')
-            ->get()
-            ->mapWithKeys(fn ($fila) => [$fila->producto_id => round($fila->costo_total / $fila->cantidad_total, 2)])
-            ->all();
-    }
-
-    /**
-     * Valor real del inventario completo (todos los productos, todos los almacenes, sin
-     * filtros) — suma el costo real por lote (`lotes_stock`), no el costo estático de la
-     * ficha (`precio_compra_producto`), que puede quedar desactualizado cuando un prorrateo
-     * de Distribución de Costos sube el costo de un lote sin tocar la ficha global (caso real:
-     * movimiento #209, ver docs/arreglos-pendientes/resumen-cambios-2026-09-20.md).
-     *
-     * Combinaciones producto+almacén sin ningún lote (catálogo viejo sin backfill, o borde no
-     * cubierto) caen al costo de la ficha para esa cantidad — mismo fallback que
-     * Producto::costoEnAlmacen(), aplicado aquí a nivel de suma total.
-     */
-    private function valorRealInventarioTotal(): float
-    {
-        $conLotes = DB::table('lotes_stock')
-            ->where('cantidad_disponible', '>', 0)
-            ->sum(DB::raw('cantidad_disponible * precio_costo'));
-
-        $sinLotes = DB::table('almacen_producto')
-            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('lotes_stock')
-                    ->whereColumn('lotes_stock.producto_id', 'almacen_producto.producto_id')
-                    ->whereColumn('lotes_stock.almacen_id', 'almacen_producto.almacen_id')
-                    ->where('lotes_stock.cantidad_disponible', '>', 0);
-            })
-            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
-
-        return (float) $conLotes + (float) $sinLotes;
     }
 
     /**
@@ -643,10 +594,55 @@ class ProductoController extends Controller
 
         $lote->update(['precio_venta' => $validated['precio_venta'] ?? null]);
 
+        // /disponibles lo llama por fetch (varios lotes seleccionados a la vez) y necesita JSON;
+        // Edit.tsx sigue usando la redirección de siempre.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'lote_id' => $lote->id,
+                'precio_venta' => $lote->precio_venta !== null ? (float) $lote->precio_venta : null,
+            ]);
+        }
+
         return redirect()->route('productos.edit', $producto)
             ->with('success', $validated['precio_venta'] !== null
                 ? "Precio de venta corregido para el lote {$lote->codigo}."
                 : "El lote {$lote->codigo} vuelve a usar el precio del almacén.");
+    }
+
+    /**
+     * Fusiona 2+ lotes de este producto en un almacén en UN solo lote, a pedido del usuario
+     * (ver FusionLotesService): suma cantidades, costo promedio ponderado, fecha del lote más
+     * viejo. Los lotes unidos quedan en 0 para el historial. Solo admin/moderador (ruta).
+     */
+    public function fusionarLotes(Request $request, Producto $producto, FusionLotesService $fusionLotes)
+    {
+        $validated = $request->validate([
+            'almacen_id' => 'required|integer|exists:almacens,id',
+            'lote_ids' => 'required|array|min:2',
+            'lote_ids.*' => 'integer|distinct|exists:lotes_stock,id',
+            'precio_venta' => 'nullable|numeric|min:0.01',
+        ]);
+
+        $lote = $fusionLotes->fusionar(
+            $producto->id,
+            (int) $validated['almacen_id'],
+            array_map('intval', $validated['lote_ids']),
+            isset($validated['precio_venta']) ? (float) $validated['precio_venta'] : null,
+            $request->user(),
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => "Lotes fusionados en {$lote->codigo}: {$lote->cantidad_disponible} unidades a costo ".number_format((float) $lote->precio_costo, 2).'.',
+            'lote' => [
+                'id' => $lote->id,
+                'codigo' => $lote->codigo,
+                'cantidad' => $lote->cantidad_disponible,
+                'costo' => (float) $lote->precio_costo,
+                'precio_venta' => $lote->precio_venta !== null ? (float) $lote->precio_venta : null,
+            ],
+        ]);
     }
 
     /**
@@ -974,79 +970,68 @@ class ProductoController extends Controller
     }
 
     /**
-     * Detectar productos duplicados agrupados por nombre, marca, modelo
+     * Detectar fichas hermanas (mismo producto repetido como 2+ fichas, ver
+     * FichasHermanasService) con su stock por almacén, costo real y los almacenes donde tienen
+     * precios de venta distintos (a resolver antes de fusionar, ver FusionProductosService).
      */
-    public function duplicados()
+    public function duplicados(FichasHermanasService $fichasHermanas, FusionProductosService $fusion, ValorInventarioService $valorInventario)
     {
-        $duplicados = Producto::selectRaw("
-            COUNT(*) as total,
-            GROUP_CONCAT(id ORDER BY id) as ids,
-            nombre_producto,
-            marca_producto,
-            modelo_producto,
-            TRIM(REPLACE(REPLACE(REPLACE(capacidad_producto, UNHEX('C2B4'), ''), UNHEX('C2A8'), ''), '\"', '')) as capacidad_limpia,
-            color_producto
-        ")
-            ->whereNotNull('nombre_producto')
-            ->groupBy('nombre_producto', 'marca_producto', 'modelo_producto', 'capacidad_limpia', 'color_producto')
-            ->having('total', '>', 1)
-            ->get();
+        $grupos = $fichasHermanas->grupos()->map(function ($fichas) use ($fusion, $valorInventario) {
+            $fichas->load('almacenes', 'codigos', 'categoria');
+            $costosReales = $valorInventario->costosPonderadosPorProducto($fichas->pluck('id')->all());
 
-        $grupos = $duplicados->map(function ($grupo) {
-            $ids = explode(',', $grupo->ids);
-            $productos = Producto::with('almacenes', 'codigos', 'categoria')
-                ->whereIn('id', $ids)
-                ->get()
-                ->map(fn ($p) => [
-                    'id' => $p->id,
-                    'nombre' => $p->nombre_producto,
-                    'marca' => $p->marca_producto,
-                    'modelo' => $p->modelo_producto,
-                    'capacidad' => $p->capacidad_producto,
-                    'color' => $p->color_producto,
-                    'codigo' => $p->codigo_producto,
-                    'precio_compra' => (float) $p->precio_compra_producto,
-                    'cantidad_total' => $p->cantidad_total,
-                    'categoria' => $p->categoria?->nombre_categoria,
-                    'categoria_id' => $p->categoria_id,
-                    'almacenes' => $p->almacenes->map(fn ($a) => [
-                        'id' => $a->id,
-                        'nombre' => $a->nombre_almacen,
-                        'cantidad' => $a->pivot->cantidad,
-                    ]),
-                    'codigos_barras' => $p->codigos->map(fn ($c) => $c->codigo_barras)->values(),
-                ]);
+            $productos = $fichas->map(fn (Producto $p) => [
+                'id' => $p->id,
+                'nombre' => $p->nombre_producto,
+                'marca' => $p->marca_producto,
+                'modelo' => $p->modelo_producto,
+                'capacidad' => $p->capacidad_producto,
+                'color' => $p->color_producto,
+                'codigo' => $p->codigos->sortByDesc('es_default')->first()?->codigo_barras,
+                // Costo real por lote (incluye prorrateos); sin lotes, el de la ficha.
+                'precio_compra' => $costosReales[$p->id] ?? (float) $p->precio_compra_producto,
+                'cantidad_total' => $p->cantidad_total,
+                'categoria' => $p->categoria?->nombre_categoria,
+                'categoria_id' => $p->categoria_id,
+                'almacenes' => $p->almacenes->map(fn ($a) => [
+                    'id' => $a->id,
+                    'nombre' => $a->nombre_almacen,
+                    'cantidad' => $a->pivot->cantidad,
+                ])->values(),
+                'codigos_barras' => $p->codigos->pluck('codigo_barras')->values(),
+            ])->values();
 
             $cantidadTotal = $productos->sum('cantidad_total');
-            $precioPromedioPonderado = $cantidadTotal > 0
+            $costoPromedio = $cantidadTotal > 0
                 ? $productos->sum(fn ($p) => $p['precio_compra'] * $p['cantidad_total']) / $cantidadTotal
                 : $productos->avg('precio_compra');
 
-            // Detectar campos que varían entre los productos del grupo
+            // Campos que varían entre las fichas y se pueden normalizar antes de fusionar.
             $camposVariables = [];
-            $camposRevisar = [
-                'capacidad' => fn ($p) => $p['capacidad'],
-                'categoria_id' => fn ($p) => $p['categoria_id'],
-            ];
-            foreach ($camposRevisar as $nombre => $extractor) {
-                $valores = $productos->map($extractor)->filter()->unique()->values();
+            foreach (['capacidad_producto' => 'capacidad', 'categoria_id' => 'categoria_id'] as $campo => $clave) {
+                $valores = $productos->pluck($clave)->filter()->unique()->values();
                 if ($valores->count() > 1) {
                     $camposVariables[] = [
-                        'campo' => $nombre,
-                        'valores' => $valores->toArray(),
-                        'valor_sugerido' => $valores->groupBy(fn ($v) => $v)->sortByDesc(fn ($g) => $g->count())->keys()->first(),
+                        'campo' => $campo,
+                        'valores' => $valores->all(),
+                        'valor_sugerido' => $productos->pluck($clave)->filter()->countBy()->sortDesc()->keys()->first(),
                     ];
                 }
             }
 
+            $primera = $fichas->first();
+
             return [
-                'clave' => trim("{$grupo->nombre_producto} {$grupo->marca_producto} {$grupo->modelo_producto}").($grupo->capacidad_limpia ? " ({$grupo->capacidad_limpia})" : '').($grupo->color_producto ? " - {$grupo->color_producto}" : ''),
+                'clave' => trim("{$primera->nombre_producto} {$primera->marca_producto} {$primera->modelo_producto}")
+                    .($primera->capacidad_producto ? " ({$primera->capacidad_producto})" : '')
+                    .($primera->color_producto ? " - {$primera->color_producto}" : ''),
                 'productos' => $productos,
                 'cantidad_total' => $cantidadTotal,
-                'precio_promedio' => round($precioPromedioPonderado, 2),
+                'precio_promedio' => round($costoPromedio, 2),
                 'campos_variables' => $camposVariables,
+                'conflictos_precio' => $fusion->conflictosDePrecio($fichas),
             ];
-        });
+        })->values();
 
         return response()->json([
             'success' => true,
@@ -1090,85 +1075,43 @@ class ProductoController extends Controller
     }
 
     /**
-     * Normalizar + fusionar productos duplicados en uno solo
+     * Normalizar + fusionar fichas hermanas en una sola. Reasigna ventas, compras, lotes,
+     * movimientos e historiales a la ficha conservada (ver FusionProductosService) — nunca los
+     * borra. Donde las fichas tienen precios de venta distintos, `precios_por_almacen` indica
+     * con qué precio queda cada almacén.
      */
-    public function fusionarDuplicados(Request $request)
+    public function fusionarDuplicados(Request $request, FusionProductosService $fusion)
     {
-        $request->validate([
+        $validated = $request->validate([
             'producto_conservar_id' => 'required|exists:productos,id',
             'productos_eliminar_ids' => 'required|array|min:1',
-            'productos_eliminar_ids.*' => 'exists:productos,id|different:producto_conservar_id',
+            'productos_eliminar_ids.*' => 'integer|distinct|exists:productos,id|different:producto_conservar_id',
             'valores_canonicos' => 'sometimes|array',
+            'precios_por_almacen' => 'sometimes|array',
+            'precios_por_almacen.*.precio_venta' => 'required|numeric|min:0.01',
+            'precios_por_almacen.*.comision' => 'nullable|numeric|min:0',
         ]);
 
-        DB::beginTransaction();
-        try {
-            $conservar = Producto::with('almacenes', 'codigos')->findOrFail($request->producto_conservar_id);
+        $todosIds = array_merge([(int) $validated['producto_conservar_id']], array_map('intval', $validated['productos_eliminar_ids']));
 
-            // 0. Aplicar valores canónicos si se enviaron
-            $camposPermitidos = ['capacidad_producto', 'categoria_id'];
-            $actualizar = array_intersect_key($request->valores_canonicos ?? [], array_flip($camposPermitidos));
+        // Normalización previa (capacidad/categoría) en la misma transacción que la fusión: si la
+        // fusión se rechaza (fichas ajenas, precio sin resolver), la normalización se revierte.
+        $resultado = DB::transaction(function () use ($validated, $todosIds, $fusion, $request) {
+            $actualizar = array_intersect_key($validated['valores_canonicos'] ?? [], array_flip(['capacidad_producto', 'categoria_id']));
             if (! empty($actualizar)) {
-                $todosIds = array_merge([$conservar->id], $request->productos_eliminar_ids);
                 Producto::whereIn('id', $todosIds)->update($actualizar);
-                $conservar->refresh();
             }
 
-            foreach ($request->productos_eliminar_ids as $eliminarId) {
-                $eliminar = Producto::with('almacenes', 'codigos')->find($eliminarId);
-                if (! $eliminar) {
-                    continue;
-                }
+            $conservar = Producto::findOrFail($validated['producto_conservar_id']);
+            $eliminar = Producto::whereIn('id', $validated['productos_eliminar_ids'])->get();
 
-                // 1. Sumar cantidades en almacen_producto
-                foreach ($eliminar->almacenes as $almacen) {
-                    $pivotExistente = AlmacenProducto::where('almacen_id', $almacen->id)
-                        ->where('producto_id', $conservar->id)
-                        ->first();
+            return $fusion->fusionar($conservar, $eliminar, $validated['precios_por_almacen'] ?? [], $request->user());
+        });
 
-                    if ($pivotExistente) {
-                        $pivotExistente->increment('cantidad', $almacen->pivot->cantidad);
-                    } else {
-                        AlmacenProducto::create([
-                            'almacen_id' => $almacen->id,
-                            'producto_id' => $conservar->id,
-                            'cantidad' => $almacen->pivot->cantidad,
-                        ]);
-                    }
-                }
-
-                // 2. Transferir códigos de barras únicos
-                foreach ($eliminar->codigos as $codigo) {
-                    $existe = ProductoCodigo::where('producto_id', $conservar->id)
-                        ->where('codigo_barras', $codigo->codigo_barras)
-                        ->exists();
-
-                    if (! $existe) {
-                        $codigo->update(['producto_id' => $conservar->id]);
-                    }
-                }
-
-                // 3. Eliminar relaciones y el producto
-                $eliminar->almacenes()->detach();
-                $eliminar->codigos()->delete();
-                $eliminar->delete();
-            }
-
-            // 4. Recalcular precio promedio ponderado final
-            $conservar->refresh();
-            $totalCantidad = $conservar->cantidad_total ?? 0;
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Fusión completada. Producto conservado: ID '.$conservar->id.' — '.$totalCantidad.' unidades totales.',
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error al fusionar duplicados: '.$e->getMessage());
-
-            return response()->json(['success' => false, 'message' => 'Error al fusionar: '.$e->getMessage()], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Fusión completada. Producto conservado: ID '.$resultado['producto_id'].' — '.$resultado['cantidad_total'].' unidades totales. Ventas, compras, lotes y movimientos de las fichas fusionadas pasaron a esta ficha.',
+            'resultado' => $resultado,
+        ]);
     }
 }
