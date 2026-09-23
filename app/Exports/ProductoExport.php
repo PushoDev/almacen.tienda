@@ -18,7 +18,7 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
      * Costo real por lote de cada producto en este almacén (clave "producto_id-almacen_id"),
      * cargado una sola vez para todo el export (ver ValorInventarioService).
      *
-     * @var array<string, array{costo: float, valor: float}>|null
+     * @var array<string, array{costo: float, valor: float, unidades: int}>|null
      */
     private ?array $costosReales = null;
 
@@ -72,10 +72,15 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping, WithS
             ?->pivot->cantidad ?? 0;
 
         // Costo real por lote en este almacén (incluye prorrateos); sin lotes, cae al costo de la ficha.
-        $this->costosReales ??= app(ValorInventarioService::class)->costosPorProductoAlmacen((int) $this->almacenId);
-        $costoReal = $this->costosReales[$producto->id.'-'.$this->almacenId] ?? null;
-        $costoUnitario = $costoReal['costo'] ?? (float) $producto->precio_compra_producto;
-        $valorTotal = $costoReal['valor'] ?? $costoUnitario * $cantidadAlmacen;
+        $valorInventario = app(ValorInventarioService::class);
+        $this->costosReales ??= $valorInventario->costosPorProductoAlmacen((int) $this->almacenId);
+        $costoFicha = (float) $producto->precio_compra_producto;
+        $valorTotal = $valorInventario->valorDeCombinacion(
+            $this->costosReales[$producto->id.'-'.$this->almacenId] ?? null,
+            (int) $cantidadAlmacen,
+            $costoFicha,
+        );
+        $costoUnitario = $cantidadAlmacen > 0 ? $valorTotal / $cantidadAlmacen : $costoFicha;
 
         // Determinar si tiene stock bajo (menos de 3 unidades)
         $stockBajo = $cantidadAlmacen < 3 ? 'SÍ' : 'NO';

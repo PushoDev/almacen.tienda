@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\LoteStock;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -53,19 +52,13 @@ class ValorInventarioService
 
     /**
      * Valor real del inventario completo (todos los productos, todos los almacenes).
+     *
+     * El stock real (`almacen_producto.cantidad`) manda: es lo que se vende y lo que muestra la
+     * tabla de Productos. Los lotes solo aportan el costo — ver `valorDeStockReal()`.
      */
     public function valorTotal(): float
     {
-        $conLotes = DB::table('lotes_stock')
-            ->where('cantidad_disponible', '>', 0)
-            ->sum(DB::raw('cantidad_disponible * precio_costo'));
-
-        $sinLotes = DB::table('almacen_producto')
-            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->whereNotExists(fn ($q) => $this->lotesConStockDeLaFila($q))
-            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
-
-        return round((float) $conLotes + (float) $sinLotes, 2);
+        return round($this->valorDeStockReal(), 2);
     }
 
     /**
@@ -95,10 +88,10 @@ class ValorInventarioService
             ->get()
             ->map(function ($fila) use ($costos) {
                 $clave = $fila->producto_id.'-'.$fila->almacen_id;
-                // Valor = suma real de los lotes (no costo redondeado × cantidad), para que
-                // el total del reporte coincida al centavo con valorTotal().
-                $valor = $costos[$clave]['valor'] ?? (float) $fila->precio_compra_producto * (int) $fila->cantidad;
-                $costoUnitario = $costos[$clave]['costo'] ?? (float) $fila->precio_compra_producto;
+                // Valor con la misma regla que valorTotal() (stock real manda, los lotes aportan el
+                // costo), para que el total del reporte coincida al centavo con el widget.
+                $valor = $this->valorDeCombinacion($costos[$clave] ?? null, (int) $fila->cantidad, (float) $fila->precio_compra_producto);
+                $costoUnitario = $valor / (int) $fila->cantidad;
 
                 return [
                     'producto_id' => (int) $fila->producto_id,
@@ -148,24 +141,70 @@ class ValorInventarioService
             return 0.0;
         }
 
-        $conLotes = DB::table('lotes_stock')
-            ->whereIn('producto_id', $productoIds)
+        return round($this->valorDeStockReal($productoIds), 2);
+    }
+
+    /**
+     * Valor del stock real de cada combinación producto+almacén con `cantidad > 0`, sumado.
+     *
+     * Antes se sumaban directo las unidades de los lotes (`cantidad_disponible`), y cuando un
+     * lote declaraba más o menos unidades que el stock real (lotes sin reconciliar tras el
+     * despliegue de `lotes_stock`) el total se inflaba o se desinflaba respecto a la tabla de
+     * Productos, que siempre multiplica por el stock real. Regla por combinación:
+     *  - sin lotes con stock: stock × costo de la ficha;
+     *  - lotes que cubren el stock o más: stock × costo promedio de esos lotes;
+     *  - lotes que cubren menos: lo que cubren a su costo + las unidades sin lote al costo de la ficha
+     *    (mismo criterio que `lotes:backfill-ajustes-legado`).
+     *
+     * @param  array<int, int>|null  $productoIds  limitar a estos productos; null = todos
+     */
+    private function valorDeStockReal(?array $productoIds = null): float
+    {
+        $lotesPorCombinacion = DB::table('lotes_stock')
             ->where('cantidad_disponible', '>', 0)
-            ->sum(DB::raw('cantidad_disponible * precio_costo'));
+            ->groupBy('producto_id', 'almacen_id')
+            ->selectRaw('producto_id, almacen_id, SUM(cantidad_disponible) as unidades, SUM(cantidad_disponible * precio_costo) as valor');
 
-        $sinLotes = DB::table('almacen_producto')
-            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
-            ->whereIn('almacen_producto.producto_id', $productoIds)
-            ->whereNotExists(fn ($q) => $this->lotesConStockDeLaFila($q))
-            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
+        return (float) DB::table('almacen_producto as ap')
+            ->join('productos as p', 'p.id', '=', 'ap.producto_id')
+            ->leftJoinSub($lotesPorCombinacion, 'lc', fn ($join) => $join
+                ->on('lc.producto_id', '=', 'ap.producto_id')
+                ->on('lc.almacen_id', '=', 'ap.almacen_id'))
+            ->where('ap.cantidad', '>', 0)
+            ->when($productoIds !== null, fn ($query) => $query->whereIn('ap.producto_id', $productoIds))
+            ->sum(DB::raw(
+                'CASE
+                    WHEN lc.unidades IS NULL THEN ap.cantidad * p.precio_compra_producto
+                    WHEN lc.unidades >= ap.cantidad THEN ap.cantidad * lc.valor / lc.unidades
+                    ELSE lc.valor + (ap.cantidad - lc.unidades) * p.precio_compra_producto
+                END'
+            ));
+    }
 
-        return round((float) $conLotes + (float) $sinLotes, 2);
+    /**
+     * Valor de una combinación producto+almacén con `$cantidad` unidades de stock real, dadas sus
+     * filas de `costosPorProductoAlmacen()` (`null` si no tiene lotes con stock). Misma regla que
+     * `valorDeStockReal()`, para que el reporte y el Excel coincidan con el total.
+     *
+     * @param  array{costo: float, valor: float, unidades: int}|null  $lotes
+     */
+    public function valorDeCombinacion(?array $lotes, int $cantidad, float $costoFicha): float
+    {
+        if ($lotes === null || $lotes['unidades'] <= 0) {
+            return $costoFicha * $cantidad;
+        }
+
+        if ($lotes['unidades'] >= $cantidad) {
+            return $lotes['valor'] * $cantidad / $lotes['unidades'];
+        }
+
+        return $lotes['valor'] + ($cantidad - $lotes['unidades']) * $costoFicha;
     }
 
     /**
      * Costo ponderado y valor real por combinación producto+almacén con lotes.
      *
-     * @return array<string, array{costo: float, valor: float}> clave "producto_id-almacen_id"
+     * @return array<string, array{costo: float, valor: float, unidades: int}> clave "producto_id-almacen_id"
      */
     public function costosPorProductoAlmacen(?int $almacenId = null): array
     {
@@ -179,20 +218,9 @@ class ValorInventarioService
                 $fila->producto_id.'-'.$fila->almacen_id => [
                     'costo' => round($fila->costo_total / $fila->cantidad_total, 2),
                     'valor' => (float) $fila->costo_total,
+                    'unidades' => (int) $fila->cantidad_total,
                 ],
             ])
             ->all();
-    }
-
-    /**
-     * Subquery "existe algún lote con stock para esta fila de almacen_producto".
-     */
-    private function lotesConStockDeLaFila(Builder $query): void
-    {
-        $query->select(DB::raw(1))
-            ->from('lotes_stock')
-            ->whereColumn('lotes_stock.producto_id', 'almacen_producto.producto_id')
-            ->whereColumn('lotes_stock.almacen_id', 'almacen_producto.almacen_id')
-            ->where('lotes_stock.cantidad_disponible', '>', 0);
     }
 }
