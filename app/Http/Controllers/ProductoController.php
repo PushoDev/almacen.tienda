@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\PlantillaProductoExport;
 use App\Exports\ProductoExport;
+use App\Exports\ProductosListadoExport;
 use App\Imports\ProductoImport;
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
@@ -16,9 +17,10 @@ use App\Services\FichasHermanasService;
 use App\Services\FusionLotesService;
 use App\Services\FusionProductosService;
 use App\Services\ValorInventarioService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 // NOTE: Removed automatic migration/seed calls for safety in production
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -38,6 +40,63 @@ class ProductoController extends Controller
 
         // No ejecutar migraciones/seed automáticamente desde la petición.
 
+        [$query, $almacenFiltroId, $sortField, $sortDirection] = $this->consultaListado($request);
+
+        // Paginación
+        $perPage = $request->get('per_page', 15);
+        $paginatedProducts = $query->paginate($perPage)->withQueryString();
+
+        // Costo real ponderado por producto (lotes_stock), en bulk para las filas de esta
+        // página — evita N+1 de llamar Producto::costoEnAlmacen() una vez por fila. Sin
+        // filtro de almacén, pondera sobre lotes de TODOS los almacenes del producto.
+        $productoIds = $paginatedProducts->getCollection()->pluck('id')->all();
+        $costosPonderados = $valorInventario->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
+
+        // Transformar los datos para la vista después de paginar
+        $paginatedProducts->getCollection()->transform(
+            fn (Producto $producto) => $this->filaListado($producto, $costosPonderados, $almacenFiltroId)
+        );
+
+        $canViewStockStats = in_array($user->role, ['admin', 'moderador']);
+        $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
+
+        // Valor total del inventario global (todos los productos, sin filtros) — costo real
+        // por lote, no el costo estático de la ficha (ver ValorInventarioService::valorTotal()).
+        $totalImporteGlobal = $valorInventario->valorTotal();
+
+        // Widget "Stock Bajo" / "Valor Stock Bajo" — sobre todo el catálogo, no solo las filas de
+        // la página visible. Mismo umbral e inclusión de productos sin stock que el filtro
+        // "stock bajo" de esta misma pantalla (Producto::getStockBajoAttribute()). El conteo lo ve
+        // cualquier rol (como antes); el valor, solo quien ve datos de costo.
+        $resumenStockBajo = $valorInventario->resumenStockBajo(5, incluirSinStock: true);
+        if (! $canViewStockStats) {
+            $resumenStockBajo['valor'] = null;
+        }
+
+        return Inertia::render('Productos/Index', [
+            'productos' => $paginatedProducts,
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
+            'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
+            'filters' => $request->only(['search', 'categoria_id', 'almacen_id', 'stock_bajo']),
+            'sort' => ['field' => $sortField, 'direction' => $sortDirection],
+            'canViewStockStats' => $canViewStockStats,
+            'canViewSensitiveData' => $canViewSensitiveData,
+            'total_importe_global' => (float) $totalImporteGlobal,
+            'resumen_stock_bajo' => $resumenStockBajo,
+        ]);
+    }
+
+    /**
+     * Query del listado de Productos con sus filtros (búsqueda, categoría, almacén, stock bajo) y
+     * orden. Fuente única: la usan `index()` (tabla paginada) y `exportGeneral()` (Excel) para que
+     * ambos muestren exactamente las mismas filas.
+     *
+     * Devuelve [query, id del almacén filtrado o null, campo de orden, dirección de orden].
+     *
+     * @return array{0: Builder<Producto>, 1: int|null, 2: string, 3: string}
+     */
+    private function consultaListado(Request $request): array
+    {
         // Query base con relaciones
         $query = Producto::with(['categoria', 'almacenes', 'codigos']);
 
@@ -113,80 +172,51 @@ class ProductoController extends Controller
             $query->whereIn('id', $ids);
         }
 
-        // Paginación
-        $perPage = $request->get('per_page', 15);
-        $paginatedProducts = $query->paginate($perPage)->withQueryString();
+        return [$query, $almacenFiltroId, $sortField, $sortDirection];
+    }
 
-        // Costo real ponderado por producto (lotes_stock), en bulk para las filas de esta
-        // página — evita N+1 de llamar Producto::costoEnAlmacen() una vez por fila. Sin
-        // filtro de almacén, pondera sobre lotes de TODOS los almacenes del producto.
-        $productoIds = $paginatedProducts->getCollection()->pluck('id')->all();
-        $costosPonderados = $valorInventario->costosPonderadosPorProducto($productoIds, $almacenFiltroId);
+    /**
+     * Una fila de la tabla de Productos: costo real ponderado, cantidad (total o del almacén
+     * filtrado), código de barras real y flags de la ficha. Fuente única, ver `consultaListado()`.
+     *
+     * @param  array<int, float>  $costosPonderados  producto_id => costo (ver ValorInventarioService)
+     * @return array<string, mixed>
+     */
+    private function filaListado(Producto $producto, array $costosPonderados, ?int $almacenFiltroId): array
+    {
+        // Costo: promedio ponderado real de lotes_stock (ver ValorInventarioService::costosPonderadosPorProducto()
+        // abajo); cae al costo estático de la ficha si el producto no tiene ningún lote
+        // (catálogo viejo, mismo fallback que Producto::costoEnAlmacen()).
+        $costo = $costosPonderados[$producto->id] ?? (float) $producto->precio_compra_producto;
 
-        // Transformar los datos para la vista después de paginar
-        $paginatedProducts->getCollection()->transform(function ($producto) use ($costosPonderados, $almacenFiltroId) {
-            // Costo: promedio ponderado real de lotes_stock (ver ValorInventarioService::costosPonderadosPorProducto()
-            // abajo); cae al costo estático de la ficha si el producto no tiene ningún lote
-            // (catálogo viejo, mismo fallback que Producto::costoEnAlmacen()).
-            $costo = $costosPonderados[$producto->id] ?? (float) $producto->precio_compra_producto;
+        // Cantidad: total en todos los almacenes sin filtro; con un almacén filtrado, la
+        // cantidad real ahí (el pivote ya está cargado en memoria por el eager load de
+        // 'almacenes' de consultaListado(), sin query extra).
+        $cantidad = $almacenFiltroId !== null
+            ? (int) ($producto->almacenes->firstWhere('id', $almacenFiltroId)?->pivot->cantidad ?? 0)
+            : $producto->cantidad_total;
 
-            // Cantidad: total en todos los almacenes sin filtro; con un almacén filtrado, la
-            // cantidad real ahí (el pivote ya está cargado en memoria por el eager load de
-            // 'almacenes' de arriba, sin query extra).
-            $cantidad = $almacenFiltroId !== null
-                ? (int) ($producto->almacenes->firstWhere('id', $almacenFiltroId)?->pivot->cantidad ?? 0)
-                : $producto->cantidad_total;
-
-            return [
-                'id' => $producto->id,
-                'nombre_producto' => $producto->nombre_producto,
-                'marca_producto' => $producto->marca_producto,
-                'modelo_producto' => $producto->modelo_producto,
-                'capacidad_producto' => $producto->capacidad_producto,
-                'color_producto' => $producto->color_producto,
-                // `productos.codigo_producto` está vacío en todo el catálogo real — el código
-                // de barras real vive en `producto_codigos` (relación `codigos`, eager-loaded
-                // arriba). Se manda el marcado `es_default` (o el primero si ninguno lo está).
-                'codigo_producto' => $producto->codigos->sortByDesc('es_default')->first()?->codigo_barras,
-                'categoria' => $producto->categoria?->nombre_categoria,
-                'categoria_id' => $producto->categoria_id,
-                'precio_compra_producto' => $costo,
-                'cantidad_total' => $cantidad,
-                'imagen_url' => $producto->imagen_url,
-                'barcode_image_url' => $producto->barcode_image_url,
-                'stock_bajo' => $producto->stock_bajo,
-                'created_at' => $producto->created_at?->toISOString(),
-                'updated_at' => $producto->updated_at?->toISOString(),
-            ];
-        });
-
-        $canViewStockStats = in_array($user->role, ['admin', 'moderador']);
-        $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
-
-        // Valor total del inventario global (todos los productos, sin filtros) — costo real
-        // por lote, no el costo estático de la ficha (ver ValorInventarioService::valorTotal()).
-        $totalImporteGlobal = $valorInventario->valorTotal();
-
-        // Widget "Stock Bajo" / "Valor Stock Bajo" — sobre todo el catálogo, no solo las filas de
-        // la página visible. Mismo umbral e inclusión de productos sin stock que el filtro
-        // "stock bajo" de esta misma pantalla (Producto::getStockBajoAttribute()). El conteo lo ve
-        // cualquier rol (como antes); el valor, solo quien ve datos de costo.
-        $resumenStockBajo = $valorInventario->resumenStockBajo(5, incluirSinStock: true);
-        if (! $canViewStockStats) {
-            $resumenStockBajo['valor'] = null;
-        }
-
-        return Inertia::render('Productos/Index', [
-            'productos' => $paginatedProducts,
-            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
-            'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
-            'filters' => $request->only(['search', 'categoria_id', 'almacen_id', 'stock_bajo']),
-            'sort' => ['field' => $sortField, 'direction' => $sortDirection],
-            'canViewStockStats' => $canViewStockStats,
-            'canViewSensitiveData' => $canViewSensitiveData,
-            'total_importe_global' => (float) $totalImporteGlobal,
-            'resumen_stock_bajo' => $resumenStockBajo,
-        ]);
+        return [
+            'id' => $producto->id,
+            'nombre_producto' => $producto->nombre_producto,
+            'marca_producto' => $producto->marca_producto,
+            'modelo_producto' => $producto->modelo_producto,
+            'capacidad_producto' => $producto->capacidad_producto,
+            'color_producto' => $producto->color_producto,
+            // `productos.codigo_producto` está vacío en todo el catálogo real — el código
+            // de barras real vive en `producto_codigos` (relación `codigos`, eager-loaded en
+            // consultaListado()). Se manda el marcado `es_default` (o el primero si ninguno lo está).
+            'codigo_producto' => $producto->codigos->sortByDesc('es_default')->first()?->codigo_barras,
+            'categoria' => $producto->categoria?->nombre_categoria,
+            'categoria_id' => $producto->categoria_id,
+            'precio_compra_producto' => $costo,
+            'cantidad_total' => $cantidad,
+            'imagen_url' => $producto->imagen_url,
+            'barcode_image_url' => $producto->barcode_image_url,
+            'stock_bajo' => $producto->stock_bajo,
+            'created_at' => $producto->created_at?->toISOString(),
+            'updated_at' => $producto->updated_at?->toISOString(),
+        ];
     }
 
     /**
@@ -877,6 +907,35 @@ class ProductoController extends Controller
 
             return redirect()->back()->withErrors(['error' => 'Error al exportar: '.$e->getMessage()]);
         }
+    }
+
+    /**
+     * Exporta a Excel exactamente lo que muestra la tabla de Productos: mismos filtros, orden, costo
+     * real y cantidad (ver `consultaListado()`/`filaListado()`), pero sin paginar. Sin costo ni
+     * importe para quien no ve datos sensibles, igual que la tabla.
+     */
+    public function exportGeneral(Request $request, ValorInventarioService $valorInventario)
+    {
+        [$query, $almacenFiltroId] = $this->consultaListado($request);
+
+        $productos = $query->get();
+        $costosPonderados = $valorInventario->costosPonderadosPorProducto($productos->pluck('id')->all(), $almacenFiltroId);
+        $filas = $productos
+            ->map(fn (Producto $producto) => $this->filaListado($producto, $costosPonderados, $almacenFiltroId))
+            ->all();
+
+        $incluirCostos = in_array(Auth::user()->role, ['admin', 'moderador']);
+        $almacenNombre = $almacenFiltroId !== null ? Almacen::find($almacenFiltroId)?->nombre_almacen : null;
+
+        return Excel::download(
+            new ProductosListadoExport(
+                $filas,
+                $incluirCostos,
+                $almacenNombre,
+                $incluirCostos ? $valorInventario->valorTotal() : null,
+            ),
+            'productos-listado-'.now()->format('Y-m-d-His').'.xlsx'
+        );
     }
 
     /**

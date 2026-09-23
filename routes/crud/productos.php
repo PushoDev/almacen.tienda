@@ -43,6 +43,9 @@ Route::middleware(['auth', 'verified'])->group(
         // Exportar productos
         Route::get('/listado-productos/exportar/excel', [ProductoController::class, 'export'])->name('productos.export');
 
+        // Exportar el listado general: lo mismo que muestra la tabla (con sus filtros), sin paginar
+        Route::get('/listado-productos/exportar/general', [ProductoController::class, 'exportGeneral'])->name('productos.export-general');
+
         // Importar productos (con almacén opcional en request)
         Route::post('/listado-productos/importar/excel', [ProductoController::class, 'import'])->name('productos.import');
 
