@@ -30,6 +30,7 @@ import {
     Download,
     Edit3,
     Eye,
+    FileSpreadsheet,
     FileText,
     Filter,
     GitMerge,
@@ -440,6 +441,21 @@ export default function ProductosPage({
         }
     };
 
+    // Exportar la lista general: lo mismo que muestra la tabla (mismos filtros y orden que ya aplicó
+    // el servidor, por eso salen de `filters`/`sort` y no del estado de los inputs), sin paginar.
+    const handleExportLista = () => {
+        const params: Record<string, string | boolean> = {};
+        if (filters.search) params.search = filters.search;
+        if (filters.categoria_id) params.categoria_id = filters.categoria_id;
+        if (filters.almacen_id) params.almacen_id = filters.almacen_id;
+        if (filters.stock_bajo) params.stock_bajo = true;
+        if (sort.field && sort.field !== 'nombre_producto') params.sort_field = sort.field;
+        if (sort.direction && sort.direction !== 'asc') params.sort_direction = sort.direction;
+
+        sileo.info({ title: 'Preparando exportación...', description: 'Se descargará la lista tal como la ves en la tabla', duration: 2500 });
+        window.location.href = route('productos.export-general', params);
+    };
+
     // Importar desde Excel - VERSIÓN PROFESIONAL
     const handleImport = async (file: File, almacenId: number) => {
         const formData = new FormData();
@@ -648,7 +664,7 @@ export default function ProductosPage({
                     <CardContent className="p-4">
                         <div className="flex flex-wrap items-end gap-3">
                     {/* Buscador */}
-                    <div className="relative w-full sm:w-72">
+                    <div className="relative min-w-64 flex-[2]">
                         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
                         <input
                             type="text"
@@ -660,7 +676,7 @@ export default function ProductosPage({
                     </div>
 
                     {/* Filtro por categoría */}
-                    <div className="w-44">
+                    <div className="min-w-44 flex-1">
                         <Label htmlFor="categoria-filtro" className="text-muted-foreground mb-1.5 block text-xs">
                             Categoría
                         </Label>
@@ -682,7 +698,7 @@ export default function ProductosPage({
                     </div>
 
                     {/* Filtro por almacén */}
-                    <div className="w-48">
+                    <div className="min-w-48 flex-1">
                         <Label htmlFor="almacen-filtro" className="text-muted-foreground mb-1.5 block text-xs">
                             Almacén
                         </Label>
@@ -725,8 +741,24 @@ export default function ProductosPage({
 
                     <Separator orientation="vertical" className="h-9" />
 
+                    {/* Exportar la lista tal como se ve en la tabla (con los filtros activos) */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                size="icon"
+                                className="h-8 w-8 cursor-pointer bg-teal-600 text-white hover:bg-teal-800"
+                                onClick={handleExportLista}
+                            >
+                                <FileSpreadsheet size={16} />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Exportar la lista tal como se ve en la tabla (con los filtros activos)</TooltipContent>
+                    </Tooltip>
+
+                    <Separator orientation="vertical" className="h-9" />
+
                     {/* Selector de almacén para exportación */}
-                    <div className="w-48">
+                    <div className="min-w-48 flex-1">
                         <Label htmlFor="almacen-exportar" className="text-muted-foreground mb-1.5 block text-xs">
                             Exportar a
                         </Label>
@@ -767,7 +799,7 @@ export default function ProductosPage({
                                 <Upload size={16} />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Exportar productos</TooltipContent>
+                        <TooltipContent>Exportar inventario del almacén elegido en "Exportar a"</TooltipContent>
                     </Tooltip>
 
                     <Tooltip>

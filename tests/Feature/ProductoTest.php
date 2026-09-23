@@ -1,12 +1,15 @@
 <?php
 
+use App\Exports\ProductosListadoExport;
 use App\Models\Almacen;
+use App\Models\Categoria;
 use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 function payloadProducto(Producto $producto, float $precioCosto, ?string $password = null): array
 {
@@ -729,4 +732,134 @@ test('index() no revienta cuando un producto no tiene ningún código de barras'
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page->where('productos.data.0.codigo_producto', null));
+});
+
+/**
+ * Escenario del export general: "Producto A" con prorrateo (ficha $10, lote de 5 unidades a $20 en
+ * ALMACEN A) y "Producto B" de catálogo viejo sin lotes (ficha $3, 2 unidades en ALMACEN B).
+ * Valor real esperado: 5*20 + 2*3 = 106.
+ *
+ * @return array{a: Producto, b: Producto, almacenA: Almacen, almacenB: Almacen}
+ */
+function escenarioExportGeneral(): array
+{
+    $categoria = Categoria::factory()->create(['nombre_categoria' => 'Bebidas']);
+    $almacenA = Almacen::factory()->create(['nombre_almacen' => 'ALMACEN A']);
+    $almacenB = Almacen::factory()->create(['nombre_almacen' => 'ALMACEN B']);
+
+    $a = Producto::factory()->for($categoria)->create([
+        'nombre_producto' => 'Producto A', 'marca_producto' => 'Acme', 'modelo_producto' => 'M1',
+        'capacidad_producto' => '1L', 'color_producto' => 'Rojo', 'codigo_producto' => null,
+        'precio_compra_producto' => 10,
+    ]);
+    $a->almacenes()->attach($almacenA->id, ['cantidad' => 5]);
+    LoteStock::create([
+        'codigo' => 'LOTE-EXPORT-A', 'producto_id' => $a->id, 'almacen_id' => $almacenA->id,
+        'cantidad' => 5, 'precio_costo' => 20,
+    ]);
+    ProductoCodigo::factory()->for($a)->default()->create(['codigo_barras' => 'COD-A-001']);
+
+    $b = Producto::factory()->for($categoria)->create([
+        'nombre_producto' => 'Producto B', 'marca_producto' => null, 'modelo_producto' => null,
+        'capacidad_producto' => null, 'color_producto' => null, 'codigo_producto' => null,
+        'precio_compra_producto' => 3,
+    ]);
+    $b->almacenes()->attach($almacenB->id, ['cantidad' => 2]);
+
+    return compact('a', 'b', 'almacenA', 'almacenB');
+}
+
+/**
+ * Pide el export general como el usuario autenticado y devuelve el export que se descargó.
+ *
+ * @param  array<string, mixed>  $filtros
+ */
+function exportGeneralDescargado(array $filtros = []): ProductosListadoExport
+{
+    Excel::fake();
+    test()->travelTo('2026-09-23 10:30:00');
+
+    test()->get(route('productos.export-general', $filtros))->assertOk();
+
+    $export = null;
+    Excel::assertDownloaded('productos-listado-2026-09-23-103000.xlsx', function (ProductosListadoExport $descargado) use (&$export) {
+        $export = $descargado;
+
+        return true;
+    });
+
+    return $export;
+}
+
+test('el export general trae las mismas cifras que la tabla, con código real y totales', function () {
+    ['a' => $a, 'b' => $b] = escenarioExportGeneral();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $export = exportGeneralDescargado();
+    $filas = $export->array();
+
+    expect($export->headings())->toBe([
+        'ID', 'Nombre', 'Marca', 'Modelo', 'Capacidad', 'Color', 'Código', 'Categoría',
+        'Costo (promedio)', 'Cant (total)', 'Importe', '¿Stock bajo?',
+    ])
+        ->and($filas[0])->toBe([$a->id, 'Producto A', 'Acme', 'M1', '1L', 'Rojo', 'COD-A-001', 'Bebidas', 20.0, 5, 100.0, 'NO'])
+        ->and($filas[1])->toBe([$b->id, 'Producto B', '', '', '', '', '', 'Bebidas', 3.0, 2, 6.0, 'SÍ'])
+        ->and($filas[2][1])->toContain('2 FILAS EXPORTADAS')
+        ->and(array_slice($filas[2], 8, 3))->toBe([null, 7, 106.0])
+        ->and($filas[3][1])->toContain('TOTAL GENERAL')
+        ->and(array_slice($filas[3], 8, 3))->toBe([null, null, 106.0])
+        ->and($filas)->toHaveCount(4);
+});
+
+test('el export general con filtro de almacén trae el costo y la cantidad de ese almacén, igual que la tabla', function () {
+    ['a' => $a, 'almacenA' => $almacenA, 'almacenB' => $almacenB] = escenarioExportGeneral();
+    $a->almacenes()->attach($almacenB->id, ['cantidad' => 4]);
+    LoteStock::create([
+        'codigo' => 'LOTE-EXPORT-A2', 'producto_id' => $a->id, 'almacen_id' => $almacenB->id,
+        'cantidad' => 4, 'precio_costo' => 30,
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $export = exportGeneralDescargado(['almacen_id' => $almacenA->id]);
+    $filas = $export->array();
+
+    expect($export->headings()[8])->toBe('Costo en ALMACEN A')
+        ->and($export->headings()[9])->toBe('Cant. en ALMACEN A')
+        ->and(array_slice($filas[0], 8, 3))->toBe([20.0, 5, 100.0])
+        ->and(collect($filas)->pluck(1)->all())->not->toContain('Producto B');
+
+    $this->get(route('productos.index', ['almacen_id' => $almacenA->id]))
+        ->assertInertia(fn ($page) => $page
+            ->where('productos.data.0.precio_compra_producto', 20)
+            ->where('productos.data.0.cantidad_total', 5));
+});
+
+test('el export general respeta la búsqueda de la tabla', function () {
+    escenarioExportGeneral();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $filas = exportGeneralDescargado(['search' => 'Producto B'])->array();
+
+    expect(collect($filas)->pluck(1)->all())->toContain('Producto B')
+        ->not->toContain('Producto A');
+});
+
+test('el export general de un vendedor no incluye costo, importe ni el total general', function () {
+    ['a' => $a] = escenarioExportGeneral();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $export = exportGeneralDescargado();
+    $filas = $export->array();
+
+    expect($export->headings())->toBe([
+        'ID', 'Nombre', 'Marca', 'Modelo', 'Capacidad', 'Color', 'Código', 'Categoría', 'Cant (total)', '¿Stock bajo?',
+    ])
+        ->and($filas[0])->toBe([$a->id, 'Producto A', 'Acme', 'M1', '1L', 'Rojo', 'COD-A-001', 'Bebidas', 5, 'NO'])
+        ->and($filas)->toHaveCount(3);
+});
+
+test('el export general redirige al login cuando no hay sesión', function () {
+    $this->get(route('productos.export-general'))->assertRedirect(route('login'));
 });
