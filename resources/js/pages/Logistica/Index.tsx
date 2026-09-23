@@ -26,6 +26,7 @@ import { ComprasPorProveedorPie } from './layout/ComprasPorProveedorChart';
 import { GastosMensualesChart } from './layout/GastosMensualesChart';
 import { ProductosMasCompradosPie } from './layout/ProductosMasCompradosPie';
 import { ProductosPorAlmacenCharts } from './layout/ProductosPorAlmacen';
+import { ResumenPorAlmacen } from './layout/ResumenPorAlmacen';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,6 +60,7 @@ export default function LogisticaPage({
     resumenClientes,
     resumenProveedores,
     resumenProductos,
+    almacenesLista = [],
 }: LogisticaProps) {
     // Vista Cliente
     return (
@@ -600,6 +602,9 @@ export default function LogisticaPage({
                             </CardContent>
                         </Card>
                     )}
+
+                    {/* Resumen por Almacén — detalle de un almacén, debajo del resumen global de productos */}
+                    {canViewFinance && <ResumenPorAlmacen almacenes={almacenesLista} />}
 
                     <Separator className="col-span-full my-4" />
                     {/* Chartjs - Only if authorized */}
