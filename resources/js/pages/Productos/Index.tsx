@@ -662,7 +662,7 @@ export default function ProductosPage({
                 {/* Buscador y Filtros */}
                 <Card>
                     <CardContent className="p-4">
-                        <div className="flex flex-wrap items-end gap-3">
+                        <div className="flex flex-wrap items-end gap-3 pr-12">
                     {/* Buscador */}
                     <div className="relative min-w-64 flex-[2]">
                         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />

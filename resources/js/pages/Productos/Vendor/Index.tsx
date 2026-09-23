@@ -298,7 +298,10 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const availableAlmacenes = initialAlmacenes.map((a) => {
         const totalProductos = a.productos.length;
         const totalStock = a.productos.reduce((sum, p) => sum + p.stock_almacen, 0);
-        const valorTotal = a.productos.reduce((sum, p) => sum + (p.precio_venta || p.precio_compra) * p.stock_almacen, 0);
+        // Valor a costo real del almacén (el mismo criterio del Valor Total de Productos y del reporte)
+        // y valor a precio de venta de lo que ya tiene precio — antes se mezclaban en una sola cifra.
+        const valorCosto = a.productos.reduce((sum, p) => sum + (p.costo_real ?? p.precio_compra) * p.stock_almacen, 0);
+        const valorVenta = a.productos.reduce((sum, p) => sum + (p.precio_venta ?? 0) * p.stock_almacen, 0);
         const productosConPrecio = a.productos.filter((p) => p.precio_venta !== null).length;
 
         return {
@@ -306,7 +309,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             nombre: a.nombre_almacen,
             totalProductos,
             totalStock,
-            valorTotal,
+            valorCosto,
+            valorVenta,
             productosConPrecio,
             productosSinPrecio: totalProductos - productosConPrecio,
         };
@@ -1508,7 +1512,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                 <span className="font-medium">{almacen.nombre}</span>
                                                 <span className="text-muted-foreground text-xs">
                                                     {almacen.totalProductos} productos • {almacen.totalStock} unidades
-                                                    {canViewSensitiveData && ` • ${formatCurrency(almacen.valorTotal)}`}
+                                                    {canViewSensitiveData &&
+                                                        ` • Costo ${formatCurrency(almacen.valorCosto)} • Venta ${formatCurrency(almacen.valorVenta)}`}
                                                 </span>
                                             </div>
                                         </ComboboxItem>
