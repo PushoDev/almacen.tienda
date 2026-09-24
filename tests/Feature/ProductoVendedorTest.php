@@ -409,3 +409,33 @@ test('el precio propio de un lote se puede poner y quitar por JSON desde disponi
     $quitar->assertOk()->assertJson(['success' => true, 'precio_venta' => null]);
     expect($lote->fresh()->precio_venta)->toBeNull();
 });
+
+// ─── Fichas agotadas: se listan si tienen precio (como el POS), las vacías sin precio no ────
+
+test('el listado de disponibles incluye las fichas agotadas con precio y omite las agotadas sin precio', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+
+    $conStock = Producto::factory()->create(['nombre_producto' => 'CON STOCK']);
+    $conStock->almacenes()->attach($almacen->id, ['cantidad' => 7]);
+    $agotadaConPrecio = Producto::factory()->create(['nombre_producto' => 'AGOTADA CON PRECIO']);
+    $agotadaConPrecio->almacenes()->attach($almacen->id, ['cantidad' => 0]);
+    DB::table('producto_vendedors')->insert([
+        'producto_id' => $agotadaConPrecio->id, 'almacen_id' => $almacen->id, 'precio_venta' => 25,
+        'venta_ganancia' => 5, 'comision' => 0, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $agotadaSinPrecio = Producto::factory()->create(['nombre_producto' => 'AGOTADA SIN PRECIO']);
+    $agotadaSinPrecio->almacenes()->attach($almacen->id, ['cantidad' => 0]);
+
+    $response = $this->get(route('disponibles.index'));
+
+    $response->assertInertia(fn ($page) => $page->where('almacenes.0.productos', function ($productos) use ($conStock, $agotadaConPrecio, $agotadaSinPrecio) {
+        $porId = collect($productos)->keyBy('id');
+
+        return $porId->count() === 2
+            && $porId[$conStock->id]['stock_almacen'] === 7
+            && $porId[$agotadaConPrecio->id]['stock_almacen'] === 0
+            && $porId[$agotadaConPrecio->id]['tiene_precio'] === true
+            && ! $porId->has($agotadaSinPrecio->id);
+    }));
+});

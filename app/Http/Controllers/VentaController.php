@@ -22,6 +22,7 @@ use App\Notifications\VentaDevueltaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
+use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
 use App\Services\LoteConsumoService;
 use Illuminate\Http\JsonResponse;
@@ -127,6 +128,10 @@ class VentaController extends Controller
             ->get()
             ->keyBy('producto_id');
 
+        // Reparto de códigos de barras por almacén, en una sola consulta (ver CodigoStockService).
+        $codigoStock = app(CodigoStockService::class);
+        $repartoCodigos = $codigoStock->repartoDelAlmacen((int) $id);
+
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
         })
@@ -139,7 +144,7 @@ class VentaController extends Controller
                 },
             ])
             ->get()
-            ->map(function ($producto) use ($preciosAlmacen, $id) {
+            ->map(function ($producto) use ($preciosAlmacen, $id, $codigoStock, $repartoCodigos) {
                 $precioRow = $preciosAlmacen->get($producto->id);
                 $almacen = $producto->almacenes->first();
 
@@ -159,12 +164,8 @@ class VentaController extends Controller
                     'tiene_precio' => ($precioRow?->precio_venta ?? 0) > 0,
                     'imagen_url' => $producto->imagen_url,
                     'codigo_barras' => $producto->codigo_producto,
-                    'codigos' => $producto->codigos->map(fn ($c) => [
-                        'id' => $c->id,
-                        'codigo_barras' => $c->codigo_barras,
-                        'cantidad' => $c->cantidad,
-                        'es_default' => (bool) $c->es_default,
-                    ]),
+                    // Códigos con las unidades que hay en ESTE almacén (no el total de todos).
+                    'codigos' => $codigoStock->codigosParaVenta($producto->codigos, $repartoCodigos, (int) ($almacen?->pivot->cantidad ?? 0))->values(),
                     'barcode_image_url' => $producto->barcode_image_url,
                     'precio_base' => $precioRow ? (float) $precioRow->precio_venta : null,
                     'comision' => $precioRow ? (float) ($precioRow->comision ?? 0) : 0,
@@ -1008,7 +1009,10 @@ class VentaController extends Controller
                     throw new \Exception("El código seleccionado no pertenece al producto: {$producto->nombre_producto}.");
                 }
 
-                if ($codigoVenta->cantidad < $item['cantidad']) {
+                // Unidades de ESTE código en ESTE almacén (ver CodigoStockService: si el reparto por
+                // almacén no cuadra con el stock, cae al total del código como antes).
+                $codigoStock = app(CodigoStockService::class);
+                if ($codigoStock->cantidadDisponible((int) $validatedData['almacen_id'], $codigoVenta, (int) $almacenProducto->cantidad) < $item['cantidad']) {
                     throw new \Exception("Stock insuficiente para el código {$codigoVenta->codigo_barras}.");
                 }
 
@@ -1029,8 +1033,9 @@ class VentaController extends Controller
                 ]);
                 $historialStockIds[] = $historial->id;
 
-                // Descontar del código exacto utilizado en la venta
-                $codigoVenta->decrement('cantidad', $item['cantidad']);
+                // Descontar del código exacto utilizado en la venta (total del producto y reparto del almacén)
+                $codigoVenta->decrement('cantidad', min($item['cantidad'], max(0, (int) $codigoVenta->cantidad)));
+                $codigoStock->descontar((int) $validatedData['almacen_id'], $codigoVenta->id, (int) $item['cantidad']);
             }
 
             // ✅ CAMBIO 3: Modificar validación de cuentas (solo si tiene cuenta_id)
@@ -2138,6 +2143,7 @@ class VentaController extends Controller
                     $codigoUsado = ProductoCodigo::find($detalle->producto_codigo_id);
                     if ($codigoUsado) {
                         $codigoUsado->increment('cantidad', $detalle->cantidad);
+                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoUsado->id, $detalle->cantidad);
                     }
                 } else {
                     $codigoDefault = ProductoCodigo::where('producto_id', $detalle->producto_id)
@@ -2146,6 +2152,7 @@ class VentaController extends Controller
 
                     if ($codigoDefault) {
                         $codigoDefault->increment('cantidad', $detalle->cantidad);
+                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoDefault->id, $detalle->cantidad);
                     }
                 }
 
@@ -2295,7 +2302,7 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
         }
 
-        $venta->load(['detalles']);
+        $venta->load(['detalles.loteConsumos']);
 
         DB::transaction(function () use ($venta) {
             foreach ($venta->detalles as $detalle) {
@@ -2306,10 +2313,19 @@ class VentaController extends Controller
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
+                // Igual que anularVenta(): las unidades vuelven a los lotes de donde salieron
+                // (o al lote resultante si ese lote se fusionó después).
+                foreach ($detalle->loteConsumos as $consumo) {
+                    if ($consumo->lote_stock_id) {
+                        LoteStock::find($consumo->lote_stock_id)?->loteVigente()->increment('cantidad_disponible', $consumo->cantidad);
+                    }
+                }
+
                 if ($detalle->producto_codigo_id) {
                     $codigo = ProductoCodigo::find($detalle->producto_codigo_id);
                     if ($codigo) {
                         $codigo->increment('cantidad', $detalle->cantidad);
+                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigo->id, $detalle->cantidad);
                     }
                 }
 

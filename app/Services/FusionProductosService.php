@@ -190,6 +190,8 @@ class FusionProductosService
         foreach (DB::table('producto_codigos')->whereIn('producto_id', $eliminarIds)->orderBy('id')->get() as $codigo) {
             if (isset($existentes[$codigo->codigo_barras])) {
                 DB::table('venta_detalles')->where('producto_codigo_id', $codigo->id)->update(['producto_codigo_id' => $existentes[$codigo->codigo_barras]]);
+                // Su reparto por almacén pasa al código equivalente antes de borrar el repetido.
+                app(CodigoStockService::class)->unirCodigos($codigo->id, $existentes[$codigo->codigo_barras]);
                 DB::table('producto_codigos')->where('id', $codigo->id)->delete();
 
                 continue;

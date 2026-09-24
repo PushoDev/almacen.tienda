@@ -12,6 +12,7 @@ use App\Models\Producto;
 use App\Models\User;
 use App\Notifications\MovimientoStockNotification;
 use App\Notifications\ProrrateoRequeridoNotification;
+use App\Services\CodigoStockService;
 use App\Services\LoteConsumoService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -527,6 +528,15 @@ class MovimientosController extends Controller
                                 'precio_costo' => $parte['costo_unitario'],
                             ]);
                         }
+
+                        // Reparto de códigos de barras por almacén: salen del origen (primero el
+                        // código que más tiene ahí) y llegan al destino con el mismo código.
+                        app(CodigoStockService::class)->mover(
+                            (int) $producto['id'],
+                            (int) $movimiento->almacen_origen_id,
+                            (int) $movimiento->almacen_destino_id,
+                            (int) $cantidadRecibida
+                        );
                     }
 
                     // Al enviar, se incrementó cantidad_en_transito pero se mantuvo cantidad

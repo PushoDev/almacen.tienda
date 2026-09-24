@@ -2,6 +2,7 @@
 
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
+use App\Models\AlmacenProductoCodigo;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\LoteStock;
@@ -1847,4 +1848,149 @@ test('show() muestra costo_unitario real a admin y moderador', function () {
 
         $response->assertInertia(fn ($page) => $page->where('venta.items.0.costo_unitario', 10));
     }
+});
+
+// ==========================================================================
+// CÓDIGOS DE BARRAS POR ALMACÉN — el POS solo ve/usa los códigos que hay en SU almacén
+// ==========================================================================
+
+function pagoEfectivoUsd(Moneda $monedaUsd, float $monto): array
+{
+    $cuenta = crearCuentaUsd();
+
+    return [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => $monto,
+        'tasa_cambio' => 1, 'monto_equivalente' => $monto, 'cuenta_id' => $cuenta->id,
+    ]];
+}
+
+test('vender descuenta el código en el reparto del almacén y anular la venta lo devuelve al mismo almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 3, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 90);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 97]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 97]);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 100]);
+});
+
+test('no se puede vender con un código que no tiene unidades en ese almacén aunque otro almacén sí las tenga', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $otroAlmacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigoDelAlmacen] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $codigoDelOtro = ProductoCodigo::factory()->create(['producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProducto::create(['almacen_id' => $otroAlmacen->id, 'producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigoDelAlmacen->id, 'cantidad' => 100]);
+    AlmacenProductoCodigo::create(['almacen_id' => $otroAlmacen->id, 'producto_codigo_id' => $codigoDelOtro->id, 'cantidad' => 1]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigoDelOtro, precioVenta: 30, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 30);
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+
+    $response->assertStatus(500);
+    expect($response->json('message'))->toContain('Stock insuficiente para el código');
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 100]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigoDelOtro->id, 'cantidad' => 1]);
+});
+
+test('si el reparto por almacén no cuadra con el stock, vender usa el total del código como antes', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    // Reparto incompleto (60 de 100): no cuadra, así que no debe bloquear una venta legítima.
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 60]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 80, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 2400);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 20]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 20]);
+});
+
+test('el POS lista de cada producto solo las unidades de código que hay en el almacén seleccionado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $otroAlmacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigoPrincipal] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 39]);
+    $codigoPrincipal->update(['cantidad' => 39]);
+    $codigoDelOtro = ProductoCodigo::factory()->create(['producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProducto::create(['almacen_id' => $otroAlmacen->id, 'producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigoPrincipal->id, 'cantidad' => 39]);
+    AlmacenProductoCodigo::create(['almacen_id' => $otroAlmacen->id, 'producto_codigo_id' => $codigoDelOtro->id, 'cantidad' => 1]);
+
+    $codigos = collect($this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json('0.codigos'))
+        ->pluck('cantidad', 'id');
+
+    expect($codigos[$codigoPrincipal->id])->toBe(39);
+    expect($codigos[$codigoDelOtro->id])->toBe(0); // la unidad de este código está en el otro almacén
+});
+
+test('sin reparto por almacén, el POS limita cada código al stock del almacén como antes', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 5]);
+    $codigo->update(['cantidad' => 100]);
+
+    $cantidad = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json('0.codigos.0.cantidad');
+
+    expect($cantidad)->toBe(5);
+});
+
+test('rechazarSolicitudEspecial devuelve las unidades a los lotes y al código del almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-RECHAZO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 100, 'precio_costo' => 12,
+    ]);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 5, cantidad: 4, monedaPrincipal: $monedaUsd);
+    $payload['es_venta_especial'] = true;
+    $payload['nota_venta_especial'] = 'Autorizada por gerencia';
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 20);
+    $this->postJson(route('ventas.procesar'), $payload)->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(96);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.especial.rechazar', $venta))->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(100);
+    $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 100]);
 });

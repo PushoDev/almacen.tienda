@@ -878,7 +878,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
             {canViewSensitiveData && <TableCell>{formatCurrency(costoDe(producto))}</TableCell>}
             <TableCell>
-                <Badge variant="outline">{producto.stock_almacen}</Badge>
+                {producto.stock_almacen > 0 ? (
+                    <Badge variant="outline">{producto.stock_almacen}</Badge>
+                ) : (
+                    <Badge variant="destructive">Agotado</Badge>
+                )}
             </TableCell>
             <TableCell className={cn(producto.precio_venta === null ? 'text-amber-400 italic' : 'text-amber-800')}>
                 {formatCurrency(producto.precio_venta)}
