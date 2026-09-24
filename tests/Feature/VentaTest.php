@@ -1994,3 +1994,116 @@ test('rechazarSolicitudEspecial devuelve las unidades a los lotes y al código d
     $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
     $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 100]);
 });
+
+// ==========================================================================
+// DEVOLUCIÓN — las unidades vuelven al stock Y a un lote, y no se puede revertir dos veces
+// ==========================================================================
+
+test('devolver una venta anterior al registro por lote crea un lote de devolución al costo al que se vendió', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $codigo->update(['cantidad' => 95]);
+
+    // Venta vieja: la línea no tiene ningún registro en venta_detalle_lotes.
+    $venta = Venta::factory()->completada()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id]);
+    $detalle = $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 12, 'ganancia' => 40, 'comision_unitaria' => 0,
+    ]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'solicitud_cliente'])->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'devuelta']);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 100]);
+    $lote = LoteStock::where('codigo', "DEV-{$venta->id}-{$detalle->id}")->sole();
+    expect($lote->almacen_id)->toBe($almacen->id);
+    expect($lote->cantidad_disponible)->toBe(5);
+    expect((float) $lote->precio_costo)->toBe(12.0);
+});
+
+test('devolver una venta con una parte de lote y otra sin lote devuelve cada parte donde corresponde', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    // El lote solo cubre 3 de las 100 unidades: al vender 5, 2 salen "sin lote" al costo de la ficha (10).
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-PARCIAL', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 3, 'precio_costo' => 18,
+    ]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 150);
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    expect($lote->fresh()->cantidad_disponible)->toBe(0);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_pedido'])->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(3); // su parte vuelve al lote de origen
+    $devolucion = LoteStock::where('codigo', 'like', 'DEV-%')->sole();
+    expect($devolucion->cantidad_disponible)->toBe(2); // la parte sin lote entra a un lote propio
+    expect((float) $devolucion->precio_costo)->toBe(10.0);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 100]);
+});
+
+test('una venta rechazada no se puede anular ni devolver otra vez', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $venta = Venta::factory()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id, 'estado' => 'rechazada']);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 10, 'ganancia' => 50, 'comision_unitaria' => 0,
+    ]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])
+        ->assertStatus(400)
+        ->assertJson(['success' => false]);
+
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 100]); // sin cambios
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'rechazada']);
+    expect(LoteStock::count())->toBe(0);
+});
+
+test('si otra petición ya devolvió la venta mientras esta se procesaba, no se revierte dos veces', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $venta = Venta::factory()->completada()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 10, 'ganancia' => 50, 'comision_unitaria' => 0,
+    ]);
+
+    // La primera vez que se carga la venta (al resolver la ruta), otra "petición" ya la marca devuelta
+    // en la base sin que este modelo en memoria se entere: el doble clic.
+    $yaDevuelta = false;
+    Venta::retrieved(function (Venta $cargada) use (&$yaDevuelta) {
+        if (! $yaDevuelta) {
+            $yaDevuelta = true;
+            DB::table('ventas')->where('id', $cargada->id)->update(['estado' => 'devuelta']);
+        }
+    });
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'solicitud_cliente'])
+        ->assertStatus(409)
+        ->assertJson(['success' => false]);
+
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 95]); // no se devolvió otra vez
+    expect(LoteStock::count())->toBe(0);
+});

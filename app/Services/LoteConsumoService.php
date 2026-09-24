@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\LoteStock;
 use App\Models\Producto;
+use App\Models\VentaDetalle;
 use Illuminate\Support\Collection;
 
 /**
@@ -79,6 +80,52 @@ class LoteConsumoService
         }
 
         return $consumido;
+    }
+
+    /**
+     * Devuelve al inventario por lote las unidades de una línea de venta que se revierte
+     * (anulación, devolución o rechazo de una venta especial): cada parte vuelve al lote de donde
+     * salió (o al lote resultante si ese lote se fusionó después). Lo que no tiene lote de origen
+     * — una parte "sin lote" al costo de la ficha, o una venta anterior al registro por lote —
+     * entra a un lote nuevo `DEV-{venta}-{línea}` al costo al que se vendió, para que el stock
+     * devuelto no quede fuera de `lotes_stock` (valor del inventario y costo de la próxima venta).
+     *
+     * Requiere `$detalle->loteConsumos` (cargado o cargable).
+     */
+    public function devolver(VentaDetalle $detalle, int $almacenId): void
+    {
+        $devuelto = 0;
+        $lotesCreados = 0;
+
+        foreach ($detalle->loteConsumos as $consumo) {
+            $lote = $consumo->lote_stock_id ? LoteStock::find($consumo->lote_stock_id) : null;
+
+            if ($lote) {
+                $lote->loteVigente()->increment('cantidad_disponible', $consumo->cantidad);
+            } else {
+                $this->crearLoteDevolucion($detalle, $almacenId, (int) $consumo->cantidad, (float) $consumo->costo_unitario, ++$lotesCreados);
+            }
+
+            $devuelto += (int) $consumo->cantidad;
+        }
+
+        $sinDesglose = (int) $detalle->cantidad - $devuelto;
+
+        if ($sinDesglose > 0) {
+            $this->crearLoteDevolucion($detalle, $almacenId, $sinDesglose, (float) $detalle->costo_unitario, ++$lotesCreados);
+        }
+    }
+
+    private function crearLoteDevolucion(VentaDetalle $detalle, int $almacenId, int $cantidad, float $costo, int $numero): void
+    {
+        LoteStock::create([
+            'codigo' => sprintf('DEV-%d-%d%s', $detalle->venta_id, $detalle->id, $numero > 1 ? '-'.$numero : ''),
+            'producto_id' => $detalle->producto_id,
+            'almacen_id' => $almacenId,
+            'cantidad' => $cantidad,
+            'cantidad_disponible' => $cantidad,
+            'precio_costo' => $costo,
+        ]);
     }
 
     /**

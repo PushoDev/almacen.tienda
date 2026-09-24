@@ -8,7 +8,6 @@ use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\DestinatarioVenta;
 use App\Models\HistorialStock;
-use App\Models\LoteStock;
 use App\Models\Moneda;
 use App\Models\PagoVenta;
 use App\Models\Producto;
@@ -2100,6 +2099,11 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'La venta ya fue devuelta'], 400);
         }
 
+        // Al rechazar una solicitud especial el stock (lotes y códigos incluidos) ya se devolvió.
+        if ($venta->estado === 'rechazada') {
+            return response()->json(['success' => false, 'message' => 'La venta fue rechazada y su stock ya se devolvió'], 400);
+        }
+
         $validated = $request->validate([
             'motivo_anulacion' => 'required|in:error_precio,solicitud_cliente,producto_defectuoso,duplicado_venta,error_pedido,otros',
             'detalle_anulacion' => 'nullable|string|max:500|required_if:motivo_anulacion,otros',
@@ -2115,128 +2119,131 @@ class VentaController extends Controller
         // Cargar relaciones necesarias para poder revertirlas
         $venta->load(['detalles.loteConsumos', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda', 'usuario', 'moneda']);
 
-        DB::transaction(function () use ($venta, $validated, $eraCompletada) {
-            // ✅ SIEMPRE revertir stock (pendiente o completada)
-            foreach ($venta->detalles as $detalle) {
-                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
-                    ->where('producto_id', $detalle->producto_id)->first();
-
-                if ($almacenProducto) {
-                    $almacenProducto->increment('cantidad', $detalle->cantidad);
+        try {
+            DB::transaction(function () use ($venta, $validated, $eraCompletada) {
+                // Con el registro bloqueado se vuelve a mirar el estado: dos peticiones a la vez
+                // (doble clic) pasaron la revisión de arriba, pero solo la primera debe revertir.
+                $estadoActual = Venta::whereKey($venta->id)->lockForUpdate()->value('estado');
+                if (in_array($estadoActual, ['cancelada', 'devuelta', 'rechazada'], true)) {
+                    throw new \DomainException('Esta venta ya fue anulada, devuelta o rechazada por otra solicitud.');
                 }
 
-                // Revertir el consumo de lote(s) — sin esto, anular una venta dejaría
-                // lotes_stock desincronizado del stock real otra vez (ver
-                // LoteConsumoService/venta_detalle_lotes). Las partes sin lote (costo global de
-                // fallback) no tienen nada que revertir acá.
-                foreach ($detalle->loteConsumos as $consumo) {
-                    if ($consumo->lote_stock_id) {
-                        // Si ese lote se fusionó después de la venta, las unidades vuelven al
-                        // lote resultante (loteVigente), no al lote fusionado que quedó en 0.
-                        LoteStock::find($consumo->lote_stock_id)?->loteVigente()->increment('cantidad_disponible', $consumo->cantidad);
+                // ✅ SIEMPRE revertir stock (pendiente o completada)
+                foreach ($venta->detalles as $detalle) {
+                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                        ->where('producto_id', $detalle->producto_id)->first();
+
+                    if ($almacenProducto) {
+                        $almacenProducto->increment('cantidad', $detalle->cantidad);
+                    }
+
+                    // Devolver las unidades a sus lotes (o a un lote de devolución al costo vendido si
+                    // no tienen lote de origen) — sin esto lotes_stock quedaría por debajo del stock.
+                    app(LoteConsumoService::class)->devolver($detalle, (int) $venta->almacen_id);
+
+                    // ✅ Devolver stock al mismo código usado en la venta.
+                    // Para ventas antiguas sin producto_codigo_id, usar default o primero.
+                    if ($detalle->producto_codigo_id) {
+                        $codigoUsado = ProductoCodigo::find($detalle->producto_codigo_id);
+                        if ($codigoUsado) {
+                            $codigoUsado->increment('cantidad', $detalle->cantidad);
+                            app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoUsado->id, $detalle->cantidad);
+                        }
+                    } else {
+                        $codigoDefault = ProductoCodigo::where('producto_id', $detalle->producto_id)
+                            ->orderByDesc('es_default')
+                            ->first();
+
+                        if ($codigoDefault) {
+                            $codigoDefault->increment('cantidad', $detalle->cantidad);
+                            app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoDefault->id, $detalle->cantidad);
+                        }
+                    }
+
+                    HistorialStock::create([
+                        'producto_id' => $detalle->producto_id,
+                        'almacen_id' => $venta->almacen_id,
+                        'venta_id' => $venta->id,
+                        'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
+                        'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                        'diferencia' => $detalle->cantidad,
+                        'tipo' => 'venta_anulada',
+                        'observaciones' => 'Stock revertido por anulación de venta',
+                        'user_id' => Auth::id(),
+                    ]);
+                }
+
+                // Revertir pagos y gestor solo si la venta fue completada.
+                // En ventas pendientes, cuentas y deudas nunca fueron modificadas.
+                if ($venta->estado === 'completada') {
+                    foreach ($venta->pagos as $pago) {
+                        if ($pago->cliente_id) {
+                            $cliente = $pago->cliente;
+                            if ($cliente) {
+                                $cliente->decrement('deuda_pago_cliente', $pago->monto);
+                            }
+                        }
+
+                        if ($pago->cuenta_id) {
+                            $cuenta = $pago->cuenta;
+                            if ($cuenta) {
+                                $cuenta->decrement('saldo_cuenta', $pago->monto);
+                            }
+                        }
+                    }
+
+                    if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
+                        $cuentaGestor = $venta->gestorCuenta;
+                        if ($cuentaGestor) {
+                            $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
+                        }
+                    }
+
+                    // Revertir mensajero — inverso exacto del aprobarVenta
+                    if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
+                        $cuentaMensajero = $venta->mensajeroCuenta;
+                        if ($cuentaMensajero) {
+                            $montoFinal = $venta->mensajero_monto_final_cup
+                                ? (float) $venta->mensajero_monto_final_cup
+                                : (float) $venta->mensajero_monto_original;
+
+                            // Bloque propio comentado — habilitar cuando se implemente vehículo propio
+                            // if ($venta->mensajero_tipo === 'propio') {
+                            //     if ($venta->mensajero_cuenta_origen_id) {
+                            //         $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
+                            //         if ($cuentaOrigen) {
+                            //             $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
+                            //         }
+                            //     }
+                            //     $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                            // } else
+
+                            // EXTERNO: devolver el dinero a la cuenta del POS
+                            if ($venta->mensajero_tipo === 'externo') {
+                                $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
+                            }
+                        }
+                    }
+
+                    // Revertir comisión vendedor — solo si no es venta con gestor (XOR)
+                    if (! $venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                        $cuentaComision = $venta->comisionCuenta;
+                        if ($cuentaComision) {
+                            $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                            $cuentaComision->increment('saldo_cuenta', $montoCUP);
+                        }
                     }
                 }
 
-                // ✅ Devolver stock al mismo código usado en la venta.
-                // Para ventas antiguas sin producto_codigo_id, usar default o primero.
-                if ($detalle->producto_codigo_id) {
-                    $codigoUsado = ProductoCodigo::find($detalle->producto_codigo_id);
-                    if ($codigoUsado) {
-                        $codigoUsado->increment('cantidad', $detalle->cantidad);
-                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoUsado->id, $detalle->cantidad);
-                    }
-                } else {
-                    $codigoDefault = ProductoCodigo::where('producto_id', $detalle->producto_id)
-                        ->orderByDesc('es_default')
-                        ->first();
-
-                    if ($codigoDefault) {
-                        $codigoDefault->increment('cantidad', $detalle->cantidad);
-                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoDefault->id, $detalle->cantidad);
-                    }
-                }
-
-                HistorialStock::create([
-                    'producto_id' => $detalle->producto_id,
-                    'almacen_id' => $venta->almacen_id,
-                    'venta_id' => $venta->id,
-                    'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
-                    'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
-                    'diferencia' => $detalle->cantidad,
-                    'tipo' => 'venta_anulada',
-                    'observaciones' => 'Stock revertido por anulación de venta',
-                    'user_id' => Auth::id(),
+                $venta->update([
+                    'estado' => $eraCompletada ? 'devuelta' : 'cancelada',
+                    'motivo_anulacion' => $validated['motivo_anulacion'],
+                    'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
                 ]);
-            }
-
-            // Revertir pagos y gestor solo si la venta fue completada.
-            // En ventas pendientes, cuentas y deudas nunca fueron modificadas.
-            if ($venta->estado === 'completada') {
-                foreach ($venta->pagos as $pago) {
-                    if ($pago->cliente_id) {
-                        $cliente = $pago->cliente;
-                        if ($cliente) {
-                            $cliente->decrement('deuda_pago_cliente', $pago->monto);
-                        }
-                    }
-
-                    if ($pago->cuenta_id) {
-                        $cuenta = $pago->cuenta;
-                        if ($cuenta) {
-                            $cuenta->decrement('saldo_cuenta', $pago->monto);
-                        }
-                    }
-                }
-
-                if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
-                    $cuentaGestor = $venta->gestorCuenta;
-                    if ($cuentaGestor) {
-                        $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
-                    }
-                }
-
-                // Revertir mensajero — inverso exacto del aprobarVenta
-                if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
-                    $cuentaMensajero = $venta->mensajeroCuenta;
-                    if ($cuentaMensajero) {
-                        $montoFinal = $venta->mensajero_monto_final_cup
-                            ? (float) $venta->mensajero_monto_final_cup
-                            : (float) $venta->mensajero_monto_original;
-
-                        // Bloque propio comentado — habilitar cuando se implemente vehículo propio
-                        // if ($venta->mensajero_tipo === 'propio') {
-                        //     if ($venta->mensajero_cuenta_origen_id) {
-                        //         $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
-                        //         if ($cuentaOrigen) {
-                        //             $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
-                        //         }
-                        //     }
-                        //     $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
-                        // } else
-
-                        // EXTERNO: devolver el dinero a la cuenta del POS
-                        if ($venta->mensajero_tipo === 'externo') {
-                            $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
-                        }
-                    }
-                }
-
-                // Revertir comisión vendedor — solo si no es venta con gestor (XOR)
-                if (! $venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
-                    $cuentaComision = $venta->comisionCuenta;
-                    if ($cuentaComision) {
-                        $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
-                        $cuentaComision->increment('saldo_cuenta', $montoCUP);
-                    }
-                }
-            }
-
-            $venta->update([
-                'estado' => $eraCompletada ? 'devuelta' : 'cancelada',
-                'motivo_anulacion' => $validated['motivo_anulacion'],
-                'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
-            ]);
-        });
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+        }
 
         // Notificar por Telegram solo cuando es una Devolución real (venta que ya
         // había movido dinero de verdad). Anular una venta pendiente no lo hace.
@@ -2313,13 +2320,8 @@ class VentaController extends Controller
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
-                // Igual que anularVenta(): las unidades vuelven a los lotes de donde salieron
-                // (o al lote resultante si ese lote se fusionó después).
-                foreach ($detalle->loteConsumos as $consumo) {
-                    if ($consumo->lote_stock_id) {
-                        LoteStock::find($consumo->lote_stock_id)?->loteVigente()->increment('cantidad_disponible', $consumo->cantidad);
-                    }
-                }
+                // Igual que anularVenta(): las unidades vuelven a sus lotes.
+                app(LoteConsumoService::class)->devolver($detalle, (int) $venta->almacen_id);
 
                 if ($detalle->producto_codigo_id) {
                     $codigo = ProductoCodigo::find($detalle->producto_codigo_id);

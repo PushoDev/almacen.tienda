@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -925,9 +926,10 @@ export default function PuntoVentaOficial({
                                                     const codigoSeleccionadoActual =
                                                         codigoSeleccionadoPorProducto[String(producto.id)]?.toString() || '';
                                                     return (
-                                                        <div
+                                                        <SpotlightCard
                                                             key={producto.id}
-                                                            className="group bg-card hover:border-primary/30 animate-fade-in overflow-hidden rounded-lg border transition-all duration-300 hover:shadow-xl"
+                                                            estado={producto.stock_disponible > 0 ? 'disponible' : 'agotado'}
+                                                            className="group bg-card animate-fade-in overflow-hidden rounded-lg transition-all duration-300 hover:shadow-xl"
                                                             style={{ animationDelay: `${index * 50}ms` }}
                                                         >
                                                             <div className="bg-secondary relative aspect-4/3 overflow-hidden">
@@ -1101,7 +1103,7 @@ export default function PuntoVentaOficial({
                                                                     </Button>
                                                                 </div>
                                                             </div>
-                                                        </div>
+                                                        </SpotlightCard>
                                                     );
                                                 })}
                                             </div>

@@ -5,6 +5,8 @@ use App\Models\CierreCaja;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\Moneda;
+use App\Models\Producto;
+use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
 use Illuminate\Support\Facades\DB;
@@ -391,4 +393,81 @@ test('index() solo muestra al vendedor sus propios cierres, pero el admin ve tod
 
     expect($idsAdmin)->toContain($cierrePropio->id);
     expect($idsAdmin)->toContain($cierreAjeno->id);
+});
+
+// ==========================================================================
+// VENTAS DEVUELTAS — sección propia, separada de las anuladas
+// ==========================================================================
+
+function crearVentaConEstadoYSubtotal(User $user, Almacen $almacen, string $estado, float $subtotal, string $motivo): Venta
+{
+    $producto = Producto::factory()->create();
+    $codigo = ProductoCodigo::factory()->default()->create(['producto_id' => $producto->id]);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $user->id, 'almacen_id' => $almacen->id, 'estado' => $estado,
+        'motivo_anulacion' => $motivo, 'detalle_anulacion' => null,
+    ]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => $subtotal, 'subtotal' => $subtotal,
+        'costo_unitario' => 1, 'ganancia' => $subtotal - 1, 'comision_unitaria' => 0,
+    ]);
+
+    return $venta;
+}
+
+test('el cierre nuevo cuenta las ventas devueltas del turno aparte de las anuladas', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    crearMonedaUsd();
+
+    $devuelta = crearVentaConEstadoYSubtotal($vendedor, $almacen, 'devuelta', 100, 'solicitud_cliente');
+    crearVentaConEstadoYSubtotal($vendedor, $almacen, 'cancelada', 40, 'error_precio');
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.ventas_devueltas_count', 1)
+        ->where('calculos.ventas_devueltas_total_usd', 100)
+        ->where('calculos.ventas_devueltas_detalles.0.venta_id', $devuelta->id)
+        ->where('calculos.ventas_devueltas_detalles.0.motivo', 'solicitud_cliente')
+        ->where('calculos.ventas_anuladas_count', 1)
+        ->where('calculos.ventas_anuladas_total_usd', 40));
+});
+
+test('una venta devuelta de otro vendedor no aparece en el cierre del turno', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $otro = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    crearMonedaUsd();
+
+    crearVentaConEstadoYSubtotal($otro, $almacen, 'devuelta', 100, 'otros');
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page->where('calculos.ventas_devueltas_count', 0));
+});
+
+test('un cierre guardado muestra las ventas devueltas del período', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    crearMonedaUsd();
+
+    $devuelta = crearVentaConEstadoYSubtotal($vendedor, $almacen, 'devuelta', 75, 'producto_defectuoso');
+    $cierre = CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_apertura' => now()->subHour(),
+        'fecha_cierre' => now()->addMinute(),
+    ]);
+
+    $this->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->where('ventas_devueltas_count', 1)
+        ->where('ventas_devueltas_total_usd', 75)
+        ->where('ventas_devueltas_detalles.0.venta_id', $devuelta->id)
+        ->where('ventas_devueltas_detalles.0.motivo', 'producto_defectuoso'));
 });
