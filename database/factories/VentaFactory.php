@@ -56,6 +56,17 @@ class VentaFactory extends Factory
             'estado' => 'solicitud_especial',
             'es_venta_especial' => true,
             'nota_venta_especial' => fake()->sentence(),
+            'tipo_venta_especial' => 'descuento',
+        ]);
+    }
+
+    /**
+     * Venta especial con algún precio por debajo del costo: solo un admin puede decidirla.
+     */
+    public function especialBajoCosto(): static
+    {
+        return $this->especial()->state(fn (array $attributes) => [
+            'tipo_venta_especial' => 'bajo_costo',
         ]);
     }
 

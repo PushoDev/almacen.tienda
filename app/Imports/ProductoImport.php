@@ -7,6 +7,7 @@ use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
+use App\Services\CodigoStockService;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -151,6 +152,7 @@ class ProductoImport implements ToModel, WithChunkReading, WithHeadingRow, WithV
                     $productoCodigo->es_default = $esPrimerCodigo;
                 }
                 $productoCodigo->save();
+                $codigoIdUsado = $productoCodigo->id;
             } else {
                 $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
                     ->where('es_default', true)
@@ -158,10 +160,14 @@ class ProductoImport implements ToModel, WithChunkReading, WithHeadingRow, WithV
 
                 if ($defaultCodigo) {
                     $defaultCodigo->increment('cantidad', $cantidad);
+                    $codigoIdUsado = $defaultCodigo->id;
                 } else {
-                    ProductoCodigo::generarYGuardarDefault($producto, $cantidad);
+                    $codigoIdUsado = ProductoCodigo::generarYGuardarDefault($producto, $cantidad)->id;
                 }
             }
+
+            // Reparto por almacén: estas unidades quedan en el almacén de la importación con ese código.
+            app(CodigoStockService::class)->agregar((int) $this->almacenId, $codigoIdUsado, (int) $cantidad);
 
             // Almacén: incrementar si ya existe, crear si no
             $almacenProducto = AlmacenProducto::where('almacen_id', $this->almacenId)

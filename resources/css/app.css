@@ -185,3 +185,84 @@
 [data-sileo-viewport] {
     z-index: 100 !important;
 }
+
+/* Borde animado de las tarjetas de producto del POS (componente SpotlightCard): un destello
+   que da la vuelta al borde — verde si hay stock, rojo si está agotado. Se dibuja en un
+   pseudo-elemento (anillo con máscara) y no en la tarjeta, para no pisar la animación de
+   entrada (`animate-fade-in`) que la tarjeta ya tiene. El ángulo se anima con una custom
+   property tipada (@property), por eso solo gira en navegadores que la soportan; en los
+   demás queda el borde fijo. */
+@property --spotlight-angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+
+@keyframes spotlight-giro {
+    to {
+        --spotlight-angle: 360deg;
+    }
+}
+
+.spotlight-card {
+    position: relative;
+    transition:
+        box-shadow 0.3s ease,
+        transform 0.3s ease;
+}
+
+.spotlight-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    padding: 2px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+        from var(--spotlight-angle),
+        var(--spotlight-base) 78%,
+        var(--spotlight-medio) 86%,
+        var(--spotlight-brillo) 90%,
+        var(--spotlight-medio) 94%,
+        var(--spotlight-base)
+    );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: spotlight-giro 6s linear infinite;
+}
+
+.spotlight-card:hover {
+    box-shadow: 0 0 22px -6px var(--spotlight-medio);
+}
+
+.spotlight-card[data-estado='disponible'] {
+    --spotlight-base: oklch(0.596 0.145 163.225 / 0.4);
+    --spotlight-medio: oklch(0.696 0.17 162.48);
+    --spotlight-brillo: oklch(0.845 0.143 164.978);
+}
+
+.spotlight-card[data-estado='agotado'],
+.spotlight-card[data-estado='bajo-costo'] {
+    --spotlight-base: oklch(0.577 0.245 27.325 / 0.4);
+    --spotlight-medio: oklch(0.637 0.237 25.331);
+    --spotlight-brillo: oklch(0.808 0.114 19.571);
+}
+
+.spotlight-card[data-estado='especial'] {
+    --spotlight-base: oklch(0.666 0.179 58.318 / 0.4);
+    --spotlight-medio: oklch(0.769 0.188 70.08);
+    --spotlight-brillo: oklch(0.879 0.169 91.605);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spotlight-card::before {
+        animation: none;
+    }
+}

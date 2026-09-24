@@ -2,6 +2,7 @@
 
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
+use App\Models\AlmacenProductoCodigo;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\LoteStock;
@@ -1846,5 +1847,551 @@ test('show() muestra costo_unitario real a admin y moderador', function () {
         $response = $this->get(route('ventas.show', $venta->id));
 
         $response->assertInertia(fn ($page) => $page->where('venta.items.0.costo_unitario', 10));
+    }
+});
+
+// ==========================================================================
+// CÓDIGOS DE BARRAS POR ALMACÉN — el POS solo ve/usa los códigos que hay en SU almacén
+// ==========================================================================
+
+function pagoEfectivoUsd(Moneda $monedaUsd, float $monto): array
+{
+    $cuenta = crearCuentaUsd();
+
+    return [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => $monto,
+        'tasa_cambio' => 1, 'monto_equivalente' => $monto, 'cuenta_id' => $cuenta->id,
+    ]];
+}
+
+test('vender descuenta el código en el reparto del almacén y anular la venta lo devuelve al mismo almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 3, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 90);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 97]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 97]);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 100]);
+});
+
+test('no se puede vender con un código que no tiene unidades en ese almacén aunque otro almacén sí las tenga', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $otroAlmacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigoDelAlmacen] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $codigoDelOtro = ProductoCodigo::factory()->create(['producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProducto::create(['almacen_id' => $otroAlmacen->id, 'producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigoDelAlmacen->id, 'cantidad' => 100]);
+    AlmacenProductoCodigo::create(['almacen_id' => $otroAlmacen->id, 'producto_codigo_id' => $codigoDelOtro->id, 'cantidad' => 1]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigoDelOtro, precioVenta: 30, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 30);
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+
+    $response->assertStatus(500);
+    expect($response->json('message'))->toContain('Stock insuficiente para el código');
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 100]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigoDelOtro->id, 'cantidad' => 1]);
+});
+
+test('si el reparto por almacén no cuadra con el stock, vender usa el total del código como antes', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    // Reparto incompleto (60 de 100): no cuadra, así que no debe bloquear una venta legítima.
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 60]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 80, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 2400);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 20]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 20]);
+});
+
+test('el POS lista de cada producto solo las unidades de código que hay en el almacén seleccionado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $otroAlmacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigoPrincipal] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 39]);
+    $codigoPrincipal->update(['cantidad' => 39]);
+    $codigoDelOtro = ProductoCodigo::factory()->create(['producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProducto::create(['almacen_id' => $otroAlmacen->id, 'producto_id' => $producto->id, 'cantidad' => 1]);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigoPrincipal->id, 'cantidad' => 39]);
+    AlmacenProductoCodigo::create(['almacen_id' => $otroAlmacen->id, 'producto_codigo_id' => $codigoDelOtro->id, 'cantidad' => 1]);
+
+    $codigos = collect($this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json('0.codigos'))
+        ->pluck('cantidad', 'id');
+
+    expect($codigos[$codigoPrincipal->id])->toBe(39);
+    expect($codigos[$codigoDelOtro->id])->toBe(0); // la unidad de este código está en el otro almacén
+});
+
+test('sin reparto por almacén, el POS limita cada código al stock del almacén como antes', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 5]);
+    $codigo->update(['cantidad' => 100]);
+
+    $cantidad = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json('0.codigos.0.cantidad');
+
+    expect($cantidad)->toBe(5);
+});
+
+test('rechazarSolicitudEspecial devuelve las unidades a los lotes y al código del almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-RECHAZO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 100, 'precio_costo' => 12,
+    ]);
+    AlmacenProductoCodigo::create(['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 5, cantidad: 4, monedaPrincipal: $monedaUsd);
+    $payload['es_venta_especial'] = true;
+    $payload['nota_venta_especial'] = 'Autorizada por gerencia';
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 20);
+    $this->postJson(route('ventas.procesar'), $payload)->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(96);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.especial.rechazar', $venta))->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(100);
+    $this->assertDatabaseHas('almacen_producto_codigos', ['almacen_id' => $almacen->id, 'producto_codigo_id' => $codigo->id, 'cantidad' => 100]);
+    $this->assertDatabaseHas('producto_codigos', ['id' => $codigo->id, 'cantidad' => 100]);
+});
+
+// ==========================================================================
+// DEVOLUCIÓN — las unidades vuelven al stock Y a un lote, y no se puede revertir dos veces
+// ==========================================================================
+
+test('devolver una venta anterior al registro por lote crea un lote de devolución al costo al que se vendió', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $codigo->update(['cantidad' => 95]);
+
+    // Venta vieja: la línea no tiene ningún registro en venta_detalle_lotes.
+    $venta = Venta::factory()->completada()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id]);
+    $detalle = $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 12, 'ganancia' => 40, 'comision_unitaria' => 0,
+    ]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'solicitud_cliente'])->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'devuelta']);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 100]);
+    $lote = LoteStock::where('codigo', "DEV-{$venta->id}-{$detalle->id}")->sole();
+    expect($lote->almacen_id)->toBe($almacen->id);
+    expect($lote->cantidad_disponible)->toBe(5);
+    expect((float) $lote->precio_costo)->toBe(12.0);
+});
+
+test('devolver una venta con una parte de lote y otra sin lote devuelve cada parte donde corresponde', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    // El lote solo cubre 3 de las 100 unidades: al vender 5, 2 salen "sin lote" al costo de la ficha (10).
+    $lote = LoteStock::create([
+        'codigo' => 'LOTE-PARCIAL', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 3, 'precio_costo' => 18,
+    ]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 150);
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    expect($lote->fresh()->cantidad_disponible)->toBe(0);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_pedido'])->assertJson(['success' => true]);
+
+    expect($lote->fresh()->cantidad_disponible)->toBe(3); // su parte vuelve al lote de origen
+    $devolucion = LoteStock::where('codigo', 'like', 'DEV-%')->sole();
+    expect($devolucion->cantidad_disponible)->toBe(2); // la parte sin lote entra a un lote propio
+    expect((float) $devolucion->precio_costo)->toBe(10.0);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 100]);
+});
+
+test('una venta rechazada no se puede anular ni devolver otra vez', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $venta = Venta::factory()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id, 'estado' => 'rechazada']);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 10, 'ganancia' => 50, 'comision_unitaria' => 0,
+    ]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])
+        ->assertStatus(400)
+        ->assertJson(['success' => false]);
+
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 100]); // sin cambios
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'rechazada']);
+    expect(LoteStock::count())->toBe(0);
+});
+
+test('si otra petición ya devolvió la venta mientras esta se procesaba, no se revierte dos veces', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $venta = Venta::factory()->completada()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 10, 'ganancia' => 50, 'comision_unitaria' => 0,
+    ]);
+
+    // La primera vez que se carga la venta (al resolver la ruta), otra "petición" ya la marca devuelta
+    // en la base sin que este modelo en memoria se entere: el doble clic.
+    $yaDevuelta = false;
+    Venta::retrieved(function (Venta $cargada) use (&$yaDevuelta) {
+        if (! $yaDevuelta) {
+            $yaDevuelta = true;
+            DB::table('ventas')->where('id', $cargada->id)->update(['estado' => 'devuelta']);
+        }
+    });
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'solicitud_cliente'])
+        ->assertStatus(409)
+        ->assertJson(['success' => false]);
+
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 95]); // no se devolvió otra vez
+    expect(LoteStock::count())->toBe(0);
+});
+
+// ==========================================================================
+// DOS TIPOS DE VENTA ESPECIAL — 'descuento' (admin o moderador) y 'bajo_costo' (solo admin)
+// ==========================================================================
+
+/**
+ * Crea una venta especial desde el POS: costo 10, precio de venta 20, comisión 2 (mínimo 18).
+ */
+function crearVentaEspecialConPrecio(User $usuario, float $precio, int $cantidad = 1): Venta
+{
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: $precio, cantidad: $cantidad, monedaPrincipal: $monedaUsd);
+    $payload['es_venta_especial'] = true;
+    $payload['nota_venta_especial'] = 'Venta a un cliente frecuente';
+    $payload['pagos'] = $precio * $cantidad > 0 ? pagoEfectivoUsd($monedaUsd, $precio * $cantidad) : [];
+
+    test()->actingAs($usuario)->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    return Venta::where('almacen_id', $almacen->id)->sole();
+}
+
+test('una venta especial con el precio bajo el mínimo pero sobre el costo es de tipo descuento', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 15);
+
+    expect($venta->estado)->toBe('solicitud_especial');
+    expect($venta->tipo_venta_especial)->toBe('descuento');
+});
+
+test('vender exactamente al costo no es pérdida: la venta especial sigue siendo de tipo descuento', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 10);
+
+    expect($venta->tipo_venta_especial)->toBe('descuento');
+});
+
+test('una venta especial con un precio bajo el costo es de tipo bajo_costo', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 9.99);
+
+    expect($venta->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+test('un regalo (total 0) es de tipo bajo_costo', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 0);
+
+    expect($venta->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+test('una sola línea bajo el costo vuelve bajo_costo a toda la venta especial', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$productoA, $codigoA] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    [$productoB, $codigoB] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $productoA, $codigoA, precioVenta: 15, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['items'][] = ['producto_id' => $productoB->id, 'producto_codigo_id' => $codigoB->id, 'cantidad' => 1, 'precio_venta' => 5, 'subtotal' => 5];
+    $payload['total'] = 20;
+    $payload['es_venta_especial'] = true;
+    $payload['nota_venta_especial'] = 'Una línea a buen precio y otra bajo costo';
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 20);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    expect(Venta::where('almacen_id', $almacen->id)->sole()->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+test('una venta normal no tiene tipo de venta especial', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 19, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 19); // 19 está sobre el mínimo (18): la comisión absorbe el descuento
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    expect($venta->es_venta_especial)->toBeFalse();
+    expect($venta->tipo_venta_especial)->toBeNull();
+});
+
+test('un moderador puede aprobar una venta especial de tipo descuento', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+    $venta = Venta::factory()->especial()->create();
+
+    $this->postJson(route('ventas.especial.aprobar', $venta))->assertOk()->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('un moderador no puede aprobar una venta especial bajo el costo, solo un admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $venta = Venta::factory()->especialBajoCosto()->create();
+
+    $this->actingAs($moderador)->postJson(route('ventas.especial.aprobar', $venta))
+        ->assertStatus(403)
+        ->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'solicitud_especial']);
+
+    $this->actingAs(User::factory()->admin()->create())->postJson(route('ventas.especial.aprobar', $venta))
+        ->assertOk()
+        ->assertJson(['success' => true]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('un moderador no puede rechazar una venta especial bajo el costo y su stock queda reservado', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $venta = Venta::factory()->especialBajoCosto()->create(['almacen_id' => $almacen->id]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 5, 'subtotal' => 25,
+        'costo_unitario' => 10, 'ganancia' => -25, 'comision_unitaria' => 0,
+    ]);
+
+    $this->postJson(route('ventas.especial.rechazar', $venta))->assertStatus(403);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'solicitud_especial']);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 95]); // no se devolvió
+});
+
+test('un admin sí puede rechazar una venta especial bajo el costo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $venta = Venta::factory()->especialBajoCosto()->create();
+
+    $this->postJson(route('ventas.especial.rechazar', $venta))->assertOk()->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'rechazada']);
+});
+
+test('editar una venta especial pendiente para bajar de su costo solo lo puede hacer un admin y la vuelve bajo_costo', function () {
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $venta = Venta::factory()->especial()->create(['almacen_id' => $almacen->id, 'estado' => 'pendiente', 'moneda_id' => $monedaUsd->id]);
+    $detalle = $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => 15, 'subtotal' => 15,
+        'costo_unitario' => 10, 'ganancia' => 5, 'comision_unitaria' => 0,
+    ]);
+    $edicion = fn (float $precio) => [
+        'pagos' => pagoEfectivoUsd($monedaUsd, $precio),
+        'items' => [['venta_detalle_id' => $detalle->id, 'precio_venta' => $precio]],
+    ];
+
+    // Un moderador no puede bajarla del costo...
+    $rechazo = $this->actingAs($moderador)->postJson(route('ventas.editar.pendiente', $venta), $edicion(5));
+    $rechazo->assertStatus(422);
+    expect($rechazo->json('message'))->toContain('solo lo puede autorizar un administrador');
+    expect($rechazo->json('message'))->not->toContain('costo');
+    expect($detalle->fresh()->precio_venta)->toEqual(15);
+    expect($venta->fresh()->tipo_venta_especial)->toBe('descuento');
+
+    // ...pero sí puede cambiarla sin bajar del costo.
+    $this->actingAs($moderador)->postJson(route('ventas.editar.pendiente', $venta), $edicion(12))->assertOk();
+    expect($venta->fresh()->tipo_venta_especial)->toBe('descuento');
+
+    // Un admin sí, y la venta pasa a bajo_costo.
+    $this->actingAs(User::factory()->admin()->create())->postJson(route('ventas.editar.pendiente', $venta), $edicion(5))->assertOk();
+    expect($venta->fresh()->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+// ==========================================================================
+// QUIÉN VE QUÉ — solo el admin ve la diferencia entre los dos tipos de venta especial
+// ==========================================================================
+
+function ventaEspecialPendienteDeDecidir(string $tipo, User $dueño): Venta
+{
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $venta = Venta::factory()->especial()->create([
+        'user_id' => $dueño->id, 'almacen_id' => $almacen->id, 'tipo_venta_especial' => $tipo,
+    ]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => 5, 'subtotal' => 5,
+        'costo_unitario' => 10, 'ganancia' => -5, 'comision_unitaria' => 0,
+    ]);
+
+    return $venta;
+}
+
+test('el admin ve el tipo real de la venta especial y puede decidir las dos', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $bajoCosto = ventaEspecialPendienteDeDecidir('bajo_costo', $dueño);
+    $descuento = ventaEspecialPendienteDeDecidir('descuento', $dueño);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('ventas.show', $bajoCosto->id))->assertInertia(fn ($page) => $page
+        ->where('venta.tipo_venta_especial', 'bajo_costo')
+        ->where('venta.puede_decidir_solicitud_especial', true));
+    $this->get(route('ventas.show', $descuento->id))->assertInertia(fn ($page) => $page
+        ->where('venta.tipo_venta_especial', 'descuento')
+        ->where('venta.puede_decidir_solicitud_especial', true));
+});
+
+test('el moderador ve el tipo real de la venta especial pero solo puede decidir la de descuento', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $bajoCosto = ventaEspecialPendienteDeDecidir('bajo_costo', $dueño);
+    $descuento = ventaEspecialPendienteDeDecidir('descuento', $dueño);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $this->get(route('ventas.show', $bajoCosto->id))->assertInertia(fn ($page) => $page
+        ->where('venta.es_venta_especial', true)
+        ->where('venta.tipo_venta_especial', 'bajo_costo')
+        ->where('venta.puede_decidir_solicitud_especial', false));
+    $this->get(route('ventas.show', $descuento->id))->assertInertia(fn ($page) => $page
+        ->where('venta.tipo_venta_especial', 'descuento')
+        ->where('venta.puede_decidir_solicitud_especial', true));
+});
+
+test('el vendedor ve el tipo de su venta especial, pero no puede decidir su propia solicitud', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $venta = ventaEspecialPendienteDeDecidir('bajo_costo', $vendedor);
+    $this->actingAs($vendedor);
+
+    $this->get(route('ventas.show', $venta->id))->assertInertia(fn ($page) => $page
+        ->where('venta.es_venta_especial', true)
+        ->where('venta.tipo_venta_especial', 'bajo_costo')
+        ->where('venta.puede_decidir_solicitud_especial', false));
+});
+
+test('el listado de ventas muestra el tipo a todos los roles, y solo el admin puede decidir la bajo costo', function () {
+    $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
+    ventaEspecialPendienteDeDecidir('bajo_costo', $dueño);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+
+    $this->actingAs(User::factory()->admin()->create());
+    $this->get(route('ventas.listado'))->assertInertia(fn ($page) => $page
+        ->where('ventas.data.0.tipo_venta_especial', 'bajo_costo')
+        ->where('ventas.data.0.puede_decidir_solicitud_especial', true));
+
+    foreach ([$moderador, $dueño] as $usuario) {
+        $this->actingAs($usuario);
+        $this->get(route('ventas.listado'))->assertInertia(fn ($page) => $page
+            ->where('ventas.data.0.tipo_venta_especial', 'bajo_costo')
+            ->where('ventas.data.0.puede_decidir_solicitud_especial', false));
+    }
+});
+
+test('el mensaje de rechazo de un moderador no revela que la venta es bajo costo', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $venta = Venta::factory()->especialBajoCosto()->create();
+
+    $respuesta = $this->actingAs($moderador)->postJson(route('ventas.especial.aprobar', $venta));
+
+    $respuesta->assertStatus(403);
+    expect($respuesta->json('message'))->not->toContain('costo');
+});
+
+test('el POS envía el costo real del producto en el almacén a todos los roles', function () {
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    LoteStock::create([
+        'codigo' => 'LOTE-COSTO-POS', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 10, 'precio_costo' => 12.5,
+    ]);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $vendedor->almacenes()->attach($almacen->id);
+    $ruta = route('ventas.getProductosPorAlmacen', $almacen->id);
+
+    foreach ([User::factory()->admin()->create(), $moderador, $vendedor] as $usuario) {
+        expect($this->actingAs($usuario)->getJson($ruta)->json('0.costo_real'))->toEqual(12.5);
     }
 });

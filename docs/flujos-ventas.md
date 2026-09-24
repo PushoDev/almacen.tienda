@@ -67,9 +67,19 @@ procesarVenta() ──► [pendiente]
 
 ## Flujo 2: Venta Especial
 
-**Cuándo aplica:** Precio por debajo del mínimo permitido (precio_base - comisión), total $0 (regalo/rotura/rifa)
+**Cuándo aplica:** un precio por debajo del mínimo permitido (`precio_base − comisión`; la comisión absorbe el descuento hasta ahí y no requiere aprobación), o total $0 (regalo/rotura/rifa). En el POS el modo especial **se calcula solo** desde los precios del carrito (o se activa a mano con el botón "Especial") y **vuelve a venta normal si se sube el precio**; siempre que un precio convierte la venta en especial sale un diálogo de confirmación.
 
-**Quién lo ejecuta:** Vendedor crea → Admin decide → si aprobada, sigue flujo normal
+**Dos tipos (2026-09-24)** — el servidor decide el tipo al crear la venta, con el costo real por lote (`ventas.tipo_venta_especial`):
+
+| Precio de la línea | Tipo | Quién aprueba/rechaza |
+|---|---|---|
+| ≥ `precio base − comisión` | Venta normal (sin tipo) | Nadie |
+| < ese mínimo pero **≥ costo** (igual al costo NO es pérdida) | **Venta Especial** — `descuento` | Admin o moderador |
+| **< costo** en alguna línea (o regalo total 0) | **Venta Bajo Costo** — `bajo_costo` (toda la venta) | **Solo admin** |
+
+Los 3 roles ven el tipo (POS, detalle, listado); el servidor envía `puede_decidir_solicitud_especial` para mostrar u ocultar los botones. El moderador ve la solicitud bajo costo pero no puede decidirla (ve "Esperando la decisión de un administrador"); el vendedor ve "Espera la confirmación de Aprobado o Anular." Editar el precio de una especial pendiente por debajo del costo solo lo puede hacer un admin y la vuelve `bajo_costo`.
+
+**Quién lo ejecuta:** Vendedor crea → Admin/moderador decide (solo admin si es bajo costo) → si aprobada, sigue flujo normal
 
 ```
 procesarVenta(es_venta_especial=true) ──► [solicitud_especial]
@@ -79,7 +89,8 @@ procesarVenta(es_venta_especial=true) ──► [solicitud_especial]
              rechazarSolicitud()        aprobarSolicitud()
                     │                          │
              [rechazada]              [pendiente]
-             + revierte stock         + notifica vendedor
+             + revierte stock,        + notifica vendedor
+               lotes y códigos
                                                │
                                       guardarDestinatario()
                                                │
@@ -170,12 +181,15 @@ editarVentaPendiente()
 
 ## Flujo 6: Anulación
 
-**Desde qué estados:** Cualquier estado excepto `cancelada`
+**Desde qué estados:** `pendiente`, `solicitud_especial` y `completada` (no `cancelada`, `devuelta` ni `rechazada`). Una `completada` queda `devuelta` (**devolución completa; no hay devolución parcial**); las demás quedan `cancelada`. La mercancía vuelve siempre al almacén de la venta y el dinero a la misma cuenta.
 
 ```
-anularVenta() requiere: motivo_anulacion
-     │
-     ├─ SIEMPRE: revierte stock + códigos de barras + registra historial
+anularVenta() requiere: motivo_anulacion   (dentro de la transacción bloquea la venta y
+     │                                       responde 409 si otra petición ya la revirtió)
+     ├─ SIEMPRE: revierte stock + lotes (LoteConsumoService::devolver) + código de barras
+     │           (total y reparto del almacén) + registra historial
+     │           · cada parte vuelve a su lote (o al lote resultante si se fusionó)
+     │           · lo sin lote de origen → lote nuevo DEV-{venta}-{línea} al costo vendido
      │
      └─ Solo si era [completada]:
           ├─ decrementa saldo_cuenta por cada pago con cuenta_id
@@ -187,9 +201,8 @@ anularVenta() requiere: motivo_anulacion
 **Motivos de anulación disponibles:**
 `error_precio` | `solicitud_cliente` | `producto_defectuoso` | `duplicado_venta` | `error_pedido` | `otros`
 
-> ⚠️ **Nota:** `anularVenta` acepta ventas en estado `rechazada`, pero ese estado
-> ya tuvo su stock revertido por `rechazarSolicitudEspecial`. Si la UI permite
-> anular una venta rechazada, el stock se revertiría dos veces. Verificar acceso en rutas.
+> ✅ **Resuelto 2026-09-24:** `anularVenta` rechaza (400) una venta `rechazada`: ese estado ya devolvió
+> stock, lotes y códigos en `rechazarSolicitudEspecial` (web y Telegram usan el mismo `LoteConsumoService::devolver`).
 
 ---
 

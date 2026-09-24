@@ -109,7 +109,10 @@ class ProductoVendedorController extends Controller
             return [
                 'almacen_id' => $almacen->id,
                 'nombre_almacen' => $almacen->nombre_almacen,
-                'productos' => $productos->filter(fn ($p) => $p['stock_almacen'] > 0)->values(),
+                // Fichas con stock, más las agotadas que tienen precio (se muestran como "Agotado",
+                // igual que el POS). Las que están en cero y sin precio son asignaciones viejas
+                // sin uso y no se listan.
+                'productos' => $productos->filter(fn ($p) => $p['stock_almacen'] > 0 || $p['tiene_precio'])->values(),
             ];
         });
 

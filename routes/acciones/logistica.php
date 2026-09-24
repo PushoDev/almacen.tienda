@@ -12,5 +12,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth', 'verified'])->group(
     function () {
         Route::get('/logistica', [LogisticaController::class, 'index'])->name('logistica.index');
+
+        // Resumen de un almacén para la tarjeta "Resumen por Almacén" — solo admin/moderador (incluye costos y márgenes).
+        Route::get('/logistica/almacen/{almacen}/resumen', [LogisticaController::class, 'resumenAlmacen'])
+            ->middleware('admin')
+            ->name('logistica.almacen.resumen');
     }
 );

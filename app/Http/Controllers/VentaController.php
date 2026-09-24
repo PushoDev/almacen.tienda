@@ -8,7 +8,6 @@ use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\DestinatarioVenta;
 use App\Models\HistorialStock;
-use App\Models\LoteStock;
 use App\Models\Moneda;
 use App\Models\PagoVenta;
 use App\Models\Producto;
@@ -22,6 +21,7 @@ use App\Notifications\VentaDevueltaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
+use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
 use App\Services\LoteConsumoService;
 use Illuminate\Http\JsonResponse;
@@ -127,6 +127,10 @@ class VentaController extends Controller
             ->get()
             ->keyBy('producto_id');
 
+        // Reparto de códigos de barras por almacén, en una sola consulta (ver CodigoStockService).
+        $codigoStock = app(CodigoStockService::class);
+        $repartoCodigos = $codigoStock->repartoDelAlmacen((int) $id);
+
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
         })
@@ -139,7 +143,7 @@ class VentaController extends Controller
                 },
             ])
             ->get()
-            ->map(function ($producto) use ($preciosAlmacen, $id) {
+            ->map(function ($producto) use ($preciosAlmacen, $id, $codigoStock, $repartoCodigos) {
                 $precioRow = $preciosAlmacen->get($producto->id);
                 $almacen = $producto->almacenes->first();
 
@@ -154,17 +158,17 @@ class VentaController extends Controller
                     'color_producto' => $producto->color_producto,
                     'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
+                    // Costo real en ESTE almacén (promedio de sus lotes): el POS lo usa para avisar "Venta Bajo
+                    // Costo" cuando un precio queda por debajo. Lo reciben todos los roles del POS (decisión
+                    // del cliente: el vendedor también ve ese cambio).
+                    'costo_real' => $producto->costoEnAlmacen((int) $id),
                     'stock_disponible' => $almacen?->pivot->cantidad ?? 0,
                     'precio_venta' => $precioRow ? (float) $precioRow->precio_venta : null,
                     'tiene_precio' => ($precioRow?->precio_venta ?? 0) > 0,
                     'imagen_url' => $producto->imagen_url,
                     'codigo_barras' => $producto->codigo_producto,
-                    'codigos' => $producto->codigos->map(fn ($c) => [
-                        'id' => $c->id,
-                        'codigo_barras' => $c->codigo_barras,
-                        'cantidad' => $c->cantidad,
-                        'es_default' => (bool) $c->es_default,
-                    ]),
+                    // Códigos con las unidades que hay en ESTE almacén (no el total de todos).
+                    'codigos' => $codigoStock->codigosParaVenta($producto->codigos, $repartoCodigos, (int) ($almacen?->pivot->cantidad ?? 0))->values(),
                     'barcode_image_url' => $producto->barcode_image_url,
                     'precio_base' => $precioRow ? (float) $precioRow->precio_venta : null,
                     'comision' => $precioRow ? (float) ($precioRow->comision ?? 0) : 0,
@@ -624,6 +628,8 @@ class VentaController extends Controller
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
             'es_venta_especial' => (bool) $venta->es_venta_especial,
             'nota_venta_especial' => $venta->nota_venta_especial,
+            'tipo_venta_especial' => $venta->tipo_venta_especial,
+            'puede_decidir_solicitud_especial' => $this->puedeDecidirEstaSolicitud($venta),
             'decision_notificada' => (bool) $venta->decision_notificada,
             'mensajero' => $venta->mensajero_monto > 0 ? [
                 'monto' => (float) $venta->mensajero_monto,
@@ -955,6 +961,10 @@ class VentaController extends Controller
             // abajo) lo usa para el costo/ganancia real y para dejar auditoría en
             // venta_detalle_lotes, en vez de recalcular con el campo global de la ficha.
             $consumoPorIndice = [];
+            // Alguna línea vendida por debajo de su costo real: la venta especial pasa a ser de
+            // tipo 'bajo_costo' y solo un admin puede decidirla. Lo decide el servidor (el POS de un
+            // vendedor no conoce el costo).
+            $hayLineaBajoCosto = false;
             foreach ($validatedData['items'] as $idx => $item) {
                 $producto = Producto::find($item['producto_id']);
 
@@ -972,6 +982,11 @@ class VentaController extends Controller
                 );
                 $consumoPorIndice[$idx] = $consumido;
                 $costoUnitarioReal = $loteConsumoService->costoPromedio($consumido);
+
+                // Igual al costo no es pérdida: solo cuenta estar estrictamente por debajo.
+                if (round((float) $item['precio_venta'], 2) < round($costoUnitarioReal, 2)) {
+                    $hayLineaBajoCosto = true;
+                }
 
                 // Ventas especiales permiten precio por debajo del costo
                 if (! $esEspecial && $item['precio_venta'] < $costoUnitarioReal) {
@@ -1008,7 +1023,10 @@ class VentaController extends Controller
                     throw new \Exception("El código seleccionado no pertenece al producto: {$producto->nombre_producto}.");
                 }
 
-                if ($codigoVenta->cantidad < $item['cantidad']) {
+                // Unidades de ESTE código en ESTE almacén (ver CodigoStockService: si el reparto por
+                // almacén no cuadra con el stock, cae al total del código como antes).
+                $codigoStock = app(CodigoStockService::class);
+                if ($codigoStock->cantidadDisponible((int) $validatedData['almacen_id'], $codigoVenta, (int) $almacenProducto->cantidad) < $item['cantidad']) {
                     throw new \Exception("Stock insuficiente para el código {$codigoVenta->codigo_barras}.");
                 }
 
@@ -1029,8 +1047,9 @@ class VentaController extends Controller
                 ]);
                 $historialStockIds[] = $historial->id;
 
-                // Descontar del código exacto utilizado en la venta
-                $codigoVenta->decrement('cantidad', $item['cantidad']);
+                // Descontar del código exacto utilizado en la venta (total del producto y reparto del almacén)
+                $codigoVenta->decrement('cantidad', min($item['cantidad'], max(0, (int) $codigoVenta->cantidad)));
+                $codigoStock->descontar((int) $validatedData['almacen_id'], $codigoVenta->id, (int) $item['cantidad']);
             }
 
             // ✅ CAMBIO 3: Modificar validación de cuentas (solo si tiene cuenta_id)
@@ -1067,6 +1086,7 @@ class VentaController extends Controller
                 // CAMPOS VENTA ESPECIAL
                 'es_venta_especial' => $esEspecial,
                 'nota_venta_especial' => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                'tipo_venta_especial' => $esEspecial ? ($hayLineaBajoCosto ? 'bajo_costo' : 'descuento') : null,
                 'decision_notificada' => false,
                 // MENSAJERO
                 'mensajero_monto' => $validatedData['mensajero_monto'] ?? null,
@@ -1371,9 +1391,36 @@ class VentaController extends Controller
      * precio/costo mínimo; si el vendedor dueño pudiera aprobarla, se estaría auto-concediendo
      * una excepción de precio a sí mismo.
      */
-    private function puedeDecidirSolicitudEspecial(): bool
+    /**
+     * Una venta especial normal ('descuento') la deciden admin y moderador; la que baja del costo
+     * ('bajo_costo') solo un admin.
+     */
+    private function puedeDecidirSolicitudEspecial(Venta $venta): bool
     {
+        if ($venta->tipo_venta_especial === 'bajo_costo') {
+            return Auth::user()->role === 'admin';
+        }
+
         return in_array(Auth::user()->role, ['admin', 'moderador']);
+    }
+
+    /**
+     * Mensaje sin mencionar costos: lo puede recibir cualquier rol, incluido el vendedor.
+     */
+    private function mensajeSinPermisoSolicitudEspecial(Venta $venta): string
+    {
+        return $venta->tipo_venta_especial === 'bajo_costo'
+            ? 'Esta solicitud solo la puede decidir un administrador.'
+            : 'No tienes permiso para decidir esta solicitud.';
+    }
+
+    /**
+     * Si el usuario actual puede aprobar/rechazar esta solicitud especial (para mostrar u ocultar
+     * los botones sin revelar el tipo).
+     */
+    private function puedeDecidirEstaSolicitud(Venta $venta): bool
+    {
+        return $venta->estado === 'solicitud_especial' && $this->puedeDecidirSolicitudEspecial($venta);
     }
 
     /**
@@ -1688,6 +1735,8 @@ class VentaController extends Controller
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                     'es_venta_especial' => (bool) $venta->es_venta_especial,
                     'nota_venta_especial' => $venta->nota_venta_especial,
+                    'tipo_venta_especial' => $venta->tipo_venta_especial,
+                    'puede_decidir_solicitud_especial' => $this->puedeDecidirEstaSolicitud($venta),
                     // MENSAJERO
                     'mensajero' => $venta->mensajero_monto > 0 ? [
                         'monto' => (float) $venta->mensajero_monto,
@@ -1774,7 +1823,7 @@ class VentaController extends Controller
         $user = Auth::user();
 
         try {
-            DB::transaction(function () use ($venta, $validated) {
+            DB::transaction(function () use ($venta, $validated, $user) {
                 // ── Actualizar precios si vienen ──────────────────────────────────
                 if (! empty($validated['items'])) {
                     $venta->load('detalles.producto');
@@ -1817,6 +1866,15 @@ class VentaController extends Controller
                                     "El precio de \"{$detalle->producto->nombre_producto}\" no puede ser menor que su costo."
                                 );
                             }
+                        }
+
+                        // Una venta especial ya aprobada como 'descuento' no puede bajar del costo por
+                        // esta vía: eso es una venta 'bajo_costo' y solo la autoriza un admin.
+                        if ($venta->es_venta_especial && round($nuevoPrecio, 2) < round($costo, 2) && $venta->tipo_venta_especial !== 'bajo_costo') {
+                            if ($user->role !== 'admin') {
+                                throw new \Exception("El precio de \"{$detalle->producto->nombre_producto}\" (\${$nuevoPrecio}) solo lo puede autorizar un administrador.");
+                            }
+                            $venta->update(['tipo_venta_especial' => 'bajo_costo']);
                         }
 
                         // Recalcular comisión
@@ -2095,6 +2153,11 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'La venta ya fue devuelta'], 400);
         }
 
+        // Al rechazar una solicitud especial el stock (lotes y códigos incluidos) ya se devolvió.
+        if ($venta->estado === 'rechazada') {
+            return response()->json(['success' => false, 'message' => 'La venta fue rechazada y su stock ya se devolvió'], 400);
+        }
+
         $validated = $request->validate([
             'motivo_anulacion' => 'required|in:error_precio,solicitud_cliente,producto_defectuoso,duplicado_venta,error_pedido,otros',
             'detalle_anulacion' => 'nullable|string|max:500|required_if:motivo_anulacion,otros',
@@ -2110,126 +2173,131 @@ class VentaController extends Controller
         // Cargar relaciones necesarias para poder revertirlas
         $venta->load(['detalles.loteConsumos', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda', 'usuario', 'moneda']);
 
-        DB::transaction(function () use ($venta, $validated, $eraCompletada) {
-            // ✅ SIEMPRE revertir stock (pendiente o completada)
-            foreach ($venta->detalles as $detalle) {
-                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
-                    ->where('producto_id', $detalle->producto_id)->first();
-
-                if ($almacenProducto) {
-                    $almacenProducto->increment('cantidad', $detalle->cantidad);
+        try {
+            DB::transaction(function () use ($venta, $validated, $eraCompletada) {
+                // Con el registro bloqueado se vuelve a mirar el estado: dos peticiones a la vez
+                // (doble clic) pasaron la revisión de arriba, pero solo la primera debe revertir.
+                $estadoActual = Venta::whereKey($venta->id)->lockForUpdate()->value('estado');
+                if (in_array($estadoActual, ['cancelada', 'devuelta', 'rechazada'], true)) {
+                    throw new \DomainException('Esta venta ya fue anulada, devuelta o rechazada por otra solicitud.');
                 }
 
-                // Revertir el consumo de lote(s) — sin esto, anular una venta dejaría
-                // lotes_stock desincronizado del stock real otra vez (ver
-                // LoteConsumoService/venta_detalle_lotes). Las partes sin lote (costo global de
-                // fallback) no tienen nada que revertir acá.
-                foreach ($detalle->loteConsumos as $consumo) {
-                    if ($consumo->lote_stock_id) {
-                        // Si ese lote se fusionó después de la venta, las unidades vuelven al
-                        // lote resultante (loteVigente), no al lote fusionado que quedó en 0.
-                        LoteStock::find($consumo->lote_stock_id)?->loteVigente()->increment('cantidad_disponible', $consumo->cantidad);
+                // ✅ SIEMPRE revertir stock (pendiente o completada)
+                foreach ($venta->detalles as $detalle) {
+                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                        ->where('producto_id', $detalle->producto_id)->first();
+
+                    if ($almacenProducto) {
+                        $almacenProducto->increment('cantidad', $detalle->cantidad);
+                    }
+
+                    // Devolver las unidades a sus lotes (o a un lote de devolución al costo vendido si
+                    // no tienen lote de origen) — sin esto lotes_stock quedaría por debajo del stock.
+                    app(LoteConsumoService::class)->devolver($detalle, (int) $venta->almacen_id);
+
+                    // ✅ Devolver stock al mismo código usado en la venta.
+                    // Para ventas antiguas sin producto_codigo_id, usar default o primero.
+                    if ($detalle->producto_codigo_id) {
+                        $codigoUsado = ProductoCodigo::find($detalle->producto_codigo_id);
+                        if ($codigoUsado) {
+                            $codigoUsado->increment('cantidad', $detalle->cantidad);
+                            app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoUsado->id, $detalle->cantidad);
+                        }
+                    } else {
+                        $codigoDefault = ProductoCodigo::where('producto_id', $detalle->producto_id)
+                            ->orderByDesc('es_default')
+                            ->first();
+
+                        if ($codigoDefault) {
+                            $codigoDefault->increment('cantidad', $detalle->cantidad);
+                            app(CodigoStockService::class)->agregar($venta->almacen_id, $codigoDefault->id, $detalle->cantidad);
+                        }
+                    }
+
+                    HistorialStock::create([
+                        'producto_id' => $detalle->producto_id,
+                        'almacen_id' => $venta->almacen_id,
+                        'venta_id' => $venta->id,
+                        'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
+                        'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                        'diferencia' => $detalle->cantidad,
+                        'tipo' => 'venta_anulada',
+                        'observaciones' => 'Stock revertido por anulación de venta',
+                        'user_id' => Auth::id(),
+                    ]);
+                }
+
+                // Revertir pagos y gestor solo si la venta fue completada.
+                // En ventas pendientes, cuentas y deudas nunca fueron modificadas.
+                if ($venta->estado === 'completada') {
+                    foreach ($venta->pagos as $pago) {
+                        if ($pago->cliente_id) {
+                            $cliente = $pago->cliente;
+                            if ($cliente) {
+                                $cliente->decrement('deuda_pago_cliente', $pago->monto);
+                            }
+                        }
+
+                        if ($pago->cuenta_id) {
+                            $cuenta = $pago->cuenta;
+                            if ($cuenta) {
+                                $cuenta->decrement('saldo_cuenta', $pago->monto);
+                            }
+                        }
+                    }
+
+                    if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
+                        $cuentaGestor = $venta->gestorCuenta;
+                        if ($cuentaGestor) {
+                            $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
+                        }
+                    }
+
+                    // Revertir mensajero — inverso exacto del aprobarVenta
+                    if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
+                        $cuentaMensajero = $venta->mensajeroCuenta;
+                        if ($cuentaMensajero) {
+                            $montoFinal = $venta->mensajero_monto_final_cup
+                                ? (float) $venta->mensajero_monto_final_cup
+                                : (float) $venta->mensajero_monto_original;
+
+                            // Bloque propio comentado — habilitar cuando se implemente vehículo propio
+                            // if ($venta->mensajero_tipo === 'propio') {
+                            //     if ($venta->mensajero_cuenta_origen_id) {
+                            //         $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
+                            //         if ($cuentaOrigen) {
+                            //             $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
+                            //         }
+                            //     }
+                            //     $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                            // } else
+
+                            // EXTERNO: devolver el dinero a la cuenta del POS
+                            if ($venta->mensajero_tipo === 'externo') {
+                                $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
+                            }
+                        }
+                    }
+
+                    // Revertir comisión vendedor — solo si no es venta con gestor (XOR)
+                    if (! $venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                        $cuentaComision = $venta->comisionCuenta;
+                        if ($cuentaComision) {
+                            $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                            $cuentaComision->increment('saldo_cuenta', $montoCUP);
+                        }
                     }
                 }
 
-                // ✅ Devolver stock al mismo código usado en la venta.
-                // Para ventas antiguas sin producto_codigo_id, usar default o primero.
-                if ($detalle->producto_codigo_id) {
-                    $codigoUsado = ProductoCodigo::find($detalle->producto_codigo_id);
-                    if ($codigoUsado) {
-                        $codigoUsado->increment('cantidad', $detalle->cantidad);
-                    }
-                } else {
-                    $codigoDefault = ProductoCodigo::where('producto_id', $detalle->producto_id)
-                        ->orderByDesc('es_default')
-                        ->first();
-
-                    if ($codigoDefault) {
-                        $codigoDefault->increment('cantidad', $detalle->cantidad);
-                    }
-                }
-
-                HistorialStock::create([
-                    'producto_id' => $detalle->producto_id,
-                    'almacen_id' => $venta->almacen_id,
-                    'venta_id' => $venta->id,
-                    'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
-                    'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
-                    'diferencia' => $detalle->cantidad,
-                    'tipo' => 'venta_anulada',
-                    'observaciones' => 'Stock revertido por anulación de venta',
-                    'user_id' => Auth::id(),
+                $venta->update([
+                    'estado' => $eraCompletada ? 'devuelta' : 'cancelada',
+                    'motivo_anulacion' => $validated['motivo_anulacion'],
+                    'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
                 ]);
-            }
-
-            // Revertir pagos y gestor solo si la venta fue completada.
-            // En ventas pendientes, cuentas y deudas nunca fueron modificadas.
-            if ($venta->estado === 'completada') {
-                foreach ($venta->pagos as $pago) {
-                    if ($pago->cliente_id) {
-                        $cliente = $pago->cliente;
-                        if ($cliente) {
-                            $cliente->decrement('deuda_pago_cliente', $pago->monto);
-                        }
-                    }
-
-                    if ($pago->cuenta_id) {
-                        $cuenta = $pago->cuenta;
-                        if ($cuenta) {
-                            $cuenta->decrement('saldo_cuenta', $pago->monto);
-                        }
-                    }
-                }
-
-                if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
-                    $cuentaGestor = $venta->gestorCuenta;
-                    if ($cuentaGestor) {
-                        $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
-                    }
-                }
-
-                // Revertir mensajero — inverso exacto del aprobarVenta
-                if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
-                    $cuentaMensajero = $venta->mensajeroCuenta;
-                    if ($cuentaMensajero) {
-                        $montoFinal = $venta->mensajero_monto_final_cup
-                            ? (float) $venta->mensajero_monto_final_cup
-                            : (float) $venta->mensajero_monto_original;
-
-                        // Bloque propio comentado — habilitar cuando se implemente vehículo propio
-                        // if ($venta->mensajero_tipo === 'propio') {
-                        //     if ($venta->mensajero_cuenta_origen_id) {
-                        //         $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
-                        //         if ($cuentaOrigen) {
-                        //             $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
-                        //         }
-                        //     }
-                        //     $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
-                        // } else
-
-                        // EXTERNO: devolver el dinero a la cuenta del POS
-                        if ($venta->mensajero_tipo === 'externo') {
-                            $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
-                        }
-                    }
-                }
-
-                // Revertir comisión vendedor — solo si no es venta con gestor (XOR)
-                if (! $venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
-                    $cuentaComision = $venta->comisionCuenta;
-                    if ($cuentaComision) {
-                        $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
-                        $cuentaComision->increment('saldo_cuenta', $montoCUP);
-                    }
-                }
-            }
-
-            $venta->update([
-                'estado' => $eraCompletada ? 'devuelta' : 'cancelada',
-                'motivo_anulacion' => $validated['motivo_anulacion'],
-                'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
-            ]);
-        });
+            });
+        } catch (\DomainException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+        }
 
         // Notificar por Telegram solo cuando es una Devolución real (venta que ya
         // había movido dinero de verdad). Anular una venta pendiente no lo hace.
@@ -2257,8 +2325,8 @@ class VentaController extends Controller
      */
     public function aprobarSolicitudEspecial(Venta $venta)
     {
-        if (! $this->puedeDecidirSolicitudEspecial()) {
-            return response()->json(['success' => false, 'message' => 'No tienes permiso para decidir esta solicitud.'], 403);
+        if (! $this->puedeDecidirSolicitudEspecial($venta)) {
+            return response()->json(['success' => false, 'message' => $this->mensajeSinPermisoSolicitudEspecial($venta)], 403);
         }
 
         if ($venta->estado !== 'solicitud_especial') {
@@ -2287,15 +2355,15 @@ class VentaController extends Controller
      */
     public function rechazarSolicitudEspecial(Venta $venta)
     {
-        if (! $this->puedeDecidirSolicitudEspecial()) {
-            return response()->json(['success' => false, 'message' => 'No tienes permiso para decidir esta solicitud.'], 403);
+        if (! $this->puedeDecidirSolicitudEspecial($venta)) {
+            return response()->json(['success' => false, 'message' => $this->mensajeSinPermisoSolicitudEspecial($venta)], 403);
         }
 
         if ($venta->estado !== 'solicitud_especial') {
             return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
         }
 
-        $venta->load(['detalles']);
+        $venta->load(['detalles.loteConsumos']);
 
         DB::transaction(function () use ($venta) {
             foreach ($venta->detalles as $detalle) {
@@ -2306,10 +2374,14 @@ class VentaController extends Controller
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
+                // Igual que anularVenta(): las unidades vuelven a sus lotes.
+                app(LoteConsumoService::class)->devolver($detalle, (int) $venta->almacen_id);
+
                 if ($detalle->producto_codigo_id) {
                     $codigo = ProductoCodigo::find($detalle->producto_codigo_id);
                     if ($codigo) {
                         $codigo->increment('cantidad', $detalle->cantidad);
+                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigo->id, $detalle->cantidad);
                     }
                 }
 

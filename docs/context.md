@@ -298,6 +298,8 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `HandleAppearance` | Maneja preferencia de tema (claro/oscuro) |
 | `throttle:60,1` | Rate limiting para API pública (60 req/min) |
 
+> **Nota (2026-09-24):** los cuatro middlewares de rol (`admin`, `admin.only`, `moderator`, `vendor`) ahora redirigen al `dashboard` con aviso de acceso denegado (antes tres de ellos daban 500 por `route('vendedor')`); `moderator`/`vendor` siguen sin aplicarse a rutas, por decisión del cliente.
+>
 > **Nota (corregida 2026-08-13, estaba desactualizada):** `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen como clases pero no están aplicadas a rutas — la verificación para esos casos sigue siendo inline en los controladores. `EnsureUserIsAdmin`/`EnsureUserIsAdminOnly` sí están aplicados a rutas reales desde Compras/Reportes/Precios de Venta (ver fila arriba); esta nota decía lo contrario para las cuatro clases, ya no es cierto desde que se cerró el control de acceso de Compras (2026-08-11).
 
 ---
@@ -444,7 +446,7 @@ Track anterior (2026-08-22, sesión larga en 4 frentes — commiteado desde ento
 
 1. **Movimientos — editar antes de enviar**: `MovimientosController::actualizar()` nuevo (solo `pendiente_confirmacion`, revalida stock, sincroniza `MovimientoDetalle`), botón + diálogo en `Movimientos/Index.tsx`. Bug real encontrado probando la feature: `recibir()` clasificaba `recibido_completo` comparando solo la suma total en vez de cada línea (un movimiento con una línea de menos y otra de más que se cancelaban en el total quedaba mal marcado) — corregido, más comando `movimientos:corregir-recibido-completo --dry-run` para producción. Detalle en memoria `project_movimientos_editar_y_recibido_completo_fix`.
 2. **Proveedores/Show.tsx, Proveedores/index.tsx, Clientes/Index.tsx**: pasada de consistencia visual (headers degradados, badges rojo/ámbar/esmeralda unificados, modal casero reemplazado por filas colapsables) + bug real de tipos (`decimal:2` cast serializa como string en JSON, rompía comparaciones `=== 0` con saldos exactos en $0.00). Detalle en memoria `project_proveedores_clientes_visual_2026-08-22`.
-3. **Riel de accesos rápidos → "Dynamic Island"**: `resources/js/components/quick-access-rail.tsx`, cápsula fija en el borde derecho que expande al hover con contador de notificaciones en vivo. Detalle en memoria `project_riel_accesos_rapidos`.
+3. **Riel de accesos rápidos → "Dynamic Island"** *(REEMPLAZADO 2026-09-24)*: era `quick-access-rail.tsx`, una cápsula fija en el borde derecho; el cliente no la quería ahí (tapaba contenido) y se movió al encabezado como `resources/js/components/quick-access-tabs.tsx` (Cierres de Caja y Mis Ventas; el acceso activo se expande, los demás con tooltip; Notificaciones queda solo en la campana).
 4. **Placeholder en campos numéricos** (Monedas/Create, Movimientos/Index, Proveedores/Create) — ver memoria `feedback_placeholder_vs_valor_real_campos_numericos`.
 
 **Pendiente parcial, solo analizado, no implementado:** `docs/modelo-costo-producto/` — módulo "Formación de Costos y Precios", decidido que convive con `precio_compra_producto` (no lo reemplaza) por presión competitiva real del proyecto — ver memoria `project_contexto_negocio_prioridad_cliente`.

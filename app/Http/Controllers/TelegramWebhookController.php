@@ -11,6 +11,8 @@ use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\VentaEspecialDecisionNotification;
+use App\Services\CodigoStockService;
+use App\Services\LoteConsumoService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -607,7 +609,7 @@ class TelegramWebhookController extends Controller
 
     private function rechazarVenta(Venta $venta, User $admin, int|string $chatId, int $messageId, string $callbackId): void
     {
-        $venta->load(['detalles']);
+        $venta->load(['detalles.loteConsumos']);
 
         DB::transaction(function () use ($venta, $admin) {
             foreach ($venta->detalles as $detalle) {
@@ -618,10 +620,14 @@ class TelegramWebhookController extends Controller
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
+                // Igual que anularVenta(): las unidades vuelven a sus lotes.
+                app(LoteConsumoService::class)->devolver($detalle, (int) $venta->almacen_id);
+
                 if ($detalle->producto_codigo_id) {
                     $codigo = ProductoCodigo::find($detalle->producto_codigo_id);
                     if ($codigo) {
                         $codigo->increment('cantidad', $detalle->cantidad);
+                        app(CodigoStockService::class)->agregar($venta->almacen_id, $codigo->id, $detalle->cantidad);
                     }
                 }
 

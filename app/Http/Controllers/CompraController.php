@@ -15,6 +15,7 @@ use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
+use App\Services\CodigoStockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -663,6 +664,7 @@ class CompraController extends Controller
                         }
                     }
                     $productoCodigo->save();
+                    $codigoIdUsado = $productoCodigo->id;
                 } else {
                     $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
                         ->where('es_default', true)
@@ -670,10 +672,14 @@ class CompraController extends Controller
 
                     if ($defaultCodigo) {
                         $defaultCodigo->increment('cantidad', $cantidad);
+                        $codigoIdUsado = $defaultCodigo->id;
                     } else {
-                        ProductoCodigo::generarYGuardarDefault($producto, $cantidad);
+                        $codigoIdUsado = ProductoCodigo::generarYGuardarDefault($producto, $cantidad)->id;
                     }
                 }
+
+                // Reparto por almacén: estas unidades llegan a ESTE almacén con ESTE código.
+                app(CodigoStockService::class)->agregar($almacenId, $codigoIdUsado, $cantidad);
 
                 $almacenProducto = AlmacenProducto::firstOrNew([
                     'almacen_id' => $almacenId,

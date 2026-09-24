@@ -438,6 +438,8 @@ export interface BalanceMoneda {
 }
 
 export interface LogisticaProps {
+    /** Lista para el selector de "Resumen por Almacén" (solo admin/moderador). */
+    almacenesLista?: { id: number; nombre_almacen: string }[];
     totalCategorias: number;
     categoriasActivas: number;
     totalProveedores: number;

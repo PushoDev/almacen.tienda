@@ -299,6 +299,10 @@ class CierreCajaController extends Controller
                 'ventas_anuladas_count' => $calculos['ventas_anuladas_count'] ?? 0,
                 'ventas_anuladas_total_usd' => $calculos['ventas_anuladas_total_usd'] ?? 0,
                 'ventas_anuladas_detalles' => $calculos['ventas_anuladas_detalles'] ?? [],
+                // Ventas devueltas (ya movieron dinero y se revirtieron)
+                'ventas_devueltas_count' => $calculos['ventas_devueltas_count'] ?? 0,
+                'ventas_devueltas_total_usd' => $calculos['ventas_devueltas_total_usd'] ?? 0,
+                'ventas_devueltas_detalles' => $calculos['ventas_devueltas_detalles'] ?? [],
                 // Mensajería del turno
                 'mensajero_total_usd' => $calculos['mensajero_total_usd'] ?? 0,
                 'mensajero_total_cup' => $calculos['mensajero_total_cup'] ?? 0,
@@ -600,6 +604,24 @@ class CierreCajaController extends Controller
             'fecha' => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
+        // Ventas devueltas: completadas que después se revirtieron (dinero y stock). A diferencia de
+        // una anulada, esta sí movió dinero — por eso va en su propia sección.
+        $ventasDevueltasCierre = Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'devuelta')
+            ->with('detalles')
+            ->get();
+
+        $vdCount = $ventasDevueltasCierre->count();
+        $vdTotalUSD = round($ventasDevueltasCierre->sum(fn ($v) => (float) $v->detalles->sum('subtotal')), 2);
+        $vdDetalles = $ventasDevueltasCierre->map(fn ($v) => [
+            'venta_id' => $v->id,
+            'total' => round((float) $v->detalles->sum('subtotal'), 2),
+            'motivo' => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle' => $v->detalle_anulacion,
+            'fecha' => $v->created_at->format('Y-m-d H:i'),
+        ])->values()->all();
+
         // Mensajería del período del cierre — usar snapshot si existe, recalcular si es un cierre antiguo
         if ($cierre->mensajero_detalles !== null) {
             $mensajeroCount = $cierre->mensajero_count ?? 0;
@@ -837,6 +859,10 @@ class CierreCajaController extends Controller
             'ventas_anuladas_count' => $vaCount,
             'ventas_anuladas_total_usd' => $vaTotalUSD,
             'ventas_anuladas_detalles' => $vaDetalles,
+            // Ventas devueltas
+            'ventas_devueltas_count' => $vdCount,
+            'ventas_devueltas_total_usd' => $vdTotalUSD,
+            'ventas_devueltas_detalles' => $vdDetalles,
             // Mensajería del turno
             'mensajero_total_usd' => $mensajeroTotUSD,
             'mensajero_total_cup' => $mensajeroTotCUP,
@@ -1566,6 +1592,23 @@ class CierreCajaController extends Controller
             'fecha' => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
+        // --- VENTAS DEVUELTAS EN EL TURNO (completadas que después se revirtieron) ---
+        $ventasDevueltas = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'devuelta')
+            ->with('detalles')
+            ->get();
+
+        $ventasDevueltasCount = $ventasDevueltas->count();
+        $ventasDevueltasTotalUSD = round($ventasDevueltas->sum(fn ($v) => (float) $v->detalles->sum('subtotal')), 2);
+        $ventasDevueltasDetalles = $ventasDevueltas->map(fn ($v) => [
+            'venta_id' => $v->id,
+            'total' => round((float) $v->detalles->sum('subtotal'), 2),
+            'motivo' => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle' => $v->detalle_anulacion,
+            'fecha' => $v->created_at->format('Y-m-d H:i'),
+        ])->values()->all();
+
         // El mensajero cobrado al cliente entra al saldo pero es pass-through —
         // se resta del saldo esperado porque al aprobar ya salió a la cuenta del mensajero.
         $saldoEsperadoSinMensajero = round($saldoEsperadoTotalUSD - $mensajeroTotalUSD, 2);
@@ -1621,6 +1664,10 @@ class CierreCajaController extends Controller
             'ventas_anuladas_count' => $ventasAnuladasCount,
             'ventas_anuladas_total_usd' => $ventasAnuladasTotalUSD,
             'ventas_anuladas_detalles' => $ventasAnuladasDetalles,
+            // Ventas devueltas
+            'ventas_devueltas_count' => $ventasDevueltasCount,
+            'ventas_devueltas_total_usd' => $ventasDevueltasTotalUSD,
+            'ventas_devueltas_detalles' => $ventasDevueltasDetalles,
         ];
 
         Log::info('CIERRE: Resultado', [

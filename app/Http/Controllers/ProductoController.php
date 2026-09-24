@@ -13,6 +13,7 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
+use App\Services\CodigoStockService;
 use App\Services\FichasHermanasService;
 use App\Services\FusionLotesService;
 use App\Services\FusionProductosService;
@@ -826,6 +827,9 @@ class ProductoController extends Controller
                 $nuevoCodigo->es_default = false;
             }
             $nuevoCodigo->save();
+
+            // Reparto por almacén: las unidades cambian de código en los almacenes donde estaban.
+            app(CodigoStockService::class)->reasignar($codigoOrigen->id, $nuevoCodigo->id, (int) $request->cantidad);
 
             DB::commit();
 

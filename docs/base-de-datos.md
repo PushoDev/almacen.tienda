@@ -86,8 +86,21 @@
 | `producto_id` | FK | |
 | `codigo_barras` | string | Código de barras EAN-128 (**no** `codigo`) |
 | `imagen_barcode` | string nullable | Imagen generada del código |
-| `cantidad` | int | Unidades que representa este código |
+| `cantidad` | int | **Total** del producto con este código, sumando **todos** los almacenes (no dice dónde está cada unidad: eso está en `almacen_producto_codigos`) |
 | `es_default` | boolean | Código principal del producto |
+
+### `almacen_producto_codigos` (2026-09-24)
+Reparto por almacén de las unidades de cada código de barras. Lo mantiene `CodigoStockService`; el POS solo lo usa cuando la suma de un producto en un almacén **cuadra** con `almacen_producto.cantidad` (si no, se comporta como antes). Llenado inicial: `php artisan codigos:backfill-por-almacen [--dry-run]`.
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `almacen_id` | FK → `almacens` | cascade |
+| `producto_codigo_id` | FK → `producto_codigos` | cascade; el producto se deduce del código |
+| `cantidad` | unsigned int | Unidades de ESE código en ESE almacén |
+| | UNIQUE | `(almacen_id, producto_codigo_id)` |
+
+### `lotes_stock` y `venta_detalle_lotes`
+Trazabilidad de costo por lote (desde 2026-09-07; consumo por lote desde 2026-09-20). `lotes_stock`: `codigo` (único), `compra_producto_id`, `movimiento_id`, `lote_origen_id` (traslados), `fusionado_en_lote_id` (fusión), `producto_id`, `almacen_id`, `cantidad` (histórica, fija), `cantidad_disponible` (baja al vender/trasladar), `precio_costo`, `precio_venta` (precio propio opcional). Prefijos de `codigo`: `LOTE-{compra}-{n}` (compra), `LOTE-MOV-{mov}-{n}` (traslado), `AJUSTE-…` / `AJUSTE-LEGADO-…` (corrección de costo / stock anterior a los lotes), `FUSION-{producto}-{almacen}-{n}` (fusión) y **`DEV-{venta}-{línea}`** (unidades devueltas sin lote de origen, al costo al que se vendieron — 2026-09-24). `venta_detalle_lotes` guarda de qué lote(s) salió cada línea de venta (`lote_stock_id` null = parte "sin lote" al costo de la ficha) y permite devolverlas.
 
 ---
 
@@ -120,6 +133,7 @@
 | `detalle_anulacion` | string nullable | Razón detallada de anulación |
 | `detalles_venta` | text nullable | Notas internas de la venta |
 | `nota_venta_especial` | text nullable | Justificación de la venta especial |
+| `tipo_venta_especial` | string(20) nullable | `descuento` (algún precio bajo `precio base − comisión`, no bajo el costo; la deciden admin o moderador) o `bajo_costo` (algún precio bajo el costo real; **solo admin**). Null = venta normal. Se fija al crear la venta (2026-09-24) |
 | `decision_notificada` | boolean | Si el vendedor ya vio la decisión admin |
 | `es_venta_especial` | boolean nullable | Flag de venta especial |
 
@@ -471,6 +485,8 @@ cierre_cajas ─── users (el vendedor que cerró)
 
 | Migración | Qué hace |
 |---|---|
+| `2026_09_24_160325_add_tipo_venta_especial_to_ventas_table` | `ventas.tipo_venta_especial`; clasifica las ventas especiales existentes (bajo_costo si alguna línea se vendió bajo su costo, si no descuento) |
+| `2026_09_24_151300_create_almacen_producto_codigos_table` | Reparto de códigos de barras por almacén |
 | `2026_07_28_165942_unificar_tipo_cuenta_temporales_a_permanentes` | Unifica `temporales→permanentes`, modifica ENUM a solo `permanentes` |
 | `2026_07_28_153937_drop_deuda_from_cuentas` | Elimina columna `deuda` de cuentas |
 | `2026_07_28_153931_add_tipo_titular_to_cuentas` | Nuevo campo `tipo_titular` (`externa`/`personal`) |

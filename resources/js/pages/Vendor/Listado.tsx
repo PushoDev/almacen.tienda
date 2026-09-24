@@ -81,6 +81,8 @@ interface Venta {
     moneda_principal?: { id: number; codigo: string; nombre: string };
     destinatario: Destinatario | null;
     es_venta_especial?: boolean;
+    /** Tipo de venta especial ('descuento' | 'bajo_costo'); lo ven todos los roles. */
+    tipo_venta_especial?: 'descuento' | 'bajo_costo' | null;
 }
 
 interface Filters {
@@ -432,8 +434,15 @@ export default function ListadoVentas() {
                                                 <div className="flex flex-col gap-1">
                                                     {getEstadoBadge(venta.estado)}
                                                     {venta.es_venta_especial && (
-                                                        <Badge variant="outline" className="w-fit border-amber-300 bg-amber-50 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                                                            Especial
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={
+                                                                venta.tipo_venta_especial === 'bajo_costo'
+                                                                    ? 'w-fit border-red-300 bg-red-50 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
+                                                                    : 'w-fit border-amber-300 bg-amber-50 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
+                                                            }
+                                                        >
+                                                            {venta.tipo_venta_especial === 'bajo_costo' ? 'Bajo costo' : 'Especial'}
                                                         </Badge>
                                                     )}
                                                 </div>
