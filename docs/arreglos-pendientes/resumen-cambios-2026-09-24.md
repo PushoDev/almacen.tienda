@@ -55,6 +55,10 @@ Lista las fichas con stock **o** con precio; las agotadas salen con badge "Agota
 - `errors/Error.tsx` rediseñada con la mascota (403 / 404 / 500 / 503). Solo se usa fuera de local; en local: `/errores/{status}` (ruta solo `local`).
 - 9 tests en `AccesoDenegadoTest.php`.
 
+## 7. Accesos rápidos al encabezado
+
+El cliente no quería el riel flotante del borde derecho (tapaba el POS, `/disponibles` y las tarjetas). Reemplazo: `components/quick-access-tabs.tsx`, una cápsula centrada en el encabezado con **Cierres de Caja** y **Mis Ventas** (3 roles). El acceso de la página actual se expande con su nombre (animación `motion/react`) y los demás muestran un tooltip al acercar el mouse o enfocar con el teclado; en pantallas pequeñas solo íconos. Notificaciones quedó fuera (ya tiene su campana). Se borró `quick-access-rail.tsx`. Habrá más accesos más adelante (la cápsula soporta más botones y separadores). Verificado en navegador como admin; sin tests de frontend.
+
 ## Pendiente / sin decidir
 
 1. **Producción:** `php artisan migrate` (2 migraciones) → `codigos:backfill-por-almacen --dry-run` → revisar los 5 productos con 2+ códigos (A06 #8, A16 #11, CAFETERA INDUCCION #45, ALARMA SENSOR #349, BATERIA #643) → sin `--dry-run`.
