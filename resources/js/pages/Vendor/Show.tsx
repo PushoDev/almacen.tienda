@@ -25,6 +25,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -259,6 +260,10 @@ interface Venta {
     } | null;
     es_venta_especial: boolean;
     nota_venta_especial: string | null;
+    /** Tipo de venta especial: 'descuento' | 'bajo_costo' (null si la venta no es especial). Lo ven todos los roles. */
+    tipo_venta_especial?: 'descuento' | 'bajo_costo' | null;
+    /** El servidor dice si este usuario puede aprobar/rechazar la solicitud (moderador: no las de bajo costo). */
+    puede_decidir_solicitud_especial?: boolean;
     decision_notificada: boolean;
     motivo_anulacion?: string | null;
     detalle_anulacion?: string | null;
@@ -793,6 +798,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const isVentaDevuelta = currentVenta.estado === 'devuelta';
     const isVentaSolicitudEspecial = currentVenta.estado === 'solicitud_especial';
     const isVentaRechazada = currentVenta.estado === 'rechazada';
+    // Todos los roles ven el tipo real de la venta especial (también queda clasificado en los reportes).
+    const esBajoCosto = currentVenta.tipo_venta_especial === 'bajo_costo';
 
     // Venta sin gestor con comisión pendiente de configurar (cuenta + tasa) — si no se
     // resuelve antes de aprobar, la comisión nunca se descuenta de ninguna cuenta.
@@ -817,7 +824,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             case 'devuelta':
                 return { color: 'bg-orange-500', text: 'DEVUELTA', textColor: 'text-orange-600' };
             case 'solicitud_especial':
-                return { color: 'bg-amber-500', text: 'SOLICITUD ESPECIAL', textColor: 'text-amber-600' };
+                return esBajoCosto
+                    ? { color: 'bg-red-600', text: 'SOLICITUD BAJO COSTO', textColor: 'text-red-600' }
+                    : { color: 'bg-amber-500', text: 'SOLICITUD ESPECIAL', textColor: 'text-amber-600' };
             case 'rechazada':
                 return { color: 'bg-red-800', text: 'RECHAZADA', textColor: 'text-red-800' };
             default:
@@ -1218,11 +1227,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Banner venta especial ── */}
                 {currentVenta.es_venta_especial && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                    <SpotlightCard
+                        estado={esBajoCosto ? 'bajo-costo' : 'especial'}
+                        className={`rounded-xl p-4 ${esBajoCosto ? 'bg-red-50 dark:bg-red-950' : 'bg-amber-50 dark:bg-amber-950'}`}
+                    >
                         <div className="flex flex-wrap items-start gap-3">
-                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                            <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${esBajoCosto ? 'text-red-600' : 'text-amber-600'}`} />
                             <div className="flex-1">
-                                <p className="font-semibold text-amber-800 dark:text-amber-200">Venta Especial</p>
+                                <p className={`font-semibold ${esBajoCosto ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'}`}>
+                                    {esBajoCosto ? 'Venta Bajo Costo' : 'Venta Especial'}
+                                </p>
                                 {currentVenta.nota_venta_especial && (
                                     <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
                                         <span className="font-medium">Motivo:</span> {currentVenta.nota_venta_especial}
@@ -1247,7 +1261,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 );
                             })()}
                         </div>
-                    </div>
+                    </SpotlightCard>
                 )}
 
                 {/* ── Widgets vendedor: Total + Comisión PV + Comisión Gestor ── */}
@@ -1385,7 +1399,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     </Button>
 
                     {/* ── Acciones para Solicitud Especial ── */}
-                    {isVentaSolicitudEspecial && (userRole === 'admin' || userRole === 'moderador') && (
+                    {isVentaSolicitudEspecial && currentVenta.puede_decidir_solicitud_especial && (
                         <>
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -1467,11 +1481,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         </>
                     )}
 
-                    {/* Indicador de espera para el vendedor en solicitud_especial */}
-                    {isVentaSolicitudEspecial && userRole === 'vendedor' && (
+                    {/* Indicador de espera: quien no puede decidir la solicitud (el vendedor, o el moderador ante
+                        una bajo costo que solo decide el admin) ve que está pendiente. */}
+                    {isVentaSolicitudEspecial && !currentVenta.puede_decidir_solicitud_especial && (
                         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950">
                             <Clock size={16} className="text-amber-500" />
-                            <span className="text-amber-700 dark:text-amber-300">Esperando aprobación del administrador</span>
+                            <span className="text-amber-700 dark:text-amber-300">
+                                {userRole === 'vendedor' ? 'Espera la confirmación de Aprobado o Anular.' : 'Esperando la decisión de un administrador.'}
+                            </span>
                         </div>
                     )}
 

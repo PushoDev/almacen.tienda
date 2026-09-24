@@ -37,6 +37,7 @@ class Venta extends Model
         // CAMPOS VENTA ESPECIAL
         'es_venta_especial',
         'nota_venta_especial',
+        'tipo_venta_especial',
         'decision_notificada',
         // ANULACIÓN
         'motivo_anulacion',

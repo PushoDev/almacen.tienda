@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\CatalogoPublicoController;
 use App\Http\Controllers\EcommerceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReporteController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -124,6 +125,15 @@ Route::middleware(['auth', 'verified', 'requiere.turno'])->group(function () {
     // Turnos (Atendido por)
     require __DIR__.'/acciones/turnos.php';
 });
+
+// Vista previa de las páginas de error (403, 404, 500, 503). Solo en local: ahí Laravel muestra su
+// pantalla de depuración en lugar de la página de la aplicación, que solo se usa fuera de local.
+if (app()->environment('local')) {
+    Route::get('/errores/{status}', fn (Request $request, int $status) => Inertia::render('errors/Error', [
+        'status' => $status,
+        'authenticated' => $request->user() !== null,
+    ]))->whereIn('status', [403, 404, 500, 503]);
+}
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

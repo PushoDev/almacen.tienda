@@ -98,6 +98,8 @@ interface Producto {
     color_producto?: string;
     categoria_nombre: string;
     precio_compra_producto: number;
+    /** Costo real en este almacén — el POS lo usa para avisar "Venta Bajo Costo" (todos los roles). */
+    costo_real?: number | null;
     stock_disponible: number;
     precio_venta: number | null;
     tiene_precio: boolean;
@@ -187,9 +189,24 @@ export default function PuntoVentaOficial({
     const [mensajeroMonto, setMensajeroMonto] = useState<string>('');
 
     // ── Venta Especial ────────────────────────────────────────────────────────
-    const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
+    // La venta es especial si se activó a mano (botón del carrito) o mientras algún precio esté por
+    // debajo de `precio base − comisión`: al subirlo otra vez, vuelve a ser normal sola. Es "bajo costo"
+    // si algún precio queda por debajo del costo real (`costo_real`); lo ven todos los roles.
+    const [especialManual, setEspecialManual] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
-    const [productoSinComisionPendiente, setProductoSinComisionPendiente] = useState<{ id: string; nuevoPrecio: number } | null>(null);
+    const precioEsBajoMinimo = (item: ItemCarrito, precio: number) => Math.round(precio * 100) < Math.round((item.precio_base - item.comision) * 100);
+    const precioEsBajoCosto = (item: ItemCarrito, precio: number) =>
+        item.producto.costo_real != null && Math.round(precio * 100) < Math.round(item.producto.costo_real * 100);
+    const esBajoCosto = useMemo(() => carrito.some((item) => precioEsBajoCosto(item, item.precio_venta)), [carrito]);
+    const esVentaEspecial = useMemo(
+        () => especialManual || esBajoCosto || carrito.some((item) => precioEsBajoMinimo(item, item.precio_venta)),
+        [especialManual, esBajoCosto, carrito],
+    );
+    useEffect(() => {
+        if (!esVentaEspecial) setMotivoEspecial('');
+    }, [esVentaEspecial]);
+    // Precio que convertiría la venta en especial, a la espera de que el usuario lo confirme en el diálogo.
+    const [precioEspecialPendiente, setPrecioEspecialPendiente] = useState<{ id: string; nuevoPrecio: number; sinComision: boolean; precioMinimo: number } | null>(null);
     // Valores de texto del input de precio por item — se aplican solo al salir del campo
     const [preciosInput, setPreciosInput] = useState<Record<string, string>>({});
 
@@ -470,16 +487,19 @@ export default function PuntoVentaOficial({
 
         const precioMinimo = item.precio_base - item.comision;
 
+        // Un precio que convierte la venta en especial siempre se confirma antes en un diálogo (con o sin
+        // comisión). Una vez que la venta ya es especial, los cambios siguientes se aplican directo.
         if (!esVentaEspecial && nuevoPrecio < precioMinimo) {
-            if (item.comision === 0) {
-                // Sin comisión: mostrar AlertDialog antes de convertir en especial
-                setProductoSinComisionPendiente({ id, nuevoPrecio });
-                return;
-            } else {
-                // Por debajo del límite: activar venta especial automáticamente
-                setEsVentaEspecial(true);
-                sileo.warning({ title: 'Venta Especial activada', description: 'Precio por debajo del límite permitido.' });
-            }
+            setPrecioEspecialPendiente({ id, nuevoPrecio, sinComision: item.comision === 0, precioMinimo });
+            return;
+        }
+
+        // Si este cambio deja todos los precios dentro del límite (y no se activó a mano), vuelve a ser venta normal.
+        const seguiraEspecial =
+            especialManual ||
+            carrito.some((i) => (i.id === id ? precioEsBajoMinimo(i, nuevoPrecio) || precioEsBajoCosto(i, nuevoPrecio) : precioEsBajoMinimo(i, i.precio_venta) || precioEsBajoCosto(i, i.precio_venta)));
+        if (esVentaEspecial && !seguiraEspecial) {
+            sileo.info({ title: 'Venta normal', description: 'El precio vuelve a estar dentro del límite permitido.' });
         }
 
         setCarrito((prev) => prev.map((i) => (i.id === id ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio } : i)));
@@ -728,7 +748,7 @@ export default function PuntoVentaOficial({
                 setAlmacenSeleccionado('');
                 setProductos([]);
                 setCodigoSeleccionadoPorProducto({});
-                setEsVentaEspecial(false);
+                setEspecialManual(false);
                 setMotivoEspecial('');
                 setTieneMensajero(false);
                 setMensajeroMonto('');
@@ -1131,10 +1151,17 @@ export default function PuntoVentaOficial({
 
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-                            <Card className={`overflow-hidden border-0 pt-0 shadow-lg ${esVentaEspecial ? 'ring-2 ring-amber-400' : ''}`}>
+                            <Card
+                                data-estado={esVentaEspecial ? (esBajoCosto ? 'bajo-costo' : 'especial') : undefined}
+                                className={`overflow-hidden border-0 pt-0 shadow-lg ${esVentaEspecial ? 'spotlight-card' : ''}`}
+                            >
                                 <CardHeader
                                     className={`px-6 py-5 ${
-                                        esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white'
+                                        esVentaEspecial
+                                            ? esBajoCosto
+                                                ? 'bg-red-50 dark:bg-red-950'
+                                                : 'bg-amber-50 dark:bg-amber-950'
+                                            : 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white'
                                     }`}
                                 >
                                     <div className="flex items-center justify-between">
@@ -1147,15 +1174,21 @@ export default function PuntoVentaOficial({
                                             <CardTitle
                                                 className={`flex items-center gap-2 text-base font-semibold ${esVentaEspecial ? '' : 'text-white'}`}
                                             >
-                                                {esVentaEspecial && <ShoppingCart className="h-5 w-5 text-amber-600" />}
-                                                {esVentaEspecial ? 'Venta Especial' : 'Carrito de Compras'}
+                                                {esVentaEspecial && <ShoppingCart className={`h-5 w-5 ${esBajoCosto ? 'text-red-600' : 'text-amber-600'}`} />}
+                                                {esVentaEspecial ? (esBajoCosto ? 'Venta Bajo Costo' : 'Venta Especial') : 'Carrito de Compras'}
                                             </CardTitle>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {carrito.length > 0 && (
                                                 <Badge
                                                     variant={esVentaEspecial ? 'outline' : undefined}
-                                                    className={esVentaEspecial ? 'border-amber-400 text-amber-700' : 'border-0 bg-white/20 text-white backdrop-blur-sm'}
+                                                    className={
+                                                        esVentaEspecial
+                                                            ? esBajoCosto
+                                                                ? 'border-red-400 text-red-700'
+                                                                : 'border-amber-400 text-amber-700'
+                                                            : 'border-0 bg-white/20 text-white backdrop-blur-sm'
+                                                    }
                                                 >
                                                     {carrito.length}
                                                 </Badge>
@@ -1163,24 +1196,32 @@ export default function PuntoVentaOficial({
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    setEsVentaEspecial(!esVentaEspecial);
-                                                    if (esVentaEspecial) setMotivoEspecial('');
+                                                    if (esVentaEspecial && !especialManual) {
+                                                        sileo.info({
+                                                            title: 'La venta es especial por sus precios',
+                                                            description: 'Sube el precio al límite permitido para volver a venta normal.',
+                                                        });
+                                                        return;
+                                                    }
+                                                    setEspecialManual(!especialManual);
                                                 }}
                                                 className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
                                                     esVentaEspecial
-                                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300'
+                                                        ? esBajoCosto
+                                                            ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300'
+                                                            : 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300'
                                                         : 'bg-white/20 text-white backdrop-blur-sm hover:bg-white/30'
                                                 }`}
                                                 title="Activar modo Venta Especial"
                                             >
                                                 <AlertTriangle className="h-3 w-3" />
-                                                Especial
+                                                {esBajoCosto ? 'Bajo costo' : 'Especial'}
                                             </button>
                                         </div>
                                     </div>
                                     {esVentaEspecial && (
-                                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                                            Precio libre · Sin comisión · Requiere aprobación del admin
+                                        <p className={`mt-1 text-xs ${esBajoCosto ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                            {esBajoCosto ? 'Precio bajo el costo · Sin comisión · Solo la aprueba un administrador' : 'Precio libre · Sin comisión · Requiere aprobación'}
                                         </p>
                                     )}
                                 </CardHeader>
@@ -1753,11 +1794,11 @@ export default function PuntoVentaOficial({
                 </DialogContent>
             </Dialog>
 
-            {/* AlertDialog: producto sin comisión — requiere aprobación del admin */}
+            {/* AlertDialog: un precio por debajo del límite convierte la venta en especial — requiere aprobación */}
             <AlertDialog
-                open={!!productoSinComisionPendiente}
+                open={!!precioEspecialPendiente}
                 onOpenChange={(open) => {
-                    if (!open) setProductoSinComisionPendiente(null);
+                    if (!open) setPrecioEspecialPendiente(null);
                 }}
             >
                 <AlertDialogContent className="overflow-hidden p-0 sm:max-w-md">
@@ -1766,32 +1807,34 @@ export default function PuntoVentaOficial({
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                 <AlertTriangle className="h-5 w-5" />
                             </div>
-                            <AlertDialogTitle className="text-white">Producto sin comisión configurada</AlertDialogTitle>
+                            <AlertDialogTitle className="text-white">
+                                {precioEspecialPendiente?.sinComision ? 'Producto sin comisión configurada' : 'Precio por debajo del límite permitido'}
+                            </AlertDialogTitle>
                         </div>
                         <AlertDialogDescription className="space-y-2 pt-2 text-sm text-amber-50">
                             <span className="block">
-                                Este producto no tiene comisión asignada. No puedes aplicar un descuento sin autorización del administrador.
+                                {precioEspecialPendiente?.sinComision
+                                    ? 'Este producto no tiene comisión asignada. No puedes aplicar un descuento sin autorización.'
+                                    : `El precio mínimo permitido para este producto es $${(precioEspecialPendiente?.precioMinimo ?? 0).toFixed(2)} (su precio de venta menos la comisión). Un precio menor necesita autorización.`}
                             </span>
                             <span className="block font-medium text-white">
-                                Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación del admin antes de
-                                completarse.
+                                Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación antes de completarse.
                             </span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="border-t px-6 py-4">
-                        <AlertDialogCancel onClick={() => setProductoSinComisionPendiente(null)}>Cancelar</AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => setPrecioEspecialPendiente(null)}>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                             className="bg-amber-600 hover:bg-amber-700"
                             onClick={() => {
-                                if (productoSinComisionPendiente) {
-                                    const { id, nuevoPrecio } = productoSinComisionPendiente;
-                                    setEsVentaEspecial(true);
+                                if (precioEspecialPendiente) {
+                                    const { id, nuevoPrecio } = precioEspecialPendiente;
                                     setCarrito((prev) =>
                                         prev.map((i) => (i.id === id ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio } : i)),
                                     );
                                     sileo.warning({ title: 'Venta Especial activada', description: 'Recuerda agregar el motivo.' });
                                 }
-                                setProductoSinComisionPendiente(null);
+                                setPrecioEspecialPendiente(null);
                             }}
                         >
                             Continuar como Venta Especial

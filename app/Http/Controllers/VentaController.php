@@ -158,6 +158,10 @@ class VentaController extends Controller
                     'color_producto' => $producto->color_producto,
                     'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
+                    // Costo real en ESTE almacén (promedio de sus lotes): el POS lo usa para avisar "Venta Bajo
+                    // Costo" cuando un precio queda por debajo. Lo reciben todos los roles del POS (decisión
+                    // del cliente: el vendedor también ve ese cambio).
+                    'costo_real' => $producto->costoEnAlmacen((int) $id),
                     'stock_disponible' => $almacen?->pivot->cantidad ?? 0,
                     'precio_venta' => $precioRow ? (float) $precioRow->precio_venta : null,
                     'tiene_precio' => ($precioRow?->precio_venta ?? 0) > 0,
@@ -624,6 +628,8 @@ class VentaController extends Controller
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
             'es_venta_especial' => (bool) $venta->es_venta_especial,
             'nota_venta_especial' => $venta->nota_venta_especial,
+            'tipo_venta_especial' => $venta->tipo_venta_especial,
+            'puede_decidir_solicitud_especial' => $this->puedeDecidirEstaSolicitud($venta),
             'decision_notificada' => (bool) $venta->decision_notificada,
             'mensajero' => $venta->mensajero_monto > 0 ? [
                 'monto' => (float) $venta->mensajero_monto,
@@ -955,6 +961,10 @@ class VentaController extends Controller
             // abajo) lo usa para el costo/ganancia real y para dejar auditoría en
             // venta_detalle_lotes, en vez de recalcular con el campo global de la ficha.
             $consumoPorIndice = [];
+            // Alguna línea vendida por debajo de su costo real: la venta especial pasa a ser de
+            // tipo 'bajo_costo' y solo un admin puede decidirla. Lo decide el servidor (el POS de un
+            // vendedor no conoce el costo).
+            $hayLineaBajoCosto = false;
             foreach ($validatedData['items'] as $idx => $item) {
                 $producto = Producto::find($item['producto_id']);
 
@@ -972,6 +982,11 @@ class VentaController extends Controller
                 );
                 $consumoPorIndice[$idx] = $consumido;
                 $costoUnitarioReal = $loteConsumoService->costoPromedio($consumido);
+
+                // Igual al costo no es pérdida: solo cuenta estar estrictamente por debajo.
+                if (round((float) $item['precio_venta'], 2) < round($costoUnitarioReal, 2)) {
+                    $hayLineaBajoCosto = true;
+                }
 
                 // Ventas especiales permiten precio por debajo del costo
                 if (! $esEspecial && $item['precio_venta'] < $costoUnitarioReal) {
@@ -1071,6 +1086,7 @@ class VentaController extends Controller
                 // CAMPOS VENTA ESPECIAL
                 'es_venta_especial' => $esEspecial,
                 'nota_venta_especial' => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                'tipo_venta_especial' => $esEspecial ? ($hayLineaBajoCosto ? 'bajo_costo' : 'descuento') : null,
                 'decision_notificada' => false,
                 // MENSAJERO
                 'mensajero_monto' => $validatedData['mensajero_monto'] ?? null,
@@ -1375,9 +1391,36 @@ class VentaController extends Controller
      * precio/costo mínimo; si el vendedor dueño pudiera aprobarla, se estaría auto-concediendo
      * una excepción de precio a sí mismo.
      */
-    private function puedeDecidirSolicitudEspecial(): bool
+    /**
+     * Una venta especial normal ('descuento') la deciden admin y moderador; la que baja del costo
+     * ('bajo_costo') solo un admin.
+     */
+    private function puedeDecidirSolicitudEspecial(Venta $venta): bool
     {
+        if ($venta->tipo_venta_especial === 'bajo_costo') {
+            return Auth::user()->role === 'admin';
+        }
+
         return in_array(Auth::user()->role, ['admin', 'moderador']);
+    }
+
+    /**
+     * Mensaje sin mencionar costos: lo puede recibir cualquier rol, incluido el vendedor.
+     */
+    private function mensajeSinPermisoSolicitudEspecial(Venta $venta): string
+    {
+        return $venta->tipo_venta_especial === 'bajo_costo'
+            ? 'Esta solicitud solo la puede decidir un administrador.'
+            : 'No tienes permiso para decidir esta solicitud.';
+    }
+
+    /**
+     * Si el usuario actual puede aprobar/rechazar esta solicitud especial (para mostrar u ocultar
+     * los botones sin revelar el tipo).
+     */
+    private function puedeDecidirEstaSolicitud(Venta $venta): bool
+    {
+        return $venta->estado === 'solicitud_especial' && $this->puedeDecidirSolicitudEspecial($venta);
     }
 
     /**
@@ -1692,6 +1735,8 @@ class VentaController extends Controller
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                     'es_venta_especial' => (bool) $venta->es_venta_especial,
                     'nota_venta_especial' => $venta->nota_venta_especial,
+                    'tipo_venta_especial' => $venta->tipo_venta_especial,
+                    'puede_decidir_solicitud_especial' => $this->puedeDecidirEstaSolicitud($venta),
                     // MENSAJERO
                     'mensajero' => $venta->mensajero_monto > 0 ? [
                         'monto' => (float) $venta->mensajero_monto,
@@ -1778,7 +1823,7 @@ class VentaController extends Controller
         $user = Auth::user();
 
         try {
-            DB::transaction(function () use ($venta, $validated) {
+            DB::transaction(function () use ($venta, $validated, $user) {
                 // ── Actualizar precios si vienen ──────────────────────────────────
                 if (! empty($validated['items'])) {
                     $venta->load('detalles.producto');
@@ -1821,6 +1866,15 @@ class VentaController extends Controller
                                     "El precio de \"{$detalle->producto->nombre_producto}\" no puede ser menor que su costo."
                                 );
                             }
+                        }
+
+                        // Una venta especial ya aprobada como 'descuento' no puede bajar del costo por
+                        // esta vía: eso es una venta 'bajo_costo' y solo la autoriza un admin.
+                        if ($venta->es_venta_especial && round($nuevoPrecio, 2) < round($costo, 2) && $venta->tipo_venta_especial !== 'bajo_costo') {
+                            if ($user->role !== 'admin') {
+                                throw new \Exception("El precio de \"{$detalle->producto->nombre_producto}\" (\${$nuevoPrecio}) solo lo puede autorizar un administrador.");
+                            }
+                            $venta->update(['tipo_venta_especial' => 'bajo_costo']);
                         }
 
                         // Recalcular comisión
@@ -2271,8 +2325,8 @@ class VentaController extends Controller
      */
     public function aprobarSolicitudEspecial(Venta $venta)
     {
-        if (! $this->puedeDecidirSolicitudEspecial()) {
-            return response()->json(['success' => false, 'message' => 'No tienes permiso para decidir esta solicitud.'], 403);
+        if (! $this->puedeDecidirSolicitudEspecial($venta)) {
+            return response()->json(['success' => false, 'message' => $this->mensajeSinPermisoSolicitudEspecial($venta)], 403);
         }
 
         if ($venta->estado !== 'solicitud_especial') {
@@ -2301,8 +2355,8 @@ class VentaController extends Controller
      */
     public function rechazarSolicitudEspecial(Venta $venta)
     {
-        if (! $this->puedeDecidirSolicitudEspecial()) {
-            return response()->json(['success' => false, 'message' => 'No tienes permiso para decidir esta solicitud.'], 403);
+        if (! $this->puedeDecidirSolicitudEspecial($venta)) {
+            return response()->json(['success' => false, 'message' => $this->mensajeSinPermisoSolicitudEspecial($venta)], 403);
         }
 
         if ($venta->estado !== 'solicitud_especial') {

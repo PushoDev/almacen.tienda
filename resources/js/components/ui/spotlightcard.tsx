@@ -2,8 +2,11 @@ import { cn } from '@/lib/utils';
 import * as React from 'react';
 
 interface SpotlightCardProps extends React.ComponentProps<'div'> {
-    /** Color del borde animado: verde si hay stock, rojo si está agotado. */
-    estado: 'disponible' | 'agotado';
+    /**
+     * Color del borde animado: verde si hay stock ('disponible'), rojo si está agotado ('agotado'),
+     * ámbar en una venta especial ('especial') y rojo en una venta bajo costo ('bajo-costo').
+     */
+    estado: 'disponible' | 'agotado' | 'especial' | 'bajo-costo';
 }
 
 /**

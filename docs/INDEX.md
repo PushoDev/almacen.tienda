@@ -146,6 +146,7 @@
 | [nativephp-offline-design-consistency.md](nativephp-offline-design-consistency.md) | **Leer antes de tocar UI en la versión offline (NativePHP)**: usar el mismo sistema de diseño de la app web (Cards, headers, degradados, bleed) — no rediseñar |
 | [cambios-cliente-proveedor.md](cambios-cliente-proveedor.md) | Cambios en el módulo de clientes/proveedores |
 | [newforsale.md](newforsale.md) | Nuevas features para ventas |
+| [arreglos-pendientes/resumen-cambios-2026-09-24.md](arreglos-pendientes/resumen-cambios-2026-09-24.md) | **Último resumen de sesión**: códigos de barras por almacén, `/disponibles` con agotadas, devoluciones a lote/código, ventas especiales en dos tipos (descuento / bajo costo), acceso denegado + páginas de error, borde animado en el POS; pendientes y pasos de despliegue |
 | [arreglos-pendientes/Propuesta-CierreCaja.md](arreglos-pendientes/Propuesta-CierreCaja.md) | Propuesta original que originó los cambios de Cierre de Caja del 2026-07-30 |
 | [sections/](./sections/) | Notas de sesión sueltas (`session-ses_*.md`, `analisisTasa.md`) — no indexadas individualmente, consultar solo si se busca contexto histórico puntual |
 | [code/](./code/) | Snippets/notas técnicas puntuales: `export-pdf.md`, `report-pdf.md`, `vendor.md` |

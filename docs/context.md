@@ -298,6 +298,8 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `HandleAppearance` | Maneja preferencia de tema (claro/oscuro) |
 | `throttle:60,1` | Rate limiting para API pública (60 req/min) |
 
+> **Nota (2026-09-24):** los cuatro middlewares de rol (`admin`, `admin.only`, `moderator`, `vendor`) ahora redirigen al `dashboard` con aviso de acceso denegado (antes tres de ellos daban 500 por `route('vendedor')`); `moderator`/`vendor` siguen sin aplicarse a rutas, por decisión del cliente.
+>
 > **Nota (corregida 2026-08-13, estaba desactualizada):** `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen como clases pero no están aplicadas a rutas — la verificación para esos casos sigue siendo inline en los controladores. `EnsureUserIsAdmin`/`EnsureUserIsAdminOnly` sí están aplicados a rutas reales desde Compras/Reportes/Precios de Venta (ver fila arriba); esta nota decía lo contrario para las cuatro clases, ya no es cierto desde que se cerró el control de acceso de Compras (2026-08-11).
 
 ---

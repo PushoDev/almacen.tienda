@@ -4,8 +4,11 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Toaster } from '@/components/ui/sileo-toaster';
+import { sileo } from '@/lib/sileo';
+import { Head, usePage } from '@inertiajs/react';
 import { Coins, Info, TrendingDown, TrendingUp } from 'lucide-react';
+import { useEffect } from 'react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -55,9 +58,18 @@ export default function Dashboard({
     resumenFinanciero?: ResumenFinanciero | null;
     gananciaAgenciaMes?: GananciaAgenciaMes | null;
 }) {
+    // Un middleware de rol redirige acá con un aviso cuando alguien abre una sección sin permiso.
+    const { flash } = usePage<{ flash?: { error?: string } }>().props;
+    useEffect(() => {
+        if (flash?.error) {
+            sileo.error({ title: flash.error });
+        }
+    }, [flash?.error]);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inventario" />
+            <Toaster position="top-center" />
             <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}

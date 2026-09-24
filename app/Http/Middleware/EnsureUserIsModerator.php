@@ -24,6 +24,11 @@ class EnsureUserIsModerator
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        return redirect()->route('vendedor');
+        // Sin sesión: al login. Con sesión pero sin el rol: al inicio con un aviso (el frontend lo muestra).
+        if (! Auth::check()) {
+            return redirect()->route('login');
+        }
+
+        return redirect()->route('dashboard')->with('error', 'No tienes permiso para acceder a esa sección.');
     }
 }

@@ -2107,3 +2107,291 @@ test('si otra petición ya devolvió la venta mientras esta se procesaba, no se 
     $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 95]); // no se devolvió otra vez
     expect(LoteStock::count())->toBe(0);
 });
+
+// ==========================================================================
+// DOS TIPOS DE VENTA ESPECIAL — 'descuento' (admin o moderador) y 'bajo_costo' (solo admin)
+// ==========================================================================
+
+/**
+ * Crea una venta especial desde el POS: costo 10, precio de venta 20, comisión 2 (mínimo 18).
+ */
+function crearVentaEspecialConPrecio(User $usuario, float $precio, int $cantidad = 1): Venta
+{
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: $precio, cantidad: $cantidad, monedaPrincipal: $monedaUsd);
+    $payload['es_venta_especial'] = true;
+    $payload['nota_venta_especial'] = 'Venta a un cliente frecuente';
+    $payload['pagos'] = $precio * $cantidad > 0 ? pagoEfectivoUsd($monedaUsd, $precio * $cantidad) : [];
+
+    test()->actingAs($usuario)->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    return Venta::where('almacen_id', $almacen->id)->sole();
+}
+
+test('una venta especial con el precio bajo el mínimo pero sobre el costo es de tipo descuento', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 15);
+
+    expect($venta->estado)->toBe('solicitud_especial');
+    expect($venta->tipo_venta_especial)->toBe('descuento');
+});
+
+test('vender exactamente al costo no es pérdida: la venta especial sigue siendo de tipo descuento', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 10);
+
+    expect($venta->tipo_venta_especial)->toBe('descuento');
+});
+
+test('una venta especial con un precio bajo el costo es de tipo bajo_costo', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 9.99);
+
+    expect($venta->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+test('un regalo (total 0) es de tipo bajo_costo', function () {
+    $venta = crearVentaEspecialConPrecio(User::factory()->admin()->create(), precio: 0);
+
+    expect($venta->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+test('una sola línea bajo el costo vuelve bajo_costo a toda la venta especial', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$productoA, $codigoA] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    [$productoB, $codigoB] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $productoA, $codigoA, precioVenta: 15, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['items'][] = ['producto_id' => $productoB->id, 'producto_codigo_id' => $codigoB->id, 'cantidad' => 1, 'precio_venta' => 5, 'subtotal' => 5];
+    $payload['total'] = 20;
+    $payload['es_venta_especial'] = true;
+    $payload['nota_venta_especial'] = 'Una línea a buen precio y otra bajo costo';
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 20);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    expect(Venta::where('almacen_id', $almacen->id)->sole()->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+test('una venta normal no tiene tipo de venta especial', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 19, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 19); // 19 está sobre el mínimo (18): la comisión absorbe el descuento
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    expect($venta->es_venta_especial)->toBeFalse();
+    expect($venta->tipo_venta_especial)->toBeNull();
+});
+
+test('un moderador puede aprobar una venta especial de tipo descuento', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+    $venta = Venta::factory()->especial()->create();
+
+    $this->postJson(route('ventas.especial.aprobar', $venta))->assertOk()->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('un moderador no puede aprobar una venta especial bajo el costo, solo un admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $venta = Venta::factory()->especialBajoCosto()->create();
+
+    $this->actingAs($moderador)->postJson(route('ventas.especial.aprobar', $venta))
+        ->assertStatus(403)
+        ->assertJson(['success' => false]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'solicitud_especial']);
+
+    $this->actingAs(User::factory()->admin()->create())->postJson(route('ventas.especial.aprobar', $venta))
+        ->assertOk()
+        ->assertJson(['success' => true]);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'pendiente']);
+});
+
+test('un moderador no puede rechazar una venta especial bajo el costo y su stock queda reservado', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $venta = Venta::factory()->especialBajoCosto()->create(['almacen_id' => $almacen->id]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 5, 'subtotal' => 25,
+        'costo_unitario' => 10, 'ganancia' => -25, 'comision_unitaria' => 0,
+    ]);
+
+    $this->postJson(route('ventas.especial.rechazar', $venta))->assertStatus(403);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'solicitud_especial']);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $producto->id, 'cantidad' => 95]); // no se devolvió
+});
+
+test('un admin sí puede rechazar una venta especial bajo el costo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $venta = Venta::factory()->especialBajoCosto()->create();
+
+    $this->postJson(route('ventas.especial.rechazar', $venta))->assertOk()->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'estado' => 'rechazada']);
+});
+
+test('editar una venta especial pendiente para bajar de su costo solo lo puede hacer un admin y la vuelve bajo_costo', function () {
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $venta = Venta::factory()->especial()->create(['almacen_id' => $almacen->id, 'estado' => 'pendiente', 'moneda_id' => $monedaUsd->id]);
+    $detalle = $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => 15, 'subtotal' => 15,
+        'costo_unitario' => 10, 'ganancia' => 5, 'comision_unitaria' => 0,
+    ]);
+    $edicion = fn (float $precio) => [
+        'pagos' => pagoEfectivoUsd($monedaUsd, $precio),
+        'items' => [['venta_detalle_id' => $detalle->id, 'precio_venta' => $precio]],
+    ];
+
+    // Un moderador no puede bajarla del costo...
+    $rechazo = $this->actingAs($moderador)->postJson(route('ventas.editar.pendiente', $venta), $edicion(5));
+    $rechazo->assertStatus(422);
+    expect($rechazo->json('message'))->toContain('solo lo puede autorizar un administrador');
+    expect($rechazo->json('message'))->not->toContain('costo');
+    expect($detalle->fresh()->precio_venta)->toEqual(15);
+    expect($venta->fresh()->tipo_venta_especial)->toBe('descuento');
+
+    // ...pero sí puede cambiarla sin bajar del costo.
+    $this->actingAs($moderador)->postJson(route('ventas.editar.pendiente', $venta), $edicion(12))->assertOk();
+    expect($venta->fresh()->tipo_venta_especial)->toBe('descuento');
+
+    // Un admin sí, y la venta pasa a bajo_costo.
+    $this->actingAs(User::factory()->admin()->create())->postJson(route('ventas.editar.pendiente', $venta), $edicion(5))->assertOk();
+    expect($venta->fresh()->tipo_venta_especial)->toBe('bajo_costo');
+});
+
+// ==========================================================================
+// QUIÉN VE QUÉ — solo el admin ve la diferencia entre los dos tipos de venta especial
+// ==========================================================================
+
+function ventaEspecialPendienteDeDecidir(string $tipo, User $dueño): Venta
+{
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $venta = Venta::factory()->especial()->create([
+        'user_id' => $dueño->id, 'almacen_id' => $almacen->id, 'tipo_venta_especial' => $tipo,
+    ]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => 5, 'subtotal' => 5,
+        'costo_unitario' => 10, 'ganancia' => -5, 'comision_unitaria' => 0,
+    ]);
+
+    return $venta;
+}
+
+test('el admin ve el tipo real de la venta especial y puede decidir las dos', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $bajoCosto = ventaEspecialPendienteDeDecidir('bajo_costo', $dueño);
+    $descuento = ventaEspecialPendienteDeDecidir('descuento', $dueño);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('ventas.show', $bajoCosto->id))->assertInertia(fn ($page) => $page
+        ->where('venta.tipo_venta_especial', 'bajo_costo')
+        ->where('venta.puede_decidir_solicitud_especial', true));
+    $this->get(route('ventas.show', $descuento->id))->assertInertia(fn ($page) => $page
+        ->where('venta.tipo_venta_especial', 'descuento')
+        ->where('venta.puede_decidir_solicitud_especial', true));
+});
+
+test('el moderador ve el tipo real de la venta especial pero solo puede decidir la de descuento', function () {
+    $dueño = User::factory()->vendedor()->create();
+    $bajoCosto = ventaEspecialPendienteDeDecidir('bajo_costo', $dueño);
+    $descuento = ventaEspecialPendienteDeDecidir('descuento', $dueño);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $this->get(route('ventas.show', $bajoCosto->id))->assertInertia(fn ($page) => $page
+        ->where('venta.es_venta_especial', true)
+        ->where('venta.tipo_venta_especial', 'bajo_costo')
+        ->where('venta.puede_decidir_solicitud_especial', false));
+    $this->get(route('ventas.show', $descuento->id))->assertInertia(fn ($page) => $page
+        ->where('venta.tipo_venta_especial', 'descuento')
+        ->where('venta.puede_decidir_solicitud_especial', true));
+});
+
+test('el vendedor ve el tipo de su venta especial, pero no puede decidir su propia solicitud', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $venta = ventaEspecialPendienteDeDecidir('bajo_costo', $vendedor);
+    $this->actingAs($vendedor);
+
+    $this->get(route('ventas.show', $venta->id))->assertInertia(fn ($page) => $page
+        ->where('venta.es_venta_especial', true)
+        ->where('venta.tipo_venta_especial', 'bajo_costo')
+        ->where('venta.puede_decidir_solicitud_especial', false));
+});
+
+test('el listado de ventas muestra el tipo a todos los roles, y solo el admin puede decidir la bajo costo', function () {
+    $dueño = User::factory()->vendedor()->create();
+    crearTurnoActivo($dueño);
+    ventaEspecialPendienteDeDecidir('bajo_costo', $dueño);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+
+    $this->actingAs(User::factory()->admin()->create());
+    $this->get(route('ventas.listado'))->assertInertia(fn ($page) => $page
+        ->where('ventas.data.0.tipo_venta_especial', 'bajo_costo')
+        ->where('ventas.data.0.puede_decidir_solicitud_especial', true));
+
+    foreach ([$moderador, $dueño] as $usuario) {
+        $this->actingAs($usuario);
+        $this->get(route('ventas.listado'))->assertInertia(fn ($page) => $page
+            ->where('ventas.data.0.tipo_venta_especial', 'bajo_costo')
+            ->where('ventas.data.0.puede_decidir_solicitud_especial', false));
+    }
+});
+
+test('el mensaje de rechazo de un moderador no revela que la venta es bajo costo', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $venta = Venta::factory()->especialBajoCosto()->create();
+
+    $respuesta = $this->actingAs($moderador)->postJson(route('ventas.especial.aprobar', $venta));
+
+    $respuesta->assertStatus(403);
+    expect($respuesta->json('message'))->not->toContain('costo');
+});
+
+test('el POS envía el costo real del producto en el almacén a todos los roles', function () {
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    [$producto] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    LoteStock::create([
+        'codigo' => 'LOTE-COSTO-POS', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id,
+        'cantidad' => 10, 'precio_costo' => 12.5,
+    ]);
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $vendedor->almacenes()->attach($almacen->id);
+    $ruta = route('ventas.getProductosPorAlmacen', $almacen->id);
+
+    foreach ([User::factory()->admin()->create(), $moderador, $vendedor] as $usuario) {
+        expect($this->actingAs($usuario)->getJson($ruta)->json('0.costo_real'))->toEqual(12.5);
+    }
+});
