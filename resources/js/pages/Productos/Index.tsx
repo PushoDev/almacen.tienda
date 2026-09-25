@@ -22,7 +22,9 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { ProductosFilters, ProductosPaginados, ProductosSort, type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { ResultadoImportacionDialog } from '@/components/importaciones/resultado-importacion-dialog';
+import { type ResultadoImportacion } from '@/components/importaciones/tipos';
 import {
     AlertTriangle,
     CloudUpload,
@@ -34,6 +36,7 @@ import {
     FileText,
     Filter,
     GitMerge,
+    History,
     Package,
     Package2,
     RefreshCw,
@@ -61,7 +64,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface ImportModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onImport: (file: File, almacenId: number) => void;
+    onImport: (file: File, almacenId: number) => Promise<void>;
     almacenes: { id: number; nombre_almacen: string }[];
 }
 
@@ -132,13 +135,12 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
             return;
         }
 
+        // Se sube el archivo y se abre la hoja de revisión: nada se importa hasta que el usuario confirme allí.
         setIsImporting(true);
         try {
             await onImport(selectedFile, almacenId);
-            setSelectedFile(null);
-            setFileSize('0 KB');
         } catch (error) {
-            console.error('Error en importación:', error);
+            console.error('Error al preparar la importación:', error);
         } finally {
             setIsImporting(false);
         }
@@ -158,12 +160,12 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="w-full max-w-2xl rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
+            <div className="animate-dialog-bounce w-full max-w-2xl rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
                 {/* Encabezado */}
                 <div className="mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Importar Productos desde Excel</h2>
                     <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        Carga un archivo Excel con los productos a importar. Se pueden crear nuevos productos o actualizar los existentes.
+                        Carga un archivo Excel con los productos. Se abrirá una hoja para que lo revises y lo edites antes de guardar nada en el inventario.
                     </p>
                 </div>
 
@@ -241,20 +243,28 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                             <li className="flex items-start gap-2">
                                 <span className="font-bold">•</span>
                                 <span>
-                                    <strong>Columnas obligatorias:</strong> nombre_producto, categoria, precio_compra, cantidad
+                                    <strong>Columna obligatoria:</strong> nombre_producto. <strong>precio_compra</strong> es obligatorio en las filas
+                                    con unidades (es el costo del lote); en las filas sin stock es opcional.
                                 </span>
                             </li>
                             <li className="flex items-start gap-2">
                                 <span className="font-bold">•</span>
                                 <span>
-                                    <strong>Columnas opcionales:</strong> marca, modelo, capacidad
+                                    <strong>Columnas opcionales:</strong> categoria, marca, modelo, capacidad, color, cantidad, codigo_barras
                                 </span>
                             </li>
                             <li className="flex items-start gap-2">
                                 <span className="font-bold">•</span>
                                 <span>
-                                    <strong>Comportamiento:</strong> Los códigos de barras se generan automáticamente. Si el producto existe, se
-                                    actualiza la categoría, precio y cantidad en el almacén.
+                                    <strong>Comportamiento:</strong> Si el producto ya existe, se suma el stock en el almacén elegido y NO cambia su
+                                    costo. Las filas con cantidad 0 o vacía quedan registradas como productos sin stock. Importar nunca resta stock.
+                                </span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <span className="font-bold">•</span>
+                                <span>
+                                    <strong>¿Cómo se llena?</strong> Descarga la plantilla (botón verde de la barra): trae una hoja «Instrucciones» con las
+                                    reglas y un ejemplo lleno.
                                 </span>
                             </li>
                             <li className="flex items-start gap-2">
@@ -279,18 +289,19 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                             {isImporting ? (
                                 <>
                                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                                    Importando...
+                                    Leyendo archivo...
                                 </>
                             ) : (
                                 <>
                                     <Upload size={16} />
-                                    Importar Productos
+                                    Revisar y continuar
                                 </>
                             )}
                         </Button>
                     </div>
                 </form>
             </div>
+
         </div>
     );
 }
@@ -335,6 +346,7 @@ export default function ProductosPage({
     // Estados para importación/exportación
     const [almacenExportId, setAlmacenExportId] = useState<number>(1);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [resultadoImportacion, setResultadoImportacion] = useState<ResultadoImportacion | null>(null);
 
     // Estados para duplicados
     const [showDuplicadosModal, setShowDuplicadosModal] = useState(false);
@@ -456,41 +468,30 @@ export default function ProductosPage({
         window.location.href = route('productos.export-general', params);
     };
 
-    // Importar desde Excel - VERSIÓN PROFESIONAL
-    const handleImport = async (file: File, almacenId: number) => {
+    // Importar desde Excel: se sube el archivo y el servidor abre la hoja de revisión (borrador). El resultado de la
+    // importación real llega de vuelta a esta página en el flash `importacion_resultado` (ver el efecto de abajo).
+    const handleImport = async (file: File, almacenId: number): Promise<void> => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('almacen_id', almacenId.toString());
 
-        try {
-            await router.post(route('productos.import'), formData, {
+        await new Promise<void>((resolve) => {
+            router.post(route('importaciones-borradores.preparar'), formData, {
                 forceFormData: true,
-                onSuccess: (page) => {
-                    // La respuesta exitosa vendrá del servidor
-                    sileo.success({
-                        title: '¡Importación completada!',
-                        description: 'Los productos han sido importados al almacén seleccionado.',
-                    });
-                    setShowImportModal(false);
-                    // Recargamos la página para ver los productos actualizados
-                    setTimeout(() => {
-                        router.reload();
-                    }, 1000);
-                },
                 onError: (errors: Record<string, string>) => {
-                    console.error('Errores de importación:', errors);
-
-                    const errorMessage = errors.error || errors.file || errors.almacen_id || 'Ocurrió un error al importar los productos.';
-
-                    sileo.error({ title: 'Error en la importación', description: errorMessage });
+                    const errorMessage = errors.error || errors.file || errors.almacen_id || 'Ocurrió un error al leer el archivo.';
+                    sileo.error({ title: 'No se pudo leer el archivo', description: errorMessage });
                 },
+                onFinish: () => resolve(),
             });
-        } catch (error: any) {
-            console.error('Error desconocido:', error);
-            const errorMessage = error?.message || 'Error desconocido al importar';
-            sileo.error({ title: 'Error al importar', description: errorMessage });
-        }
+        });
     };
+
+    // Al volver de confirmar una importación, se muestra su resultado.
+    const flashImportacion = (usePage().props.flash as { importacion_resultado?: ResultadoImportacion | null } | undefined)?.importacion_resultado;
+    useEffect(() => {
+        if (flashImportacion) setResultadoImportacion(flashImportacion);
+    }, [flashImportacion]);
 
     // Descargar plantilla desde el servidor (genera un .xlsx real)
     const downloadTemplate = () => {
@@ -833,6 +834,19 @@ export default function ProductosPage({
                     {canViewStockStats && (
                         <Tooltip>
                             <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 cursor-pointer" asChild>
+                                    <Link href={route('importaciones-productos.index')}>
+                                        <History size={16} />
+                                    </Link>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Historial de importaciones</TooltipContent>
+                        </Tooltip>
+                    )}
+
+                    {canViewStockStats && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
                                 <Button
                                     variant="outline"
                                     size="icon"
@@ -1127,11 +1141,12 @@ export default function ProductosPage({
 
                 {/* Modal de Importación */}
                 <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} onImport={handleImport} almacenes={almacenes} />
+                <ResultadoImportacionDialog resultado={resultadoImportacion} onClose={() => setResultadoImportacion(null)} />
 
                 {/* Modal 1 - Exploración de duplicados */}
                 {showDuplicadosModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                        <div className="mx-4 w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+                        <div className="animate-dialog-bounce mx-4 w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
                             <div className="mb-4 flex items-center justify-between">
                                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧹 Limpiar productos duplicados</h2>
                                 <Button variant="ghost" size="sm" className="cursor-pointer" onClick={() => setShowDuplicadosModal(false)}>✕</Button>

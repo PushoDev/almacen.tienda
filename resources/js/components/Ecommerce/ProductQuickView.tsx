@@ -40,7 +40,7 @@ export default function ProductQuickView({
             <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
             {/* Modal */}
-            <div className="animate-in fade-in zoom-in-95 relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-[2.5rem] bg-white shadow-2xl md:flex-row">
+            <div className="animate-dialog-bounce relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-[2.5rem] bg-white shadow-2xl md:flex-row">
                 {/* Close Button */}
                 <button
                     onClick={onClose}

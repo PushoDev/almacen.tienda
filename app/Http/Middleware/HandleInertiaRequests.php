@@ -56,6 +56,11 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                // Import de productos: resultado de la importación, aviso de archivo repetido y
+                // bloqueos al deshacer (los muestran los diálogos de Productos/Index y del historial).
+                'importacion_resultado' => fn () => $request->session()->get('importacion_resultado'),
+                'importacion_repetida' => fn () => $request->session()->get('importacion_repetida'),
+                'bloqueos_reversion' => fn () => $request->session()->get('bloqueos_reversion'),
             ],
             'tasas' => fn () => Moneda::where('estado', true)
                 ->orderBy('principal', 'desc')

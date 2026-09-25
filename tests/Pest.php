@@ -45,7 +45,10 @@ use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\TurnoVendedor;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Da a un usuario un turno activo "de hoy" (feature "Atendido por" / Turnos) — necesario
@@ -115,4 +118,32 @@ function crearTiposMovimientoFinanciero(): void
         ['id' => 2, 'nombre' => 'Ingreso', 'efecto' => 'ingreso', 'created_at' => now(), 'updated_at' => now()],
         ['id' => 3, 'nombre' => 'Transferencia', 'efecto' => 'egreso', 'created_at' => now(), 'updated_at' => now()],
     ]);
+}
+
+/**
+ * Arma un .xlsx real con las columnas de la plantilla de importación.
+ *
+ * @param  array<int, array<int, mixed>>  $filas  [nombre_producto, categoria, marca, modelo, capacidad, color, precio_compra, cantidad, codigo_barras]
+ */
+function crearExcelImportacion(array $filas): UploadedFile
+{
+    // Las mismas filas producen SIEMPRE el mismo archivo (mismos bytes): un .xlsx lleva fecha y hora en el zip, así que
+    // dos archivos generados en segundos distintos tendrían hashes distintos y el aviso de "archivo repetido" no saltaría.
+    static $rutas = [];
+    $clave = md5((string) json_encode($filas));
+
+    if (! isset($rutas[$clave])) {
+        $hoja = new Spreadsheet;
+        $hoja->getActiveSheet()->fromArray(
+            ['nombre_producto', 'categoria', 'marca', 'modelo', 'capacidad', 'color', 'precio_compra', 'cantidad', 'codigo_barras'],
+            null,
+            'A1'
+        );
+        $hoja->getActiveSheet()->fromArray($filas, null, 'A2');
+
+        $rutas[$clave] = tempnam(sys_get_temp_dir(), 'importacion').'.xlsx';
+        (new Xlsx($hoja))->save($rutas[$clave]);
+    }
+
+    return new UploadedFile($rutas[$clave], 'productos.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 }

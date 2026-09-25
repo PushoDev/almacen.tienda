@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CompraController;
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Categoria;
@@ -17,6 +18,7 @@ use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
 use App\Models\TipoMovimientoFinanciero;
 use App\Models\User;
+use Illuminate\Http\Request;
 
 test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', function () {
     $user = User::factory()->admin()->create();
@@ -1999,4 +2001,93 @@ test('un moderador sí puede aprobar/anular/editar una compra, igual que admin',
     $this->post(route('comprar.aprobar', $compra->id), [], ['X-Inertia' => 'true'])->assertSessionHasNoErrors();
 
     expect($compra->fresh()->estado)->toBe('aprobada');
+});
+
+// ─── Doble petición: la segunda ve la compra con el estado viejo ───────────
+//
+// Con un doble clic (o aprobar contra anular/editar) dos peticiones cargan la compra como
+// "pendiente" y ambas pasan la primera revisión. Se reproduce sin concurrencia real: la
+// petición "ganadora" cambia el estado y la "perdedora" entra al controlador con el modelo
+// que cargó antes — por eso se llama al controlador directo con esa copia obsoleta.
+
+function crearCompraPendienteConDeuda(Proveedor $proveedor, Almacen $almacen, Categoria $categoria, string $nombreProducto): Compra
+{
+    test()->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $proveedor->nombre_proveedor,
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-07',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => $nombreProducto, 'categoria' => $categoria->nombre_categoria, 'codigo_barras' => 'BARCODE-DOBLE', 'cantidad' => 2, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    return Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+}
+
+test('aprobar con el estado desactualizado (otra petición ya la aprobó) no duplica stock, código ni lote', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $almacen = Almacen::factory()->create();
+    $compra = crearCompraPendienteConDeuda($proveedor, $almacen, Categoria::factory()->create(), 'Producto Doble Clic Aprobar');
+
+    $copiaObsoleta = Compra::findOrFail($compra->id);
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    $respuesta = app(CompraController::class)->aprobar($copiaObsoleta);
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede aprobar una compra pendiente.');
+    $producto = Producto::where('nombre_producto', 'Producto Doble Clic Aprobar')->firstOrFail();
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 2]);
+    $this->assertDatabaseHas('producto_codigos', ['producto_id' => $producto->id, 'cantidad' => 2]);
+    expect(LoteStock::where('producto_id', $producto->id)->count())->toBe(1);
+});
+
+test('anular con el estado desactualizado (otra petición ya la anuló) no devuelve el dinero dos veces', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $compra = crearCompraPendienteConDeuda($proveedor, Almacen::factory()->create(), Categoria::factory()->create(), 'Producto Doble Clic Anular');
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('480.00');
+
+    $copiaObsoleta = Compra::findOrFail($compra->id);
+    $this->post(route('comprar.anular', $compra->id), [
+        'tipo_anulacion' => 'reversion',
+        'motivo_anulacion' => 'Primer clic',
+    ])->assertSessionHasNoErrors();
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+
+    $peticion = Request::create('/', 'POST', ['tipo_anulacion' => 'reversion', 'motivo_anulacion' => 'Segundo clic']);
+    $respuesta = app(CompraController::class)->anular($peticion, $copiaObsoleta);
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede anular una compra pendiente.');
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+    expect($compra->fresh()->motivo_anulacion)->toBe('Primer clic');
+});
+
+test('editar con el estado desactualizado (otra petición ya la aprobó) no reemplaza las líneas ni toca el dinero', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+    $compra = crearCompraPendienteConDeuda($proveedor, $almacen, $categoria, 'Producto Doble Clic Editar');
+
+    $copiaObsoleta = Compra::findOrFail($compra->id);
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    $peticion = Request::create('/', 'POST', [
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Doble Clic Editar', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 9, 'precio' => 10],
+        ],
+        'nota' => 'Edición tardía',
+    ]);
+    $respuesta = app(CompraController::class)->actualizar($peticion, $copiaObsoleta);
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede editar una compra pendiente.');
+    $this->assertDatabaseHas('compra_producto', ['compra_id' => $compra->id, 'cantidad' => 2]);
+    expect($compra->fresh()->total_compra)->toEqual('20.00');
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('480.00');
+    expect(CompraEdicion::where('compra_id', $compra->id)->count())->toBe(0);
 });

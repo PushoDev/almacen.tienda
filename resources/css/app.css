@@ -9,6 +9,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+    --animate-dialog-bounce: dialog-bounce-in 0.35s ease-out both;
+
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
@@ -265,4 +267,117 @@
     .spotlight-card::before {
         animation: none;
     }
+}
+
+/* Entrada con rebote de diálogos y modales (dialog.tsx / alert-dialog.tsx, utilidad
+   `animate-dialog-bounce`): nace a 0.85 y no a 0.3 para que los formularios grandes no se vean
+   diminutos, se pasa un poco de tamaño y se asienta. Usa las propiedades individuales `scale`
+   y `opacity`, no `transform`: el centrado del diálogo va en `translate` y no se pisa. El
+   cierre sigue siendo el fade + zoom-out normal, sin rebote. */
+@keyframes dialog-bounce-in {
+    0% {
+        opacity: 0;
+        scale: 0.85;
+    }
+    60% {
+        opacity: 1;
+        scale: 1.03;
+    }
+    80% {
+        scale: 0.99;
+    }
+    100% {
+        opacity: 1;
+        scale: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --animate-dialog-bounce: none;
+    }
+}
+
+/* Hoja de revisión de importaciones (Productos/Importaciones/Revisar.tsx): la cuadrícula de
+   react-data-grid con aspecto de Excel — verde Excel (#217346) en la selección y la barra de
+   título, encabezados y numeración de filas en gris, líneas de celda finas. Las celdas son
+   transparentes para que se vea la marca de agua de la mascota (mismo patrón que la variante B
+   de Vendor/Imprimir.tsx); los encabezados son opacos. */
+.hoja-excel {
+    --hoja-verde: #217346;
+    --hoja-papel: #ffffff;
+    --hoja-gris: #f3f3f3;
+    --hoja-linea: #d4d4d4;
+    --hoja-texto: #1f1f1f;
+    --hoja-texto-suave: #6b6b6b;
+    --rdg-color: var(--hoja-texto);
+    --rdg-background-color: transparent;
+    --rdg-header-background-color: var(--hoja-gris);
+    --rdg-border-color: var(--hoja-linea);
+    --rdg-summary-border-color: var(--hoja-linea);
+    --rdg-selection-color: var(--hoja-verde);
+    --rdg-selection-width: 2px;
+    --rdg-row-hover-background-color: rgb(33 115 70 / 0.06);
+    --rdg-row-selected-background-color: rgb(33 115 70 / 0.16);
+    --rdg-row-selected-hover-background-color: rgb(33 115 70 / 0.22);
+    --rdg-font-size: 13px;
+    font-family: Calibri, Carlito, 'Segoe UI', Arial, sans-serif;
+    color-scheme: light;
+}
+
+.dark .hoja-excel {
+    --hoja-papel: #1e1e1e;
+    --hoja-gris: #2b2b2b;
+    --hoja-linea: #454545;
+    --hoja-texto: #e6e6e6;
+    --hoja-texto-suave: #a3a3a3;
+    --rdg-row-hover-background-color: rgb(33 115 70 / 0.2);
+    --rdg-row-selected-background-color: rgb(33 115 70 / 0.35);
+    --rdg-row-selected-hover-background-color: rgb(33 115 70 / 0.42);
+    color-scheme: dark;
+}
+
+.hoja-excel .rdg {
+    block-size: 100%;
+    border: 0;
+    background: transparent;
+}
+
+/* Encabezado de columna al estilo Excel: letra arriba, nombre debajo */
+.hoja-excel .rdg-header-row .rdg-cell {
+    padding: 0;
+    color: var(--hoja-texto);
+    font-weight: 600;
+}
+
+.hoja-excel .celda-numero-fila {
+    background: var(--hoja-gris);
+    color: var(--hoja-texto-suave);
+    text-align: center;
+    font-size: 11px;
+}
+
+.hoja-excel .celda-derecha {
+    text-align: right;
+}
+
+.hoja-excel .fila-error .rdg-cell:not(.celda-numero-fila) {
+    background: rgb(220 38 38 / 0.1);
+}
+
+.hoja-excel .fila-solo-catalogo .rdg-cell:not(.celda-numero-fila) {
+    background: rgb(37 99 235 / 0.07);
+}
+
+.hoja-excel .celda-editada {
+    font-style: italic;
+}
+
+/* Columnas fijas opacas (si no, se transparentaría el contenido que se desplaza por debajo) */
+.hoja-excel .rdg-cell[class*='rdg-cell-frozen'] {
+    background: var(--hoja-papel);
+}
+
+.hoja-excel .rdg-cell.celda-numero-fila {
+    background: var(--hoja-gris);
 }
