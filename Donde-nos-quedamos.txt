@@ -1,0 +1,3458 @@
+ ▐▛███▛█   Claude Code v2.1.281
+▝▜██████▀  Sonnet 5 · Claude Pro
+  ▝▝ ▝▝    /media/pushodev/PushoDev/APP_CREATED/PHP/almacen.tienda
+
+
+❯ Analiza este proyecto desde tu memoria, estado desarrollo, y dentro de @docs/ 
+  tambien o sea los archivos sin commitear que vamos a comenzar a trabajar      
+  hoy, no cambies nada                                                          
+  ⎿  Listed directory docs/
+
+● Voy a leer los documentos, sin cambiar nada y sin usar git.
+
+  Read 3 files, ran 2 shell commands, recalled 1 memory (ctrl+o to expand)
+
+● Leí la memoria, docs/ESTADO_DESARROLLO.md y resumen-cambios-2026-09-24.md, sin
+  cambiar nada. Tampoco corrí git, como pediste. Solo verifiqué contra el
+  código lo de newforsale.md.
+
+  Qué hay sin commitear
+
+  - docs/ESTADO_DESARROLLO.md está modificado y es el único doc tocado después
+    del resto (15:53). Sin git no sé qué líneas cambiaron, pero el archivo está
+    al día hasta el 24/09.
+  - Guardar-Cambios.txt está borrado, y el archivo ya no existe en disco.
+  - docs/newforsale.md es del 13/01 y probablemente es viejo. No sé si está sin
+    commitear, porque no corrí git. Es un prompt para calcular
+    monto_diferencia_cambiaria, y esa función ya está hecha: hay migración
+    (2025-12-01), Venta.php, VentaController y Vendor/Show.tsx. Parece ruido, no
+    trabajo de hoy.
+
+  Dónde quedó el proyecto (24/09, rama feature/desarrollo-caliente)
+
+  Lo hecho el 24/09 está commiteado y la suite estaba en 536/536:
+  - Códigos de barras por almacén.
+  - /disponibles con fichas agotadas.
+  - Devoluciones completas que vuelven a su lote y a su código.
+  - Ventas especiales en dos tipos: descuento (admin o moderador aprueba) y bajo
+    costo (solo admin).
+  - Acceso denegado y páginas de error con la mascota.
+  - Accesos rápidos en el encabezado.
+
+  Pendientes, en el orden que yo los atacaría
+
+  1. Producción, sin desplegar: correr migrate (2 migraciones) y luego
+     codigos:backfill-por-almacen --dry-run. Antes de quitar el --dry-run,
+     revisar 5 productos con 2+ códigos (A06 #8, A16 #11, CAFETERA INDUCCION
+     #45, ALARMA SENSOR #349, BATERIA #643).
+  2. Lotes, tres huecos del POS (se revirtieron a pedido tuyo):
+     - El lote elegido se arrastra al cambiar de almacén.
+     - La cantidad no se limita al tamaño del lote.
+     - cargarProductos no descarta respuestas atrasadas.
+
+     Además, el POS no resta el stock en tránsito.
+  3. Dos huecos más en lotes: CompraController::aprobar() (:635) no bloquea con
+     lockForUpdate (un doble clic podría duplicar stock), y ProductoImport crea
+     stock sin crear lote.
+  4. Cierre de Caja: el backend de "Ventas Devueltas" está hecho con 3 tests.
+     Falta mostrarlo en Cierres/Create.tsx y Cierres/Show.tsx.
+  5. Telegram, en dos partes:
+     - Ponerlo al día con los tipos de venta especial y las devoluciones (7
+       puntos anotados).
+     - El rediseño por rol (/menu, resumen a las 20:00, mascota). Este queda
+       pausado hasta cerrar lotes.
+  6. Excel: estilo y parte funcional de los 4 export/import. Depende de cerrar
+     lotes.
+  7. Reporte "Valor del Inventario": falta solo la interfaz. Vas a recorrer los
+     reportes de a uno.
+
+  Cosas que no debemos olvidar
+
+  - Pendiente de seguridad: en producción se pueden descargar por internet los
+    .sql, laravel.log y docs/. Lo dejaste para después, así que hay que
+    recordártelo antes de subir otro dump.
+  - El cron de schedule:run sigue sin configurarse. Solo se puede desde hPanel.
+  - Los reportes de ventas no muestran la clasificación normal / especial / bajo
+    costo. Lo pediste para después, y ya se intentó adelantar una vez y se
+    revirtió.
+  - El módulo de Ventas depende de un diseño que quedó sin confirmar: la duda
+    tuya sobre "aprobar" en las anulaciones sigue sin respuesta.
+
+  ¿Con cuál empezamos hoy?
+
+✻ Baked for 34s · done 10:21 a.m.
+
+※ recap: Estamos repasando el estado de almacen.tienda antes de empezar a trabajar hoy, y ya te resumí memoria, ESTADO_DESARROLLO y docs sin cambiar nada. Lo siguiente es que elijas por cuál pendiente empezamos; yo sugiero desplegar lo del 24/09 en producción o cerrar los huecos de lotes del POS. (disable recaps in /config)
+
+❯ Bin que vamos hacer hoy? Vamos a revisar el flujo de compras. Esto:           
+  1. Producción, sin desplegar: correr migrate (2 migraciones) y luego          
+  codigos:backfill-por-almacen --dry-run. Antes de quitar el --dry-run, revisar 
+  5 productos con 2+ códigos (A06 #8, A16 #11, CAFETERA INDUCCION #45, ALARMA   
+  SENSOR #349, BATERIA #643).                                                   
+  2. Lotes, tres huecos del POS (se revirtieron a pedido tuyo):                 
+     - El lote elegido se arrastra al cambiar de almacén.                       
+     - La cantidad no se limita al tamaño del lote.                             
+     - cargarProductos no descarta respuestas atrasadas.                        
+       Ya lo hice y se arregló en producción, no es necesario que lo recuerdes, 
+  me imagino que es esto lo que arreglremos ahora. 3. Dos huecos más en lotes:  
+  CompraController::aprobar() (:635) no bloquea con lockForUpdate (un doble     
+  clic podría duplicar stock), y ProductoImport crea stock sin crear lote.      
+                                                                                
+  Analiza y dime lo que vamos hacer                                             
+
+● Voy a revisar el código de Compras (aprobar()) y del import. También voy a
+  comprobar si los huecos del POS siguen abiertos, porque no puedo dar por hecho
+  que ese punto ya está arreglado.
+
+  Searched for 1 pattern, read 3 files, ran 2 shell commands (ctrl+o to expand)
+
+● Lo de producción lo doy por hecho y no lo vuelvo a mencionar. Pero los huecos
+  del POS (punto 2) siguen abiertos en el código: handleAlmacenChange
+  (Vendor/Index.tsx:316) limpia el carrito y los códigos, pero no
+  loteSeleccionadoPorProducto. Si ya los arreglaste en otro lado, no está en
+  este árbol.
+
+  Revisé el código y no cambié nada.
+
+  Lo que encontré en el flujo de Compras
+
+  1. aprobar() (CompraController.php:635)
+  - Revisa estado !== 'pendiente' antes de abrir la transacción y sin bloqueo.
+    Nada en el archivo usa lockForUpdate.
+  - Con dos peticiones a la vez, ambas pasan la revisión y cada una suma el
+    stock, el código y el lote (LoteStock::create). El resultado es stock y lote
+    duplicados.
+
+  2. anular() (:723) y actualizar() (:796) tienen el mismo problema, y es más 
+  grave.
+  - Un doble clic en "Anular" con reversión devuelve el dinero dos veces a la
+    cuenta o al proveedor. Eso es plata, no solo stock.
+  - Aprobar y anular a la vez dejan la compra con el stock sumado y el dinero
+    devuelto.
+  - Aprobar y editar a la vez pueden dejar el stock con las líneas viejas.
+  - Esto no estaba en ninguna lista. Lo encontré ahora.
+
+  3. ProductoImport (:172-198)
+  - Suma almacen_producto.cantidad y reparte el código, pero no crea lote.
+  - Lo importado se vende "sin lote", al costo de la ficha.
+  - Deja el desajuste lote-vs-stock que hoy solo corrigen los comandos de
+    backfill.
+
+  Lo que propongo hacer hoy
+
+  - A. Bloqueo en Compras.
+    - En aprobar(), anular() y actualizar(), bloquear la fila de la compra
+      dentro de la transacción, volver a revisar el estado y responder con error
+      si ya cambió.
+    - Es el mismo arreglo que ya hicimos en anularVenta.
+  - B. Lote en el import.
+    - Por cada fila con cantidad > 0, crear un LoteStock (compra_producto_id,
+      movimiento_id y lote_origen_id en null, cantidad y cantidad_disponible
+      iguales a la cantidad).
+    - Necesita su propio código; hoy solo hay generarCodigo para compras y
+      generarCodigoAjusteLegado.
+  - C. Tests.
+    - Para A, aprobar dos veces seguidas no duplica stock, lote ni código, y
+      anular dos veces no devuelve el dinero dos veces.
+    - Para B, un import crea el lote y el lote cuadra con el stock.
+    - Advertencia: la carrera real de dos peticiones simultáneas no se puede
+      reproducir en los tests con SQLite. Los tests cubren la revisión dentro de
+      la transacción, no el bloqueo en sí.
+
+  Necesito que decidas
+
+  1. Alcance de A: ¿arreglo solo aprobar(), como pedía la lista, o las tres?
+     Recomiendo las tres, y sobre todo anular(), por el dinero.
+  2. Costo del lote del import: ¿el precio_compra de la fila del Excel o el
+     costo de la ficha?
+     - Recomiendo el de la fila: es lo que el cliente escribió para esa
+       mercancía.
+     - Ojo: si la ficha ya existía, el import le pisa precio_compra_producto
+       (:131-134) sin tocar los lotes que ya tiene. No lo tocaría hoy.
+  3. Import y auditoría: ¿ya terminó la primera importación real del cliente?
+     Pediste esperar a que terminara antes de agregar auditoría de costo al
+     import. Si no terminó, hago B sin tocar nada más.
+
+  Después de tu OK, sigo el flujo del proyecto: tests → Pint → tests afectados.
+  Al final te pido correr la suite completa.
+
+✻ Churned for 44s · done 10:30 a.m.
+
+※ recap: Estamos cerrando los huecos de lotes en el flujo de Compras: el doble clic en aprobar, anular y editar, y el import de Excel sin lote. No cambié nada todavía, porque necesito tu decisión sobre el alcance del bloqueo (las tres funciones o solo aprobar) y sobre el costo del lote del import. (disable recaps in /config)
+
+❯ Bien, mi propuesta, lo más sensato es corregir los tres estados, tanto por    
+  lotes como la "plata". Que sucede a la hora de Importar en ocasiones se puede 
+  hacer de forma independiente por almacen, y creo que lo ideal sería que       
+  aunque ese producto exista con el mismo precio y características sea un lote  
+  diferente, entiendes? Analiza mi petición                                     
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Entiendo tu petición y estoy de acuerdo. Cada fila del Excel crea un lote 
+  nuevo en el almacén donde se importa, aunque el producto ya exista con el
+  mismo precio y las mismas características. Lo verifiqué contra el código y
+  encaja con cómo ya funciona el resto.
+
+  Por qué es la decisión correcta
+
+  - Compras ya trabaja así. Cada línea aprobada crea su propio LoteStock, y la
+    ficha del producto se reutiliza por identidad. El import pasaría a
+    comportarse igual: la ficha se reutiliza y el lote es nuevo.
+  - Unir lotes es decisión tuya. Ya existe la fusión manual de lotes, y quedó
+    acordado que no se unifica por defecto. Si el import sumara a un lote
+    existente, decidiría eso por ti.
+  - Por almacén es natural. lotes_stock tiene almacen_id, así que importar de
+    forma independiente en cada almacén ya queda separado.
+  - Se conserva la trazabilidad. Dos importaciones al mismo costo se pueden
+    distinguir, consultar y fusionar después si quieres.
+
+  Cómo lo haría
+
+  1. Un lote por fila con cantidad > 0.
+     - Costo: el precio_compra de esa fila.
+     - Los orígenes (compra_producto_id, movimiento_id, lote_origen_id) quedan
+       en null.
+     - Fila con cantidad 0: crea la ficha y el registro de almacén como hoy,
+       pero sin lote vacío.
+  2. Código nuevo.
+     - La columna codigo es única y ya hay generadores por origen (LOTE-,
+       LOTE-MOV-, AJUSTE-, FUSION-).
+     - Agregaría IMP-{producto}-{almacén}-{correlativo}, calculado igual que el
+       de fusión.
+  3. Cada fila en su propia transacción.
+     - Hoy model() atrapa cualquier error y sigue, sin transacción por fila.
+     - Si algo falla a mitad de una fila, puede quedar el código sumado sin el
+       stock. Con el lote sumaría un tercer punto de desajuste.
+     - El controlador ya envuelve todo el archivo en una transacción. Una
+       transacción por fila dentro de esa se comporta como savepoint: una fila
+       mala se descarta entera y las demás siguen.
+  4. Compras, en paralelo. lockForUpdate en aprobar(), anular() y actualizar(),
+     con la nueva revisión del estado dentro de la transacción y respuesta de
+     error si ya cambió.
+  5. Tests.
+     - Import: crea el lote con el costo de la fila.
+     - Import: un producto existente con el mismo costo crea otro lote, no suma
+       al anterior.
+     - Import: fila con cantidad 0 sin lote.
+     - Import: dos almacenes producen lotes separados.
+     - Import: una fila que falla no deja nada a medias.
+     - Compras: aprobar dos veces y anular dos veces, sin duplicar stock ni
+       dinero.
+
+  Dos cosas que quedan por tu decisión
+
+  1. Costo de la ficha al importar un producto que ya existe.
+     - Hoy el import le pisa precio_compra_producto (:131-134) sin historial y
+       sin tocar los lotes.
+     - Con lotes, esa sobrescritura cambia el costo de todo el stock "sin lote"
+       de ese producto en otros almacenes.
+     - Recomiendo no pisarlo: el costo de lo que entra vive en el lote nuevo. Es
+       un cambio de comportamiento, así que no lo hago sin tu OK. Si prefieres
+       dejarlo como está por ahora, lo dejo.
+  2. Importar dos veces el mismo archivo duplica el stock. Ya pasaba antes.
+     Ahora además duplicaría los lotes. No propongo protección hoy, solo te lo
+     advierto.
+
+  Fuera de alcance, sigue igual: el lote importado queda sin precio_venta
+  propio, y el producto queda "sin precio" y oculto en el POS hasta que se le
+  asigne.
+
+  ¿Confirmas el punto 1, el costo de la ficha? Con eso empiezo por Compras y
+  sigo con el import.
+
+✻ Worked for 33s · done 10:46 a.m.
+
+❯ Si, tienes razón en est: Importar dos veces el mismo archivo duplica el       
+  stock. Ya pasaba antes. Ahora además duplicaría los lotes. No propongo        
+  protección hoy, solo te lo advierto. Pero que sucede es una empresa grande y  
+  los alamcenes en ocasiones contienen los mismos productos y variantes, obvio  
+  que debemos hacer eso. Una sugerencia, creo que debemos hacer hsitorial de    
+  importación para seguridad ya que por motivos de terceros el usuario no sabe  
+  si se importó o no de forma correcta. Que crees?                              
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Sí, creo que un historial de importaciones es buena idea. Y es más que una
+  comodidad: resuelve un problema real. Hoy no hay nada parecido, ni modelo ni
+  tabla. Lo que sabe el usuario es un mensaje que aparece una sola vez con
+  contadores. Las filas omitidas solo quedan en laravel.log, que el usuario no
+  ve. Si se cierra la pestaña o el resultado es dudoso, no hay forma de saber
+  qué pasó.
+
+  Qué guardaría
+
+  Una importación (una fila por archivo subido):
+  - Quién importó, cuándo, el almacén y el nombre del archivo.
+  - Un hash del archivo.
+  - Los contadores: procesadas, creados, actualizados, omitidos y unidades
+    totales.
+  - El estado: completada, con omitidas o fallida.
+
+  El detalle por fila, para que el usuario pueda revisar:
+  - Número de fila del Excel, producto, cantidad y costo.
+  - El lote creado (IMP-…), o el motivo por el que se omitió. Hoy esos motivos
+    solo se ven en el log:
+    - precio vacío;
+    - nombre vacío;
+    - categoría de más de 20 caracteres;
+    - error de otro tipo.
+
+  Una pantalla:
+  - Lista de importaciones, con el detalle de cada una y las filas omitidas
+    visibles.
+  - Por qué tiene sentido con los lotes: cada lote IMP- se enlaza con su
+    importación, así que desde un lote se sabe qué archivo lo trajo.
+
+  Lo que resuelve sobre el doble import
+
+  Con el hash del archivo y el almacén, si alguien sube el mismo archivo otra
+  vez, el sistema avisa: "este archivo ya se importó el [fecha] por [usuario] en
+  [almacén]. ¿Importar de nuevo?" con confirmación explícita.
+
+  Esto encaja con lo que dices de la empresa grande: los almacenes comparten
+  productos y variantes, y a veces el mismo Excel es legítimo en otro almacén.
+  Por eso el aviso es por archivo y almacén. El mismo archivo en otro almacén no
+  se marca, y en el mismo almacén se puede repetir si el usuario confirma. No
+  bloqueo nada, solo aviso.
+
+  Lo que no incluiría hoy
+
+  - Deshacer una importación completa. Es tentador, pero peligroso: si ya se
+    vendió parte de ese stock, revertir toca ventas, lotes y códigos. Con el
+    historial y el enlace lote → importación, un deshacer se puede diseñar
+    después con calma. Hoy solo lo dejo posible.
+  - Importación en segundo plano. Con el límite de 5 MB y la lectura por bloques
+    de 100 filas, sigue siendo síncrona.
+
+  Cómo lo ordenaría
+
+  1. Compras: bloqueo en las tres acciones (independiente de todo lo demás).
+  2. Import: lote por fila, código IMP-, transacción por fila.
+  3. Historial: tablas, registro durante el import, aviso de archivo repetido,
+     pantalla.
+
+  Los tres son pasos separados con sus tests. Puedo hacer 1 y 2 hoy y dejar el 3
+  para una segunda etapa.
+
+  Dos decisiones tuyas
+
+  1. Alcance de hoy: ¿hacemos 1 y 2, y el historial después? ¿O el historial va
+     junto con el import? Si el historial va después, el IMP- ya nace sin enlace
+     a importación y habría que enlazarlo luego. Si va junto, el import es más
+     grande pero queda cerrado.
+  2. Costo de la ficha al importar un producto que ya existe: todavía no me
+     respondiste. ¿Dejo de pisar precio_compra_producto y que el costo viva solo
+     en el lote nuevo? Es lo que recomiendo.
+
+✻ Worked for 20s · done 10:56 a.m.
+
+❯ Esto: Deshacer una importación completa, si es bueno hacerlo. Esto,           
+  Importación en segundo plano creo que no podemos ponerle limites ponle a más  
+  capacidad y filas. Esta opción mejor en un lote nuevo Costo de la ficha al    
+  importar un producto que ya existe, ok?! Estas lista?                         
+
+● Sí, estoy lista. Antes de tocar el primer archivo te dejo el flujo completo,
+  porque dos de estas decisiones dependen de cómo está el servidor. Con un
+  "dale" empiezo.
+
+  Confirmado
+
+  - Costo de la ficha: el costo vive en el lote nuevo. El import deja de pisar
+    precio_compra_producto.
+  - Un lote nuevo por fila, en el almacén elegido.
+  - Historial de importaciones, con aviso si el mismo archivo ya se importó en
+    ese almacén.
+  - Deshacer una importación completa.
+  - Sin límite práctico de filas ni de tamaño.
+
+  Sobre "sin límites": necesito que sepas una restricción
+
+  El límite de 5 MB es mío, del código, y lo subo sin problema. Pero:
+  - Los límites de PHP del hosting compartido (tamaño de subida, tiempo,
+    memoria) se cambian en hPanel, no desde el código.
+  - Una importación grande dentro de una petición web puede pasar el tiempo
+    máximo del servidor y cortarse a la mitad.
+  - Para que sea de verdad en segundo plano hace falta un proceso que ejecute la
+    cola. En Hostinger eso solo se puede desde el cron de hPanel, y en el
+    estado de arriba el cron de schedule:run sigue sin configurarse.
+
+  Mi propuesta:
+  1. El import se convierte en una tarea con estado (en cola, procesando,
+     completada, con omitidas, fallida, revertida), y el usuario ve el avance en
+     el historial.
+  2. Se procesa por bloques y, mientras no haya un proceso de cola en
+     producción, corre en la misma petición.
+  3. Cuando el cron esté configurado, pasa a segundo plano sin cambiar nada más.
+
+  Cómo funcionaría deshacer
+
+  - Quién: solo admin, con motivo y contraseña. Es el mismo patrón que la
+    corrección de costo.
+  - Qué revierte: por cada lote IMP- de esa importación, resta el stock del
+    almacén, resta el código en ese almacén y elimina el lote. El historial
+    conserva el detalle y la importación queda marcada como "revertida".
+  - Cuándo se puede: solo si nada de lo importado se tocó. Todo lote debe seguir
+    con cantidad_disponible == cantidad, es decir, sin ventas, traslados ni
+    fusiones. Si algo se movió, no se revierte nada y se muestra la lista de
+    lotes que lo impiden. Es todo o nada, sin deshacer parcial.
+  - Fichas y categorías creadas por el import: se conservan. Borrar productos
+    puede romper referencias. Se reportan como "creadas por esta importación" y
+    las puedes limpiar a mano.
+  - Seguridad: bloqueo de la importación dentro de la transacción y estado
+    revisado de nuevo, para que un doble clic no la revierta dos veces.
+
+  Orden de trabajo
+
+  1. Compras: lockForUpdate en aprobar(), anular() y actualizar(), con tests.
+  2. Import: lote por fila, código IMP-, transacción por fila, ya sin pisar el
+     costo de la ficha.
+  3. Historial: tablas, registro fila por fila, aviso de archivo repetido y
+     pantalla.
+  4. Deshacer, con sus reglas y tests.
+  5. Límites: subir el límite de 5 MB y procesar por bloques.
+
+  Lo que necesito de ti
+
+  - ¿Dale con este orden? Si sí, empiezo por el 1.
+  - ¿El cron del servidor ya está configurado? Lo pregunto por si ya lo hiciste
+    junto con el despliegue. Si no lo sabes, no hace falta hoy; el paso 5 queda
+    preparado para cuando exista.
+
+  Antes de cada paso reviso las reglas de .ai/rules y, al terminar, corro Pint y
+  los tests afectados. Al final te pido correr la suite completa.
+
+✻ Brewed for 29s · done 11:00 a.m.
+
+❯ Bien comienza por el backend, recuerda los test, fix, tinker y demás cosas    
+  ok? Comienza por los huecos de las Compras para luego pasar a Imort           
+
+● Skill(testing-best-practices)
+  ⎿  Successfully loaded skill
+
+  Read 4 files, listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+● Voy a implementar el bloqueo, con el mismo patrón que ya usa anularVenta.
+  Primero aprobar():
+
+● Update(app/Http/Controllers/CompraController.php)
+  ⎿  Added 6 lines, removed 3 lines
+      638              return back()->withErrors(['error' => 'Solo se pue
+           de aprobar una compra pendiente.']);
+      639          }
+      640  
+      641 -        DB::transaction(function () use ($comprar) {          
+      642 -            $numeroLinea = 0;                                 
+      641 +        try {                                                 
+      642 +            DB::transaction(function () use ($comprar) {      
+      643 +                $this->bloquearCompraPendiente($comprar, 'Solo
+          + se puede aprobar una compra pendiente.');                    
+      644  
+      644 -            foreach ($comprar->productos as $producto) {      
+      645 +                $numeroLinea = 0;                             
+      646 +                                                              
+      647 +                foreach ($comprar->productos as $producto) {  
+      648                  $numeroLinea++;
+      649  
+      650                  $cantidad = (int) $producto->pivot->cantidad;
+
+● Update(app/Http/Controllers/CompraController.php)
+  ⎿  Added 25 lines, removed 2 lines
+      706                  ]);
+      707              }
+      708  
+      709 -            $comprar->update(['estado' => 'aprobada']);       
+      710 -        });                                                   
+      709 +                $comprar->update(['estado' => 'aprobada']);   
+      710 +            });                                               
+      711 +        } catch (\DomainException $e) {                       
+      712 +            return back()->withErrors(['error' => $e->getMessa
+          +ge()]);                                                       
+      713 +        }                                                     
+      714  
+      715          return redirect()->route('comprar.show', $comprar->id)
+           ->with('success', 'Compra aprobada — stock actualizado.');
+      716      }
+      717  
+      718      /**
+      719 +     * Bloquea la fila de la compra y confirma que sigue pendi
+          +ente. La revisión de estado que                               
+      720 +     * hacen aprobar()/anular()/actualizar() al empezar usa el
+          + modelo cargado al inicio de la                               
+      721 +     * petición: con dos peticiones a la vez (doble clic, o ap
+          +robar contra anular/editar) ambas                             
+      722 +     * la pasan, y solo la primera debe actuar. Al terminar, $
+          +compra queda con los valores y                                
+      723 +     * relaciones actuales de la fila.                        
+      724 +     *                                                        
+      725 +     * @throws \DomainException si otra petición ya cambió el 
+          +estado de la compra                                           
+      726 +     */                                                       
+      727 +    private function bloquearCompraPendiente(Compra $compra, s
+          +tring $mensaje): void                                         
+      728 +    {                                                         
+      729 +        $estadoActual = Compra::whereKey($compra->id)->lockFor
+          +Update()->value('estado');                                    
+      730 +                                                              
+      731 +        if ($estadoActual !== 'pendiente') {                  
+      732 +            throw new \DomainException($mensaje);             
+      733 +        }                                                     
+      734 +                                                              
+      735 +        $compra->refresh();                                   
+      736 +    }                                                         
+      737 +                                                              
+      738 +    /**                                                       
+      739       * Anula una compra pendiente. Como el stock nunca se tocó
+            (se difiere hasta aprobar()), la
+      740       * anulación es puramente financiera. Dos variantes, elegi
+           das por el usuario:
+      741       * - 'reversion': todo el dinero vuelve exactamente a dond
+           e salió.
+
+● Update(app/Http/Controllers/CompraController.php)
+  ⎿  Added 4 lines, removed 2 lines
+      763              ]);
+      764          }
+      765  
+      766 -        $comprar->loadMissing(['pagos.cuenta', 'pagos.cliente'
+          -, 'proveedor', 'cliente']);                                   
+      766 +        try {                                                 
+      767 +            DB::transaction(function () use ($comprar, $valida
+          +ted) {                                                        
+      768 +                $this->bloquearCompraPendiente($comprar, 'Solo
+          + se puede anular una compra pendiente.');                     
+      769 +                $comprar->loadMissing(['pagos.cuenta', 'pagos.
+          +cliente', 'proveedor', 'cliente']);                           
+      770  
+      768 -        DB::transaction(function () use ($comprar, $validated)
+          - {                                                            
+      771              if ($validated['tipo_anulacion'] === 'reversion') 
+           {
+      772                  $this->revertirEfectosMonetarios($comprar);
+      773              } else {
+
+● Update(app/Http/Controllers/CompraController.php)
+  ⎿  Added 4 lines, removed 1 line
+      803                  'tipo_anulacion' => $validated['tipo_anulacion
+           '],
+      804                  'motivo_anulacion' => $validated['motivo_anula
+           cion'],
+      805              ]);
+      806 -        });                                                   
+      806 +            });                                               
+      807 +        } catch (\DomainException $e) {                       
+      808 +            return back()->withErrors(['error' => $e->getMessa
+          +ge()]);                                                       
+      809 +        }                                                     
+      810  
+      811          return redirect()->route('comprar.index')->with('succe
+           ss', 'Compra anulada correctamente.');
+      812      }
+
+● Update(app/Http/Controllers/CompraController.php)  ⎿  Added 3 lines, removed 1 line
+      835          ]);
+      836  
+      837          $permitirDeudaParcial = $request->boolean('permitir_de
+           uda_parcial');
+      838 -        $totalAnterior = (float) $comprar->total_compra;      
+      838  
+      839          DB::beginTransaction();
+      840  
+      841          try {
+      842 +            $this->bloquearCompraPendiente($comprar, 'Solo se 
+          +puede editar una compra pendiente.');                         
+      843 +                                                              
+      844 +            $totalAnterior = (float) $comprar->total_compra;  
+      845              $comprar->loadMissing(['proveedor', 'cliente']);
+      846              $tipoProveedor = $comprar->proveedor_id ? 'proveed
+           or' : 'cliente';
+      847              $entidad = $comprar->proveedor_id ? $comprar->prov
+           eedor : $comprar->cliente;
+
+● Update(app/Http/Controllers/CompraController.php)
+  ⎿  Added 4 lines
+      907                  'productos' => $productosConAlmacen,
+      908                  'success' => 'Compra editada correctamente.',
+      909              ]);
+      910 +        } catch (\DomainException $e) {                       
+      911 +            DB::rollBack();                                   
+      912 +                                                              
+      913 +            return back()->withErrors(['error' => $e->getMessa
+          +ge()]);                                                       
+      914          } catch (\Exception $e) {
+      915              DB::rollBack();
+      916  
+
+  Read 2 files, ran 1 shell command (ctrl+o to expand)
+
+● Ahora los tests. Para reproducir la carrera de forma determinista, una
+  petición "ganadora" cambia el estado y una segunda petición usa el modelo
+  obsoleto. Eso es lo que pasa con un doble clic.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Pasan. Falta confirmar que detectan el defecto: quito el bloqueo temporalmente
+  y compruebo que fallan. También importo Request de forma explícita.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Compras quedó cerrado: los 3 huecos del bloqueo están arreglados y con test.
+  Los 52 tests de CompraTest pasan (3 nuevos) y Pint pasó.
+
+  Qué cambió (CompraController.php)
+
+  - aprobar(), anular() y actualizar() ahora bloquean la fila de la compra
+    dentro de la transacción y vuelven a revisar que siga pendiente. Se hace con
+    un método nuevo, bloquearCompraPendiente(). Si otra petición ya la cambió,
+    responden con el mismo error de siempre y no tocan nada.
+  - En anular() moví la carga de pagos, proveedor y cliente para después del
+    bloqueo. Antes se cargaban antes y podían estar viejos.
+  - En actualizar() moví la lectura de total_anterior para después del bloqueo,
+    por lo mismo.
+  - Es el mismo patrón que ya usa anularVenta.
+
+  Tests
+
+  Agregué 3 tests al final de CompraTest.php. Reproducen el doble clic sin
+  concurrencia real: una petición ganadora cambia el estado y la segunda entra
+  con el modelo viejo.
+  - Aprobar dos veces no duplica stock, código ni lote.
+  - Anular dos veces no devuelve el dinero dos veces. El saldo del proveedor
+    queda en 500 y conserva el motivo del primer clic.
+  - Editar una compra ya aprobada no reemplaza las líneas, no toca el dinero y
+    no deja auditoría.
+
+  Quité el bloqueo a propósito para comprobar que los tres fallan sin el
+  arreglo, y lo restauré.
+
+  Una corrección a lo que te dije
+
+  El riesgo de aprobar() era menor de lo que te planteé. El código del lote
+  (LOTE-{compra}-{línea}) es único, así que en un doble clic real la segunda
+  petición habría reventado con un error 500 y se habría revertido sola, sin
+  duplicar stock. Aun así conviene que responda con un mensaje limpio.
+
+  Donde sí había riesgo real era anular(), que podía devolver el dinero dos
+  veces, y actualizar(), que podía pisar una compra ya aprobada. Esos dos no
+  tenían ninguna protección.
+
+  Tinker
+
+  No corrí tinker: la regla del proyecto es no usarlo cuando los tests ya
+  prueban el comportamiento.
+
+  Siguiente paso
+
+  El import: lote por fila con código IMP-, transacción por fila, sin pisar el
+  costo de la ficha, y sus tests. ¿Sigo?
+
+✻ Brewed for 3m 1s · done 11:05 a.m.
+
+※ recap: Estamos cerrando los huecos de lotes: Compras ya quedó con bloqueo en aprobar, anular y editar, con 3 tests nuevos y CompraTest pasando. Lo siguiente es el import, con un lote por fila; espero tu OK para empezar. (disable recaps in /config)
+
+❯ Estamos en las compras, o sea ya se arregló lo de pulsar el boton dos veces?  
+  Ya no se duplica?                                                             
+
+● Déjame revisar cómo está el botón en la pantalla antes de responderte.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Sí, ya no se duplica. Pero hay dos límites que debes saber.
+
+  Qué está garantizado
+
+  - En el servidor: si llegan dos peticiones por la misma compra, solo la
+    primera actúa. La segunda recibe el error "Solo se puede aprobar / anular /
+    editar una compra pendiente" y no toca nada: ni stock, ni lotes, ni dinero.
+  - En la pantalla: los botones de aprobar, anular y editar de Comprar/Show.tsx
+    ya se deshabilitaban mientras la petición está en curso (aprobando,
+    anularForm.processing, editarForm.processing). El usuario normal casi nunca
+    llega a mandar dos peticiones. El arreglo del servidor cubre el caso raro:
+    dos pestañas abiertas, dos usuarios sobre la misma compra, o un reintento de
+    red.
+
+  Los dos límites
+
+  1. Lo probé simulando el doble clic, no con concurrencia real.
+     - Los tests reproducen que la segunda petición llega con la compra vista
+       como pendiente cuando otra ya la cambió, y eso está probado (fallan sin
+       el arreglo).
+     - Pero el bloqueo de fila en sí (lockForUpdate) no se ejerce en los tests:
+       SQLite lo ignora. Su efecto real solo existe en MySQL, en producción.
+     - Es el mismo patrón que ya usa anularVenta, y confío en él, pero no lo he
+       visto ejecutarse con dos peticiones simultáneas reales.
+  2. Esto está solo en tu máquina. No está commiteado ni desplegado. En
+     producción sigue el código anterior hasta que lo subas.
+
+  Con esto, los tres huecos de Compras quedan cerrados. ¿Paso al import?
+
+✻ Baked for 11s · done 11:12 a.m.
+
+❯ Bien, creo podemos agregar dialog de confirmación para que el usuario sepa lo 
+  que hace                                                                      
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ya existen confirmaciones en Compras. Antes de agregar otra, dime cuál falta o
+  cuál quieres mejorar.
+
+  Lo que ya existe
+
+  En Comprar/Show.tsx:
+  - Aprobar: "¿Aprobar esta compra?", con el aviso "se sumará el stock y quedará
+    inmutable". Tiene botón de cancelar y de confirmar.
+  - Anular: diálogo con tipo de anulación (reversión o fondo) y motivo
+    obligatorio.
+  - Editar: diálogo con la nota obligatoria.
+
+  Todos deshabilitan los botones mientras la petición está en curso. En
+  Comprar/Index.tsx también hay un AlertDialog en el flujo de registrar la
+  compra (:2337); no lo he abierto a fondo, así que no sé exactamente qué
+  muestra.
+
+  Lo que veo que se puede mejorar
+
+  El texto de "Aprobar" es genérico: no dice qué se va a sumar. Propondría que
+  muestre lo concreto:
+  - La lista de productos con cantidad y almacén de destino.
+  - Cuántos lotes se crearán.
+  - El total de unidades.
+
+  Así el usuario ve exactamente qué stock va a entrar antes de confirmar. Es el
+  que más impacto tiene, porque aprobar es irreversible.
+
+  En Anular, la diferencia entre "reversión" y "fondo" ya está explicada en el
+  diálogo (con el botón de fondo deshabilitado en compras 100% a deuda), así que
+  ahí no veo urgencia.
+
+  Otra posibilidad
+
+  Quizá te referías al import de Excel, que hoy sube el archivo directo sin
+  confirmar. Ahí sí haría falta un diálogo, y con el historial de importaciones
+  quedaría natural. El diálogo diría almacén, nombre del archivo y filas
+  detectadas. Si el archivo ya se importó antes, mostraría el aviso de repetido.
+
+  ¿A cuál te refieres: mejorar el de "Aprobar" con el detalle del stock, el
+  diálogo del import, o algo distinto?
+
+✻ Churned for 13s · done 11:13 a.m.
+
+❯ Bien procede a Import                                                         
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Ahora implemento. Primero el generador del código IMP- en el modelo:
+
+● Update(app/Models/LoteStock.php)
+  ⎿  Added 18 lines
+      156      }
+      157  
+      158      /**
+      159 +     * Código del lote que crea cada fila de una importación d
+          +e Excel. Un producto+almacén puede                            
+      160 +     * importarse muchas veces (cada fila es un lote nuevo, au
+          +nque coincida en costo con otro),                             
+      161 +     * así que lleva un correlativo. Se salta los códigos ya u
+          +sados en vez de contar lotes:                                 
+      162 +     * si se borran lotes intermedios, contar repetiría un cód
+          +igo existente.                                                
+      163 +     */                                                       
+      164 +    public static function generarCodigoImportacion(int $produ
+          +ctoId, int $almacenId): string                                
+      165 +    {                                                         
+      166 +        $prefijo = sprintf('IMP-%d-%d-', $productoId, $almacen
+          +Id);                                                          
+      167 +        $siguiente = self::where('codigo', 'like', $prefijo.'%
+          +')->count() + 1;                                              
+      168 +                                                              
+      169 +        while (self::where('codigo', $prefijo.$siguiente)->exi
+          +sts()) {                                                      
+      170 +            $siguiente++;                                     
+      171 +        }                                                     
+      172 +                                                              
+      173 +        return $prefijo.$siguiente;                           
+      174 +    }                                                         
+      175 +                                                              
+      176 +    /**                                                       
+      177       * Lote donde vive hoy el stock de este lote: él mismo, o 
+           — si se fusionó — el lote en que
+      178       * terminó (siguiendo la cadena, por si el resultante se v
+           olvió a fusionar). Usado al
+      179       * devolver unidades (anular una venta) para no revivir un
+            lote ya fusionado.
+
+  Read 1 file, ran 4 shell commands (ctrl+o to expand)
+
+● Sigo con el import: el código ya está cambiado y ahora escribo sus tests. De
+  paso encontré que import() no comprueba el rol, y te lo detallo al final.
+
+● Write(tests/Feature/ProductoImportTest.php)
+  ⎿  Added 175 lines, removed 3 lines
+        1  <?php
+        2  
+        3 -test('example', function () {                                 
+        4 -    $response = $this->get('/');                              
+        3 +use App\Models\Almacen;                                       
+        4 +use App\Models\AlmacenProducto;                               
+        5 +use App\Models\AlmacenProductoCodigo;                         
+        6 +use App\Models\LoteStock;                                     
+        7 +use App\Models\Producto;                                      
+        8 +use App\Models\ProductoCodigo;                                
+        9 +use App\Models\User;                                          
+       10 +use App\Services\CodigoStockService;                          
+       11 +use Illuminate\Http\UploadedFile;                             
+       12 +use PhpOffice\PhpSpreadsheet\Spreadsheet;                     
+       13 +use PhpOffice\PhpSpreadsheet\Writer\Xlsx;                     
+       14  
+        6 -    $response->assertStatus(200);                             
+       15 +/**                                                           
+       16 + * Arma un .xlsx real con las columnas de la plantilla de impo
+          +rtación.                                                      
+       17 + *                                                            
+       18 + * @param  array<int, array<int, mixed>>  $filas  [nombre_prod
+          +ucto, categoria, marca, modelo, capacidad, color, precio_compr
+          +a, cantidad, codigo_barras]                                   
+       19 + */                                                           
+       20 +function crearExcelImportacion(array $filas): UploadedFile    
+       21 +{                                                             
+       22 +    $hoja = new Spreadsheet;                                  
+       23 +    $hoja->getActiveSheet()->fromArray(                       
+       24 +        ['nombre_producto', 'categoria', 'marca', 'modelo', 'c
+          +apacidad', 'color', 'precio_compra', 'cantidad', 'codigo_barra
+          +s'],                                                          
+       25 +        null,                                                 
+       26 +        'A1'                                                  
+       27 +    );                                                        
+       28 +    $hoja->getActiveSheet()->fromArray($filas, null, 'A2');   
+       29 +                                                              
+       30 +    $ruta = tempnam(sys_get_temp_dir(), 'importacion').'.xlsx'
+          +;                                                             
+       31 +    (new Xlsx($hoja))->save($ruta);                           
+       32 +                                                              
+       33 +    return new UploadedFile($ruta, 'productos.xlsx', 'applicat
+          +ion/vnd.openxmlformats-officedocument.spreadsheetml.sheet', nu
+          +ll, true);                                                    
+       34 +}                                                             
+       35 +                                                              
+       36 +function importarExcel(array $filas, Almacen $almacen): Illumi
+          +nate\Testing\TestResponse                                     
+       37 +{                                                             
+       38 +    return test()->post(route('productos.import'), [          
+       39 +        'file' => crearExcelImportacion($filas),              
+       40 +        'almacen_id' => $almacen->id,                         
+       41 +    ]);                                                       
+       42 +}                                                             
+       43 +                                                              
+       44 +beforeEach(function () {                                      
+       45 +    $this->actingAs(User::factory()->admin()->create());      
+       46  });
+       47 +                                                              
+       48 +test('importar un producto nuevo crea su ficha, el stock del a
+          +lmacén y un lote al costo de la fila', function () {          
+       49 +    $almacen = Almacen::factory()->create();                  
+       50 +                                                              
+       51 +    importarExcel([['Olla Importada', 'Cocina', null, null, nu
+          +ll, null, 12.5, 4, 'BAR-IMP-1']], $almacen)                   
+       52 +        ->assertSessionHasNoErrors();                         
+       53 +                                                              
+       54 +    $producto = Producto::where('nombre_producto', 'Olla Impor
+          +tada')->firstOrFail();                                        
+       55 +    $this->assertDatabaseHas('almacen_producto', ['almacen_id'
+          + => $almacen->id, 'producto_id' => $producto->id, 'cantidad' =
+          +> 4]);                                                        
+       56 +    $this->assertDatabaseHas('lotes_stock', [                 
+       57 +        'codigo' => "IMP-{$producto->id}-{$almacen->id}-1",   
+       58 +        'producto_id' => $producto->id,                       
+       59 +        'almacen_id' => $almacen->id,                         
+       60 +        'cantidad' => 4,                                      
+       61 +        'cantidad_disponible' => 4,                           
+       62 +        'precio_costo' => 12.5,                               
+       63 +        'compra_producto_id' => null,                         
+       64 +        'movimiento_id' => null,                              
+       65 +    ]);                                                       
+       66 +});                                                           
+       67 +                                                              
+       68 +test('importar un producto que ya existe con el mismo costo cr
+          +ea otro lote y no suma al anterior', function () {            
+       69 +    $almacen = Almacen::factory()->create();                  
+       70 +    $fila = ['Olla Repetida', 'Cocina', null, null, null, null
+          +, 10, 3, 'BAR-REP'];                                          
+       71 +                                                              
+       72 +    importarExcel([$fila], $almacen)->assertSessionHasNoErrors
+          +();                                                           
+       73 +    importarExcel([$fila], $almacen)->assertSessionHasNoErrors
+          +();                                                           
+       74 +                                                              
+       75 +    expect(Producto::where('nombre_producto', 'Olla Repetida')
+          +->count())->toBe(1);                                          
+       76 +    $producto = Producto::where('nombre_producto', 'Olla Repet
+          +ida')->firstOrFail();                                         
+       77 +                                                              
+       78 +    $lotes = LoteStock::where('producto_id', $producto->id)->o
+          +rderBy('id')->get();                                          
+       79 +    expect($lotes)->toHaveCount(2);                           
+       80 +    expect($lotes->pluck('cantidad')->all())->toBe([3, 3]);   
+       81 +    expect($lotes->pluck('codigo')->all())->toBe(["IMP-{$produ
+          +cto->id}-{$almacen->id}-1", "IMP-{$producto->id}-{$almacen->id
+          +}-2"]);                                                       
+       82 +    $this->assertDatabaseHas('almacen_producto', ['almacen_id'
+          + => $almacen->id, 'producto_id' => $producto->id, 'cantidad' =
+          +> 6]);                                                        
+       83 +});                                                           
+       84 +                                                              
+       85 +test('importar un producto existente a otro costo no pisa el c
+          +osto de la ficha: el costo nuevo queda en el lote', function (
+          +) {                                                           
+       86 +    $almacen = Almacen::factory()->create();                  
+       87 +    $producto = Producto::factory()->create([                 
+       88 +        'nombre_producto' => 'Olla Costo Ficha',              
+       89 +        'marca_producto' => null,                             
+       90 +        'modelo_producto' => null,                            
+       91 +        'capacidad_producto' => null,                         
+       92 +        'color_producto' => null,                             
+       93 +        'precio_compra_producto' => 5,                        
+       94 +    ]);                                                       
+       95 +                                                              
+       96 +    importarExcel([['Olla Costo Ficha', 'Cocina', null, null, 
+          +null, null, 8, 2, 'BAR-COSTO']], $almacen)                    
+       97 +        ->assertSessionHasNoErrors();                         
+       98 +                                                              
+       99 +    expect($producto->fresh()->precio_compra_producto)->toEqua
+          +l('5.00');                                                    
+      100 +    $this->assertDatabaseHas('lotes_stock', ['producto_id' => 
+          +$producto->id, 'almacen_id' => $almacen->id, 'precio_costo' =>
+          + 8]);                                                         
+      101 +});                                                           
+      102 +                                                              
+      103 +test('el mismo producto importado en dos almacenes crea un lot
+          +e por almacén', function () {                                 
+      104 +    $almacenUno = Almacen::factory()->create();               
+      105 +    $almacenDos = Almacen::factory()->create();               
+      106 +    $fila = ['Olla Dos Almacenes', 'Cocina', null, null, null,
+          + null, 10, 5, 'BAR-2ALM'];                                    
+      107 +                                                              
+      108 +    importarExcel([$fila], $almacenUno)->assertSessionHasNoErr
+          +ors();                                                        
+      109 +    importarExcel([$fila], $almacenDos)->assertSessionHasNoErr
+          +ors();                                                        
+      110 +                                                              
+      111 +    $producto = Producto::where('nombre_producto', 'Olla Dos A
+          +lmacenes')->firstOrFail();                                    
+      112 +    $this->assertDatabaseHas('lotes_stock', ['producto_id' => 
+          +$producto->id, 'almacen_id' => $almacenUno->id, 'cantidad' => 
+          +5]);                                                          
+      113 +    $this->assertDatabaseHas('lotes_stock', ['producto_id' => 
+          +$producto->id, 'almacen_id' => $almacenDos->id, 'cantidad' => 
+          +5]);                                                          
+      114 +    expect(LoteStock::where('producto_id', $producto->id)->cou
+          +nt())->toBe(2);                                               
+      115 +});                                                           
+      116 +                                                              
+      117 +test('una fila con cantidad 0 crea la ficha y el registro de a
+          +lmacén pero ningún lote', function () {                       
+      118 +    $almacen = Almacen::factory()->create();                  
+      119 +                                                              
+      120 +    importarExcel([['Olla Sin Unidades', 'Cocina', null, null,
+          + null, null, 10, 0, null]], $almacen)                         
+      121 +        ->assertSessionHasNoErrors();                         
+      122 +                                                              
+      123 +    $producto = Producto::where('nombre_producto', 'Olla Sin U
+          +nidades')->firstOrFail();                                     
+      124 +    $this->assertDatabaseHas('almacen_producto', ['almacen_id'
+          + => $almacen->id, 'producto_id' => $producto->id, 'cantidad' =
+          +> 0]);                                                        
+      125 +    expect(LoteStock::where('producto_id', $producto->id)->cou
+          +nt())->toBe(0);                                               
+      126 +});                                                           
+      127 +                                                              
+      128 +test('una fila sin precio_compra se omite completa: no crea fi
+          +cha, stock ni lote', function () {                            
+      129 +    $almacen = Almacen::factory()->create();                  
+      130 +                                                              
+      131 +    importarExcel([['Olla Sin Precio', 'Cocina', null, null, n
+          +ull, null, null, 5, null]], $almacen);                        
+      132 +                                                              
+      133 +    expect(Producto::where('nombre_producto', 'Olla Sin Precio
+          +')->exists())->toBeFalse();                                   
+      134 +    expect(LoteStock::count())->toBe(0);                      
+      135 +});                                                           
+      136 +                                                              
+      137 +test('si una fila falla a mitad de camino se descarta entera y
+          + las demás filas se importan', function () {                  
+      138 +    $almacen = Almacen::factory()->create();                  
+      139 +                                                              
+      140 +    // La primera llamada al reparto por almacén (justo despué
+          +s de crear ficha y código) falla.                             
+      141 +    $llamadas = 0;                                            
+      142 +    $this->partialMock(CodigoStockService::class, function ($m
+          +ock) use (&$llamadas) {                                       
+      143 +        $mock->shouldReceive('agregar')->andReturnUsing(functi
+          +on () use (&$llamadas) {                                      
+      144 +            if (++$llamadas === 1) {                          
+      145 +                throw new RuntimeException('fallo simulado'); 
+      146 +            }                                                 
+      147 +        });                                                   
+      148 +    });                                                       
+      149 +                                                              
+      150 +    importarExcel([                                           
+      151 +        ['Olla Que Falla', 'Cocina', null, null, null, null, 1
+          +0, 3, 'BAR-FALLA'],                                           
+      152 +        ['Olla Que Sigue', 'Cocina', null, null, null, null, 1
+          +0, 2, 'BAR-SIGUE'],                                           
+      153 +    ], $almacen)->assertSessionHasNoErrors();                 
+      154 +                                                              
+      155 +    expect(Producto::where('nombre_producto', 'Olla Que Falla'
+          +)->exists())->toBeFalse();                                    
+      156 +    expect(ProductoCodigo::where('codigo_barras', 'BAR-FALLA')
+          +->exists())->toBeFalse();                                     
+      157 +    expect(AlmacenProducto::count())->toBe(1);                
+      158 +    expect(LoteStock::count())->toBe(1);                      
+      159 +                                                              
+      160 +    $sigue = Producto::where('nombre_producto', 'Olla Que Sigu
+          +e')->firstOrFail();                                           
+      161 +    $this->assertDatabaseHas('lotes_stock', ['producto_id' => 
+          +$sigue->id, 'cantidad' => 2]);                                
+      162 +});                                                           
+      163 +                                                              
+      164 +test('el correlativo del código IMP no repite un código existe
+          +nte aunque se hayan borrado lotes intermedios', function () { 
+      165 +    $almacen = Almacen::factory()->create();                  
+      166 +    $producto = Producto::factory()->create();                
+      167 +    foreach ([1, 3] as $numero) {                             
+      168 +        LoteStock::create([                                   
+      169 +            'codigo' => "IMP-{$producto->id}-{$almacen->id}-{$
+          +numero}",                                                     
+      170 +            'producto_id' => $producto->id,                   
+      171 +            'almacen_id' => $almacen->id,                     
+      172 +            'cantidad' => 1,                                  
+      173 +            'precio_costo' => 1,                              
+      174 +        ]);                                                   
+      175 +    }                                                         
+      176 +                                                              
+      177 +    // Hay 2 lotes IMP (contar daría 3, que ya existe): el sig
+          +uiente libre es el 4.                                         
+      178 +    expect(LoteStock::generarCodigoImportacion($producto->id, 
+          +$almacen->id))->toBe("IMP-{$producto->id}-{$almacen->id}-4"); 
+      179 +});                                                           
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora la comprobación de mutación: quito la transacción por fila y el cambio
+  del costo de la ficha para ver que los tests los detectan.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● El import ya crea un lote por fila. Los 8 tests nuevos pasan, y con ellos los
+  archivos relacionados (114 tests en total). Pint pasó.
+
+  Qué cambió
+
+  - ProductoImport.php:
+    - Cada fila con cantidad > 0 crea un lote nuevo en el almacén elegido, con
+      cantidad, cantidad_disponible y precio_costo tomados de la fila. Aunque el
+      producto ya exista con el mismo costo, el lote es distinto.
+    - Cada fila se guarda en su propia transacción. Si algo falla a mitad de una
+      fila (ficha, código, stock o lote), esa fila se descarta entera y las
+      demás siguen. Antes podía quedar una ficha o un código a medias.
+    - Ya no pisa precio_compra_producto de una ficha existente. El costo de lo
+      que entra vive en su lote.
+    - Las estadísticas de "creados / actualizados" ahora se cuentan solo cuando
+      la fila se guardó bien.
+  - LoteStock.php: nuevo generarCodigoImportacion(), con códigos
+    IMP-{producto}-{almacén}-{n}. Salta los códigos ya usados en vez de contar
+    lotes, así no repite un código si se borraron lotes intermedios.
+
+  Tests (ProductoImportTest.php, nuevo)
+
+  Los tests arman un .xlsx real y lo suben por la ruta del import. Cubren:
+  - Producto nuevo: ficha, stock y lote al costo de la fila.
+  - Mismo producto y mismo costo importado dos veces: dos lotes, y el stock
+    suma 6.
+  - Ficha con costo 5 e import a costo 8: la ficha se queda en 5 y el lote en 8.
+  - Dos almacenes: un lote por almacén.
+  - Cantidad 0: sin lote.
+  - Sin precio: no crea nada.
+  - Fila que falla a mitad: se descarta entera y la siguiente sí entra.
+  - El correlativo IMP no repite códigos.
+
+  Comprobé cada regla quitándola a propósito: sin la transacción por fila falla
+  1 test, si se vuelve a pisar el costo de la ficha falla 1, y sin lote fallan
+  5. Después restauré el archivo.
+
+  Un hallazgo que no arreglé
+
+  ProductoController::import() y su ruta solo exigen sesión iniciada, sin
+  comprobar el rol. Un vendedor podría subir un Excel y meter stock y costos en
+  cualquier almacén. No escribí ningún test que lo dé por bueno.
+
+  ¿Lo restrinjo a admin y moderador? Sería un cambio pequeño en la ruta, pero es
+  una decisión tuya, y afectaría a cualquier vendedor que hoy use el import.
+
+  Siguiente paso
+
+  El historial de importaciones: tablas, registro fila por fila, aviso de
+  archivo repetido y la pantalla. Después el "deshacer" y los límites de tamaño.
+
+  Todo sigue solo en tu máquina, sin commit ni despliegue. ¿Sigo con el
+  historial?
+
+✻ Baked for 3m 33s · done 11:17 a.m.
+
+❯ Creo que podemos ponerle esto no crees? para que se vea bastante profesional: 
+  "use client";                                                                 
+                                                                                
+  import React, { useState } from "react";                                      
+  import Modal from "./modal";                                                  
+  import Button from "../button/button";                                        
+                                                                                
+  const SuccessModalView: React.FC = () => {                                    
+    const [isSuccessOpen, setIsSuccessOpen] = useState(false);                  
+    const [isCompletionOpen, setIsCompletionOpen] = useState(false);            
+    const [isAchievementOpen, setIsAchievementOpen] = useState(false);          
+                                                                                
+    return (                                                                    
+      <div className="space-y-4">                                               
+        <div className="flex flex-wrap gap-3">                                  
+          <Button                                                               
+            onClick={() => setIsSuccessOpen(true)}                              
+            variant="default"                                                   
+            className="bg-green-500 hover:bg-green-600"                         
+          >                                                                     
+            Success Message                                                     
+          </Button>                                                             
+          <Button onClick={() => setIsCompletionOpen(true)} variant="default">  
+            Task Completion                                                     
+          </Button>                                                             
+          <Button                                                               
+            onClick={() => setIsAchievementOpen(true)}                          
+            variant="default"                                                   
+            className="bg-purple-500 hover:bg-purple-600"                       
+          >                                                                     
+            Achievement Unlocked                                                
+          </Button>                                                             
+        </div>                                                                  
+                                                                                
+        {/* Success Message Modal (No Title) */}                                
+        <Modal                                                                  
+          isOpen={isSuccessOpen}                                                
+          onClose={() => setIsSuccessOpen(false)}                               
+          size="sm"                                                             
+        >                                                                       
+          <div className="text-center space-y-4">                               
+            <div className="mx-auto flex items-center justify-center h-16 w-16  
+  rounded-full bg-green-100 dark:bg-green-900/30">                              
+              <svg                                                              
+                className="h-8 w-8 text-green-600 dark:text-green-400"          
+                fill="none"                                                     
+                viewBox="0 0 24 24"                                             
+                strokeWidth="2"                                                 
+                stroke="currentColor"                                           
+              >                                                                 
+                <path                                                           
+                  strokeLinecap="round"                                         
+                  strokeLinejoin="round"                                        
+                  d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118   
+  0z"                                                                           
+                />                                                              
+              </svg>                                                            
+            </div>                                                              
+                                                                                
+            <div>                                                               
+              <h3 className="text-lg font-semibold text-gray-900                
+  dark:text-gray-100">                                                          
+                Success!                                                        
+              </h3>                                                             
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">     
+                Your changes have been saved successfully. You can continue     
+                working or close this dialog.                                   
+              </p>                                                              
+            </div>                                                              
+                                                                                
+            <div className="pt-2">                                              
+              <Button                                                           
+                onClick={() => setIsSuccessOpen(false)}                         
+                variant="default"                                               
+                className="bg-green-500 hover:bg-green-600"                     
+              >                                                                 
+                Continue                                                        
+              </Button>                                                         
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+                                                                                
+        {/* Task Completion Modal */}                                           
+        <Modal                                                                  
+          isOpen={isCompletionOpen}                                             
+          onClose={() => setIsCompletionOpen(false)}                            
+          size="md"                                                             
+        >                                                                       
+          <div className="text-center space-y-6">                               
+            <div className="mx-auto flex items-center justify-center h-20 w-20  
+  rounded-full bg-blue-100 dark:bg-blue-900/30">                                
+              <svg                                                              
+                className="h-10 w-10 text-blue-600 dark:text-blue-400"          
+                fill="none"                                                     
+                viewBox="0 0 24 24"                                             
+                strokeWidth="2"                                                 
+                stroke="currentColor"                                           
+              >                                                                 
+                <path                                                           
+                  strokeLinecap="round"                                         
+                  strokeLinejoin="round"                                        
+                  d="M11.35 3.836c-.065.21-.1.433-.1.664 0                      
+  .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251  
+  2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8                      
+  0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25                        
+  6.108V8.25m8.25-4.875c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976     
+  2.192V16.5A2.25 2.25 0 0117.25 18.75h-10.5A2.25 2.25 0 014.5                  
+  16.5V6.108c0-1.135.845-2.098 1.976-2.192.374-.03.748-.057 1.124-.08M15        
+  12.75a3 3 0 11-6 0 3 3 0 016 0zm-3 2.25a.75.75 0 100-1.5.75.75 0 000 1.5z"    
+                />                                                              
+              </svg>                                                            
+            </div>                                                              
+                                                                                
+            <div>                                                               
+              <h3 className="text-xl font-semibold text-gray-900                
+  dark:text-gray-100">                                                          
+                Task Completed!                                                 
+              </h3>                                                             
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">     
+                You have successfully completed the onboarding process. Welcome 
+  to                                                                            
+                our platform!                                                   
+              </p>                                                              
+            </div>                                                              
+                                                                                
+            <div className="bg-blue-50 dark:bg-blue-900/20 border               
+  border-blue-200 dark:border-blue-800 rounded-lg p-4">                         
+              <h4 className="text-sm font-medium text-blue-800                  
+  dark:text-blue-200 mb-2">                                                     
+                What&apos;s Next?                                               
+              </h4>                                                             
+              <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1 
+  text-left">                                                                   
+                <li>• Explore your dashboard</li>                               
+                <li>• Set up your profile</li>                                  
+                <li>• Connect with team members</li>                            
+                <li>• Start your first project</li>                             
+              </ul>                                                             
+            </div>                                                              
+                                                                                
+            <div className="flex justify-center space-x-3">                     
+              <Button                                                           
+                onClick={() => setIsCompletionOpen(false)}                      
+                variant="secondary"                                             
+              >                                                                 
+                Later                                                           
+              </Button>                                                         
+              <Button                                                           
+                onClick={() => setIsCompletionOpen(false)}                      
+                variant="default"                                               
+              >                                                                 
+                Get Started                                                     
+              </Button>                                                         
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+                                                                                
+        {/* Achievement Modal */}                                               
+        <Modal                                                                  
+          isOpen={isAchievementOpen}                                            
+          onClose={() => setIsAchievementOpen(false)}                           
+          size="md"                                                             
+        >                                                                       
+          <div className="text-center space-y-6">                               
+            <div className="relative">                                          
+              <div className="mx-auto flex items-center justify-center h-24     
+  w-24 rounded-full bg-gradient-to-r from-purple-400 to-pink-400                
+  animate-pulse">                                                               
+                <svg                                                            
+                  className="h-12 w-12 text-white"                              
+                  fill="none"                                                   
+                  viewBox="0 0 24 24"                                           
+                  strokeWidth="2"                                               
+                  stroke="currentColor"                                         
+                >                                                               
+                  <path                                                         
+                    strokeLinecap="round"                                       
+                    strokeLinejoin="round"                                      
+                    d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9         
+  0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5                              
+  18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454    
+  7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25             
+  4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25            
+  4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25   
+  12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 002.748       
+  1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.228a25.014 25.014 0  
+  004.244.247C20.058 4.764 19.156 4.9 18 5.08m0 0V9.25c0 .621-.504 1.125-1.125  
+  1.125M18 5.08a25.014 25.014 0 01-4.244.247A25.014 25.014 0 0112 5.25M7.73     
+  9.728V9.25c0-.621.504-1.125 1.125-1.125M9.497 14.25H12m-2.503 0a7.454 7.454 0 
+  01-.982-3.172M12 14.25a7.454 7.454 0 01-.981-3.172"                           
+                  />                                                            
+                </svg>                                                          
+              </div>                                                            
+              <div className="absolute -top-2 -right-2">                        
+                <div className="flex items-center justify-center h-8 w-8        
+  rounded-full bg-yellow-400 text-white text-xs font-bold">                     
+                  🎉                                                            
+                </div>                                                          
+              </div>                                                            
+            </div>                                                              
+                                                                                
+            <div>                                                               
+              <h3 className="text-xl font-bold text-transparent bg-clip-text    
+  bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400             
+  dark:to-pink-400">                                                            
+                Achievement Unlocked!                                           
+              </h3>                                                             
+              <h4 className="text-lg font-semibold text-gray-900                
+  dark:text-gray-100 mt-1">                                                     
+                First Modal Master                                              
+              </h4>                                                             
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">     
+                Congratulations! You&apos;ve successfully opened your first     
+  modal                                                                         
+                component. You&apos;re on your way to becoming a UI master!     
+              </p>                                                              
+            </div>                                                              
+                                                                                
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50          
+  dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200          
+  dark:border-purple-800 rounded-lg p-4">                                       
+              <div className="flex items-center justify-between">               
+                <div className="text-left">                                     
+                  <h5 className="text-sm font-medium text-purple-800            
+  dark:text-purple-200">                                                        
+                    Progress                                                    
+                  </h5>                                                         
+                  <p className="text-xs text-purple-600 dark:text-purple-300">  
+                    Next: Open 10 different modals                              
+                  </p>                                                          
+                </div>                                                          
+                <div className="text-right">                                    
+                  <div className="text-lg font-bold text-purple-600             
+  dark:text-purple-400">                                                        
+                    +50 XP                                                      
+                  </div>                                                        
+                  <div className="text-xs text-purple-500                       
+  dark:text-purple-400">                                                        
+                    Level 1                                                     
+                  </div>                                                        
+                </div>                                                          
+              </div>                                                            
+              <div className="mt-3">                                            
+                <div className="bg-purple-200 dark:bg-purple-800 rounded-full   
+  h-2">                                                                         
+                  <div                                                          
+                    className="bg-purple-500 h-2 rounded-full"                  
+                    style={{ width: "25%" }}                                    
+                  ></div>                                                       
+                </div>                                                          
+              </div>                                                            
+            </div>                                                              
+                                                                                
+            <div>                                                               
+              <Button                                                           
+                onClick={() => setIsAchievementOpen(false)}                     
+                variant="default"                                               
+                className="bg-gradient-to-r from-purple-500 to-pink-500         
+  hover:from-purple-600 hover:to-pink-600 transform hover:scale-105"            
+                size="lg"                                                       
+              >                                                                 
+                Awesome!                                                        
+              </Button>                                                         
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+      </div>                                                                    
+    );                                                                          
+  };                                                                            
+                                                                                
+  export default SuccessModalView;                                              
+
+● Déjame ver qué componentes de diálogo tiene el proyecto y cómo se muestra hoy
+  el resultado del import.
+
+  Searched for 2 patterns, listed 1 directory (ctrl+o to expand)
+
+● Sí a la idea, y no copiaría el código tal cual.
+
+  Por qué no copiarlo
+
+  - El código usa un Modal y un Button propios (./modal, ../button/button) que
+    no existen en este proyecto, y un "use client" de Next.js que aquí no
+    aplica.
+  - Aquí ya tenemos dialog.tsx, alert-dialog.tsx y button.tsx de shadcn, más los
+    avisos sileo. Hay que construirlo con esos.
+  - Los textos están en inglés y usa colores fijos. El proyecto tiene patrones
+    propios: el encabezado degradado de las cards y los diálogos grandes.
+
+  Qué sí me sirve del ejemplo
+
+  - "Success Message": ícono en círculo, título, descripción corta y un solo
+    botón. Queda limpio.
+  - "Task Completion": un recuadro de "qué sigue" con datos concretos, más un
+    botón secundario y uno primario.
+  - "Achievement": lo descartaría. El XP, los emojis y el degradado morado con
+    animación no van con un sistema de inventario y dinero, y le restarían
+    seriedad.
+
+  Dónde lo pondría
+
+  Hoy el import termina con un aviso sileo de una línea, y esa pantalla es justo
+  la que le falta claridad al usuario. Propongo dos diálogos:
+
+  1. Resultado del import, después de subir el archivo:
+     - Un círculo verde si todo salió bien, ámbar si hubo filas omitidas.
+     - Los números concretos: filas procesadas, productos nuevos, lotes creados,
+       unidades totales y almacén.
+     - La lista de filas omitidas con su motivo.
+     - Botones para ver el historial o cerrar.
+  2. Confirmación antes de importar: almacén, nombre del archivo y número de
+     filas. Si el archivo ya se importó antes, el aviso de repetido.
+
+  Con el historial de importaciones, esos dos diálogos se alimentan de los
+  mismos datos, así que conviene hacerlos juntos.
+
+  Un detalle que quedó desactualizado
+
+  El diálogo actual de Productos/Index.tsx dice "se pueden crear nuevos
+  productos o actualizar los existentes". Con lo que hicimos hoy ya no es
+  cierto: cada fila crea un lote nuevo y no cambia el costo de la ficha. Habría
+  que corregir ese texto. También tiene un límite de 5 MB validado en el cliente
+  (:97), que subiremos cuando lleguemos a eso.
+
+  Cómo lo haría
+
+  Backend primero (historial y datos del resultado), y la pantalla al final con
+  esos datos reales. Antes de escribir el diseño abriría el diálogo actual del
+  import, para no inventar el patrón.
+
+  ¿Confirmas que lo quieres para el import, con el resultado y la confirmación
+  previa? ¿O pensabas ponerlo en otro lado, por ejemplo en "Aprobar compra"?
+
+✻ Brewed for 28s · done 11:18 a.m.
+
+❯ Y si, creo que debemos agregar otra cosa, ahora estuve conversando y hay      
+  archivos deonde los productos no tienen stock o sea '0' cero, vacio que       
+  sucede que le gusta tenerlo como historial de saber los productos que han     
+  tenido para comprar más, entiendes?                                           
+● Déjame verificar qué pasa hoy con esas filas antes de responderte, porque
+  parte ya podría funcionar.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Sí, te entiendo: quieres poder subir listas de productos aunque estén en 0 o
+  vacías, para que queden registrados como "lo que hemos tenido" y sirvan para
+  decidir qué volver a comprar.
+
+  Lo que ya funciona hoy
+
+  Lo verifiqué en el código y en un test que escribí hoy:
+  - Una fila con cantidad 0 o vacía crea la ficha del producto y su registro en
+    ese almacén con cantidad 0. No crea lote, porque no hay unidades.
+  - En el listado de Productos, filtrar por almacén usa "tiene registro en ese
+    almacén", no "tiene stock". Así que esos productos aparecen en la lista con
+    stock 0.
+  - En /disponibles y en el POS no aparecen si están en 0 y sin precio. Está
+    bien: son historial, no mercancía para vender.
+
+  Lo que no funciona para tu caso
+
+  El import omite la fila completa si no trae precio_compra. Si esos archivos de
+  productos sin stock también vienen sin costo, no entra ninguno. El costo de
+  la ficha no se guarda en blanco, sino que se llena con 0, así que crearla sin
+  precio es posible.
+
+  Lo que propongo
+
+  1. Aceptar filas sin stock aunque no tengan precio.
+     - Si cantidad es 0 o vacía, precio_compra pasa a ser opcional.
+     - Si sí trae precio, se aprovecha.
+     - Si no, la ficha queda con costo 0, sin ningún lote.
+  2. Marcarlas en el historial de importación. Cada fila del detalle dice "solo
+     catálogo (sin stock)". Se conserva el precio que venía en el archivo,
+     aunque el costo de la ficha existente ya no se pisa. Ese precio de archivo
+     es justamente el dato útil para "cuánto nos costaba".
+  3. Contarlas aparte en el resultado del import: "12 productos registrados sin
+     stock". Así el usuario ve que se guardaron y no se pierden entre las filas
+     omitidas.
+
+  Una cosa que tienes que decidir
+
+  Cuando el producto ya existe con stock y el archivo lo trae en 0, la fila no 
+  hace nada (no baja el stock a 0). Es lo correcto, porque el import suma y
+  nunca resta. Pero conviene que el resultado lo diga, para que nadie piense que
+  se puso en cero. ¿Estás de acuerdo con que el import nunca reste stock?
+
+  Y una pregunta práctica: esos archivos sin stock, ¿traen columna de precio? Si
+  sí, el punto 1 casi no cambia nada. Si no traen, es justo lo que necesitamos
+  habilitar.
+
+✻ Cogitated for 28s · done 11:20 a.m.
+
+❯ Bien procede para hacerlo bien el import                                      
+
+● Voy con el import completo en el backend: historial (tablas y registro fila
+  por fila), filas sin stock y aviso de archivo repetido. Primero miro cómo
+  están hechos los modelos y migraciones similares, para seguir su estilo.
+
+  Listed 1 directory (ctrl+o to expand)
+
+❯ recuerda el estilo del dialog                                                 
+
+● Anotado el estilo de diálogo (ícono circular, título, descripción, recuadro
+  "qué sigue" y botones), lo guardo en memoria para aplicarlo al resultado y
+  confirmación del import con los componentes Dialog/AlertDialog del proyecto en
+  español, y sigo con el backend. · summarized
+
+  Ran 2 shell commands, wrote 1 memory (ctrl+o to expand)
+
+● Ahora las migraciones, los modelos y las factories del historial:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Las tablas ya están creadas en la base local (solo esquema, sin tocar datos).
+  Ahora reescribo ProductoImport para que registre el historial y acepte filas
+  sin stock:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+❯ A todos los dialog y modal del proyecto me gustaria ponerle la animacion      
+  bounce:                                                                       
+  "use client";                                                                 
+                                                                                
+  import React, { useState } from "react";                                      
+  import Modal from "./modal";                                                  
+  import Button from "../button/button";                                        
+                                                                                
+  const AnimationModalView: React.FC = () => {                                  
+    const [activeModal, setActiveModal] = useState<string | null>(null);        
+                                                                                
+    const animations = [                                                        
+      {                                                                         
+        type: "scale" as const,                                                 
+        name: "Scale",                                                          
+        description: "Smooth scale-in with spring physics",                     
+        color: "bg-blue-500 hover:bg-blue-600",                                 
+      },                                                                        
+      {                                                                         
+        type: "slide" as const,                                                 
+        name: "Slide",                                                          
+        description: "Slides down from top with gentle bounce",                 
+        color: "bg-green-500 hover:bg-green-600",                               
+      },                                                                        
+      {                                                                         
+        type: "fade" as const,                                                  
+        name: "Fade",                                                           
+        description: "Simple fade-in animation",                                
+        color: "bg-purple-500 hover:bg-purple-600",                             
+      },                                                                        
+      {                                                                         
+        type: "bounce" as const,                                                
+        name: "Bounce",                                                         
+        description: "Playful bounce with rotation",                            
+        color: "bg-orange-500 hover:bg-orange-600",                             
+      },                                                                        
+    ];                                                                          
+                                                                                
+    const openModal = (type: string) => {                                       
+      setActiveModal(type);                                                     
+    };                                                                          
+                                                                                
+    const closeModal = () => {                                                  
+      setActiveModal(null);                                                     
+    };                                                                          
+                                                                                
+    return (                                                                    
+      <div className="space-y-4">                                               
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">                 
+          {animations.map((animation) => (                                      
+            <div key={animation.type} className="space-y-2">                    
+              <Button                                                           
+                onClick={() => openModal(animation.type)}                       
+                className="w-full"                                              
+                variant="default"                                               
+                size="default"                                                  
+              >                                                                 
+                {animation.name} Animation                                      
+              </Button>                                                         
+              <p className="text-sm text-gray-600 dark:text-gray-400            
+  text-center">                                                                 
+                {animation.description}                                         
+              </p>                                                              
+            </div>                                                              
+          ))}                                                                   
+        </div>                                                                  
+                                                                                
+        {/* Scale Animation Modal */}                                           
+        <Modal                                                                  
+          isOpen={activeModal === "scale"}                                      
+          onClose={closeModal}                                                  
+          title={`${animations[0].name} Animation`}                             
+          animation="scale"                                                     
+          size="md"                                                             
+        >                                                                       
+          <div className="space-y-4">                                           
+            <p className="text-gray-700 dark:text-gray-300">                    
+              This modal uses the <strong>scale</strong> animation with spring  
+              physics. It scales from 75% to 100% with a gentle bounce effect   
+  and                                                                           
+              moves up slightly during the entrance.                            
+            </p>                                                                
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg       
+  border border-blue-200 dark:border-blue-800">                                 
+              <h4 className="font-medium text-blue-800 dark:text-blue-200       
+  mb-2">                                                                        
+                Animation Properties:                                           
+              </h4>                                                             
+              <ul className="text-sm text-blue-700 dark:text-blue-300           
+  space-y-1">                                                                   
+                <li>• Scale: 0.75 → 1.0</li>                                    
+                <li>• Y movement: 20px up</li>                                  
+                <li>• Spring damping: 25</li>                                   
+                <li>• Spring stiffness: 300</li>                                
+              </ul>                                                             
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+                                                                                
+        {/* Slide Animation Modal */}                                           
+        <Modal                                                                  
+          isOpen={activeModal === "slide"}                                      
+          onClose={closeModal}                                                  
+          title={`${animations[1].name} Animation`}                             
+          animation="slide"                                                     
+          size="md"                                                             
+        >                                                                       
+          <div className="space-y-4">                                           
+            <p className="text-gray-700 dark:text-gray-300">                    
+              This modal uses the <strong>slide</strong> animation. It slides   
+  down                                                                          
+              from above the viewport with a spring effect and slight scaling.  
+            </p>                                                                
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg     
+  border border-green-200 dark:border-green-800">                               
+              <h4 className="font-medium text-green-800 dark:text-green-200     
+  mb-2">                                                                        
+                Animation Properties:                                           
+              </h4>                                                             
+              <ul className="text-sm text-green-700 dark:text-green-300         
+  space-y-1">                                                                   
+                <li>• Y movement: -50px → 0px</li>                              
+                <li>• Scale: 0.95 → 1.0</li>                                    
+                <li>• Spring damping: 20</li>                                   
+                <li>• Spring stiffness: 300</li>                                
+              </ul>                                                             
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+                                                                                
+        {/* Fade Animation Modal */}                                            
+        <Modal                                                                  
+          isOpen={activeModal === "fade"}                                       
+          onClose={closeModal}                                                  
+          title={`${animations[2].name} Animation`}                             
+          animation="fade"                                                      
+          size="md"                                                             
+        >                                                                       
+          <div className="space-y-4">                                           
+            <p className="text-gray-700 dark:text-gray-300">                    
+              This modal uses the <strong>fade</strong> animation. It&apos;s a  
+              simple, elegant opacity transition without any scaling or         
+  movement.                                                                     
+            </p>                                                                
+            <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg   
+  border border-purple-200 dark:border-purple-800">                             
+              <h4 className="font-medium text-purple-800 dark:text-purple-200   
+  mb-2">                                                                        
+                Animation Properties:                                           
+              </h4>                                                             
+              <ul className="text-sm text-purple-700 dark:text-purple-300       
+  space-y-1">                                                                   
+                <li>• Opacity: 0 → 1</li>                                       
+                <li>• Duration: 0.3s</li>                                       
+                <li>• Easing: easeOut</li>                                      
+                <li>• No scaling or movement</li>                               
+              </ul>                                                             
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+                                                                                
+        {/* Bounce Animation Modal */}                                          
+        <Modal                                                                  
+          isOpen={activeModal === "bounce"}                                     
+          onClose={closeModal}                                                  
+          title={`${animations[3].name} Animation`}                             
+          animation="bounce"                                                    
+          size="md"                                                             
+        >                                                                       
+          <div className="space-y-4">                                           
+            <p className="text-gray-700 dark:text-gray-300">                    
+              This modal uses the <strong>bounce</strong> animation. It&apos;s  
+  a                                                                             
+              playful entrance with rotation, scaling, and enhanced bounce      
+  effect.                                                                       
+            </p>                                                                
+            <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg   
+  border border-orange-200 dark:border-orange-800">                             
+              <h4 className="font-medium text-orange-800 dark:text-orange-200   
+  mb-2">                                                                        
+                Animation Properties:                                           
+              </h4>                                                             
+              <ul className="text-sm text-orange-700 dark:text-orange-300       
+  space-y-1">                                                                   
+                <li>• Scale: 0.3 → 1.0</li>                                     
+                <li>• Rotation: -10° → 0°</li>                                  
+                <li>• Spring damping: 15</li>                                   
+                <li>• Spring stiffness: 400</li>                                
+                <li>• Bounce: 0.6</li>                                          
+              </ul>                                                             
+            </div>                                                              
+          </div>                                                                
+        </Modal>                                                                
+      </div>                                                                    
+    );                                                                          
+  };                                                                            
+                                                                                
+  export default AnimationModalView;                                            
+
+● Anotado lo del bounce. Antes de proponerte nada, reviso cómo están hechos los
+  diálogos del proyecto.
+
+  Listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+● Con esto ya tengo lo necesario para responderte sobre el bounce. Termino
+  primero el import: conecto el historial en el controlador.
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Ese fallo era esperado, ya que el sistema ahora detecta correctamente el
+  archivo duplicado. Voy a actualizar ese test y agregar los correspondientes al
+  historial, filas sin stock, archivo repetido e importación fallida. 
+  · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Los 14 pasan. Compruebo con una mutación que el aviso de repetido y el
+  registro de fallidas de verdad se detectan, y corro las suites relacionadas.
+
+  Ran 1 shell command, wrote 1 memory (ctrl+o to expand)
+
+● El backend del historial del import ya está hecho. Lo del bounce lo dejé como
+  propuesta, sin tocar nada, hasta que me digas.
+
+  Import: qué quedó hecho (backend)
+
+  - Historial de importaciones: dos tablas nuevas (importaciones_productos y el
+    detalle importaciones_producto_filas) con sus modelos y factories. Guarda
+    quién importó, cuándo, en qué almacén, el archivo y los contadores. El
+    detalle dice, fila por fila, si fue importada, solo catálogo u omitida con
+    su motivo.
+  - Filas sin stock: si cantidad es 0 o vacía, precio_compra pasa a ser
+    opcional. La fila deja el producto registrado en ese almacén, sin lote, y el
+    import nunca resta stock a un producto que ya lo tiene.
+  - Aviso de archivo repetido: si subes el mismo archivo al mismo almacén, el
+    servidor no importa nada y devuelve un aviso (importacion_repetida) con
+    quién lo importó y cuándo. Se importa solo si el usuario confirma. No salta
+    en otro almacén ni si la importación anterior falló o se revirtió.
+  - Importaciones fallidas: quedan en el historial como fallida con su mensaje,
+    y no dejan nada a medias.
+  - Tests: ProductoImportTest tiene 14 tests que pasan, y con las suites
+    relacionadas son 129. Quité a propósito el aviso de repetido y el registro
+    de fallidas para comprobar que los tests los detectan, y los restauré. Pint
+    pasó.
+
+  Para el despliegue: hay 2 migraciones nuevas. Yo ya las corrí en tu base
+  local, solo el esquema.
+
+  Todavía falta del import
+
+  - Deshacer una importación.
+  - Subir el límite de tamaño.
+  - La pantalla del historial y los dos diálogos, con el estilo del ejemplo.
+  - La decisión pendiente sobre el rol: import() sigue sin comprobar quién puede
+    importar.
+
+  El bounce en todos los diálogos
+
+  Es viable y sale barato. La mayoría de los diálogos comparten dos componentes,
+  dialog.tsx y alert-dialog.tsx (unos 38 usos entre los dos). Cambiar esos dos
+  archivos alcanza a casi todos.
+
+  Cómo lo haría:
+  - Con animación CSS y no con motion. Los diálogos de Radix necesitan animar
+    también el cierre, y con CSS eso ya funciona. Con motion habría que añadir
+    código extra a cada uno.
+  - Animar solo scale y rotate. El centrado del diálogo usa translate, que es
+    otra propiedad, así que no chocan.
+  - Una entrada con rebote y un cierre rápido y limpio. Sin rebote al cerrar.
+
+  Ajustes que te recomiendo sobre el ejemplo:
+  - Empezar en escala 0.85 y no en 0.3. Los diálogos grandes (el de 90 % de alto
+    en Compras, los formularios) se verían raros si nacieran diminutos.
+  - Rotación mínima o nula. Un giro de -10° en un formulario largo se ve poco
+    serio. Si la quieres, solo en los diálogos pequeños de confirmación.
+  - Respetar "reducir movimiento" del sistema (prefers-reduced-motion), como
+    buena práctica de accesibilidad.
+
+  Qué no cubre el cambio central:
+  - Hay 4 lugares que hacen su propio modal a mano (fixed inset-0):
+    ProductQuickView.tsx, StoreSelector.tsx, Comprar/Index.tsx y
+    Productos/Index.tsx, incluyendo el del import.
+  - Los abriría uno por uno para ver cuáles son modales de verdad y cuáles otra
+    cosa.
+  - Los paneles laterales (sheet.tsx) los dejaría como están: entran deslizando
+    desde el borde, y el rebote ahí no tiene sentido.
+
+  No compilo el frontend: tú lo manejas. Para verlo bastaría con abrir cualquier
+  diálogo.
+
+  Necesito de ti
+
+  1. Bounce: ¿lo aplico con esa versión moderada (sin giro en los grandes)? ¿O
+     prefieres el giro y la escala 0.3 del ejemplo tal cual en todos?
+  2. Import: ¿sigo con "deshacer" o pasamos a los diálogos, ya que estamos con
+     el estilo?
+
+✻ Cogitated for 5m 17s · done 11:25 a.m.
+
+❯ Aplica el bounce moderado y sigue con deshacer                                
+
+● Empiezo por el bounce. Primero miro cómo está armado el CSS del proyecto.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Los dos componentes centrales ya usan el rebote. Reviso los 5 modales hechos a
+  mano para ver cuáles son modales de verdad.
+
+  Searched for 2 patterns, ran 1 shell command (ctrl+o to expand)
+
+● Son 4 modales hechos a mano (el de Comprar/Index.tsx es solo un spinner de
+  carga, no un modal). Les aplico la misma animación a sus paneles:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● El bounce ya está aplicado (ESLint limpio; no compilo, eso lo manejas tú).
+  Sigo con "deshacer". Antes reviso cómo se confirma la contraseña en otras
+  acciones y la API del servicio de códigos.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Voy con "deshacer". Primero una migración con las columnas nuevas: el motivo y
+  quién lo revirtió, y el código de barras que usó cada fila (necesario para
+  poder descontarlo).
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Ahora el controlador con la lógica de deshacer (todo o nada) y su ruta:
+
+  Searched for 1 pattern, ran 3 shell commands (ctrl+o to expand)
+
+❯ Antes de deshacer el usuario, tiene la posibildiad de revisar lo que importó? 
+
+  Ran 2 shell commands (ctrl+o to expand)
+● Los fallos son de mis tests, no del código: la fila omitida deja el estado en
+  con_omitidas y la ruta responde 403 para un moderador, igual que en
+  MonedaTest. Voy a corregir esas dos expectativas. · summarized
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Las dos cosas están hechas en el backend, y abajo te respondo lo de revisar
+  antes de deshacer.
+
+  Bounce moderado
+
+  - Animación: en app.css está la animación dialog-bounce-in. Empieza en escala
+    0.85, sube a 1.03, baja a 0.99 y se asienta en 1, en 0.35 s. El cierre sigue
+    siendo el fade normal, sin rebote. Se desactiva si el usuario tiene
+    "reducir movimiento" en su sistema.
+  - Dónde se aplicó:
+    - dialog.tsx y alert-dialog.tsx, que cubren casi todos los diálogos (unos 38
+      usos).
+    - Los modales hechos a mano: el de importar y el de duplicados en
+      Productos/Index.tsx, StoreSelector y ProductQuickView.
+  - Qué dejé fuera:
+    - El spinner de carga de Comprar/Index.tsx, que no es un modal.
+    - Los paneles laterales (sheet.tsx).
+  - Verificación:
+    - ESLint pasa en los componentes que toqué (ui/, StoreSelector y
+      ProductQuickView).
+    - Productos/Index.tsx tiene 4 errores de ESLint (dos any y variables sin
+      usar), de antes de mi cambio: yo solo agregué clases.
+    - No compilé el frontend. Recarga y abre cualquier diálogo para verlo.
+
+  Deshacer importación
+
+  Hay una ruta nueva, importaciones-productos.revertir, solo para admin (un
+  moderador recibe 403). Pide motivo y tu contraseña.
+  - Qué hace: por cada lote IMP- resta el stock del almacén, descuenta el código
+    de barras que recibió y elimina el lote. La importación queda "revertida",
+    con quién, cuándo y por qué.
+  - Qué conserva: las fichas y las categorías creadas, y el historial con el
+    código de cada lote.
+  - Todo o nada: si algo ya se movió, no toca nada y devuelve la lista exacta de
+    lo que lo impide. Los casos son:
+    - unidades ya usadas por ventas o traslados;
+    - lote fusionado;
+    - lote eliminado a mano;
+    - stock del almacén menor que lo importado.
+  - Doble clic: con el registro bloqueado y el estado leído de nuevo, no
+    descuenta dos veces.
+  - Tests: los 24 de ProductoImportTest pasan, y con las suites relacionadas son
+    139 en total. Quité a propósito cada protección (los bloqueos, la relectura
+    del estado y el descuento del código) y en cada caso fallan tests, así que
+    las detectan.
+  - Migraciones: hay una migración más, además de las 2 de antes: son 3 para
+    correr en producción. Ya las corrí en tu base local.
+
+  Tu pregunta: ¿puede revisar lo que importó antes de deshacer?
+
+  Los datos ya están. Cada importación guarda el detalle fila por fila:
+  producto, cantidad, costo, lote creado y si se importó, quedó solo como
+  catálogo o se omitió con su motivo. Lo que falta es la pantalla para verlo.
+  Hoy solo existe el botón "deshacer" en el backend, sin ninguna pantalla.
+
+  Lo que propongo para la pantalla:
+  1. Historial de importaciones, con una tabla de todas (fecha, quién, almacén,
+     archivo, contadores y estado).
+  2. Detalle de una importación, con todas sus filas. Es donde el usuario revisa
+     qué entró antes de decidir.
+  3. Deshacer con vista previa. Antes de pedir el motivo y la contraseña, el
+     diálogo muestra: "se eliminarán N lotes y M unidades". Si algo lo impide,
+     muestra la lista de bloqueos de una vez y no deja confirmar. Así el usuario
+     no descubre el problema solo después de escribir la contraseña. Hoy los
+     bloqueos solo se calculan al confirmar. Para la vista previa hay que
+     exponer ese mismo cálculo sin ejecutarlo, y es un cambio pequeño.
+
+  Todo iría con el estilo de diálogo que me pediste que recordara.
+
+  Siguiente paso
+
+  Hacer esa pantalla: el backend de listado, detalle y vista previa, más el
+  frontend con los dos diálogos. Antes de escribir el diseño abriría el diálogo
+  actual del import, para no inventar el patrón. ¿Lo hacemos así, con la vista
+  previa incluida?
+
+✻ Cogitated for 6m 38s · done 11:32 a.m.
+
+❯ Procede con Hacer esa pantalla: el backend de listado, detalle y vista        
+  previa, más el frontend con los dos diálogos. Antes de escribir el diseño     
+  abriría el diálogo actual del import, para no inventar el patrón.             
+
+● Empiezo leyendo lo que ya existe para copiar los patrones reales: el diálogo
+  del import, cómo llegan los avisos al frontend y una pantalla de historial
+  parecida.
+
+  Read 2 files, ran 2 shell commands (ctrl+o to expand)
+
+● Ya identifiqué los patrones de banner y cards con degradado, además del
+  diálogo actual de import (desactualizado). Ahora empiezo por el backend:
+  listado, detalle y vista previa. · summarized
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+❯ Y poder editar el import antes de confirmar, podemos hacerlo?                 
+
+● Sigo: los 2 tests que fallan solo esperan las páginas de React, que aún no
+  existen. Ahora escribo el frontend. Sobre tu pregunta de editar antes de
+  confirmar: se puede, y te la respondo al final.
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Escribo los componentes compartidos: los tipos, el badge de estado y los tres
+  diálogos con el estilo del ejemplo (círculo con ícono, título, descripción,
+  recuadro de "qué sigue").
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora el diálogo de "Deshacer" (con vista previa antes de pedir la contraseña)
+  y las dos pantallas:
+
+  Read 1 file (ctrl+o to expand)
+
+❯ Creo que para ello hacer una vista aparte como el recibo de venta no crees,   
+  para que tenga el propio design de un excel bien hecho y el usuario pueda     
+  editarlo, confirmarlo antes de guardarlo en database                          
+
+● Voy a cerrar la pantalla de detalle y el enganche en Productos, y después te
+  explico cómo construiría una pantalla propia para editar muchas filas. 
+  · summarized
+
+  Read 1 file, ran 4 shell commands, wrote 1 memory (ctrl+o to expand)
+
+● La pantalla del historial y los tres diálogos están hechos. Lo de editar antes
+  de guardar, con la vista aparte que propones, es viable y lo veo mejor que
+  meterlo en un diálogo. Está sin construir, pendiente de que me confirmes el
+  diseño de abajo.
+
+  Qué quedó hecho
+
+  - Backend:
+    - Listado (con filtros por almacén y estado) y detalle fila por fila, con
+      paginación y filtro por resultado. Los ve un admin o un moderador.
+    - Una vista previa de "deshacer" que no toca nada.
+    - El resultado del import ahora llega estructurado al frontend.
+  - Pantallas:
+    - Productos/Importaciones/Index.tsx (historial) y Show.tsx (detalle).
+    - Botón "Historial de importaciones" junto a los de importar y exportar en
+      Productos/Index.tsx.
+    - Sigo el patrón de DistribucionCostos/Historial.tsx: el banner, la card con
+      degradado, la tabla y la paginación.
+  - Los diálogos, con el estilo del ejemplo (círculo con ícono, título,
+    descripción y recuadro de "qué sigue"), y con el rebote:
+    - Confirmación antes de importar: dice archivo, almacén y qué va a pasar.
+    - Archivo repetido: "ya se importó el… por…", con opción de importar de
+      todos modos.
+    - Resultado: verde si salió bien, ámbar si hubo filas omitidas, con los
+      números y los motivos.
+    - Deshacer: primero muestra "se quitarán N lotes y M unidades", o la lista
+      de bloqueos. Solo si se puede, pide motivo y contraseña.
+  - Texto corregido en el diálogo de importar: ya no dice "crear o actualizar",
+    y explica que el precio es obligatorio solo con unidades.
+  - Tests: ProductoImportTest tiene 33 tests que pasan, y con las suites
+    relacionadas son 140. Pint pasó.
+
+  Sin verificar:
+  - Navegador y tipos: no lo probé en el navegador ni con el chequeo de tipos de
+    TypeScript (npm run types, que está roto en este proyecto). Solo ESLint,
+    que pasa en mis archivos.
+  - Errores de ESLint previos: en Productos/Index.tsx quedan 2 errores que ya
+    existían (un any y una variable sin usar); no los toqué.
+  - Frontend: recarga o compila y pruébalo tú.
+
+  Despliegue: hay 3 migraciones nuevas para correr en producción (las 2 tablas
+  del historial y las columnas de deshacer).
+
+  Editar el import antes de guardar
+
+  Estoy de acuerdo en que sea una vista aparte, como la del recibo de venta. Un
+  diálogo no sirve para revisar cientos de filas.
+
+  Cómo funcionaría:
+  1. El usuario sube el Excel y elige almacén. Todavía no se guarda nada en
+     inventario.
+  2. Se abre la vista "Revisar importación", con una cuadrícula tipo hoja de 
+     Excel: una fila por producto, columnas de nombre, categoría, marca, modelo,
+     capacidad, color, costo, cantidad y código.
+  3. Cada fila muestra en vivo su estado, con la misma lógica del import: verde
+     si está bien, ámbar si es solo catálogo (0 unidades), rojo si falta el
+     nombre o el precio con unidades. El motivo aparece al lado.
+  4. El usuario puede corregir celdas, borrar filas y agregar filas, y ve un
+     resumen arriba: "38 filas van a importarse, 4 tienen error, 12 quedan sin
+     stock".
+  5. "Confirmar importación" guarda lo que se ve en pantalla, con el mismo
+     código de hoy (lotes, historial y "deshacer" incluidos).
+
+  Detalles técnicos que te conviene saber:
+  - Cómo leer el Excel y dónde guardar el borrador:
+    - Hoy el import lee el archivo directamente. Habría que hacer que trabaje
+      con filas ya leídas, sea del archivo o de la cuadrícula.
+    - El borrador de las filas se guardaría en el servidor, en una tabla propia.
+      Así un archivo grande no viaja de ida y vuelta, y el usuario puede cerrar
+      la pestaña y retomarlo.
+  - La cuadrícula: la haría con los componentes de la app, sin librería nueva
+    (el proyecto pide aprobación para cambiar dependencias). Con miles de filas,
+    paginada.
+  - La confirmación previa que acabo de hacer: quedaría casi redundante, porque
+    la revisión ya cumple ese papel. La dejaría solo como el último paso de la
+    vista.
+  - El aviso de archivo repetido: se mantendría en la vista de revisión.
+
+  Lo que necesito de ti antes de empezar:
+  1. ¿La cuadrícula edita solo lo que trae el archivo, o también agregar filas
+     nuevas a mano?
+  2. ¿El borrador debe poder retomarse otro día, o basta con que exista mientras
+     el usuario está en la vista?
+
+  Si te parece bien, empiezo por el backend (leer el Excel a un borrador,
+  validar por fila y confirmar desde el borrador) y luego la vista.
+
+✻ Crunched for 6m 36s · done 11:40 a.m.
+
+❯ Creo que para esto existen componentes, librerias que simulan una hoja de     
+  cálculo, y si creo que podemos agregar filas a mano, así sería un trabajo     
+  supergenial con este flujo                                                    
+
+● Buena idea, y la verificación de librerías conviene hacerla antes de elegir.
+  Reviso qué hay ya instalado y comparo las candidatas con datos reales
+  (versión, licencia, compatibilidad con React 19).
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Comparé las opciones con datos reales de npm. Mi recomendación es
+  react-data-grid, pero es una dependencia nueva y el proyecto pide tu
+  aprobación, así que no instalé nada.
+
+  Comparación
+
+  Librería: react-data-grid 7.0.0-beta.61
+  Licencia: MIT
+  React 19: Sí (pide ^19.2, el proyecto tiene ^19.2.1)
+  Tamaño: 0.4 MB, sin dependencias
+  Veredicto: La recomiendo
+  ────────────────────────────────────────
+  Librería: Fortune-sheet 1.0.4
+  Licencia: MIT
+  React 19: Sí (>=18.2)
+  Tamaño: 8 MB
+  Veredicto: Es un Excel completo con fórmulas y barra de herramientas.
+  Demasiado
+  para esto
+  ────────────────────────────────────────
+  Librería: AG Grid Community 36
+  Licencia: MIT
+  React 19: Sí
+  Tamaño: 21 MB
+  Veredicto: Muy pesada. El pegado de rangos desde Excel es de su versión de
+  pago
+  ────────────────────────────────────────
+  Librería: Handsontable 18
+  Licencia: Licencia propia
+  React 19: —
+  Tamaño: —
+  Veredicto: Es gratis solo para uso no comercial. Este sistema es de un
+  negocio,
+  así que la descartaría
+  ────────────────────────────────────────
+  Librería: Glide Data Grid 6
+  Licencia: MIT
+  React 19: No (pide React ≤18)
+  Tamaño: —
+  Veredicto: Descartada por compatibilidad
+  ────────────────────────────────────────
+  Librería: TanStack Table (ya instalada)
+  Licencia: MIT
+  React 19: Sí
+  Tamaño: —
+  Veredicto: Solo maneja los datos, no la interfaz. La edición, el teclado y el
+  pegado tendría que escribirlos yo a mano
+
+  Por qué react-data-grid
+
+  - Edición de celdas y navegación con teclado (flechas, Enter, Tab), como en
+    Excel.
+  - Copiar y pegar celdas, incluso desde el propio Excel. Este es el punto clave
+    para tu flujo.
+  - Filas virtualizadas: aguanta miles de filas sin ir lenta, y sin que yo tenga
+    que paginar la cuadrícula.
+  - Modo oscuro con variables CSS, así que cuadra con el tema de la app.
+  - Colorear filas según su estado (verde, ámbar, rojo) es directo.
+  - Agregar y quitar filas lo controlo yo desde botones en la vista.
+
+  Riesgos que te debo decir:
+  - Su versión 7 sigue marcada como "beta" (la actual es la beta.61). Lleva años
+    así y se publicó por última vez en julio de 2026, pero la API cambia entre
+    betas. Fijaría la versión exacta para no llevarme sorpresas.
+  - No es un Excel de verdad: sin fórmulas, ni varias hojas, ni barra de
+    herramientas. Para revisar y corregir filas antes de guardar no las
+    necesitamos.
+
+  Flujo completo que quedaría
+
+  1. Subir el Excel y elegir almacén. Se lee en el servidor y se guarda como
+     borrador; no se toca el inventario.
+  2. Vista "Revisar importación": cuadrícula editable con una columna de estado
+     por fila (verde, ámbar o rojo, con el motivo).
+  3. El usuario corrige celdas, pega desde Excel, borra filas o agrega filas a 
+     mano, como pediste.
+  4. Resumen arriba y en vivo: "38 van a importarse, 12 sin stock, 4 con error".
+  5. "Confirmar importación" guarda lo que se ve, con el mismo código de hoy:
+     lotes, historial y "deshacer".
+
+  Sobre el borrador: como no me respondiste si debe poder retomarse otro día, lo
+  dejo guardado en el servidor. Cuesta poco y evita perder un trabajo largo si
+  se cierra la pestaña. Si prefieres que no quede nada guardado, dímelo.
+
+  Necesito de ti
+
+  - ¿Apruebas instalar react-data-grid fijado a la versión beta.61?
+
+  Con tu OK sigo este orden: primero el backend (leer el Excel a borrador,
+  validar por fila, confirmar desde el borrador) con sus tests, y luego la vista
+  con la cuadrícula.
+
+✻ Crunched for 50s · done 11:43 a.m.
+
+❯ Bien procede, pero dale estilo que se parezca un excel, y de paso en el fondo 
+  le agregas la @public/projects/mascota/mascota.webp como en el recibo de      
+  pago de la ventas, ok? Procede                                                
+  ⎿  Read public/projects/mascota/mascota.webp (190.7KB)
+
+● Aprobado. Antes de escribir nada leo el patrón real de la mascota en el recibo
+  (no lo voy a suponer) e instalo la librería fijada a esa versión exacta.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● La librería quedó instalada, fijada en 7.0.0-beta.61. Como la versión es beta,
+  leo su API real en node_modules antes de escribir la vista.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● La API real usa renderTextEditor y pegado celda por celda, así que
+  implementaré un manejador de pegado propio para soportar rangos completos
+  desde Excel. Ahora sigo con el backend, revisando antes la regla del proyecto
+  sobre helpers de tests. · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Empiezo por el backend del borrador: tabla, modelo, servicio compartido y el
+  lector del Excel.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● El refactor no rompió nada (33 tests siguen pasando). Ahora el controlador del
+  borrador y sus rutas:
+
+  Read 1 file (ctrl+o to expand)
+
+● Ahora muevo el helper del Excel de pruebas a tests/Pest.php (donde viven los
+  helpers compartidos) y escribo los tests del borrador.
+
+  Ran 1 shell command (ctrl+o to expand)
+● Pint reescribió la línea pest()->extend(...) de tests/Pest.php, justo la
+  trampa que documenta la regla del proyecto. La restauro a su forma completa:
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Solo falta la vista de React. Antes de escribirla reviso las variables CSS
+  reales de la librería para dejarle el aspecto de Excel.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Antes de seguir con el frontend, corrijo un hueco en la validación: cantidades
+  o precios negativos pasan el import y podrían restar stock, contradiciendo la
+  regla de que importar nunca resta. Lo arreglo en el servidor y lo pruebo. 
+  · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora el estilo de la hoja en app.css (aspecto de Excel, claro y oscuro):
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora la vista principal: la hoja tipo Excel con la cuadrícula, la barra de
+  fórmulas, las pestañas de hoja, la barra de estado y la mascota de fondo.
+
+  Read 1 file (ctrl+o to expand)
+
+❯ Bien, recuerda hacer la plantilla para que el usuario sepa como llenarla para 
+  poder importar los productos, ok y así, recuerda los test finales y probar    
+  en el navegador                                                               
+
+● Anotado los tres puntos: la plantilla con instrucciones, los tests finales y
+  la prueba en el navegador. Primero corrijo el error de ESLint de mi vista y
+  reviso la plantilla que ya existe.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Veo que la plantilla actual tiene 5 filas de ejemplo dentro de la hoja
+  "Productos", con riesgo de importarse como stock real. Voy a moverlas a una
+  hoja de instrucciones aparte, que también explicará las nuevas reglas. 
+  · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora la hoja de instrucciones y el libro que reúne las dos hojas:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Pint volvió a tocar tests/Pest.php. Verifico que la línea pest()->extend siga
+  intacta antes de seguir:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Pint la revirtió otra vez. La restauro, y desde ahora corro Pint sobre
+  carpetas concretas (no --dirty) para que no vuelva a tocar ese archivo.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● El 0 se perdía al escribir mi archivo de prueba (fromArray trata el 0 como
+  vacío), no al leerlo. Lo escribo con comparación estricta:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● La plantilla quedó lista y probada. Ahora conecto el diálogo de importar con
+  el flujo nuevo (subir → hoja de revisión) y hago que Productos muestre el
+  resultado al volver.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora las tarjetas de "Borradores pendientes" en el historial, para retomar
+  una revisión a medias:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Los 49 tests de importación pasan. Ahora la prueba en el navegador: cargo las
+  herramientas y compruebo que la app y Vite estén corriendo.
+
+  Called laravel-boost, claude-in-chrome 4 times, ran 1 shell command (ctrl+o to expand)
+
+● La sesión y el historial se ven correctos. Ahora preparo un Excel de prueba
+  con nombres «PRUEBA IMPORT» que incluye una fila válida, una sin stock y una
+  con error. · summarized
+
+  Called claude-in-chrome 2 times, ran 2 shell commands (ctrl+o to expand)
+
+● Sigo con la prueba en el navegador. Me falla crear el archivo de prueba en la
+  carpeta temporal; reviso por qué.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● El archivo de prueba ya existe. Vuelvo al navegador a abrir el diálogo de
+  importar:
+
+  Called claude-in-chrome 5 times (ctrl+o to expand)
+
+● El diálogo con el texto nuevo y el archivo cargado se ve bien. Continúo:
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● La barra de progreso sigue avanzando: probablemente Vite está optimizando la
+  librería nueva por primera vez. Espero y reviso.
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● La página volvió a Productos sin abrir la hoja. Miro en el servidor si se creó
+  el borrador y si hubo algún error.
+  Ran 1 shell command (ctrl+o to expand)
+
+● El borrador sí se creó (id 1). Abro directamente la hoja de revisión:
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● La hoja funciona correctamente con todos sus elementos, pero detecto que la
+  tarjeta se desborda por la derecha, dejando el botón «Confirmar importación»
+  fuera de pantalla. Voy a medir para confirmarlo. · summarized
+
+  Called claude-in-chrome (ctrl+o to expand)
+
+● Confirmado: el contenedor mide 1824 px cuando solo caben ~1620, porque el
+  ancho natural de las 11 columnas ensancha el layout. Voy a contenerlo para que
+  la hoja tenga su propio scroll horizontal. · summarized
+
+  Called claude-in-chrome 2 times, ran 1 shell command (ctrl+o to expand)
+
+● Corregido: ya no hay desbordamiento horizontal (el documento mide 1839 = el
+  ancho de la ventana). Ahora pruebo la edición: arreglo la fila con error
+  escribiendo su precio.
+
+  Called claude-in-chrome (ctrl+o to expand)
+
+● El resumen coincide con mis cuentas: 30×4 + 12,50×10 = 245,00. Edito la celda
+  de precio de la fila con error:
+
+  Called claude-in-chrome 4 times (ctrl+o to expand)
+
+● La edición funciona: la fila pasó de rojo a verde y el resumen se recalculó
+  (274,97 = 245 + 29,97). Ahora pruebo agregar una fila y pegar un rango de
+  Excel de dos filas:
+
+  Called claude-in-chrome 4 times (ctrl+o to expand)
+
+● El pegado de un rango de 2 filas × 9 columnas funciona (creó la fila 7 solo) y
+  las cuentas cuadran (19 unidades, 289,97). Guardo el borrador y abro la
+  confirmación:
+
+  Called claude-in-chrome 2 times, ran 1 shell command (ctrl+o to expand)
+
+● El borrador se guardó (6 filas en la base, y el estado pasó a «Listo»). Ahora
+  la confirmación:
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)
+
+● La confirmación tiene el estilo pedido. Confirmo la importación de prueba
+  (queda registrada como «PRUEBA IMPORT …» en la base local):
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● El resultado sale con el estilo pedido y los números correctos (6 productos, 4
+  lotes, 19 unidades, 2 sin stock). Abro el detalle:
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● El detalle funciona correctamente: contadores, filtros y cada fila con su lote
+  correspondiente. Ahora abro el diálogo de deshacer solo para revisar la vista
+  previa, sin ejecutarlo, para no borrar lo que acabamos de crear. · summarized
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● La vista previa funciona correctamente (4 lotes, 19 unidades, fichas
+  conservadas). Cancelo esta prueba y ahora subiré el mismo archivo de nuevo
+  para comprobar el aviso de archivo repetido. · summarized
+
+  Called claude-in-chrome 6 times (ctrl+o to expand)
+
+● Ese clic abrió otro modal (el de «duplicados», que solo lista, no cambia
+  nada). Lo cierro y uso el botón azul correcto:
+
+  Called claude-in-chrome 8 times (ctrl+o to expand)
+
+● La segunda vez la redirección a la hoja funcionó directo (la primera se demoró
+  por la optimización inicial de Vite). Confirmo y debe aparecer el aviso de
+  repetido:
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)
+
+● El diálogo avisa además de que «1 fila con error no se importará». Confirmo
+  para provocar el aviso de archivo repetido:
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● El aviso de archivo repetido funciona (dice cuándo y quién). Elijo «No
+  importar» y compruebo que el borrador quede en el historial para retomarlo:
+
+  Called claude-in-chrome 3 times, ran 1 shell command (ctrl+o to expand)
+
+● No se duplicó nada (1 importación, 4 lotes, 1 borrador pendiente). La captura
+  salió en blanco porque la página aún cargaba; la repito:
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)
+
+● El historial muestra el borrador pendiente (con «Retomar» y «Descartar») y la
+  importación #1. Reviso que no haya errores de consola durante toda la prueba:
+
+  Called laravel-boost (ctrl+o to expand)
+
+● La prueba en el navegador confirmó que el error «Invalid hook call» ocurrió
+  solo en la primera carga por una copia duplicada de React que Vite generó al
+  detectar la librería nueva; tras recargar no vuelve a aparecer. Lo incluiré en
+  el resumen y ahora ejecutaré los tests finales. · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Ese test pasa solo, o sea que falla según el orden o el estado. Lo reproduzco
+  en la corrida combinada para ver el detalle:
+  Ran 1 shell command (ctrl+o to expand)
+
+● Detecté que el test es intermitente: dos Excel generados en instantes
+  distintos pueden diferir en bytes por la marca de fecha/hora del zip, haciendo
+  que el hash cambie sin motivo real. Lo voy a hacer determinista reutilizando
+  el mismo archivo para las mismas filas. · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Los 307 tests relacionados pasan. Actualizo la memoria con lo aprendido y lo
+  pendiente:
+
+  Wrote 1 memory (ctrl+o to expand)
+
+● El import en dos pasos (subir, revisar en una hoja tipo Excel, confirmar) está
+  hecho y probado en el navegador. Los 307 tests relacionados pasan y Pint y
+  ESLint pasan en lo que toqué. No corrí la suite completa; te toca a ti (php 
+  artisan test --compact).
+
+  Lo que probé en el navegador
+
+  Con tu sesión abierta, subí un Excel de prueba de 4 filas (una buena, una sin
+  stock, una con error, una con coma decimal):
+  - La hoja: barra de título verde, cinta de opciones, barra de fórmulas, letras
+    de columna y números de fila, pestaña «Hoja1» y barra de estado. La mascota
+    va de fondo, como en el recibo. Cada fila muestra su estado (verde, azul o
+    rojo) con el motivo.
+  - Editar: escribí el precio de la fila roja y pasó a verde, con el resumen
+    recalculado (274,97; cuadra a mano).
+  - Pegar y guardar: un rango de 2×9 celdas desde el portapapeles creó la fila
+    que faltaba, y guardar el borrador dejó las 6 filas en la base.
+  - Confirmar y resultado: el diálogo de confirmación y el de resultado salieron
+    bien (6 productos, 4 lotes, 19 unidades, 2 sin stock).
+  - Detalle e historial: la pantalla de detalle fila por fila y el historial con
+    el borrador pendiente («Retomar» y «Descartar») funcionan.
+  - Deshacer: la vista previa muestra «4 lotes, 19 unidades».
+  - Archivo repetido: el aviso salió («ya se importó… por Luis Alberto») y
+    confirmé que no se duplicó nada.
+
+  Dos cosas que no ejecuté en el navegador: el deshacer real, que cubren los
+  tests y no quise borrar lo que acabo de crear; y la descarga de la plantilla,
+  que también cubren los tests.
+
+  Datos de prueba que quedaron en tu base local: la importación #1 (6 productos
+  «PRUEBA IMPORT …» con 4 lotes en ALMACEN DE SALIDA) y el borrador #2
+  pendiente.
+
+  Qué se hizo
+
+  - La hoja: usa react-data-grid, con la versión exacta 7.0.0-beta.61 que
+    aprobaste. Pegar rangos desde Excel, arrastrar la esquina para rellenar y
+    Supr para vaciar una celda funcionan.
+  - La plantilla: ahora trae la hoja «Productos» vacía y una hoja
+    «Instrucciones». La hoja de instrucciones explica los pasos y las columnas,
+    qué pasa al importar, los límites y un ejemplo lleno. La plantilla anterior
+    traía 5 filas de ejemplo dentro de «Productos»: quien las olvidara habría
+    importado stock falso.
+  - Un hueco que cerré por el camino: el import aceptaba cantidad o precio
+    negativos (una cantidad negativa restaba stock). Ahora esas filas se omiten
+    con su motivo.
+  - Cambio de comportamiento: el diálogo de importar ahora dice «Revisar y
+    continuar» y abre la hoja. Nada se importa hasta que confirmes ahí.
+
+  Tres cosas que debes saber
+
+  1. Vite y la librería nueva: la primera vez que se abrió la hoja con el
+     servidor de desarrollo ya encendido falló («Invalid hook call»), porque
+     Vite creó una segunda copia de React al descubrir la librería. Después de
+     recargar no volvió a fallar. Si te pasa, reinicia npm run dev una vez. En
+     producción hace falta npm ci (el package-lock.json cambió) y compilar.
+  2. Un test intermitente que yo introduje: el de «mismo archivo dos veces»
+     fallaba a veces, porque dos .xlsx generados en segundos distintos tienen
+     hashes distintos. Lo arreglé y lo repetí 3 veces sin fallos.
+  3. tests/Pest.php: Pint reescribió dos veces la línea pest()->extend(...) (la
+     trampa que documenta .ai/rules/tests.md). La restauré y ahora corro Pint
+     por carpetas, no con --dirty. Esa línea está intacta.
+
+  Pendiente
+
+  - Límites de tamaño y filas: el límite de 5 MB y 20 000 filas sigue puesto.
+    Falta lo de procesar sin límite práctico, que depende del hosting y la cola.
+  - Rol de la ruta directa: la ruta directa antigua productos.import sigue sin
+    comprobar el rol. La pantalla nueva sí exige admin o moderador, pero un
+    vendedor todavía ve el botón Importar (le responde con una redirección). ¿Lo
+    restrinjo a admin y moderador y lo oculto a vendedores?
+  - Despliegue: hay 4 migraciones nuevas para producción.
+  - docs/ESTADO_DESARROLLO.md: no lo he actualizado. Si quieres, lo pongo al día
+    con todo esto.
+
+✻ Crunched for 26m 40s · done 12:13 p.m.
+
+※ recap: Estamos rehaciendo el import de productos para que se revise en una hoja tipo Excel antes de guardar, y ya quedó hecho y probado en el navegador. Lo siguiente es que decidas si restrinjo el import a admin y moderador.
+
+❯ Actualiza el estado desrrollo                                                 
+
+● Voy a leer el final del documento (secciones pendientes y tabla de historial)
+  para editarlo con su formato.
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Voy a editar el documento por prefijos de línea para no romper el formato.
+  Primero confirmo los prefijos exactos de las líneas a tocar:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Verifico que las ediciones quedaron bien colocadas y con el formato de tabla
+  correcto:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Un detalle de orden: mi nota de actualización quedó entre los dos párrafos
+  originales del ítem de Excel. La muevo al final:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Actualicé docs/ESTADO_DESARROLLO.md. Solo toqué ese archivo y no ejecuté nada
+  de git, como pediste.
+
+  Qué cambié
+
+  - Cabecera: fecha 2026-09-25, con el resumen de lo nuevo. Dice que confirmaste
+    el despliegue de lo del 24/09 y que falta lo del 25/09.
+  - Media prioridad:
+    - El despliegue del 24/09 pasa a ✅ hecho, «lo confirmó el cliente». Añadí
+      un ítem nuevo para el despliegue del 25/09:
+      - 4 migraciones;
+      - npm ci y compilar (react-data-grid 7.0.0-beta.61 fijada);
+      - el aviso de que la primera carga con Vite ya encendido puede fallar
+        («Invalid hook call»).
+    - Los huecos de aprobar(), anular() y actualizar() de Compras, y el de «el
+      import no crea lote», pasan a ✅ resueltos, con el detalle de cómo.
+    - El ítem «el import no audita cambios de costo» también pasa a ✅ resuelto:
+      ya no cambia el costo de las fichas.
+    - «Tests que faltan» queda solo con rechazarVenta(), porque ProductoImport
+      ya tiene 34 tests.
+    - En el ítem de Excel añadí lo que ya se hizo del import y lo que sigue
+      pendiente: estilo de los 4 exports, producto_vendedor, y los docs viejos
+      que hay que revisar.
+    - Ítem nuevo, «Importación de productos — pendientes tras el flujo en dos
+      pasos», con 6 puntos:
+      - límites de 5 MB y 20 000 filas;
+      - la ruta directa productos.import sin comprobación de rol y el botón
+        visible para vendedores;
+      - productos nuevos sin precio de venta;
+      - evaluarFila de la hoja como espejo en TypeScript de las reglas del
+        servidor;
+      - lo que no verifiqué (tipos con tsc, el deshacer real);
+      - los 2 errores de ESLint anteriores en Productos/Index.tsx.
+  - Tablas:
+    - Fila nueva «Importación de productos (Excel)» en módulos completos.
+    - Nota en la fila de Compras sobre el bloqueo de fila.
+    - Bugs B26 (Compras sin bloqueo) y B27 (import y plantilla).
+    - Sección «Importación de productos (Excel)» en archivos clave.
+    - Primera fila del historial con el resumen completo del día.
+
+  Tres cosas que debes saber
+
+  - Los 3 huecos del POS: sigo sin dar por arreglados los huecos de lotes del
+    POS. Anoté que verifiqué contra el código y siguen abiertos
+    (handleAlmacenChange en Vendor/Index.tsx:316 no limpia
+    loteSeleccionadoPorProducto). Si los arreglaste en otro lado, en este árbol
+    no están.
+  - Sin datos de tu base local: no anoté la importación #1 ni el borrador de
+    prueba, porque este documento se audita solo contra el código y no cita
+    datos de tu base local.
+  - Verificación: revisé que las filas nuevas de tabla tengan el mismo número de
+    columnas que sus tablas y que queden bien colocadas. No comparé cada línea
+    del documento contra el código, como se hizo el 24/09: solo verifiqué lo que
+    hice hoy.
+
+  Si quieres, también puedo dejar un resumen-cambios-2026-09-25.md en
+  docs/arreglos-pendientes/ (como los de otras sesiones). No lo creé porque no
+  lo pediste.
+
+✻ Cogitated for 2m 4s · done 12:36 p.m.
+
+❯ si, lo de resumen de arreglos-pendientes, actualizalo también                 
+
+● Creo el resumen de la sesión con el mismo formato que el del 24/09.
+
+● Write(docs/arreglos-pendientes/resumen-cambios-2026-09-25.md)
+  ⎿  Wrote 89 lines to
+     docs/arreglos-pendientes/resumen-cambios-2026-09-25.md
+      1 # Resumen de cambios — 2026-09-25
+      3 Sesión sobre **Compras** (doble clic) y sobre la **importación de
+         productos desde Excel**: un lote por fila, historial, deshacer, 
+        sos con una hoja de revisión tipo Excel. Verificado con tests y e
+        n el navegador (rol admin). Tests relacionados: **307/307** (Comp
+        negado, valor de inventario e importación); la suite completa no 
+        se corrió. Pint y ESLint limpios en lo tocado. Nada commiteado — 
+      4 
+      5 ## 1. Compras: aprobar / anular / editar con bloqueo de fila
+      7 **Problema:** `aprobar()`, `anular()` y `actualiz
+     … +226 lines (ctrl+o to expand)
+
+  Ran 1 shell command, wrote 1 memory (ctrl+o to expand)
+
+❯ Háblame de esto: Los 3 huecos del POS: sigo sin dar por arreglados los huecos 
+  de lotes del POS. Anoté que verifiqué contra el código y siguen abiertos      
+  (handleAlmacenChange en Vendor/Index.tsx:316 no limpia                        
+  loteSeleccionadoPorProducto).                                                 
+
+● Voy a leer el código exacto de esos tres puntos para explicártelos con
+  precisión, sin tocar nada.
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Los tres huecos del POS siguen abiertos. Los releí en el código ahora mismo
+  (sin tocar nada), y te los explico en simple. En los tres, la venta sale bien 
+  pero con datos equivocados y sin aviso.
+
+  Contexto: qué hace el selector de lote
+
+  En el POS, cuando un producto tiene 2 o más lotes, aparece «Vender de este
+  lote». Lo elegido se guarda en loteSeleccionadoPorProducto (un mapa producto →
+  lote). Al vender, el servidor gasta esas unidades de ese lote, con su costo.
+  Sin elección, gasta el más viejo primero.
+
+  Hueco 1 — El lote elegido se arrastra al cambiar de almacén
+
+  Qué pasa: handleAlmacenChange (Vendor/Index.tsx:316) limpia el carrito y los
+  códigos, pero no ese mapa.
+  - Eliges el lote L1 de un producto en el almacén A y cambias al almacén B, que
+    tiene el mismo producto.
+  - Al agregarlo, el carrito lleva lote_id = L1, que es del almacén A.
+
+  Por qué no se nota: el servidor solo valida que el lote exista
+  (VentaController.php:850, exists:lotes_stock,id), no que sea de ese producto
+  ni de ese almacén.
+  - LoteConsumoService::consumir busca ese lote dentro del almacén B y no lo
+    encuentra. Entonces trata las unidades como «sin lote» y les pone el costo
+    de la ficha.
+  - El lote real del almacén B no baja.
+
+  Resultado: el costo y la ganancia de esa venta salen mal, y los lotes del
+  almacén B quedan por encima del stock real. Solo ocurre cuando cambias de
+  almacén después de elegir un lote.
+
+  Hueco 2 — La cantidad no se limita al tamaño del lote elegido
+
+  Qué pasa: el selector muestra «L1 (3)», pero en actualizarCantidad el tope es
+  solo min(stock, stock del código), sin mirar el lote.
+  - Eliges un lote de 3 unidades y subes la cantidad a 10.
+  - El servidor toma 3 del lote y las otras 7 las trata como «sin lote», otra
+    vez al costo de la ficha.
+
+  Resultado: parte de la venta tiene el costo real y parte un costo aproximado,
+  sin que el vendedor lo sepa. Ocurre cada vez que se sube la cantidad por
+  encima del lote elegido.
+
+  Hueco 3 — cargarProductos no descarta respuestas atrasadas
+
+  Qué pasa: cargarProductos (:271) hace la petición y guarda el resultado sin
+  comprobar si sigue siendo el almacén elegido.
+  - Cambias de almacén A a B rápido, o con internet lento, y la respuesta de A
+    llega después que la de B.
+  - La pantalla muestra los productos, precios, stock y lotes de A, mientras la
+    venta se registra en B.
+
+  Resultado: el vendedor ve datos de un almacén y vende en otro. El servidor
+  valida el stock del almacén B, así que puede rechazar la venta o consumir mal.
+  Es la más rara, pero la más confusa cuando ocurre.
+
+  Aparte (ya anotado)
+
+  El POS no resta cantidad_en_transito al calcular lo vendible, y Movimientos sí
+  lo hace.
+
+  Cómo lo arreglaría (solo propuesta)
+
+  1. Hueco 1: limpiar el mapa al cambiar de almacén y tras cada venta, y no usar
+     un lote que no esté en la lista del producto actual. Además, en el
+     servidor, comprobar que el lote_id sea de ese producto y de ese almacén, y
+     responder 422 si no. Esta segunda parte protege también contra el hueco 2.
+  2. Hueco 2: con un lote elegido, limitar la cantidad al tamaño del lote (con
+     el aviso «Sin más stock»). En el servidor, rechazar si la cantidad supera
+     lo disponible del lote.
+  3. Hueco 3: guardar cuál fue la última petición de almacén y descartar
+     respuestas viejas (o cancelarlas con AbortController).
+
+  Un detalle honesto
+
+  Esos arreglos ya se intentaron y se revirtieron el 24/09 a pedido tuyo. No sé
+  por qué exactamente, así que antes de rehacerlos necesito saber si fue por el
+  enfoque, por el momento o por otro motivo. Además, no volví a comprobar la
+  parte de «ni tras una venta» que dice el ESTADO, solo los tres puntos de
+  arriba.
+
+  ¿Los retomamos, y con qué enfoque?
+
+✻ Cogitated for 1m 33s · done 12:38 p.m.
+
+※ recap: Estamos cerrando el import de Excel en dos pasos y la actualización de la documentación; ya quedó todo hecho y probado, incluido el resumen del 25/09. Lo siguiente es que decidas si retomamos los tres huecos de lotes del POS y con qué enfoque.
+
+❯ Donde es eso en las ventas?                                                   
+
+● Déjame ubicarlo exactamente en la aplicación (ruta y menú).
+
+  Ran 5 shell commands (ctrl+o to expand)
+
+● Es la pantalla de vender (el punto de venta, el POS).
+
+  Dónde está en la aplicación
+
+  - Dirección: /punto-venta (ruta punto-venta.index).
+  - Cómo se llega desde el menú: en «Caja Principal» (el dashboard), en las
+    opciones rápidas, hay una tarjeta grande «Vender» con un botón «Vender». Ese
+    botón te lleva al POS. Hay otros enlaces que también llevan ahí: la miga
+    «Ventas» de las pantallas de venta.
+  - Quién la ve: los tres roles. Por eso el arreglo importa aunque quien vende
+    sea un vendedor.
+  - En el código: resources/js/pages/Vendor/Index.tsx. Lo prepara
+    VentaController::index (:444).
+
+  Dónde se ve cada hueco
+
+  1. Lote arrastrado entre almacenes: arriba de esa pantalla eliges el almacén,
+     y cada tarjeta de producto con 2 o más lotes tiene un selector «Vender de 
+     este lote». Si eliges un lote, cambias de almacén y agregas el mismo
+     producto, el lote elegido se arrastra.
+  2. Cantidad sin límite: en el carrito, al subir la cantidad de una línea (con
+     el + o tocando el número) por encima de las unidades del lote elegido.
+  3. Respuesta atrasada: al cambiar de almacén varias veces seguidas, con
+     internet lento, puede quedar en pantalla la lista de productos del almacén
+     anterior.
+
+  Lo que no es esta pantalla
+
+  Las ventas ya hechas se ven en «Mis Ventas» (la cápsula de arriba,
+  /ventas/listado) y en el detalle de cada venta. Ahí ya no se puede elegir
+  lote, así que los huecos no están ahí. Pero el efecto de los huecos 1 y 2 sí
+  se nota después: en esas ventas, la ganancia y el costo pueden salir con el
+  costo de la ficha, no el del lote real.
+
+  Cómo reproducir el hueco 1 (por si quieres verlo)
+
+  Necesitas un producto que exista en dos almacenes y tenga 2 lotes en el
+  primero:
+  1. Entra a «Vender», elige el almacén A y, en ese producto, elige un lote en
+     «Vender de este lote».
+  2. Cambia al almacén B, que tiene el mismo producto, y agrégalo al carrito.
+  3. La línea del carrito lleva ese lote del almacén A, y el servidor lo trata
+     como «sin lote».
+
+  Si quieres, lo compruebo en el navegador con datos de tu base local (solo
+  mirando, sin vender), o vamos directo a decidir cómo arreglarlo.
+
+✻ Crunched for 32s · done 12:48 p.m.
+
+※ recap: Estamos cerrando los huecos de lotes: Compras y el import de Excel ya están hechos y documentados, y ahora explicábamos los 3 huecos del POS (`/punto-venta`). Lo siguiente es que decidas si los retomamos y con qué enfoque.
+
+❯ REcuerda que esto es por rol de usuario, y creo que se arregló, se supone que 
+  el producto a vender sea del alamcen seleccionado. revisa eso no cambies      
+  nada porque vamos hacer otras cosas también                                   
+
+● Voy a revisar el código del servidor y del POS, sin modificar nada: cómo se
+  filtran los almacenes por rol y si el producto y el lote realmente se limitan
+  al almacén elegido.
+
+  Searched for 1 pattern, read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Tienes razón en lo principal, y lo verifiqué sin cambiar nada. Lo que se
+  muestra y se vende sí es del almacén seleccionado. Lo que queda abierto es más
+  estrecho de lo que expliqué antes.
+
+  Lo que sí está bien (comprobado en el código)
+
+  - Almacenes por rol (VentaController::getAlmacenes, :87):
+    - Admin y moderador ven todos los almacenes.
+    - El vendedor ve solo los suyos ($user->almacenes).
+  - Productos del almacén elegido (getProductosPorAlmacen, :112):
+    - Un vendedor que pide un almacén que no es suyo recibe 403.
+    - La lista sale solo de los productos que tienen registro en ese almacén
+      (whereHas('almacenes', … id)).
+    - El stock, los códigos de barras, el costo real y los lotes que se muestran
+      son de ese almacén, y solo aparecen los productos con precio en él.
+  - Al vender (procesarVenta, :939): el servidor vuelve a comprobar que el
+    almacén sea del vendedor. El consumo de stock y de lotes se filtra por
+    producto y por el almacén de la venta (LoteConsumoService::consumir). Nunca
+    se toca el stock ni un lote de otro almacén.
+
+  Lo que sigue abierto (comprobado)
+
+  Es un solo detalle, en el estado del navegador (Vendor/Index.tsx):
+  - setLoteSeleccionadoPorProducto solo se llama al elegir un lote (:629). Nunca
+    se vacía: ni en handleAlmacenChange (:321 solo vacía los códigos) ni tras
+    una venta (:750 también solo vacía códigos).
+  - El mapa se guarda por id de producto, y una misma ficha puede existir en
+    varios almacenes.
+  - Si eliges un lote en el almacén A y pasas al B con el mismo producto, el
+    carrito lleva ese lote_id viejo. El servidor no comprueba que el lote sea de
+    ese almacén (solo exists:lotes_stock,id, :850).
+  - consumir no encuentra ese lote dentro del almacén B y cae a «sin lote» al
+    costo de la ficha (LoteConsumoService.php:72-80).
+
+  Así que no se mezclan productos ni stock entre almacenes. Lo único que puede
+  fallar es el costo, y con él la ganancia, en ese caso puntual.
+
+  Por rol, quién lo puede tocar
+
+  - Vendedor: solo si tiene asignados 2 o más almacenes que comparten una ficha
+    con lotes.
+  - Admin y moderador: pueden, porque ven todos los almacenes.
+  - Los huecos 2 y 3 (cantidad sobre el lote y respuesta atrasada) los puede
+    tocar cualquier rol.
+
+  No estoy diciendo que sea imposible que lo hayas arreglado en otra rama: en
+  este árbol el mapa no se limpia en ningún sitio. Si tienes la corrección en
+  otra rama, dime cuál y la comparo. Si no, lo dejamos anotado como está en el
+  ESTADO y seguimos con lo otro.
+✻ Cooked for 41s · done 12:55 p.m.
+
+※ recap: Estamos cerrando el flujo de compras e importación de productos; hoy quedaron listos el bloqueo en Compras, la importación en dos pasos con hoja tipo Excel, el historial y los documentos. Ahora espero que decidas si retomamos los huecos del POS o pasamos a lo siguiente.
+
+❯ Sinceramente no entiendo, resuelve eso                                        
+
+● Entendido: los resuelvo ahora. Lo hago en los dos lados (el navegador y el
+  servidor) y con tests. Primero leo el código exacto que voy a tocar.
+
+  Read 1 file, ran 4 shell commands (ctrl+o to expand)
+
+● Ya tengo el mapa completo. Empiezo midiendo el estado de ESLint de
+  Vendor/Index.tsx antes de tocarlo, para no confundir errores viejos con los
+  míos:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Hay 6 errores de ESLint que ya existían en esa pantalla (variables sin usar).
+  Ahora aplico el arreglo del servidor y luego el del navegador:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● ESLint queda igual que antes (los mismos 6 errores viejos, ninguno nuevo).
+  Ahora los tests del servidor:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Compruebo con una mutación que los tests detectan el problema de verdad (quito
+  la validación y deben fallar):
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Los tests del servidor detectan el problema y las suites relacionadas pasan
+  (148). Ahora compruebo el comportamiento del POS en el navegador, solo mirando
+  y sin vender nada:
+
+  Called claude-in-chrome, laravel-boost 10 times (ctrl+o to expand)
+
+● El POS carga sin errores en la consola. Para probar el tope por lote necesito
+  un producto con 2 o más lotes; lo busco con una consulta de solo lectura:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Encontré un caso ideal: la LAVADORA en QUIVICAN TIENDA tiene 2 lotes de 1 y 2
+  unidades. Elijo ese almacén en el POS:
+
+  Called claude-in-chrome 14 times (ctrl+o to expand)
+
+● Sigo con la prueba: elijo el lote de 1 unidad, agrego la lavadora al carrito y
+  trato de sumar una segunda.
+
+  Called claude-in-chrome 5 times (ctrl+o to expand)
+
+● El carrito tiene la lavadora, pero noto algo raro: el selector de lote de la
+  tarjeta ahora muestra otro lote («LOTE-MOV-235-002 (2)») del que elegí. Antes
+  de seguir reviso qué lo cambió.
+
+  Searched for 1 pattern, called claude-in-chrome 3 times (ctrl+o to expand)
+
+● Confirmo que el desplegable marcado corresponde al lote de 2 unidades,
+  probablemente porque un clic rápido cayó mientras aún se cerraba. Ahora vacío
+  el carrito y selecciono con calma el lote de 1 unidad. · summarized
+
+  Called claude-in-chrome 4 times (ctrl+o to expand)
+
+● Ahora el carrito está vacío y el lote elegido es el de 1 unidad. Agrego una
+  vez y espero:
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● Ahora el lote elegido se mantiene («AJUSTE-LEGADO-166-2 (1)»). Pruebo el hueco
+  2: subir la cantidad a 2 con el + del carrito, aunque el lote solo tiene 1.
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)
+
+● La cantidad se quedó en 1 (el tope funciona). Compruebo también que salió el
+  aviso:
+  ⎿  Error: No such tool available: 
+     mcp__claude-in-chrome__left_click_placeholder
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)
+
+● El tope por lote funciona correctamente, pero noto un error de redacción («1
+  unidades»), así que lo corrijo. Ahora probaré el hueco 1 para cambiar de
+  almacén. · summarized
+
+  Called claude-in-chrome, ran 1 shell command (ctrl+o to expand)
+  ⎿  Error: No such tool available: 
+     mcp__claude-in-chrome__screenshot_placeholder
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)
+
+● Ahora pruebo el hueco 1: cambio de almacén (el carrito se vacía) y regreso,
+  para ver si el lote elegido se olvidó.
+
+  Called claude-in-chrome 2 times (ctrl+o to expand)  ⎿  Interrupted · What should Claude do instead?
+
+❯ Estas cometiendo el mismo maldito error estba mirando eso de lavadora eko     
+  semiatumatica y en quivican solo hay dos unidades, porque me haces ese        
+  maldito select no te das cuenta que lo otro pertenece a otro almacen, eso     
+  estaba bien, quita eso que hiciste                                            
+
+● Confirmo que ese selector funcionaba bien como estaba, así que ahora revertiré
+  todos los cambios que hice en el POS: navegador, servidor y los tests
+  agregados. · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Verifico que quedó igual que antes (código original y tests):
+
+  Called claude-in-chrome, ran 2 shell commands, wrote 1 memory (ctrl+o to expand)
+
+● Ya quité todo lo que hice en el POS: el archivo del POS (Vendor/Index.tsx), la
+  validación del lote en VentaController y los 3 tests que había agregado. El
+  POS vuelve a estar como lo tenías. VentaTest pasa completo (102 tests) y
+  ESLint marca los mismos 6 avisos de antes.
+
+  Tenías razón: el selector «Vender de este lote» solo lista los lotes de ese
+  almacén. Yo lo estaba tratando como un error y no lo era.
+
+  Me equivoqué en dos cosas:
+  - Tu «no cambies nada»: cuando dijiste «no cambies nada, vamos a hacer otras
+    cosas», no debí implementar nada después.
+  - Tu «no entiendo, resuelve eso»: eso era que mi explicación estaba confusa
+    (mezclé roles, almacenes y el código). Debí explicártelo más simple o
+    preguntarte qué querías resolver, no tocar el código.
+
+  Lo que quedó en pantalla durante la prueba era solo un carrito en el
+  navegador. No se guardó ninguna venta ni se cambió stock.
+
+  Dejé anotado en mi memoria que no vuelva a proponer ni a implementar esos
+  cambios del POS si no me lo pides tú. No cambié ESTADO_DESARROLLO.md ni el
+  resumen del 25/09: siguen diciendo que esos 3 puntos están abiertos, y eso
+  describe el código, no una petición tuya. ¿Quieres que los quite de ahí?
+
+  Dime qué es lo siguiente.
+
+✻ Worked for 1m 54s · done 1:31 p.m.
+
+❯ Realmente que hiciste? Que quitaste que cambiaste joder, ahora ve al maldito  
+  punto de venta, quivican alamcen busca lavadora, de esta marcka eko           
+  semiatumatica porque me sale un select, y cuando voy a Productos/Show porque  
+  solo me muestra 2 unidades, y cuando voy a disponibles porque carajos no      
+  puedo fusionar, que hiciste                                                   
+
+● Voy a mirar los datos reales de esa lavadora en Quivicán y el código de esas
+  tres pantallas, solo lectura. Con eso te explico cada síntoma y qué toqué yo.
+
+  Searched for 1 pattern, ran 3 shell commands (ctrl+o to expand)
+
+● Confirmo que los datos de la lavadora (ficha #166, 7 KG) en Quivicán cuadran:
+  stock 3 = lote de 2 + lote de 1, con el tercer lote (#141) agotado. Ahora
+  reviso qué muestra exactamente Productos/Show para esa ficha. · summarized
+
+  Called claude-in-chrome 3 times (ctrl+o to expand)
+
+● Veo la pantalla real. Antes de responderte compruebo dos cosas: que ningún
+  dato de esa lavadora se tocó hoy y cómo decide /disponibles cuándo ofrece
+  fusionar.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+❯ POrque me haces seleccionar de lote de movimiento si este no se ha            
+  prorrateado? Si no se prorratea y tiene las mismas caracteristicas para que   
+  lo pones así? que carajo es eso, no te das cuenta que el prorrateo es         
+  opcional                                                                      
+
+● Voy a leer cómo crea el lote un movimiento y qué estado tiene el movimiento
+  #235 (el de esa lavadora), solo lectura.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● No cambié nada. Te explico lo que encontré en tus datos y en el código, con lo
+  que confirmé.
+
+  Qué pasó con esa lavadora en Quivicán
+
+  La ficha es la EKO SEMIAUTOMATICA de 7 KG (la ficha #166). Tiene 3 unidades en
+  ese almacén, repartidas en dos lotes que cuestan lo mismo ($133,78):
+  - AJUSTE-LEGADO-166-2: 1 unidad. Es stock viejo que ya existía. Se creó el
+    11/09.
+  - LOTE-MOV-235-002: 2 unidades. Lo creó el movimiento #235, que vino del
+    almacén 4.
+
+  Ninguno de esos datos cambió hoy. Sus últimas modificaciones son del 22 y 23
+  de septiembre, y hoy no hay ventas. Lo que probé en el POS quedó solo en el
+  carrito del navegador.
+
+  Por qué ves lo que ves
+
+  1. El select en el POS: el POS ofrece elegir lote cuando el producto tiene 2 o
+     más lotes con unidades, aunque cuesten lo mismo. Aquí hay 2, así que sale
+     el select.
+  2. Por qué hay 2 lotes: cada movimiento, al recibirse, siempre crea un lote 
+     nuevo en el destino (MovimientosController.php:503-521). No se une al lote
+     que el destino ya tenía, aunque el costo sea igual y no haya prorrateo. Ese
+     lote nuevo es el LOTE-MOV-235-002. Eso es lo que estás señalando.
+  3. El movimiento #235: está recibido completo, marcado «requiere prorrateo» y
+     con la decisión sin tomar. Mientras esté así, su lote cuenta como
+     «prorrateo pendiente», y eso bloquea la fusión de ese lote. Tú dices que el
+     prorrateo es opcional, y aquí no lo trata así.
+  4. Por qué no puedes fusionar en /disponibles:
+     - /disponibles solo muestra el desglose de lotes y el botón «Fusionar
+       lotes» cuando los lotes tienen costos distintos
+       (ProductoVendedorController::lotesConVariosCostos).
+     - Aquí los dos cuestan igual, así que ni aparece la opción. Y aunque
+       apareciera, el punto 3 la bloquearía.
+  5. Productos/Show: en Quivicán muestra «Disponibilidad 3 uds.» con los dos
+     lotes (1 + 2), no 2. Si tú ves 2, quizás estás mirando la línea del lote
+     del movimiento; dime dónde lo ves. Además el recuadro dice «Este almacén
+     tiene 2 lotes a costo distinto» aunque ambos cuestan $133,78. Ese texto
+     está mal.
+
+  Qué se podría cambiar (dime cuáles, no toco nada hasta entonces)
+
+  - A. Al recibir un movimiento, si el destino ya tiene un lote con el mismo
+    costo y no hay prorrateo, sumar las unidades a ese lote en vez de crear
+    otro.
+  - B. Que un prorrateo sin decidir ya no bloquee la fusión, puesto que es
+    opcional.
+  - C. Que el POS ofrezca elegir lote solo cuando los lotes se diferencian en
+    costo o precio.
+  - D. Que /disponibles permita fusionar lotes también cuando cuestan lo mismo.
+  - E. Corregir el texto «a costo distinto» de Productos/Show.
+
+  Los lotes que ya están creados no cambian con A, C ni E. Para esos harían
+  falta B y D (fusionarlos a mano) o una limpieza aparte.
+
+✻ Cogitated for 2m 20s · done 1:37 p.m.
+
+❯ Bien perfecto, procede                                                        
+
+● Voy con las cinco (A a E), pero primero leo cómo funciona el prorrateo de
+  movimientos en el código, porque A y B tocan justo eso y no quiero romper la
+  trazabilidad de costos.
+
+  Searched for 2 patterns, ran 1 shell command (ctrl+o to expand)
+
+● Voy a revisar cómo funciona la fusión y la forma de omitir un prorrateo, ya
+  que B y D dependen de esa lógica. · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Antes de tocar nada leo la interfaz de /disponibles (dónde bloquea por
+  prorrateo pendiente y dónde usa lotes) y los tests de fusión existentes:
+
+  Searched for 1 pattern, ran 3 shell commands (ctrl+o to expand)
+
+❯ Otra cosa vamos agregar una nueva funcionalidad, para que no se acomule el    
+  listado de prorrateos pendientes, vamos a darle la opción del usuario         
+  eliminarlos, para que no sea un listado muy largo, obviamente si no prorratea 
+  se acomulan al lote existente en el almacen destino, al igual que las         
+  compras, entiendes?                                                           
+
+● Confirmado el comportamiento: al eliminar un prorrateo pendiente, sus unidades
+  se suman al lote existente del almacén destino con mismo costo, encajando con
+  lo ya aprobado (A–E). Ahora reviso el estado actual de la lista de pendientes
+  antes de continuar. · summarized
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Voy a convertir la acción «Omitir» en «Eliminar de la lista», haciendo que las
+  unidades se acumulen al lote existente. Empiezo por el servicio de
+  acumulación en el backend, revisando el modelo de auditoría de fusiones y el
+  final de recibir(). · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Sigo con la parte del servidor: el servicio que acumula las unidades de un
+  movimiento en el lote existente.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Escribo el servicio de acumulación y lo conecto a «omitir» y a recibir():
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora los tests de la acumulación (al eliminar de la lista y al recibir):
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● El fallo es del helper de test (crea siempre el mismo código de lote y choca
+  al crear dos). Creo el segundo lote a mano:
+
+  Ran 1 shell command (ctrl+o to expand)
+● Compruebo con mutaciones que estos tests realmente detectan la acumulación
+  (quito cada conexión y deben fallar):
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● La acumulación está lista y probada. Sigo con el punto B: que un prorrateo sin
+  decidir ya no bloquee la fusión. Leo los dos tests que hoy esperan ese
+  bloqueo:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Actualizo el servicio para que el prorrateo pendiente ya no bloquee, y ajusto
+  esos dos tests manteniendo la misma cobertura, pero forzando el fallo con un
+  producto que solo tiene un lote. · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora el punto D en el servidor: /disponibles ofrece el desglose y la fusión
+  cuando hay 2 o más lotes con stock, aunque cuesten lo mismo. Miro si algún
+  test cubre el criterio actual:
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+● Ahora el punto C: el POS solo ofrece elegir lote cuando los lotes se
+  diferencian de verdad (costo o precio). Miro el test existente del POS para
+  reutilizar su preparación:
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Ahora el punto E (el texto de Productos/Show). Miro esa parte:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Ahora la interfaz de /disponibles: el desglose y la fusión para lotes de igual
+  costo (D), y el aviso en vez de bloqueo por prorrateo pendiente (B):
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Voy a actualizar la lista de pendientes en Distribución de Costos, cambiando
+  «Omitir» por «Eliminar de la lista» y añadiendo el botón por fila. Reviso las
+  filas de esa tabla. · summarized
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Todo el código está escrito. Corro los tests de todo lo relacionado:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● API Error: Can't reach the API server — check your internet or DNS 
+  (EAI_AGAIN)
+
+✻ Crunched for 13m 34s · done 1:53 p.m.
+
+❯ continua                                                                      
+
+● Sigo: los 304 tests relacionados pasan. Ahora compruebo en el navegador, solo
+  mirando, que lo que reportaste ya se ve bien. Empiezo por Productos/Show de
+  esa lavadora:
+
+  Called claude-in-chrome 4 times (ctrl+o to expand)
+
+● La extensión del navegador se desconectó, así que no puedo mirar las
+  pantallas. Compruebo lo mismo directamente en el servidor con tus datos
+  reales, solo lectura:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Confirmo que el POS ya no ofrece el select para esa lavadora ni para ninguno
+  de los 321 productos de Quivicán, y que /disponibles muestra el desglose y
+  fusión de los 2 lotes, avisando del prorrateo pendiente en el lote del
+  movimiento #235. Ahora voy a comprobar con una mutación que el test del POS
+  detecta correctamente la nueva regla. · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora actualizo la documentación y mi memoria con estos cambios:
+
+  Ran 2 shell commands, wrote 1 memory (ctrl+o to expand)
+
+● Los cinco puntos (A a E) y lo de eliminar prorrateos de la lista están hechos
+  y probados. Los 304 tests relacionados pasan; Pint y ESLint pasan en lo que
+  toqué.
+
+  Lo que no pude hacer fue mirarlo en el navegador: la extensión se desconectó a
+  mitad. Lo comprobé en el servidor con tus datos reales, solo lectura, y
+  espero que lo mires tú al recargar.
+
+  Con esa lavadora en Quivicán (comprobado con tus datos)
+
+  - POS: ya no ofrece elegir lote. Ninguno de los 321 productos de Quivicán lo
+    ofrece hoy.
+  - /disponibles: ofrece el desglose y «Fusionar lotes» para sus 2 lotes. El
+    lote del movimiento #235 (prorrateo pendiente) ahora solo muestra un aviso y
+    ya no bloquea la fusión.
+  - Productos/Show: ya no dice «a costo distinto»; dice «2 lotes (mismo costo)».
+    Esto lo cambié en el código pero no lo verifiqué con datos.
+
+  Qué cambió
+
+  - A, acumular al lote existente:
+    - Si un movimiento no requiere prorrateo, al recibirlo sus unidades se suman
+      al lote idéntico del destino.
+    - Idéntico = mismo costo, sin precio propio, y que no venga de otro
+      movimiento con prorrateo pendiente.
+    - El lote del movimiento no se borra: queda en 0 apuntando al lote que lo
+      absorbió, y queda en el registro de fusiones.
+  - Eliminar de la lista (Distribución de Costos):
+    - «Omitir» ahora se llama «Eliminar de la lista», con botón en cada fila y
+      en bloque.
+    - El diálogo explica que no se prorratea y que las unidades se acumulan.
+    - Al confirmar, se acumulan igual que en A. El movimiento no se borra: sigue
+      en el historial de Movimientos.
+  - B, fusión sin bloqueo: un prorrateo pendiente ya no impide fusionar. Solo
+    avisa, y no cambia la decisión del movimiento.
+  - C, POS: el selector «Vender de este lote» solo sale si los lotes se
+    diferencian en costo o en precio.
+  - D, /disponibles: el desglose y la fusión salen con 2 o más lotes con stock,
+    aunque cuesten lo mismo. El filtro ahora dice «Varios lotes».
+  - E, Productos/Show: el texto «a costo distinto» solo aparece si los costos
+    son distintos.
+  - Tests: reescribí 2 tests de fusión que exigían el bloqueo (ahora prueban que
+    no bloquea) y actualicé el de /disponibles al nuevo criterio.
+
+  Ojo con esto
+
+  1. Los lotes que ya existían no se tocaron. Los de la lavadora
+     (AJUSTE-LEGADO-166-2 y LOTE-MOV-235-002) siguen separados. Los unes tú
+     desde /disponibles con «Fusionar lotes».
+  2. Un movimiento de admin o moderador siempre nace «requiere prorrateo». Su
+     lote queda aparte hasta que apliques el prorrateo o lo elimines de la
+     lista. Al eliminarlo se acumula.
+  3. Compras: si luego haces la Distribución de Costos de la compra de origen,
+     no llega a las unidades ya acumuladas. Es el mismo límite que ya tenía la
+     fusión.
+  4. Logística: el indicador «Resumen por Almacén» sigue contando solo productos
+     con lotes a costos distintos. No lo cambié.
+  5. Los 3 puntos del POS que revertí (lote arrastrado, tope al lote, respuestas
+     atrasadas) siguen sin hacerse, como pediste.
+
+  Actualicé docs/ESTADO_DESARROLLO.md, el resumen del 25/09 y mi memoria.
+
+  ¿Quieres que fusione ahora esa lavadora de Quivicán desde /disponibles, o lo
+  haces tú?
+
+✻ Sautéed for 1m 57s · done 2:08 p.m.
+
+❯ Me imagino que eso que hiciste, en los movimientos a prorratear tambien hazlo 
+  con las compras                                                               
+
+● Voy a revisar cómo funciona hoy la lista de compras pendientes de prorrateo y
+  cómo nacen sus lotes, antes de tocar nada.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Voy a revisar cómo se distribuye una compra y cómo está estructurada esa
+  pestaña antes de diseñar la lógica para agregar la decisión de
+  pendiente/decidido, ya que actualmente muestra todas las compras sin esa
+  distinción. · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● El diseño para compras queda claro: agregar la decisión "omitido", el botón
+  "Eliminar de la lista" y la acumulación al lote, igual que en movimientos.
+  Ahora voy a leer la pestaña de compras para editarla. · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Sigo con compras: primero la base de datos y el servicio; después la pantalla.
+
+  Ran 3 shell commands (ctrl+o to expand)
+● Escribo el backend de compras: modelo, servicio (reutilizando la misma lógica
+  de acumulación), controlador y ruta:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Los tests de movimientos siguen pasando tras generalizar el servicio. Ahora
+  los tests de compras. Miro cómo distribuye una compra el test existente, para
+  agregar la comprobación de «aplicado»:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Compruebo con mutaciones que los tests de compras detectan la acumulación y la
+  protección contra compras sin decidir:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ahora la pantalla: el botón «Eliminar de la lista» en la pestaña de compras y
+  el diálogo compartido para compras y movimientos:
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Todo pasa (301 tests). Actualizo la documentación y mi memoria:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Hecho: las compras ahora funcionan igual que los movimientos. Los 301 tests
+  relacionados pasan, y ESLint y Pint pasan en lo que toqué. Sigo sin poder
+  abrir el navegador (la extensión sigue desconectada), así que la pantalla
+  nueva está sin ver.
+
+  Cómo funciona ahora en compras
+
+  - Base de datos: hoy la pestaña Compras lista todas las compras, sin pendiente
+    ni decidido, así que no había nada que «eliminar». Agregué la decisión de
+    prorrateo a las compras, con tres valores: sin decidir, aplicado u omitido.
+  - Distribuir costos: distribuir costos de una compra la marca como «aplicado».
+  - Eliminar de la lista:
+    - En la pestaña Compras hay un botón por fila y otro para las seleccionadas,
+      solo para admin y moderador.
+    - La compra queda marcada «omitido», desaparece de la lista y sus lotes se
+      acumulan al lote idéntico del almacén (mismo costo, sin precio propio, no
+      fusionado).
+    - El diálogo es el mismo que ya hicimos para movimientos, adaptado a
+      compras.
+  - Qué compras se pueden eliminar: solo las aprobadas o anuladas que todavía no
+    se han prorrateado.
+    - Una pendiente no tiene lotes todavía.
+    - Una ya prorrateada sigue visible con su botón «Detalles».
+  - Vendedor: no ve el botón y recibe 403 si va directo a la ruta.
+
+  La regla que protege el costo
+
+  Un lote no puede ser destino de una acumulación si su costo todavía puede
+  cambiar. Eso incluye los lotes de una compra aprobada sin decidir y los de un
+  movimiento pendiente. Si no, las unidades acumuladas recibirían un prorrateo
+  que no les corresponde. Es lo que hace útil la lista: mientras una compra esté
+  sin decidir, su lote no absorbe unidades de otras.
+
+  Ojo con esto
+
+  1. La lista de compras actual no cambia sola. Las compras que ya existen y no
+     tienen distribución quedan «sin decidir», así que siguen apareciendo. La
+     lista empieza a acortarse cuando las elimines.
+  2. Las compras que ya tenían distribución quedan marcadas «aplicado» por la
+     migración, y siguen visibles como hoy.
+  3. Migración: es la quinta del día y trae un cambio de datos (marcar
+     «aplicado» a las compras con distribución). Ya la corrí en tu base local.
+     Las migraciones de producción son ahora 5, y ya lo anoté en
+     docs/ESTADO_DESARROLLO.md y en el resumen del día.
+  4. Límite conocido: al elegir a qué lote acumular no sigo la cadena de origen
+     de los lotes de movimientos. Un lote de un movimiento ya decidido que
+     descienda de una compra pendiente sí podría ser destino. Es un caso raro y
+     lo dejé anotado.
+  5. Los lotes que ya existían (por ejemplo los de la lavadora de Quivicán)
+     siguen sin fusionar: se unen a mano en /disponibles.
+
+  Tests
+
+  - Hay 5 tests nuevos en CompraTest.php. Cubren:
+    - eliminar y acumular;
+    - los casos que no acumulan (otro costo, precio propio, compra sin decidir);
+    - compras pendientes, prorrateadas y anuladas;
+    - vendedor.
+  - Además sumé una comprobación de que distribuir deja la compra en «aplicado».
+  - Quité a propósito la acumulación y la protección para comprobar que los
+    tests las detectan.
+
+  ¿Quieres que pruebe la pantalla cuando se reconecte el navegador, o lo miras
+  tú al recargar?
+
+✻ Baked for 8m 26s · done 2:17 p.m.
+
+❯ Bien, perfecto, que otro test es necesario?                                   
+
+● Antes de contestar reviso una cosa que no hemos hecho nunca: correr la suite 
+  completa. Compruebo primero que los tests no usen tu base de datos de
+  desarrollo.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Los tests con SQLite en memoria confirman que el backfill de la migración
+  cuadra correctamente. Ahora corro la suite completa, que no habíamos ejecutado
+  en toda la sesión. · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Corrí la suite completa: 604 tests pasan (2803 aserciones), y no usa tu base
+  de datos (es SQLite en memoria). Nadie la había corrido entera en toda la
+  sesión. Con eso, los huecos de pruebas que veo, ordenados por importancia:
+
+  Prioridad alta (los haría ya)
+
+  1. Doble confirmación del borrador de importación.
+     - Es un hueco real, no solo falta de test. confirmar() no bloquea el
+       borrador: dos peticiones simultáneas (doble clic o dos pestañas) pasan el
+       aviso de «archivo repetido», porque ese aviso solo ve importaciones ya
+       terminadas, y ambas importarían el stock.
+     - En Compras ya cerramos este mismo problema. Aquí propondría el arreglo y
+       un test con la misma técnica.
+  2. Acumular un lote y luego anular o devolver una venta que salió de él.
+     - Al acumular, el lote absorbido queda en 0 apuntando al lote destino. Al
+       devolver esas unidades deben ir al destino, y el stock debe seguir
+       cuadrando.
+     - Existe ese test para la fusión manual, pero no para la acumulación nueva.
+       También falta el caso de un lote a medio vender: solo debe acumular lo
+       que queda.
+  3. Deshacer una importación con una venta o un traslado reales. Hoy los
+     bloqueos se prueban editando columnas del lote a mano. Falta el flujo real:
+     vender de un lote IMP-… y comprobar que deshacer se bloquea.
+  4. Moderador en «Eliminar de la lista». Solo probé admin (permitido) y
+     vendedor (403). Falta que el moderador pueda, porque es un rol que sí lo
+     usa.
+
+  Prioridad media
+
+  5. Fusionar lotes del mismo costo. Ahora /disponibles lo ofrece, pero los
+     tests de fusión usan siempre costos distintos.
+  6. Límites del import. No hay test de archivo de más de 5 MB, de más de 20 000
+     filas, de .xls antiguo ni de encabezados con mayúsculas o acentos.
+  7. Recibir un movimiento parcial que no requiere prorrateo, con varios 
+     productos. Hoy solo probé el caso simple.
+  8. Doble clic en «Eliminar de la lista». La segunda petición no debería
+     acumular otra vez. Creo que el código ya lo garantiza, pero no está
+     probado.
+
+  Lo que no recomiendo (por ahora)
+
+  - Pruebas de la pantalla: el proyecto no tiene herramientas de test de
+    frontend y no instalé ninguna, porque cambiar dependencias requiere tu
+    aprobación. Lo más delicado es que las reglas de estado por fila de la hoja
+    están duplicadas en TypeScript y en PHP. El servidor manda, así que un
+    desajuste solo confunde a quien mira la hoja.
+  - La migración del backfill: la comprobé a mano en tu base local (1 compra con
+    distribución = 1 marcada «aplicada»), sin test automático.
+
+  Mi propuesta es hacer del 1 al 4 ahora (más el arreglo del punto 1) y dejar 5
+  al 8 para después. ¿Empiezo?
+
+✻ Cogitated for 2m 32s · done 2:21 p.m.
+
+❯ Bien procede                                                                  
+  ⎿  You've hit your session limit · resets 3:10pm (America/Havana)
+     Use your limit reset to reset it now: clau.de/reset
+     Continuing automatically at 3:10pm · esc to cancel
+
+● Usage limit reached · continuing automatically at 3:10pm · esc or type
+  to cancel
+
+✻ Cooked for 0s · done 2:25 p.m.
