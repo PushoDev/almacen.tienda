@@ -1,1 +1,0 @@
-import{j as r}from"./app-Ys7yqtSF.js";import{c as s}from"./utils-CDN07tui.js";function p({estado:t,className:a,...o}){return r.jsx("div",{"data-estado":t,className:s("spotlight-card",a),...o})}export{p as S};
