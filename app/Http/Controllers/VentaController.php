@@ -178,16 +178,38 @@ class VentaController extends Controller
                     // se elige ninguno). 'precio_venta' es el efectivo de ESE lote ("Opción A"):
                     // hereda el precio general del almacén salvo que tenga override propio — el
                     // frontend lo usa para autocompletar el precio al elegir un lote puntual.
-                    'lotes' => $producto->lotesActivosEnAlmacen($id)->map(fn ($lote) => [
-                        'id' => $lote->id,
-                        'codigo' => $lote->codigo,
-                        'cantidad' => $lote->cantidad_disponible,
-                        'precio_venta' => $producto->precioVentaEfectivo($lote),
-                    ])->values(),
+                    'lotes' => $this->lotesParaElegirEnPos($producto, (int) $id),
                 ];
             });
 
         return response()->json($productos->filter(fn ($p) => $p['tiene_precio'])->values());
+    }
+
+    /**
+     * Lotes que el POS ofrece elegir para un producto en el almacén. Solo se ofrecen cuando de verdad
+     * se diferencian (otro costo u otro precio de venta efectivo): con lotes idénticos elegir no
+     * cambia nada, así que se vende del más viejo sin preguntar (LoteConsumoService, FIFO). Antes el
+     * selector salía siempre que había 2+ lotes, aunque fueran iguales.
+     *
+     * @return array<int, array{id: int, codigo: string, cantidad: int, precio_venta: float|null}>
+     */
+    private function lotesParaElegirEnPos(Producto $producto, int $almacenId): array
+    {
+        $lotes = $producto->lotesActivosEnAlmacen($almacenId);
+
+        $seDiferencian = $lotes->map(fn ($lote) => round((float) $lote->precio_costo, 2))->unique()->count() > 1
+            || $lotes->map(fn ($lote) => $producto->precioVentaEfectivo($lote))->unique()->count() > 1;
+
+        if (! $seDiferencian) {
+            return [];
+        }
+
+        return $lotes->map(fn ($lote) => [
+            'id' => $lote->id,
+            'codigo' => $lote->codigo,
+            'cantidad' => $lote->cantidad_disponible,
+            'precio_venta' => $producto->precioVentaEfectivo($lote),
+        ])->values()->all();
     }
 
     /**

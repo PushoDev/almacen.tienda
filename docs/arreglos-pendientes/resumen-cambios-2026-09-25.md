@@ -75,9 +75,34 @@ Pedido del cliente: poder **revisar y editar el import antes de confirmar**, en 
 
 ## 9. Despliegue a producción
 
-1. `php artisan migrate` — **4 migraciones nuevas**: `create_importaciones_productos_table`, `create_importaciones_producto_filas_table`, `add_reversion_to_importaciones_productos_tables`, `create_importaciones_borradores_table` (solo tablas nuevas, sin backfill).
+1. `php artisan migrate` — **5 migraciones nuevas** (las 4 de importación más `add_prorrateo_decision_to_compras_table`, que incluye un backfill): `create_importaciones_productos_table`, `create_importaciones_producto_filas_table`, `add_reversion_to_importaciones_productos_tables`, `create_importaciones_borradores_table` (solo tablas nuevas, sin backfill).
 2. `npm ci` y compilar (cambió `package.json` y `package-lock.json`).
 3. Nada que correr para lotes: los `IMP-…` solo nacen de importaciones nuevas.
+
+## 10. Lotes de movimientos: acumular, eliminar pendientes, fusionar sin bloqueo
+
+Pedido del cliente tras revisar la LAVADORA EKO SEMIAUTOMATICA 7 KG en Quivicán: el POS mostraba un selector de lote, /disponibles no dejaba fusionar y Productos/Show hablaba de "lotes a costo distinto" con lotes de igual costo. Causa: cada movimiento **siempre** crea un lote nuevo en el destino (`MovimientosController::recibir`), aunque el costo sea igual y no haya prorrateo; el prorrateo pendiente bloqueaba la fusión; y /disponibles solo ofrecía fusionar con costos distintos.
+
+- **Acumular al lote existente** (`FusionLotesService::acumularMovimientoEnLoteExistente`): al recibir un movimiento que no requiere prorrateo, o al **eliminarlo de la lista de pendientes**, sus unidades se suman al lote idéntico del destino (mismo costo, sin precio propio, no fusionado, que no venga de otro movimiento con prorrateo pendiente). El lote del movimiento se conserva en 0 apuntando al que lo absorbió (`fusionado_en_lote_id`) y queda auditado en `lote_fusions`; dos partes del mismo movimiento con igual costo también se juntan.
+- **Eliminar de la lista de pendientes** (Distribución de Costos): la acción "Omitir" pasa a "Eliminar de la lista" (botón por fila y en bloque), con un diálogo que explica que no se prorratea y que las unidades se acumulan. Es la misma decisión `omitido` de siempre: el movimiento no se borra y sigue en el historial. Un movimiento de admin/moderador conserva su lote aparte mientras esté pendiente.
+- **Fusión sin bloqueo por prorrateo pendiente** (el prorrateo es opcional): se quitó el bloqueo de `FusionLotesService::validar()`; la interfaz avisa que un prorrateo posterior ya no llegará a las unidades fusionadas. La decisión del movimiento no se toca.
+- **/disponibles**: desglose por lote y "Fusionar lotes" para productos con 2+ lotes con stock aunque cuesten lo mismo (filtro "Varios lotes"; badge "N lotes" y "· costos distintos" solo si difieren).
+- **POS**: el selector "Vender de este lote" solo aparece si los lotes se diferencian en costo o en precio efectivo (`VentaController::lotesParaElegirEnPos`).
+- **Productos/Show**: "a costo distinto" solo cuando los costos difieren.
+- Tests: 9 nuevos o reescritos (movimientos, fusión, /disponibles, POS); 304 tests relacionados en verde. Se quitó cada regla a propósito para comprobar que los tests la detectan.
+- **Lo que NO se hizo:** los lotes ya existentes no se fusionaron (se unen a mano en /disponibles); el indicador de Logística (`ResumenAlmacenService`) sigue contando solo costos distintos.
+- **Se revirtió, por segunda vez y a pedido del cliente**, el intento de arreglar los 3 huecos de lotes del POS (lote arrastrado entre almacenes, tope de cantidad al lote, respuestas atrasadas). Siguen como estaban.
+
+## 11. Lo mismo para las compras
+
+Pedido del cliente: hacer con las compras lo mismo que con los movimientos a prorratear. Hasta ahora la pestaña Compras de Distribución de Costos listaba TODAS las compras (no había "pendiente/decidido").
+
+- Migración `add_prorrateo_decision_to_compras_table`: `prorrateo_decision` (null / `aplicado` / `omitido`), `prorrateo_decidido_por`, `prorrateo_decidido_en`; backfill `aplicado` para las compras que ya tienen una distribución. Distribuir costos de una compra la marca `aplicado`.
+- **"Eliminar de la lista"** en la pestaña Compras (botón por fila y en bloque; solo admin/moderador): marca `omitido`, la oculta de la lista y acumula sus lotes al lote idéntico del almacén (`FusionLotesService::acumularCompraEnLoteExistente`). Solo aprobadas o anuladas sin decisión; las ya prorrateadas siguen visibles con "Detalles". Un vendedor no ve el botón y recibe 403 en la ruta.
+- La lógica de acumulación se generalizó (`acumularEnLoteIdentico`, compartida con movimientos). Un lote no puede ser destino si su costo todavía puede cambiar: lotes de un movimiento pendiente o de una compra aprobada sin decidir.
+- Tests: 5 nuevos en `CompraTest.php` + 1 aserción; 301 tests relacionados en verde. Mutaciones comprobadas (sin la acumulación y sin la protección de compras sin decidir).
+- Despliegue: **1 migración más** (5 en total del día), con backfill de `aplicado`.
+- Límite: no se sigue la cadena `lote_origen_id` al elegir destino.
 
 ## Pendiente / sin decidir
 

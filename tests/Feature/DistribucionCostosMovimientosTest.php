@@ -307,6 +307,84 @@ test('admin omite el prorrateo de varios movimientos en lote: solo marca la deci
     $this->assertEquals(100.0, (float) $producto->fresh()->precio_compra_producto);
 });
 
+test('eliminar de la lista (omitir) acumula los lotes del movimiento al lote idéntico del almacén destino, sin borrar el lote del movimiento', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $existente = LoteStock::create(['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $loteDelMovimiento = crearLoteStockRecibido($movimiento, $producto, $destino, cantidad: 10);
+    $loteDelMovimiento->update(['precio_costo' => 100]);
+
+    $this->post(route('distribucion-costos.movimientos.omitir'), ['movimiento_ids' => [$movimiento->id]])
+        ->assertSessionHas('success', fn (string $mensaje) => str_contains($mensaje, '1 lote(s) se acumularon'));
+
+    $existente->refresh();
+    expect($existente->cantidad)->toBe(15);
+    expect($existente->cantidad_disponible)->toBe(15);
+    // El lote del movimiento se conserva (las ventas que salieron de él guardan su costo), en 0 y apuntando al que lo absorbió.
+    $loteDelMovimiento->refresh();
+    expect($loteDelMovimiento->cantidad_disponible)->toBe(0);
+    expect($loteDelMovimiento->fusionado_en_lote_id)->toBe($existente->id);
+    $this->assertDatabaseHas('lote_fusions', ['lote_resultante_id' => $existente->id, 'cantidad_total' => 15]);
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => 'omitido']);
+});
+
+test('eliminar de la lista NO acumula si el lote existente no es idéntico: otro costo, precio propio o de otro movimiento con prorrateo pendiente', function (string $caso) {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $loteDelMovimiento = crearLoteStockRecibido($movimiento, $producto, $destino, cantidad: 10);
+    $loteDelMovimiento->update(['precio_costo' => 100]);
+
+    $datos = ['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100];
+    if ($caso === 'otro costo') {
+        $datos['precio_costo'] = 90;
+    } elseif ($caso === 'precio propio') {
+        $datos['precio_venta'] = 200;
+    } else {
+        $otroMovimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 5); // sin decidir
+        $datos['movimiento_id'] = $otroMovimiento->id;
+    }
+    $existente = LoteStock::create($datos);
+
+    $this->post(route('distribucion-costos.movimientos.omitir'), ['movimiento_ids' => [$movimiento->id]])->assertSessionHasNoErrors();
+
+    expect($existente->fresh()->cantidad_disponible)->toBe(5);
+    expect($loteDelMovimiento->fresh()->cantidad_disponible)->toBe(10);
+    expect($loteDelMovimiento->fresh()->fusionado_en_lote_id)->toBeNull();
+    $this->assertDatabaseCount('lote_fusions', 0);
+})->with(['otro costo', 'precio propio', 'de otro movimiento pendiente']);
+
+test('eliminar de la lista acumula entre sí las partes del mismo movimiento que tienen el mismo costo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 7);
+    $primero = crearLoteStockRecibido($movimiento, $producto, $destino, cantidad: 4);
+    $segundo = LoteStock::create([
+        'codigo' => LoteStock::generarCodigoMovimiento($movimiento->id, 2), 'movimiento_id' => $movimiento->id,
+        'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 3, 'precio_costo' => 100,
+    ]);
+    $primero->update(['precio_costo' => 100]);
+
+    $this->post(route('distribucion-costos.movimientos.omitir'), ['movimiento_ids' => [$movimiento->id]])->assertSessionHasNoErrors();
+
+    expect($primero->fresh()->cantidad_disponible)->toBe(7);
+    expect($segundo->fresh()->cantidad_disponible)->toBe(0);
+    expect($segundo->fresh()->fusionado_en_lote_id)->toBe($primero->id);
+});
+
 test('un vendedor no puede omitir el prorrateo de un movimiento (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);

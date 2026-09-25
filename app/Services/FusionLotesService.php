@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Compra;
+use App\Models\CompraProducto;
 use App\Models\LoteFusion;
 use App\Models\LoteStock;
 use App\Models\Movimiento;
@@ -118,6 +120,141 @@ class FusionLotesService
     }
 
     /**
+     * Sin prorrateo, las unidades que llegaron por un movimiento no tienen por qué seguir en un lote
+     * aparte: se ACUMULAN al lote que el destino ya tenía del mismo producto cuando es idéntico —
+     * mismo costo, sin precio propio y sin un prorrateo pendiente que después le cambiaría el costo
+     * a las unidades ajenas. Si no hay un lote así, el lote del movimiento se queda como está.
+     *
+     * Se llama cuando el movimiento ya no tiene nada que prorratear: al recibirlo si nunca requirió
+     * prorrateo, o al eliminarlo de la lista de pendientes. El lote del movimiento NO se borra (las
+     * ventas que ya salieron de él conservan su costo): queda en 0 con `fusionado_en_lote_id`
+     * apuntando al lote que absorbió sus unidades, y la acumulación queda auditada en `lote_fusions`.
+     *
+     * @return int Cantidad de lotes del movimiento que se acumularon en otro
+     */
+    public function acumularMovimientoEnLoteExistente(Movimiento $movimiento, User $user): int
+    {
+        return DB::transaction(function () use ($movimiento, $user) {
+            $lotes = LoteStock::where('movimiento_id', $movimiento->id)
+                ->where('cantidad_disponible', '>', 0)
+                ->whereNull('fusionado_en_lote_id')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            return $this->acumularEnLoteIdentico($lotes, $user, movimientoActualId: $movimiento->id);
+        });
+    }
+
+    /**
+     * Lo mismo para una compra: sin prorrateo (la compra se elimina de la lista de pendientes), los
+     * lotes que creó al aprobarse se acumulan al lote idéntico que el almacén ya tenía.
+     *
+     * @return int Cantidad de lotes de la compra que se acumularon en otro
+     */
+    public function acumularCompraEnLoteExistente(Compra $compra, User $user): int
+    {
+        return DB::transaction(function () use ($compra, $user) {
+            $lotes = LoteStock::whereIn('compra_producto_id', CompraProducto::where('compra_id', $compra->id)->select('id'))
+                ->where('cantidad_disponible', '>', 0)
+                ->whereNull('fusionado_en_lote_id')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            return $this->acumularEnLoteIdentico($lotes, $user, compraActualId: $compra->id);
+        });
+    }
+
+    /**
+     * Acumula cada lote dado en un lote idéntico del mismo producto y almacén (ver
+     * acumularMovimientoEnLoteExistente()). El destino NO puede ser: un lote de esta misma
+     * operación, uno con precio propio, uno ya fusionado, ni uno cuyo costo todavía puede cambiar
+     * por un prorrateo pendiente (de un movimiento o de una compra sin decidir): las unidades
+     * acumuladas recibirían un incremento que no les corresponde.
+     *
+     * Límite conocido: no se sigue la cadena `lote_origen_id` — un lote de un movimiento ya decidido
+     * que descienda de una compra pendiente sí puede ser destino.
+     *
+     * @param  Collection<int, LoteStock>  $lotes
+     */
+    private function acumularEnLoteIdentico(Collection $lotes, User $user, ?int $movimientoActualId = null, ?int $compraActualId = null): int
+    {
+        if ($lotes->isEmpty()) {
+            return 0;
+        }
+
+        $movimientosPendientes = Movimiento::where('requiere_prorrateo', true)
+            ->whereNull('prorrateo_decision')
+            ->when($movimientoActualId !== null, fn ($query) => $query->where('id', '!=', $movimientoActualId))
+            ->pluck('id')
+            ->all();
+
+        $comprasPendientes = Compra::where('estado', 'aprobada')
+            ->whereNull('prorrateo_decision')
+            ->when($compraActualId !== null, fn ($query) => $query->where('id', '!=', $compraActualId))
+            ->select('id');
+
+        $idsDeLaOperacion = $lotes->pluck('id')->all();
+        $acumulados = 0;
+        // Lotes de esta misma operación que ya quedaron como base de su producto+costo, para que
+        // dos partes con igual costo tampoco queden separadas.
+        $bases = [];
+
+        foreach ($lotes as $lote) {
+            $clave = $lote->producto_id.'|'.round((float) $lote->precio_costo, 2);
+
+            $destino = $bases[$clave] ?? LoteStock::where('producto_id', $lote->producto_id)
+                ->where('almacen_id', $lote->almacen_id)
+                ->whereNotIn('id', $idsDeLaOperacion)
+                ->where('cantidad_disponible', '>', 0)
+                ->whereNull('fusionado_en_lote_id')
+                ->whereNull('precio_venta')
+                ->where('precio_costo', $lote->precio_costo)
+                ->when($movimientosPendientes !== [], fn ($query) => $query->where(
+                    fn ($q) => $q->whereNull('movimiento_id')->orWhereNotIn('movimiento_id', $movimientosPendientes)
+                ))
+                ->where(fn ($q) => $q->whereNull('compra_producto_id')
+                    ->orWhereNotIn('compra_producto_id', CompraProducto::select('id')->whereIn('compra_id', $comprasPendientes)))
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $destino) {
+                $bases[$clave] = $lote;
+
+                continue;
+            }
+
+            $unidades = (int) $lote->cantidad_disponible;
+            $destino->increment('cantidad', $unidades);
+            $destino->increment('cantidad_disponible', $unidades);
+            $lote->update(['cantidad_disponible' => 0, 'fusionado_en_lote_id' => $destino->id]);
+
+            LoteFusion::create([
+                'producto_id' => $lote->producto_id,
+                'almacen_id' => $lote->almacen_id,
+                'lote_resultante_id' => $destino->id,
+                'user_id' => $user->id,
+                'lotes_origen' => [[
+                    'id' => $lote->id,
+                    'codigo' => $lote->codigo,
+                    'cantidad' => $unidades,
+                    'precio_costo' => (float) $lote->precio_costo,
+                    'precio_venta' => null,
+                ]],
+                'cantidad_total' => (int) $destino->fresh()->cantidad_disponible,
+                'costo_resultante' => round((float) $destino->precio_costo, 2),
+            ]);
+
+            $acumulados++;
+        }
+
+        return $acumulados;
+    }
+
+    /**
      * @param  Collection<int, LoteStock>  $lotes
      * @param  array<int, int>  $loteIds
      *
@@ -140,14 +277,8 @@ class FusionLotesService
             $falla('Estos lotes no tienen stock o ya se fusionaron: '.$sinStock->pluck('codigo')->implode(', ').'.');
         }
 
-        // Un prorrateo pendiente se aplica a los lotes que creó ESE movimiento; si ya se
-        // fusionaron, el incremento no llegaría al lote resultante.
-        $movimientosPendientes = Movimiento::whereIn('id', $lotes->pluck('movimiento_id')->filter())
-            ->where('requiere_prorrateo', true)
-            ->whereNull('prorrateo_decision')
-            ->pluck('id');
-        if ($movimientosPendientes->isNotEmpty()) {
-            $falla('Hay un prorrateo pendiente del movimiento #'.$movimientosPendientes->implode(', #').'. Aplícalo u omítelo en Distribución de Costos antes de fusionar.');
-        }
+        // Un prorrateo sin decidir NO bloquea la fusión: el prorrateo es opcional (el cliente lo dejó
+        // explícito). La interfaz avisa que, si el movimiento se prorratea después, el incremento ya
+        // no llegará a las unidades fusionadas (mismo límite que ya tienen los lotes de una compra).
     }
 }

@@ -24,7 +24,6 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowRightLeft,
-    Ban,
     Calendar,
     CheckCircle2,
     Clock,
@@ -36,6 +35,7 @@ import {
     Scale,
     Search,
     Store,
+    Trash2,
     Truck,
     User,
     X,
@@ -145,6 +145,8 @@ interface Props {
     almacenes: Almacen[];
     filtros: Filtros;
     operacionesComprasRealizadas: number;
+    // Eliminar de la lista (sin prorratear) acumula lotes: solo admin/moderador.
+    puedeEliminarPendientes?: boolean;
     // Solo llegan cuando el usuario autenticado es admin/moderador — un vendedor nunca recibe
     // estas props y la pestaña "Movimientos" no se renderiza (prorratear movimientos es
     // admin/moderador-only, regla del cliente).
@@ -175,6 +177,7 @@ export default function DistribucionCostosIndex({
     almacenes,
     filtros,
     operacionesComprasRealizadas,
+    puedeEliminarPendientes = false,
     movimientosPendientes,
     almacenesMovimientos,
     filtrosMovimientos,
@@ -212,6 +215,11 @@ export default function DistribucionCostosIndex({
     // Selección de compras para prorratear varias juntas ("lote") en una sola operación.
     const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
 
+    // Solo las compras aprobadas o anuladas que todavía no se prorratean se pueden eliminar de la lista.
+    const seleccionadasEliminables = compras.data
+        .filter((compra) => seleccionadas.includes(compra.id) && !compra.tiene_distribucion && ['aprobada', 'anulada'].includes(compra.estado))
+        .map((compra) => compra.id);
+
     const toggleSeleccionada = (id: number) => {
         setSeleccionadas((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
     };
@@ -245,7 +253,8 @@ export default function DistribucionCostosIndex({
 
     const [busquedaMov, setBusquedaMov] = useState(filtrosMovimientos?.buscar ?? '');
     const [seleccionadosMov, setSeleccionadosMov] = useState<number[]>([]);
-    const [omitirDialogOpen, setOmitirDialogOpen] = useState(false);
+    // Compras o movimientos que se van a eliminar de la lista de pendientes (uno desde su fila, o los seleccionados); null = diálogo cerrado.
+    const [eliminacion, setEliminacion] = useState<{ tipo: 'compras' | 'movimientos'; ids: number[] } | null>(null);
 
     const aplicarFiltrosMovimientos = (cambios: Record<string, string | undefined>) => {
         const actuales = Object.fromEntries(new URLSearchParams(window.location.search));
@@ -273,25 +282,42 @@ export default function DistribucionCostosIndex({
         }
     };
 
-    const confirmarOmitirSeleccionados = () => {
-        const cantidad = seleccionadosMov.length;
+    const confirmarEliminarDeLaLista = () => {
+        if (!eliminacion) return;
+        const { tipo, ids } = eliminacion;
+        const esCompras = tipo === 'compras';
 
         router.post(
-            route('distribucion-costos.movimientos.omitir'),
-            { movimiento_ids: seleccionadosMov },
+            route(esCompras ? 'distribucion-costos.compras.omitir' : 'distribucion-costos.movimientos.omitir'),
+            esCompras ? { compra_ids: ids } : { movimiento_ids: ids },
             {
-                onSuccess: () => {
-                    sileo.success({
-                        title: 'Prorrateo omitido',
-                        description: `${cantidad} movimiento${cantidad === 1 ? '' : 's'} marcado${cantidad === 1 ? '' : 's'} como revisado.`,
-                    });
-                    setSeleccionadosMov([]);
-                    setOmitirDialogOpen(false);
+                onSuccess: (page) => {
+                    const flash = page.props.flash as { success?: string | null; error?: string | null } | undefined;
+                    if (flash?.error) {
+                        sileo.error({ title: 'No se pudo eliminar de la lista', description: flash.error });
+                    } else {
+                        sileo.success({
+                            title: esCompras
+                                ? ids.length === 1
+                                    ? 'Compra eliminada de la lista'
+                                    : 'Compras eliminadas de la lista'
+                                : ids.length === 1
+                                  ? 'Movimiento eliminado de la lista'
+                                  : 'Movimientos eliminados de la lista',
+                            description: flash?.success ?? `${ids.length} sin prorratear.`,
+                        });
+                    }
+                    if (esCompras) {
+                        setSeleccionadas((previas) => previas.filter((id) => !ids.includes(id)));
+                    } else {
+                        setSeleccionadosMov((previos) => previos.filter((id) => !ids.includes(id)));
+                    }
+                    setEliminacion(null);
                 },
                 onError: (errors) => {
                     const firstError = Object.values(errors)[0];
-                    sileo.error({ title: 'No se pudo omitir el prorrateo', description: firstError });
-                    setOmitirDialogOpen(false);
+                    sileo.error({ title: 'No se pudo eliminar de la lista', description: firstError });
+                    setEliminacion(null);
                 },
             },
         );
@@ -576,8 +602,8 @@ export default function DistribucionCostosIndex({
                                 <div>
                                     <CardTitle className="text-white">Compras para Distribuir Costos</CardTitle>
                                     <CardDescription className="text-indigo-100">
-                                        Seleccione una o varias compras para distribuir manualmente los costos adicionales entre sus productos. Solo
-                                        disponible para cuentas en moneda CUP.
+                                        Seleccione una o varias compras para distribuir manualmente los costos adicionales entre sus productos (solo
+                                        disponible para cuentas en moneda CUP) o elimínelas de la lista si no se van a prorratear.
                                     </CardDescription>
                                 </div>
                             </div>
@@ -588,6 +614,16 @@ export default function DistribucionCostosIndex({
                                         Ver Historial
                                     </Button>
                                 </Link>
+                                {puedeEliminarPendientes && seleccionadasEliminables.length > 0 && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setEliminacion({ tipo: 'compras', ids: seleccionadasEliminables })}
+                                        className="cursor-pointer border-white/30 bg-white/10 text-white hover:bg-white/20"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        Eliminar {seleccionadasEliminables.length} seleccionada{seleccionadasEliminables.length === 1 ? '' : 's'}
+                                    </Button>
+                                )}
                                 {seleccionadas.length > 0 && (
                                     <Button
                                         onClick={distribuirSeleccionadas}
@@ -712,6 +748,21 @@ export default function DistribucionCostosIndex({
                                                                 </Link>
                                                             </TooltipTrigger>
                                                             <TooltipContent>Detalles</TooltipContent>
+                                                        </Tooltip>
+                                                    ) : puedeEliminarPendientes && ['aprobada', 'anulada'].includes(compra.estado) ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="outline"
+                                                                    className="cursor-pointer text-red-600 hover:text-red-700"
+                                                                    onClick={() => setEliminacion({ tipo: 'compras', ids: [compra.id] })}
+                                                                    aria-label={`Eliminar la compra #${compra.id} de la lista`}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Eliminar de la lista (sin prorratear)</TooltipContent>
                                                         </Tooltip>
                                                     ) : (
                                                         <div className="size-9" />
@@ -866,7 +917,7 @@ export default function DistribucionCostosIndex({
                                                 <CardTitle className="text-white">Movimientos Pendientes de Decisión</CardTitle>
                                                 <CardDescription className="text-amber-100">
                                                     El prorrateo es opcional y no bloquea la recepción — decida cuando le convenga: aplicar el costo
-                                                    de transporte o dejarlo sin prorratear.
+                                                    de transporte o eliminarlo de la lista (sin prorratear).
                                                 </CardDescription>
                                             </div>
                                         </div>
@@ -874,11 +925,11 @@ export default function DistribucionCostosIndex({
                                             <div className="flex items-center gap-2">
                                                 <Button
                                                     variant="outline"
-                                                    onClick={() => setOmitirDialogOpen(true)}
+                                                    onClick={() => setEliminacion({ tipo: 'movimientos', ids: seleccionadosMov })}
                                                     className="cursor-pointer border-white/30 bg-white/10 text-white hover:bg-white/20"
                                                 >
-                                                    <Ban className="h-4 w-4" />
-                                                    Omitir {seleccionadosMov.length} seleccionado{seleccionadosMov.length === 1 ? '' : 's'}
+                                                    <Trash2 className="h-4 w-4" />
+                                                    Eliminar {seleccionadosMov.length} seleccionado{seleccionadosMov.length === 1 ? '' : 's'}
                                                 </Button>
                                                 <Button
                                                     onClick={distribuirSeleccionadosMov}
@@ -921,7 +972,7 @@ export default function DistribucionCostosIndex({
                                                         Productos
                                                     </div>
                                                 </TableHead>
-                                                <TableHead className="w-24 text-right">Acción</TableHead>
+                                                <TableHead className="w-32 text-right">Acción</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -960,7 +1011,21 @@ export default function DistribucionCostosIndex({
                                                                 {movimiento.cantidad_lineas} {movimiento.cantidad_lineas === 1 ? 'línea' : 'líneas'}
                                                             </Badge>
                                                         </TableCell>
-                                                        <TableCell className="text-right">
+                                                        <TableCell className="space-x-1 text-right whitespace-nowrap">
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="outline"
+                                                                        className="cursor-pointer text-red-600 hover:text-red-700"
+                                                                        onClick={() => setEliminacion({ tipo: 'movimientos', ids: [movimiento.id] })}
+                                                                        aria-label={`Eliminar el movimiento #${movimiento.id} de la lista`}
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Eliminar de la lista (sin prorratear)</TooltipContent>
+                                                            </Tooltip>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
                                                                     <Link href={route('distribucion-costos.formulario', { movimientos: [movimiento.id] })}>
@@ -1029,18 +1094,35 @@ export default function DistribucionCostosIndex({
                     )}
                 </Tabs>
 
-                <AlertDialog open={omitirDialogOpen} onOpenChange={setOmitirDialogOpen}>
+                <AlertDialog open={eliminacion !== null} onOpenChange={(abierto) => !abierto && setEliminacion(null)}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
-                            <AlertDialogTitle>Omitir prorrateo</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Se marcará{seleccionadosMov.length === 1 ? ' el movimiento seleccionado' : ` los ${seleccionadosMov.length} movimientos seleccionados`} como
-                                revisado sin aplicar ningún costo adicional. Esto no afecta la recepción del movimiento — solo lo saca de esta lista.
+                            <AlertDialogTitle>Eliminar de la lista de pendientes</AlertDialogTitle>
+                            <AlertDialogDescription className="space-y-2">
+                                <span className="block">
+                                    Se {(eliminacion?.ids.length ?? 0) === 1 ? 'eliminará' : 'eliminarán'}{' '}
+                                    {eliminacion?.tipo === 'compras'
+                                        ? (eliminacion?.ids.length ?? 0) === 1
+                                            ? 'la compra'
+                                            : `las ${eliminacion?.ids.length} compras`
+                                        : (eliminacion?.ids.length ?? 0) === 1
+                                          ? 'el movimiento'
+                                          : `los ${eliminacion?.ids.length} movimientos`}{' '}
+                                    de esta lista <strong>sin prorratear</strong>: no se aplica ningún costo adicional
+                                    {eliminacion?.tipo === 'movimientos' ? ' y la recepción no cambia' : ''}. Sigue en el historial de{' '}
+                                    {eliminacion?.tipo === 'compras' ? 'Compras' : 'Movimientos'}.
+                                </span>
+                                <span className="block">
+                                    Como no se prorratea, las unidades que llegaron por{' '}
+                                    {(eliminacion?.ids.length ?? 0) === 1 ? (eliminacion?.tipo === 'compras' ? 'ella' : 'él') : 'ellos'} se acumulan al
+                                    lote existente del almacén cuando tiene el mismo costo y precio. Si no hay un lote idéntico, el lote queda como
+                                    está.
+                                </span>
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={confirmarOmitirSeleccionados}>Omitir</AlertDialogAction>
+                            <AlertDialogAction onClick={confirmarEliminarDeLaLista}>Eliminar de la lista</AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>

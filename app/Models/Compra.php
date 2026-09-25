@@ -23,11 +23,15 @@ class Compra extends Model
         'estado',
         'tipo_anulacion',
         'motivo_anulacion',
+        'prorrateo_decision',
+        'prorrateo_decidido_por',
+        'prorrateo_decidido_en',
     ];
 
     protected $casts = [
         'receptor_saldo_anterior' => 'double',
         'receptor_saldo_posterior' => 'double',
+        'prorrateo_decidido_en' => 'datetime',
     ];
 
     // Relación con el usuario que registró la compra (nullable — compras

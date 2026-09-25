@@ -95,7 +95,7 @@ interface LoteDisponible {
     costo: number | null;
     // Precio propio del lote ("Opción A"); null = hereda el precio del producto en el almacén.
     precio_venta: number | null;
-    // El movimiento que creó el lote tiene el prorrateo pendiente: no se puede fusionar.
+    // El movimiento que creó el lote tiene el prorrateo sin decidir: no bloquea la fusión (el prorrateo es opcional), solo se avisa.
     prorrateo_pendiente: boolean;
 }
 
@@ -870,7 +870,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                             ) : (
                                 <ChevronRight className="mr-1 h-3 w-3" />
                             )}
-                            {producto.lotes.length} lotes · costos distintos
+                            {producto.lotes.length} lotes{new Set(producto.lotes.map((l) => l.costo)).size > 1 ? ' · costos distintos' : ''}
                         </Badge>
                     </button>
                 )}
@@ -1086,9 +1086,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     };
 
     // ─── "Fusionar lotes" global del almacén seleccionado (admin/moderador) ─────────────
-    const productosVariosCostos = productsInAlmacen.filter((p) => p.lotes !== null);
-    const motivoBloqueoFusion = (producto: Producto) =>
-        producto.lotes?.some((l) => l.prorrateo_pendiente) ? 'Tiene un prorrateo pendiente en Distribución de Costos' : null;
+    const productosVariosLotes = productsInAlmacen.filter((p) => p.lotes !== null);
+    // Un prorrateo sin decidir NO bloquea la fusión (es opcional): solo se avisa de su efecto.
+    const avisoProrrateo = (producto: Producto) =>
+        producto.lotes?.some((l) => l.prorrateo_pendiente)
+            ? 'Tiene un prorrateo pendiente en Distribución de Costos: si lo prorratea después, ya no llegará a las unidades fusionadas.'
+            : null;
 
     const abrirFusionMasiva = () => {
         setMasivaSeleccion([]);
@@ -1552,7 +1555,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                 onClick={() => toggleFiltroPrecio('varios_costos')}
                             >
                                 <Layers size={16} />
-                                Varios costos ({productsInAlmacen.filter((p) => p.lotes !== null).length})
+                                Varios lotes ({productsInAlmacen.filter((p) => p.lotes !== null).length})
                             </Button>
                         )}
                         {meta.role_usuario === 'admin' && (
@@ -1566,7 +1569,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                 variant="outline"
                                 className="h-11 gap-2 border-amber-500/60 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
                                 onClick={abrirFusionMasiva}
-                                disabled={productosVariosCostos.length === 0}
+                                disabled={productosVariosLotes.length === 0}
                             >
                                 <GitMerge size={16} />
                                 Fusionar lotes
@@ -2608,7 +2611,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                             </DialogTitle>
                             <DialogDescription>
                                 {masivaPaso === 'elegir' &&
-                                    'Productos con lotes a costo distinto en este almacén. Los que marques quedan con un solo lote (costo promedio ponderado) que vende al precio del producto.'}
+                                    'Productos con 2 o más lotes en este almacén (con el mismo costo o con costos distintos). Los que marques quedan con un solo lote (costo promedio ponderado) que vende al precio del producto.'}
                                 {masivaPaso === 'confirmar' && 'Revisa antes de confirmar. Esta acción no se puede deshacer.'}
                                 {masivaPaso === 'resultado' && masivaResultado?.message}
                             </DialogDescription>
@@ -2621,17 +2624,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         <TableHead className="w-10">
                                             <Checkbox
                                                 aria-label="Seleccionar todos"
-                                                checked={
-                                                    masivaSeleccion.length > 0 &&
-                                                    masivaSeleccion.length === productosVariosCostos.filter((p) => !motivoBloqueoFusion(p)).length
-                                                }
-                                                onCheckedChange={(v) =>
-                                                    setMasivaSeleccion(
-                                                        v === true
-                                                            ? productosVariosCostos.filter((p) => !motivoBloqueoFusion(p)).map((p) => p.id)
-                                                            : [],
-                                                    )
-                                                }
+                                                checked={masivaSeleccion.length > 0 && masivaSeleccion.length === productosVariosLotes.length}
+                                                onCheckedChange={(v) => setMasivaSeleccion(v === true ? productosVariosLotes.map((p) => p.id) : [])}
                                             />
                                         </TableHead>
                                         <TableHead>Producto</TableHead>
@@ -2641,22 +2635,21 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {productosVariosCostos.map((producto) => {
+                                    {productosVariosLotes.map((producto) => {
                                         const lotes = producto.lotes ?? [];
                                         const cantidad = lotes.reduce((sum, l) => sum + l.cantidad, 0);
                                         const costo =
                                             cantidad > 0
                                                 ? Math.round((lotes.reduce((sum, l) => sum + l.cantidad * (l.costo ?? 0), 0) / cantidad) * 100) / 100
                                                 : 0;
-                                        const bloqueo = motivoBloqueoFusion(producto);
+                                        const aviso = avisoProrrateo(producto);
                                         const conPrecioPropio = lotes.filter((l) => l.precio_venta !== null);
 
                                         return (
-                                            <TableRow key={producto.id} className={cn(bloqueo && 'opacity-60')}>
+                                            <TableRow key={producto.id}>
                                                 <TableCell>
                                                     <Checkbox
                                                         aria-label={`Seleccionar ${producto.nombre_producto}`}
-                                                        disabled={bloqueo !== null}
                                                         checked={masivaSeleccion.includes(producto.id)}
                                                         onCheckedChange={() =>
                                                             setMasivaSeleccion((prev) =>
@@ -2674,7 +2667,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                             .filter(Boolean)
                                                             .join(' • ')}
                                                     </p>
-                                                    {bloqueo && <p className="text-xs text-red-600 dark:text-red-400">{bloqueo}</p>}
+                                                    {aviso && <p className="text-xs text-amber-700 dark:text-amber-400">{aviso}</p>}
                                                     {conPrecioPropio.map((l) => (
                                                         <p key={l.id} className="text-xs text-amber-700 dark:text-amber-400">
                                                             {l.codigo} tiene precio propio {formatCurrency(l.precio_venta)} → quedará a{' '}
@@ -2707,7 +2700,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                     {selectedAlmacen?.nombre_almacen}:
                                 </p>
                                 <ul className="text-muted-foreground list-disc pl-5">
-                                    {productosVariosCostos
+                                    {productosVariosLotes
                                         .filter((p) => masivaSeleccion.includes(p.id))
                                         .map((p) => (
                                             <li key={p.id}>
@@ -2840,6 +2833,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             Costo = promedio ponderado por cantidad. El lote nuevo toma la antigüedad del lote más viejo. Los lotes
                                             originales quedan en 0 y se conservan para el historial de ventas.
                                         </p>
+                                        {loteFusion.lotes.some((l) => l.prorrateo_pendiente) && (
+                                            <p className="text-xs text-amber-700 dark:text-amber-400">
+                                                Alguno de estos lotes viene de un movimiento con el prorrateo pendiente. No bloquea la fusión, pero si lo
+                                                prorratea después ya no llegará a las unidades fusionadas.
+                                            </p>
+                                        )}
 
                                         <div className="space-y-2">
                                             <Label>Precio de venta del lote resultante</Label>

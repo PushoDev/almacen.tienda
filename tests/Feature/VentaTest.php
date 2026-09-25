@@ -1808,6 +1808,23 @@ test('getProductosPorAlmacen() expone el precio de venta efectivo de cada lote (
     expect((float) $lotes[$loteConOverride->id]['precio_venta'])->toBe(25.0); // su propio override
 });
 
+test('getProductosPorAlmacen() solo ofrece elegir lote cuando los lotes se diferencian en costo o en precio', function (array $primero, array $segundo, bool $seOfrece) {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    [$producto] = crearProductoConPrecio($almacen, 10, 20);
+    foreach ([$primero, $segundo] as $i => $datos) {
+        LoteStock::create($datos + ['codigo' => "LOTE-POS-{$i}", 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5]);
+    }
+
+    $lotes = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json('0.lotes');
+
+    expect($lotes)->toHaveCount($seOfrece ? 2 : 0);
+})->with([
+    'lotes idénticos (mismo costo y mismo precio): no se pregunta' => [['precio_costo' => 12], ['precio_costo' => 12], false],
+    'mismo precio pero otro costo: se ofrece' => [['precio_costo' => 12], ['precio_costo' => 18], true],
+    'mismo costo pero uno con precio propio: se ofrece' => [['precio_costo' => 12], ['precio_costo' => 12, 'precio_venta' => 25], true],
+]);
+
 test('show() oculta costo_unitario a un vendedor, incluso en su propia venta', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);

@@ -110,7 +110,7 @@ test('no se fusionan lotes de almacenes distintos', function () {
     expect($ajeno->fresh()->cantidad_disponible)->toBe(5);
 });
 
-test('no se fusiona un lote cuyo movimiento tiene el prorrateo pendiente', function () {
+test('se puede fusionar un lote cuyo movimiento tiene el prorrateo pendiente: el prorrateo es opcional y no bloquea', function () {
     $this->actingAs(User::factory()->admin()->create());
     $movimiento = Movimiento::factory()->create(['requiere_prorrateo' => true, 'prorrateo_decision' => null]);
     ['producto' => $producto, 'almacen' => $almacen, 'viejo' => $viejo, 'nuevo' => $nuevo] = ollaConDosLotes($movimiento);
@@ -120,8 +120,11 @@ test('no se fusiona un lote cuyo movimiento tiene el prorrateo pendiente', funct
         'lote_ids' => [$viejo->id, $nuevo->id],
     ]);
 
-    $response->assertUnprocessable()->assertJsonValidationErrors(['lote_ids' => 'prorrateo pendiente']);
-    expect($nuevo->fresh()->cantidad_disponible)->toBe(50);
+    $response->assertOk();
+    expect($nuevo->fresh()->cantidad_disponible)->toBe(0);
+    expect(LoteStock::where('codigo', 'like', 'FUSION-%')->sole()->cantidad_disponible)->toBe(78);
+    // La decisión del prorrateo no se toca: sigue pendiente hasta que el usuario la aplique o la elimine de la lista.
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'requiere_prorrateo' => true, 'prorrateo_decision' => null]);
 });
 
 test('un lote ya fusionado no se puede volver a fusionar', function () {
@@ -141,11 +144,10 @@ test('un lote ya fusionado no se puede volver a fusionar', function () {
 test('fusionar lotes del almacén une cada producto elegido, sigue si uno falla y avisa cuál', function () {
     $this->actingAs(User::factory()->admin()->create());
     ['producto' => $olla, 'almacen' => $almacen] = ollaConDosLotes();
-    $movimiento = Movimiento::factory()->create(['requiere_prorrateo' => true, 'prorrateo_decision' => null]);
+    // Un producto con UN solo lote con stock: no hay nada que fusionar y esa fila falla, sin frenar a la otra.
     $refrigerador = Producto::factory()->create(['nombre_producto' => 'REFRIGERADOR']);
-    $refrigerador->almacenes()->attach($almacen->id, ['cantidad' => 13]);
-    LoteStock::create(['codigo' => 'REF-VIEJO', 'producto_id' => $refrigerador->id, 'almacen_id' => $almacen->id, 'cantidad' => 8, 'precio_costo' => 433.15]);
-    $bloqueado = LoteStock::create(['codigo' => 'REF-MOV', 'producto_id' => $refrigerador->id, 'almacen_id' => $almacen->id, 'movimiento_id' => $movimiento->id, 'cantidad' => 5, 'precio_costo' => 442.67]);
+    $refrigerador->almacenes()->attach($almacen->id, ['cantidad' => 8]);
+    $soloUno = LoteStock::create(['codigo' => 'REF-UNICO', 'producto_id' => $refrigerador->id, 'almacen_id' => $almacen->id, 'cantidad' => 8, 'precio_costo' => 433.15]);
 
     $response = $this->postJson(route('disponibles.fusionar-lotes', $almacen), [
         'producto_ids' => [$refrigerador->id, $olla->id],
@@ -158,8 +160,8 @@ test('fusionar lotes del almacén une cada producto elegido, sigue si uno falla 
         ->assertJsonPath('fusionados.0.cantidad', 78)
         ->assertJsonCount(1, 'fallidos')
         ->assertJsonPath('fallidos.0.producto_id', $refrigerador->id);
-    expect($response->json('fallidos.0.motivo'))->toContain('prorrateo pendiente')
-        ->and($bloqueado->fresh()->cantidad_disponible)->toBe(5)
+    expect($response->json('fallidos.0.motivo'))->toContain('al menos 2 lotes')
+        ->and($soloUno->fresh()->cantidad_disponible)->toBe(8)
         ->and(LoteStock::where('producto_id', $olla->id)->where('cantidad_disponible', '>', 0)->pluck('codigo')->all())->toBe(["FUSION-{$olla->id}-{$almacen->id}-1"]);
 });
 

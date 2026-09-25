@@ -19,6 +19,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\MovimientoSeguimiento;
 use App\Models\Producto;
 use App\Models\Proveedor;
+use App\Services\FusionLotesService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -50,6 +51,8 @@ class DistribucionCostosController extends Controller
             ->when($proveedorId !== '', fn ($query) => $query->where('proveedor_id', $proveedorId))
             ->when($almacenId !== '', fn ($query) => $query->whereHas('productos', fn ($q) => $q->wherePivot('almacen_id', $almacenId)))
             ->when($fecha !== '', fn ($query) => $query->whereDate('fecha_compra', $fecha))
+            // Las que el usuario eliminó de la lista (sin prorratear) ya no se muestran.
+            ->where(fn ($query) => $query->whereNull('prorrateo_decision')->orWhere('prorrateo_decision', '!=', 'omitido'))
             ->orderByDesc('fecha_compra')
             ->paginate(15)
             ->withQueryString();
@@ -104,6 +107,8 @@ class DistribucionCostosController extends Controller
             // Widget "Operaciones realizadas" — cuántas distribuciones de costo ya confirmadas
             // cubrieron al menos una compra (vs. las que cubrieron un lote de movimientos).
             'operacionesComprasRealizadas' => CostDistribution::whereHas('compras')->count(),
+            // Eliminar de la lista (sin prorratear) acumula lotes: solo admin/moderador.
+            'puedeEliminarPendientes' => in_array(Auth::user()->role, ['admin', 'moderador']),
             // Solo proveedores/almacenes que realmente participan en alguna compra — no la lista
             // completa del sistema, para no ofrecer filtros que siempre den cero resultados.
             'proveedores' => Proveedor::whereHas('compras')->orderBy('nombre_proveedor')->get(['id', 'nombre_proveedor']),
@@ -364,6 +369,12 @@ class DistribucionCostosController extends Controller
                 CostDistributionCompra::create([
                     'cost_distribution_id' => $resultado['distribution']->id,
                     'compra_id' => $compraDelLote->id,
+                ]);
+
+                $compraDelLote->update([
+                    'prorrateo_decision' => 'aplicado',
+                    'prorrateo_decidido_por' => auth()->id(),
+                    'prorrateo_decidido_en' => now(),
                 ]);
             }
 
@@ -725,6 +736,8 @@ class DistribucionCostosController extends Controller
                 return redirect()->back()->with('error', 'No se encontraron movimientos pendientes de decisión entre los seleccionados.');
             }
 
+            $lotesAcumulados = 0;
+
             foreach ($movimientos as $movimiento) {
                 $movimiento->update([
                     'prorrateo_decision' => 'omitido',
@@ -738,17 +751,93 @@ class DistribucionCostosController extends Controller
                     'observaciones' => 'Prorrateo de costos omitido.',
                     'user_id' => auth()->id(),
                 ]);
+
+                // Sin prorrateo no hay motivo para mantener un lote aparte: sus unidades se acumulan
+                // al lote existente del almacén destino cuando es idéntico (mismo costo).
+                if ($movimiento->almacen_destino_id) {
+                    $lotesAcumulados += app(FusionLotesService::class)->acumularMovimientoEnLoteExistente($movimiento, auth()->user());
+                }
             }
 
             DB::commit();
 
+            $mensaje = 'Prorrateo omitido en '.$movimientos->count().' movimiento(s).';
+            if ($lotesAcumulados > 0) {
+                $mensaje .= " {$lotesAcumulados} lote(s) se acumularon al lote existente del almacén destino.";
+            }
+
             return redirect()->route('distribucion-costos.index')
-                ->with('success', 'Prorrateo omitido en '.$movimientos->count().' movimiento(s).');
+                ->with('success', $mensaje);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al omitir prorrateo de movimientos: '.$e->getMessage());
 
             return redirect()->back()->with('error', 'Ocurrió un error al omitir el prorrateo. Intenta de nuevo.');
+        }
+    }
+
+    /**
+     * Elimina compras de la lista de Distribución de Costos SIN prorratear (la decisión "omitido"),
+     * igual que con los movimientos: la lista no crece sin fin. Como no se prorratea, los lotes que
+     * la compra creó al aprobarse se acumulan al lote idéntico que el almacén ya tenía. Solo
+     * admin/moderador (mueve lotes). Solo compras aprobadas o anuladas y aún sin decisión: una
+     * pendiente no tiene lotes todavía, y una ya prorrateada tiene su historial de distribución.
+     */
+    public function omitirProrrateoCompras(Request $request): RedirectResponse
+    {
+        if (! in_array(Auth::user()->role, ['admin', 'moderador'])) {
+            abort(403, 'Solo admin/moderador puede eliminar compras de la lista de prorrateos.');
+        }
+
+        $request->validate([
+            'compra_ids' => 'required|array|min:1',
+            'compra_ids.*' => 'required|exists:compras,id',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $compras = Compra::whereIn('id', $request->compra_ids)
+                ->whereNull('prorrateo_decision')
+                ->whereIn('estado', ['aprobada', 'anulada'])
+                ->get();
+
+            if ($compras->isEmpty()) {
+                DB::rollBack();
+
+                return redirect()->back()->with('error', 'Ninguna de las compras seleccionadas se puede eliminar de la lista: solo las aprobadas o anuladas que aún no se prorratearon.');
+            }
+
+            $lotesAcumulados = 0;
+
+            foreach ($compras as $compra) {
+                $compra->update([
+                    'prorrateo_decision' => 'omitido',
+                    'prorrateo_decidido_por' => auth()->id(),
+                    'prorrateo_decidido_en' => now(),
+                ]);
+
+                if ($compra->estado === 'aprobada') {
+                    $lotesAcumulados += app(FusionLotesService::class)->acumularCompraEnLoteExistente($compra, auth()->user());
+                }
+            }
+
+            DB::commit();
+
+            $mensaje = $compras->count().' compra(s) eliminada(s) de la lista sin prorratear.';
+            if ($lotesAcumulados > 0) {
+                $mensaje .= " {$lotesAcumulados} lote(s) se acumularon al lote existente del almacén.";
+            }
+            if ($compras->count() < count($request->compra_ids)) {
+                $mensaje .= ' Las demás no se pudieron eliminar (pendientes o ya prorrateadas).';
+            }
+
+            return redirect()->route('distribucion-costos.index')->with('success', $mensaje);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error al eliminar compras de la lista de prorrateos: '.$e->getMessage());
+
+            return redirect()->back()->with('error', 'Ocurrió un error al eliminar las compras de la lista. Intenta de nuevo.');
         }
     }
 

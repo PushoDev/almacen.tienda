@@ -385,7 +385,7 @@ export default function ShowPageProductos({
                                                         </div>
                                                         <div>
                                                             <p className="text-muted-foreground mb-1">
-                                                                {almacen.lotes.length > 1 ? 'Costo promedio' : 'Costo aquí'}
+                                                                {new Set(almacen.lotes.map((lote) => lote.costo)).size > 1 ? 'Costo promedio' : 'Costo aquí'}
                                                             </p>
                                                             <div className="flex items-center gap-1">
                                                                 <Badge
@@ -435,7 +435,9 @@ export default function ShowPageProductos({
                                                         <div className="rounded-md border border-dashed bg-white/60 p-3 dark:bg-black/10">
                                                             <p className="mb-2 flex items-center gap-1 text-xs font-medium text-muted-foreground">
                                                                 <Layers size={12} />
-                                                                Este almacén tiene {almacen.lotes.length} lotes a costo distinto
+                                                                {new Set(almacen.lotes.map((lote) => lote.costo)).size > 1
+                                                                    ? `Este almacén tiene ${almacen.lotes.length} lotes a costo distinto`
+                                                                    : `Este almacén tiene ${almacen.lotes.length} lotes (mismo costo)`}
                                                             </p>
                                                             <div className="space-y-1.5">
                                                                 {almacen.lotes.map((lote) => (
