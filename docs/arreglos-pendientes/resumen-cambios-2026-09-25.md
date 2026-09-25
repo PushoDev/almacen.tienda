@@ -104,6 +104,18 @@ Pedido del cliente: hacer con las compras lo mismo que con los movimientos a pro
 - Despliegue: **1 migración más** (5 en total del día), con backfill de `aplicado`.
 - Límite: no se sigue la cadena `lote_origen_id` al elegir destino.
 
+## 12. Segunda tanda: bloqueo del borrador y tests que faltaban
+
+Tras correr la suite completa (604 en verde) se propusieron 8 tests; se hicieron los 4 primeros y el arreglo que destapó el primero.
+
+- **Hueco real cerrado — doble confirmación del borrador de importación.** `ImportacionBorradorController::confirmar()` no bloqueaba el borrador: con doble clic o dos pestañas las dos peticiones pasaban el aviso de «archivo repetido» (solo mira importaciones ya terminadas) e importaban dos veces. Ahora todo corre en una transacción que bloquea la fila (`bloquearBorrador()`) y revisa que siga existiendo; la segunda recibe «Este borrador ya se importó o se descartó.». `ejecutar()` queda como savepoint: si falla, la importación queda `fallida` y el borrador se conserva.
+- **Tests nuevos:** (1) doble confirmación con copia obsoleta del borrador; (2) `VentaTest`: un lote de movimiento medio vendido solo acumula lo que queda y anular la venta devuelve las unidades al lote que lo absorbió; (3) `VentaTest`: una importación cuyo lote se vendió por el POS no se puede deshacer, y tras anular la venta sí; (4) el moderador puede eliminar de la lista de prorrateos (movimientos y compras) y ve el botón.
+- **Hallazgo:** los tests del moderador fallaron al principio porque `RequireTurnoActivo` bloquea sus escrituras (POST/PUT/PATCH/DELETE) sin turno capturado; no era un bug, se usa `crearTurnoActivo()` de `tests/Pest.php`.
+- Se quitó cada lógica a propósito (bloqueo, `loteVigente()`, acumular solo lo disponible, bloqueo de deshacer) y cada test falló.
+- 228 tests de los archivos tocados en verde; Pint pasó; `tests/Pest.php` intacto. Suite completa sin correr en esta tanda.
+- **Siguen sin test (5 a 8):** fusionar lotes del mismo costo, límites del import, movimiento parcial sin prorrateo con varios productos, doble clic en «Eliminar de la lista».
+- Límite conocido: SQLite ignora `lockForUpdate`, el bloqueo real solo actúa en MySQL.
+
 ## Pendiente / sin decidir
 
 1. **Límites:** el archivo se limita a 5 MB (`mimes:xlsx,xls|max:5120`, también validado en `Productos/Index.tsx`) y el borrador a 20 000 filas (`ImportacionBorradorController::MAX_FILAS`). El cliente pidió "sin límites": los límites de PHP del hosting compartido (subida, tiempo, memoria) se cambian en hPanel, y una cola real necesita el cron de hPanel (sin configurar). Hoy la confirmación corre síncrona.

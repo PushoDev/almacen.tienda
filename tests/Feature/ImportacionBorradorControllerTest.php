@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\ImportacionBorradorController;
 use App\Models\Almacen;
 use App\Models\ImportacionBorrador;
 use App\Models\ImportacionProducto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\User;
+use App\Services\ImportacionProductosService;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Testing\TestResponse;
 
@@ -191,6 +194,28 @@ test('confirmar un archivo que ya se importó en ese almacén avisa, y sigue sol
         ->assertSessionMissing('importacion_repetida')
         ->assertRedirect(route('productos.index'));
     expect(LoteStock::count())->toBe(1);
+});
+
+// Con un doble clic (o dos pestañas) las dos peticiones cargan el borrador y ambas pasan el aviso
+// de «archivo repetido». Se reproduce sin concurrencia real: la petición «ganadora» confirma y la
+// «perdedora» entra al controlador con la copia del borrador que cargó antes.
+test('confirmar con el borrador ya importado por otra petición no vuelve a importar', function () {
+    $almacen = Almacen::factory()->create();
+    prepararBorrador([['Olla Doble Clic', 'Cocina', null, null, null, null, 10, 3, null]], $almacen);
+    $copiaObsoleta = ImportacionBorrador::firstOrFail();
+    $datos = ['filas' => [filaBorrador(['nombre_producto' => 'Olla Doble Clic', 'cantidad' => '3'])]];
+
+    $this->post(route('importaciones-borradores.confirmar', $copiaObsoleta->id), $datos)->assertRedirect(route('productos.index'));
+
+    $segunda = Request::create('/', 'POST', $datos);
+    $segunda->setUserResolver(fn () => auth()->user());
+    $respuesta = app(ImportacionBorradorController::class)->confirmar($segunda, $copiaObsoleta, app(ImportacionProductosService::class));
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Este borrador ya se importó o se descartó.');
+    $producto = Producto::where('nombre_producto', 'Olla Doble Clic')->firstOrFail();
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 3]);
+    expect(LoteStock::where('producto_id', $producto->id)->count())->toBe(1);
+    expect(ImportacionProducto::count())->toBe(1);
 });
 
 test('descartar elimina el borrador sin importar nada', function () {

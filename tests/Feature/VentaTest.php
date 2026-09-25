@@ -5,8 +5,10 @@ use App\Models\AlmacenProducto;
 use App\Models\AlmacenProductoCodigo;
 use App\Models\Cliente;
 use App\Models\Cuenta;
+use App\Models\ImportacionProducto;
 use App\Models\LoteStock;
 use App\Models\Moneda;
+use App\Models\Movimiento;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\User;
@@ -311,6 +313,90 @@ test('anular una venta de un lote que después se fusionó devuelve las unidades
 
     expect($resultante->fresh()->cantidad_disponible)->toBe(50)
         ->and($loteA->fresh()->cantidad_disponible)->toBe(0);
+});
+
+test('acumular un lote medio vendido solo acumula lo que queda, y anular la venta devuelve las unidades al lote que lo absorbió', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $existente = LoteStock::create(['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 20, 'precio_costo' => 18]);
+    $movimiento = Movimiento::factory()->create(['almacen_destino_id' => $almacen->id, 'requiere_prorrateo' => false, 'estado' => 'recibido']);
+    $delMovimiento = LoteStock::create([
+        'codigo' => LoteStock::generarCodigoMovimiento($movimiento->id, 1), 'movimiento_id' => $movimiento->id,
+        'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 10, 'precio_costo' => 18,
+    ]);
+
+    // Se venden 4 de las 10 unidades del lote del movimiento, antes de que se acumule.
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 4, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $delMovimiento->id;
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 120,
+        'tasa_cambio' => 1, 'monto_equivalente' => 120, 'cuenta_id' => crearCuentaUsd()->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    expect($delMovimiento->fresh()->cantidad_disponible)->toBe(6);
+
+    expect(app(FusionLotesService::class)->acumularMovimientoEnLoteExistente($movimiento, $admin))->toBe(1);
+
+    // Solo se acumularon las 6 que quedaban; el lote del movimiento queda en 0 apuntando al que lo absorbió.
+    expect($existente->fresh()->cantidad_disponible)->toBe(26);
+    expect($delMovimiento->fresh()->cantidad_disponible)->toBe(0);
+    expect($delMovimiento->fresh()->fusionado_en_lote_id)->toBe($existente->id);
+
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+
+    // Las 4 unidades vuelven al lote vigente, no al lote de origen que quedó en 0.
+    expect($existente->fresh()->cantidad_disponible)->toBe(30);
+    expect($delMovimiento->fresh()->cantidad_disponible)->toBe(0);
+    expect(LoteStock::where('producto_id', $producto->id)->sum('cantidad_disponible'))->toBe(30);
+});
+
+test('una importación cuyo lote ya se vendió por el punto de venta no se puede deshacer, y al anular la venta sí', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $this->post(route('productos.import'), [
+        'file' => crearExcelImportacion([['Producto Importado Vendido', 'Cocina', null, null, null, null, 10, 5, 'BAR-IMP-VENTA']]),
+        'almacen_id' => $almacen->id,
+    ])->assertSessionHasNoErrors();
+
+    $importacion = ImportacionProducto::firstOrFail();
+    $producto = Producto::where('nombre_producto', 'Producto Importado Vendido')->firstOrFail();
+    $lote = LoteStock::where('producto_id', $producto->id)->sole();
+    DB::table('producto_vendedors')->insert([
+        'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'precio_venta' => 30,
+        'venta_ganancia' => 20, 'comision' => 0, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    $payload = payloadBaseVenta($almacen, $producto, ProductoCodigo::where('producto_id', $producto->id)->firstOrFail(), precioVenta: 30, cantidad: 2, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 60,
+        'tasa_cambio' => 1, 'monto_equivalente' => 60, 'cuenta_id' => crearCuentaUsd()->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    expect($lote->fresh()->cantidad_disponible)->toBe(3);
+
+    $deshacer = ['motivo_reversion' => 'Archivo equivocado', 'password_confirmacion' => 'password'];
+    $this->post(route('importaciones-productos.revertir', $importacion->id), $deshacer)
+        ->assertSessionHasErrors('revertir')
+        ->assertSessionHas('bloqueos_reversion', fn (array $bloqueos) => str_contains(implode(' ', $bloqueos), 'ya se usaron 2 de 5 unidades'));
+    expect($importacion->fresh()->estado)->toBe('completada');
+    expect(LoteStock::whereKey($lote->id)->exists())->toBeTrue();
+
+    // Con la venta anulada las unidades vuelven al lote y ya no hay nada que lo impida.
+    $venta = Venta::where('almacen_id', $almacen->id)->sole();
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+    expect($lote->fresh()->cantidad_disponible)->toBe(5);
+
+    $this->post(route('importaciones-productos.revertir', $importacion->id), $deshacer)->assertSessionHasNoErrors();
+    expect($importacion->fresh()->estado)->toBe('revertida');
+    expect(LoteStock::whereKey($lote->id)->exists())->toBeFalse();
 });
 
 test('rechaza la venta si no hay stock suficiente', function () {

@@ -9,6 +9,7 @@ use App\Models\ImportacionBorrador;
 use App\Services\ImportacionProductosService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -103,46 +104,73 @@ class ImportacionBorradorController extends Controller
 
     /**
      * Importa de verdad lo que el usuario ve en la hoja. El borrador se elimina al terminar bien.
+     *
+     * Todo va dentro de una transacción que bloquea la fila del borrador: con un doble clic (o dos
+     * pestañas) las dos peticiones cargan el borrador y pasan el aviso de «archivo repetido»
+     * —solo ve importaciones ya terminadas—, así que solo la primera puede importar; la segunda
+     * encuentra el borrador ya eliminado. `ejecutar()` queda como savepoint de esta transacción:
+     * si falla, deshace lo suyo, deja la importación `fallida` y aquí se conserva el borrador.
      */
     public function confirmar(Request $request, ImportacionBorrador $borrador, ImportacionProductosService $servicio): RedirectResponse
     {
         $this->autorizar($request, $borrador);
         $request->validate(['confirmar_repetido' => 'sometimes|boolean']);
         $filas = $this->filasValidadas($request);
-        $borrador->update(['filas' => $filas]);
 
         $almacen = Almacen::findOrFail($borrador->almacen_id);
 
-        // El mismo archivo ya se importó en este almacén: se avisa y solo se sigue si el usuario lo confirma.
-        $previa = $servicio->buscarPrevia($almacen->id, $borrador->hash_archivo);
-        if ($previa && ! $request->boolean('confirmar_repetido')) {
-            return back()->with('importacion_repetida', $servicio->avisoRepetida($previa));
-        }
-
         try {
-            $importacion = $servicio->ejecutar(
-                $request->user(),
-                $almacen,
-                $borrador->nombre_archivo,
-                $borrador->hash_archivo,
-                function (ProductoImport $importador) use ($filas) {
-                    foreach ($filas as $fila) {
-                        $importador->model($fila);
-                    }
-                },
-            );
-        } catch (\Exception $e) {
-            Log::error('Error al confirmar el borrador de importación: '.$e->getMessage(), ['borrador_id' => $borrador->id]);
+            return DB::transaction(function () use ($request, $borrador, $servicio, $filas, $almacen) {
+                $this->bloquearBorrador($borrador);
+                $borrador->update(['filas' => $filas]);
 
-            return back()->withErrors(['error' => 'Error al importar productos: '.$e->getMessage()]);
+                // El mismo archivo ya se importó en este almacén: se avisa y solo se sigue si el usuario lo confirma.
+                $previa = $servicio->buscarPrevia($almacen->id, $borrador->hash_archivo);
+                if ($previa && ! $request->boolean('confirmar_repetido')) {
+                    return back()->with('importacion_repetida', $servicio->avisoRepetida($previa));
+                }
+
+                try {
+                    $importacion = $servicio->ejecutar(
+                        $request->user(),
+                        $almacen,
+                        $borrador->nombre_archivo,
+                        $borrador->hash_archivo,
+                        function (ProductoImport $importador) use ($filas) {
+                            foreach ($filas as $fila) {
+                                $importador->model($fila);
+                            }
+                        },
+                    );
+                } catch (\Exception $e) {
+                    Log::error('Error al confirmar el borrador de importación: '.$e->getMessage(), ['borrador_id' => $borrador->id]);
+
+                    return back()->withErrors(['error' => 'Error al importar productos: '.$e->getMessage()]);
+                }
+
+                $borrador->delete();
+
+                return redirect()
+                    ->route('productos.index')
+                    ->with('success', $servicio->mensajeResumen($importacion))
+                    ->with('importacion_resultado', $servicio->resultadoParaVista($importacion, $almacen));
+            });
+        } catch (\DomainException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
         }
+    }
 
-        $borrador->delete();
-
-        return redirect()
-            ->route('productos.index')
-            ->with('success', $servicio->mensajeResumen($importacion))
-            ->with('importacion_resultado', $servicio->resultadoParaVista($importacion, $almacen));
+    /**
+     * Bloquea la fila del borrador y confirma que sigue existiendo: si otra petición ya lo
+     * confirmó (y lo eliminó), esta no debe importar de nuevo.
+     *
+     * @throws \DomainException si el borrador ya no existe
+     */
+    private function bloquearBorrador(ImportacionBorrador $borrador): void
+    {
+        if (! ImportacionBorrador::whereKey($borrador->id)->lockForUpdate()->exists()) {
+            throw new \DomainException('Este borrador ya se importó o se descartó.');
+        }
     }
 
     /**

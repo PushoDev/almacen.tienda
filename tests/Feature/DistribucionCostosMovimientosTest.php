@@ -385,6 +385,24 @@ test('eliminar de la lista acumula entre sí las partes del mismo movimiento que
     expect($segundo->fresh()->fusionado_en_lote_id)->toBe($primero->id);
 });
 
+test('un moderador sí puede eliminar movimientos de la lista de prorrateos y se acumulan como con el admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+    crearTurnoActivo($moderador); // sin turno capturado, RequireTurnoActivo bloquea las escrituras del moderador
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $existente = LoteStock::create(['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $moderador, $producto, cantidadDespachada: 10);
+    crearLoteStockRecibido($movimiento, $producto, $destino, cantidad: 10)->update(['precio_costo' => 100]);
+
+    $this->post(route('distribucion-costos.movimientos.omitir'), ['movimiento_ids' => [$movimiento->id]])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => 'omitido', 'prorrateo_decidido_por' => $moderador->id]);
+    expect($existente->fresh()->cantidad_disponible)->toBe(15);
+});
+
 test('un vendedor no puede omitir el prorrateo de un movimiento (403)', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);

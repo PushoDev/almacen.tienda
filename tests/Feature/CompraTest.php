@@ -2180,6 +2180,23 @@ test('no se elimina de la lista una compra pendiente ni una ya prorrateada; una 
     expect($anulada->fresh()->prorrateo_decision)->toBe('omitido');
 });
 
+test('un moderador sí puede eliminar compras de la lista de prorrateos, ve el botón y se acumulan como con el admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+    crearTurnoActivo($moderador); // sin turno capturado, RequireTurnoActivo bloquea las escrituras del moderador
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $existente = LoteStock::create(['codigo' => 'AJUSTE-LEGADO-X', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 10]);
+    [$compra] = compraAprobadaConLote($producto, $almacen, cantidad: 8, costo: 10);
+
+    $this->get(route('distribucion-costos.index'))->assertInertia(fn ($page) => $page->where('puedeEliminarPendientes', true));
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$compra->id]])->assertSessionHasNoErrors();
+
+    expect($compra->fresh()->prorrateo_decision)->toBe('omitido');
+    expect($compra->fresh()->prorrateo_decidido_por)->toBe($moderador->id);
+    expect($existente->fresh()->cantidad_disponible)->toBe(13);
+});
+
 test('un vendedor no puede eliminar compras de la lista de prorrateos (403) y no ve el botón', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);
