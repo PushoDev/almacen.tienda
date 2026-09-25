@@ -5,9 +5,12 @@ namespace App\Imports;
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Categoria;
+use App\Models\ImportacionProducto;
+use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Services\CodigoStockService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -21,11 +24,17 @@ class ProductoImport implements ToModel, WithChunkReading, WithHeadingRow, WithV
     private $estadisticas = [
         'productos_creados' => 0,
         'productos_actualizados' => 0,
+        'productos_sin_stock' => 0,
+        'lotes_creados' => 0,
+        'unidades_importadas' => 0,
         'filas_procesadas' => 0,
         'filas_omitidas' => 0,
     ];
 
-    public function __construct($almacenId = 1)
+    /**
+     * @param  ImportacionProducto|null  $importacion  Registro del historial donde se anota cada fila (null = no se registra)
+     */
+    public function __construct($almacenId = 1, private ?ImportacionProducto $importacion = null)
     {
         $this->almacenId = $almacenId;
 
@@ -36,165 +45,55 @@ class ProductoImport implements ToModel, WithChunkReading, WithHeadingRow, WithV
 
     public function model(array $row)
     {
-        try {
-            $this->estadisticas['filas_procesadas']++;
+        $this->estadisticas['filas_procesadas']++;
+        // La fila 1 del Excel son los encabezados.
+        $numeroFila = $this->estadisticas['filas_procesadas'] + 1;
 
+        try {
             $row = array_map(function ($value) {
                 return is_string($value) ? trim($value) : $value;
             }, $row);
 
             // Único campo verdaderamente obligatorio: nombre del producto
             if (empty($row['nombre_producto'])) {
-                $this->estadisticas['filas_omitidas']++;
-                Log::warning('Fila omitida - nombre_producto vacío', ['fila' => $this->estadisticas['filas_procesadas']]);
+                $this->omitirFila($numeroFila, $row, 'Falta el nombre del producto');
 
                 return null;
             }
 
-            // precio_compra es obligatorio porque no se puede editar después
+            $cantidad = $this->normalizarCantidad($row['cantidad'] ?? null);
             $precioRaw = $row['precio_compra'] ?? null;
             $precio = $this->normalizarPrecio($precioRaw);
 
-            if (is_null($precio)) {
-                $this->estadisticas['filas_omitidas']++;
-                Log::warning('Fila omitida - precio_compra vacío o inválido', [
-                    'nombre' => $row['nombre_producto'],
-                    'precio_raw' => $precioRaw,
-                ]);
+            // Importar solo suma: una cantidad negativa restaría stock y un costo negativo daría un lote inválido.
+            if ($cantidad < 0) {
+                $this->omitirFila($numeroFila, $row, 'La cantidad no puede ser negativa');
 
                 return null;
             }
 
-            // Categoría: opcional, default "Sin Categoría"
-            $categoriaNombre = ! empty($row['categoria']) ? $row['categoria'] : 'Sin Categoría';
+            if (! is_null($precio) && $precio < 0) {
+                $this->omitirFila($numeroFila, $row, 'El precio de compra no puede ser negativo');
 
-            $categoria = Categoria::firstOrCreate(
-                ['nombre_categoria' => $categoriaNombre],
-                ['descripcion_categoria' => 'Importado desde Excel', 'activar_categoria' => true]
-            );
-            $categoriaId = $categoria->id;
-
-            $nombreProducto = $row['nombre_producto'];
-            $marca = ! empty($row['marca']) ? $row['marca'] : null;
-            $modelo = ! empty($row['modelo']) ? $row['modelo'] : null;
-            $capacidad = ! empty($row['capacidad']) ? $row['capacidad'] : null;
-            $color = ! empty($row['color']) ? $row['color'] : null;
-            $cantidad = $this->normalizarCantidad($row['cantidad'] ?? null);
-
-            // Búsqueda correcta con NULL: where('col', null) no funciona en SQL
-            $query = Producto::where('nombre_producto', $nombreProducto);
-
-            if (is_null($marca)) {
-                $query->whereNull('marca_producto');
-            } else {
-                $query->where('marca_producto', $marca);
+                return null;
             }
 
-            if (is_null($modelo)) {
-                $query->whereNull('modelo_producto');
-            } else {
-                $query->where('modelo_producto', $modelo);
+            // Con unidades, precio_compra es obligatorio: es el costo del lote que crea la fila.
+            // Sin unidades (0 o vacío) la fila solo registra el producto, y el precio es opcional.
+            if (is_null($precio) && $cantidad > 0) {
+                $this->omitirFila($numeroFila, $row, 'Falta el precio de compra o no es válido (obligatorio cuando hay unidades)');
+
+                return null;
             }
 
-            if (is_null($capacidad)) {
-                $query->whereNull('capacidad_producto');
+            $resultado = DB::transaction(fn () => $this->guardarFila($row, $precio, $cantidad, $numeroFila));
+
+            $this->estadisticas[$resultado['producto_nuevo'] ? 'productos_creados' : 'productos_actualizados']++;
+            if ($resultado['resultado'] === 'solo_catalogo') {
+                $this->estadisticas['productos_sin_stock']++;
             } else {
-                $query->where('capacidad_producto', $capacidad);
-            }
-
-            if (is_null($color)) {
-                $query->whereNull('color_producto');
-            } else {
-                $query->where('color_producto', $color);
-            }
-
-            $producto = $query->first();
-
-            if (! $producto) {
-                $producto = Producto::create([
-                    'nombre_producto' => $nombreProducto,
-                    'marca_producto' => $marca,
-                    'modelo_producto' => $modelo,
-                    'capacidad_producto' => $capacidad,
-                    'color_producto' => $color,
-                    'categoria_id' => $categoriaId,
-                    'precio_compra_producto' => $precio,
-                    'imagen_producto' => 'productos/producto-default.png',
-                ]);
-                $this->estadisticas['productos_creados']++;
-                Log::info("Producto creado: {$nombreProducto}", [
-                    'producto_id' => $producto->id,
-                    'almacen_id' => $this->almacenId,
-                    'cantidad' => $cantidad,
-                ]);
-            } else {
-                $producto->update([
-                    'categoria_id' => $categoriaId,
-                    'precio_compra_producto' => $precio,
-                ]);
-                $this->estadisticas['productos_actualizados']++;
-                Log::info("Producto actualizado: {$nombreProducto}", [
-                    'producto_id' => $producto->id,
-                    'almacen_id' => $this->almacenId,
-                ]);
-            }
-
-            // Códigos de barras
-            $codigoBarrasInput = trim((string) ($row['codigo_barras'] ?? ''));
-            if ($codigoBarrasInput !== '') {
-                $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
-                $productoCodigo = ProductoCodigo::firstOrNew([
-                    'producto_id' => $producto->id,
-                    'codigo_barras' => $codigoBarrasInput,
-                ]);
-                $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
-                if (! $productoCodigo->exists) {
-                    $productoCodigo->es_default = $esPrimerCodigo;
-                }
-                $productoCodigo->save();
-                $codigoIdUsado = $productoCodigo->id;
-            } else {
-                $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
-                    ->where('es_default', true)
-                    ->first();
-
-                if ($defaultCodigo) {
-                    $defaultCodigo->increment('cantidad', $cantidad);
-                    $codigoIdUsado = $defaultCodigo->id;
-                } else {
-                    $codigoIdUsado = ProductoCodigo::generarYGuardarDefault($producto, $cantidad)->id;
-                }
-            }
-
-            // Reparto por almacén: estas unidades quedan en el almacén de la importación con ese código.
-            app(CodigoStockService::class)->agregar((int) $this->almacenId, $codigoIdUsado, (int) $cantidad);
-
-            // Almacén: incrementar si ya existe, crear si no
-            $almacenProducto = AlmacenProducto::where('almacen_id', $this->almacenId)
-                ->where('producto_id', $producto->id)
-                ->first();
-
-            if ($almacenProducto) {
-                $cantidadAnterior = $almacenProducto->cantidad;
-                $almacenProducto->increment('cantidad', $cantidad);
-                Log::info('Cantidad incrementada en almacén', [
-                    'producto_id' => $producto->id,
-                    'cantidad_anterior' => $cantidadAnterior,
-                    'cantidad_agregada' => $cantidad,
-                    'cantidad_total' => $cantidadAnterior + $cantidad,
-                    'almacen_id' => $this->almacenId,
-                ]);
-            } else {
-                AlmacenProducto::create([
-                    'almacen_id' => $this->almacenId,
-                    'producto_id' => $producto->id,
-                    'cantidad' => $cantidad,
-                ]);
-                Log::info('Producto asignado al almacén', [
-                    'producto_id' => $producto->id,
-                    'cantidad' => $cantidad,
-                    'almacen_id' => $this->almacenId,
-                ]);
+                $this->estadisticas['lotes_creados']++;
+                $this->estadisticas['unidades_importadas'] += $cantidad;
             }
 
             return null;
@@ -203,10 +102,214 @@ class ProductoImport implements ToModel, WithChunkReading, WithHeadingRow, WithV
                 'fila' => $row,
                 'almacen_id' => $this->almacenId,
             ]);
-            $this->estadisticas['filas_omitidas']++;
+            $this->omitirFila($numeroFila, $row, 'No se pudo guardar la fila (error interno; quedó en el registro del servidor)');
 
             return null;
         }
+    }
+
+    /**
+     * Guarda una fila válida del Excel dentro de su propia transacción (savepoint dentro de la
+     * del controlador): si algo falla a mitad de la fila, esa fila se descarta entera — ficha,
+     * código, stock, lote y su renglón del historial — y las demás siguen.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array{resultado: 'importada'|'solo_catalogo', producto_nuevo: bool}
+     */
+    private function guardarFila(array $row, ?float $precio, int $cantidad, int $numeroFila): array
+    {
+        // Categoría: opcional, default "Sin Categoría"
+        $categoriaNombre = ! empty($row['categoria']) ? $row['categoria'] : 'Sin Categoría';
+
+        $categoria = Categoria::firstOrCreate(
+            ['nombre_categoria' => $categoriaNombre],
+            ['descripcion_categoria' => 'Importado desde Excel', 'activar_categoria' => true]
+        );
+        $categoriaId = $categoria->id;
+
+        $nombreProducto = $row['nombre_producto'];
+        $marca = ! empty($row['marca']) ? $row['marca'] : null;
+        $modelo = ! empty($row['modelo']) ? $row['modelo'] : null;
+        $capacidad = ! empty($row['capacidad']) ? $row['capacidad'] : null;
+        $color = ! empty($row['color']) ? $row['color'] : null;
+
+        // Búsqueda correcta con NULL: where('col', null) no funciona en SQL
+        $query = Producto::where('nombre_producto', $nombreProducto);
+
+        if (is_null($marca)) {
+            $query->whereNull('marca_producto');
+        } else {
+            $query->where('marca_producto', $marca);
+        }
+
+        if (is_null($modelo)) {
+            $query->whereNull('modelo_producto');
+        } else {
+            $query->where('modelo_producto', $modelo);
+        }
+
+        if (is_null($capacidad)) {
+            $query->whereNull('capacidad_producto');
+        } else {
+            $query->where('capacidad_producto', $capacidad);
+        }
+
+        if (is_null($color)) {
+            $query->whereNull('color_producto');
+        } else {
+            $query->where('color_producto', $color);
+        }
+
+        $producto = $query->first();
+
+        if (! $producto) {
+            $producto = Producto::create([
+                'nombre_producto' => $nombreProducto,
+                'marca_producto' => $marca,
+                'modelo_producto' => $modelo,
+                'capacidad_producto' => $capacidad,
+                'color_producto' => $color,
+                'categoria_id' => $categoriaId,
+                'precio_compra_producto' => $precio ?? 0,
+                'imagen_producto' => 'productos/producto-default.png',
+            ]);
+            $productoNuevo = true;
+            Log::info("Producto creado: {$nombreProducto}", [
+                'producto_id' => $producto->id,
+                'almacen_id' => $this->almacenId,
+                'cantidad' => $cantidad,
+            ]);
+        } else {
+            // El costo de la ficha NO se pisa: lo que entra ahora vive en su lote nuevo (abajo),
+            // y sobrescribir la ficha cambiaría el costo del stock "sin lote" de otros almacenes.
+            $producto->update(['categoria_id' => $categoriaId]);
+            $productoNuevo = false;
+            Log::info("Producto actualizado: {$nombreProducto}", [
+                'producto_id' => $producto->id,
+                'almacen_id' => $this->almacenId,
+            ]);
+        }
+
+        // Códigos de barras
+        $codigoBarrasInput = trim((string) ($row['codigo_barras'] ?? ''));
+        if ($codigoBarrasInput !== '') {
+            $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
+            $productoCodigo = ProductoCodigo::firstOrNew([
+                'producto_id' => $producto->id,
+                'codigo_barras' => $codigoBarrasInput,
+            ]);
+            $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
+            if (! $productoCodigo->exists) {
+                $productoCodigo->es_default = $esPrimerCodigo;
+            }
+            $productoCodigo->save();
+            $codigoIdUsado = $productoCodigo->id;
+        } else {
+            $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
+                ->where('es_default', true)
+                ->first();
+
+            if ($defaultCodigo) {
+                $defaultCodigo->increment('cantidad', $cantidad);
+                $codigoIdUsado = $defaultCodigo->id;
+            } else {
+                $codigoIdUsado = ProductoCodigo::generarYGuardarDefault($producto, $cantidad)->id;
+            }
+        }
+
+        // Reparto por almacén: estas unidades quedan en el almacén de la importación con ese código.
+        app(CodigoStockService::class)->agregar((int) $this->almacenId, $codigoIdUsado, (int) $cantidad);
+
+        // Almacén: incrementar si ya existe, crear si no
+        $almacenProducto = AlmacenProducto::where('almacen_id', $this->almacenId)
+            ->where('producto_id', $producto->id)
+            ->first();
+
+        if ($almacenProducto) {
+            $cantidadAnterior = $almacenProducto->cantidad;
+            $almacenProducto->increment('cantidad', $cantidad);
+            Log::info('Cantidad incrementada en almacén', [
+                'producto_id' => $producto->id,
+                'cantidad_anterior' => $cantidadAnterior,
+                'cantidad_agregada' => $cantidad,
+                'cantidad_total' => $cantidadAnterior + $cantidad,
+                'almacen_id' => $this->almacenId,
+            ]);
+        } else {
+            AlmacenProducto::create([
+                'almacen_id' => $this->almacenId,
+                'producto_id' => $producto->id,
+                'cantidad' => $cantidad,
+            ]);
+            Log::info('Producto asignado al almacén', [
+                'producto_id' => $producto->id,
+                'cantidad' => $cantidad,
+                'almacen_id' => $this->almacenId,
+            ]);
+        }
+
+        // Cada fila con unidades es un lote nuevo en este almacén, aunque el producto ya existiera
+        // con el mismo costo y características (igual que cada línea de una compra aprobada):
+        // unir lotes es una decisión del usuario (fusión de lotes), nunca del import. Una fila
+        // sin unidades solo registra el producto: el import suma stock, nunca lo resta.
+        $lote = null;
+        if ($cantidad > 0) {
+            $lote = LoteStock::create([
+                'codigo' => LoteStock::generarCodigoImportacion($producto->id, (int) $this->almacenId),
+                'compra_producto_id' => null,
+                'movimiento_id' => null,
+                'lote_origen_id' => null,
+                'producto_id' => $producto->id,
+                'almacen_id' => $this->almacenId,
+                'cantidad' => $cantidad,
+                'cantidad_disponible' => $cantidad,
+                'precio_costo' => $precio,
+            ]);
+        }
+
+        $resultado = $lote ? 'importada' : 'solo_catalogo';
+
+        $this->registrarFila($numeroFila, [
+            'nombre_producto' => $nombreProducto,
+            'producto_id' => $producto->id,
+            'producto_nuevo' => $productoNuevo,
+            'producto_codigo_id' => $codigoIdUsado,
+            'cantidad' => $cantidad,
+            'precio_compra' => $precio,
+            'resultado' => $resultado,
+            'motivo' => (! $lote && ! $productoNuevo) ? 'El producto ya existía: su stock no cambia (el import solo suma)' : null,
+            'lote_id' => $lote?->id,
+            'lote_codigo' => $lote?->codigo,
+        ]);
+
+        return ['resultado' => $resultado, 'producto_nuevo' => $productoNuevo];
+    }
+
+    /**
+     * Anota una fila que no se pudo importar, con el motivo que verá el usuario en el historial.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function omitirFila(int $numeroFila, array $row, string $motivo): void
+    {
+        $this->estadisticas['filas_omitidas']++;
+        Log::warning("Fila {$numeroFila} omitida - {$motivo}", ['nombre' => $row['nombre_producto'] ?? null]);
+
+        $this->registrarFila($numeroFila, [
+            'nombre_producto' => isset($row['nombre_producto']) ? mb_substr((string) $row['nombre_producto'], 0, 255) : null,
+            'cantidad' => $this->normalizarCantidad($row['cantidad'] ?? null),
+            'precio_compra' => $this->normalizarPrecio($row['precio_compra'] ?? null),
+            'resultado' => 'omitida',
+            'motivo' => $motivo,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $datos
+     */
+    private function registrarFila(int $numeroFila, array $datos): void
+    {
+        $this->importacion?->filas()->create($datos + ['fila' => $numeroFila]);
     }
 
     /**

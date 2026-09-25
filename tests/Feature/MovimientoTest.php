@@ -2,6 +2,7 @@
 
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
+use App\Models\LoteStock;
 use App\Models\Movimiento;
 use App\Models\Producto;
 use App\Models\User;
@@ -341,6 +342,58 @@ test('recibir() completo: suma al destino, resta del origen (cantidad y en_trans
         'almacen_id' => $destino->id, 'producto_id' => $producto->id, 'cantidad' => 13,
     ]);
     $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'recibido_completo']);
+});
+
+test('recibir() un movimiento que NO requiere prorrateo acumula sus unidades al lote idéntico del destino en vez de crear otro', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($destino, $producto, cantidad: 5);
+    $existente = LoteStock::create(['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100]);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $admin->id, 'requiere_prorrateo' => false,
+    ]);
+    $movimiento->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10]);
+
+    $this->post(route('movimientos.recibir', $movimiento), ['productos' => [['id' => $producto->id, 'cantidad_recibida' => 10]]])
+        ->assertRedirect(route('movimientos.index'));
+
+    expect($existente->fresh()->cantidad_disponible)->toBe(15);
+    // El lote del movimiento existió, pero quedó absorbido: sin stock propio y apuntando al existente.
+    $loteDelMovimiento = LoteStock::where('movimiento_id', $movimiento->id)->sole();
+    expect($loteDelMovimiento->cantidad_disponible)->toBe(0);
+    expect($loteDelMovimiento->fusionado_en_lote_id)->toBe($existente->id);
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $destino->id, 'producto_id' => $producto->id, 'cantidad' => 15]);
+});
+
+test('recibir() un movimiento que SÍ requiere prorrateo deja su lote aparte hasta que se decida (aplicar o eliminar de la lista)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($destino, $producto, cantidad: 5);
+    $existente = LoteStock::create(['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100]);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $admin->id, 'requiere_prorrateo' => true,
+    ]);
+    $movimiento->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10]);
+
+    $this->post(route('movimientos.recibir', $movimiento), ['productos' => [['id' => $producto->id, 'cantidad_recibida' => 10]]])
+        ->assertRedirect(route('movimientos.index'));
+
+    expect($existente->fresh()->cantidad_disponible)->toBe(5);
+    $loteDelMovimiento = LoteStock::where('movimiento_id', $movimiento->id)->sole();
+    expect($loteDelMovimiento->cantidad_disponible)->toBe(10);
+    expect($loteDelMovimiento->fusionado_en_lote_id)->toBeNull();
 });
 
 test('recibir() parcial: la diferencia no recibida queda de vuelta en el origen, estado recibido_parcial', function () {

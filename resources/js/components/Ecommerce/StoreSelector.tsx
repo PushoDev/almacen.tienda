@@ -82,7 +82,7 @@ export default function StoreSelector({ isOpen, onClose, onSelectStore, selected
             <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300" onClick={onClose} />
 
             {/* Modal */}
-            <div className="animate-in fade-in zoom-in-95 relative z-10 w-full max-w-2xl overflow-hidden rounded-[2.5rem] bg-white shadow-2xl duration-300">
+            <div className="animate-dialog-bounce relative z-10 w-full max-w-2xl overflow-hidden rounded-[2.5rem] bg-white shadow-2xl duration-300">
                 {/* Header */}
                 <div className="relative border-b border-slate-50 bg-white px-8 py-10 md:px-12">
                     <button

@@ -368,26 +368,36 @@ test('el listado de disponibles marca las fichas hermanas del almacén con la mi
     }));
 });
 
-// ─── Desglose por lote: solo productos con 2+ costos distintos en el almacén ────
+// ─── Desglose por lote: productos con 2+ lotes con stock en el almacén (igual costo o no) ────
 
-test('el listado de disponibles trae los lotes solo cuando el producto tiene costos distintos en el almacén', function () {
+test('el listado de disponibles trae los lotes cuando el producto tiene 2+ lotes con stock en el almacén, aunque cuesten lo mismo', function () {
     $this->actingAs(User::factory()->admin()->create());
     $almacen = Almacen::factory()->create();
     $variosCostos = Producto::factory()->create(['nombre_producto' => 'OLLA ARROCERA']);
     $variosCostos->almacenes()->attach($almacen->id, ['cantidad' => 78]);
     $loteViejo = LoteStock::create(['codigo' => 'AJUSTE-LEGADO-1', 'producto_id' => $variosCostos->id, 'almacen_id' => $almacen->id, 'cantidad' => 28, 'precio_costo' => 21.38]);
     $loteNuevo = LoteStock::create(['codigo' => 'LOTE-MOV-209-1', 'producto_id' => $variosCostos->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 21.85, 'precio_venta' => 36]);
-    $unCosto = Producto::factory()->create(['nombre_producto' => 'MICROONDAS']);
-    $unCosto->almacenes()->attach($almacen->id, ['cantidad' => 4]);
-    LoteStock::create(['codigo' => 'LOTE-A', 'producto_id' => $unCosto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
-    LoteStock::create(['codigo' => 'LOTE-B', 'producto_id' => $unCosto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
+    // Dos lotes al MISMO costo: también salen (se pueden fusionar aunque no cambie el costo).
+    $mismoCosto = Producto::factory()->create(['nombre_producto' => 'MICROONDAS']);
+    $mismoCosto->almacenes()->attach($almacen->id, ['cantidad' => 4]);
+    $loteA = LoteStock::create(['codigo' => 'LOTE-A', 'producto_id' => $mismoCosto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
+    $loteB = LoteStock::create(['codigo' => 'LOTE-B', 'producto_id' => $mismoCosto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
+    // Un solo lote con stock (el otro está agotado): sin desglose.
+    $unSoloLote = Producto::factory()->create(['nombre_producto' => 'LICUADORA']);
+    $unSoloLote->almacenes()->attach($almacen->id, ['cantidad' => 3]);
+    LoteStock::create(['codigo' => 'LOTE-C', 'producto_id' => $unSoloLote->id, 'almacen_id' => $almacen->id, 'cantidad' => 3, 'precio_costo' => 30]);
+    LoteStock::create(['codigo' => 'LOTE-D-AGOTADO', 'producto_id' => $unSoloLote->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'cantidad_disponible' => 0, 'precio_costo' => 31]);
 
     $response = $this->get(route('disponibles.index'));
 
-    $response->assertInertia(fn ($page) => $page->where('almacenes.0.productos', function ($productos) use ($variosCostos, $unCosto, $loteViejo, $loteNuevo) {
+    $response->assertInertia(fn ($page) => $page->where('almacenes.0.productos', function ($productos) use ($variosCostos, $mismoCosto, $unSoloLote, $loteA, $loteB, $loteViejo, $loteNuevo) {
         $porId = collect($productos)->keyBy('id');
 
-        return $porId[$unCosto->id]['lotes'] === null
+        return $porId[$unSoloLote->id]['lotes'] === null
+            && $porId[$mismoCosto->id]['lotes'] == [
+                ['id' => $loteA->id, 'codigo' => 'LOTE-A', 'cantidad' => 2, 'costo' => 50.0, 'precio_venta' => null, 'prorrateo_pendiente' => false],
+                ['id' => $loteB->id, 'codigo' => 'LOTE-B', 'cantidad' => 2, 'costo' => 50.0, 'precio_venta' => null, 'prorrateo_pendiente' => false],
+            ]
             // == (no ===): al pasar por JSON, 36.0 llega como 36.
             && $porId[$variosCostos->id]['lotes'] == [
                 ['id' => $loteViejo->id, 'codigo' => 'AJUSTE-LEGADO-1', 'cantidad' => 28, 'costo' => 21.38, 'precio_venta' => null, 'prorrateo_pendiente' => false],

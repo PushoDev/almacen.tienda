@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CompraController;
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Categoria;
@@ -17,6 +18,7 @@ use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
 use App\Models\TipoMovimientoFinanciero;
 use App\Models\User;
+use Illuminate\Http\Request;
 
 test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', function () {
     $user = User::factory()->admin()->create();
@@ -705,6 +707,10 @@ test('prorratear una compra nueva no toca el costo del lote de otra compra vieja
     // queda intacto, aunque comparta ficha con la nueva.
     expect((float) $loteViejo->fresh()->precio_costo)->toEqual(10.0);
     expect($producto->costoEnAlmacen($almacenViejo->id))->toBe(10.0);
+
+    // La compra prorrateada queda decidida ("aplicado"); la otra sigue sin decidir.
+    expect($compraNueva->fresh()->prorrateo_decision)->toBe('aplicado');
+    expect($compraVieja->fresh()->prorrateo_decision)->toBeNull();
 });
 
 test('no se puede prorratear costos de una compra que sigue pendiente (sin aprobar)', function () {
@@ -1999,4 +2005,207 @@ test('un moderador sí puede aprobar/anular/editar una compra, igual que admin',
     $this->post(route('comprar.aprobar', $compra->id), [], ['X-Inertia' => 'true'])->assertSessionHasNoErrors();
 
     expect($compra->fresh()->estado)->toBe('aprobada');
+});
+
+// ─── Doble petición: la segunda ve la compra con el estado viejo ───────────
+//
+// Con un doble clic (o aprobar contra anular/editar) dos peticiones cargan la compra como
+// "pendiente" y ambas pasan la primera revisión. Se reproduce sin concurrencia real: la
+// petición "ganadora" cambia el estado y la "perdedora" entra al controlador con el modelo
+// que cargó antes — por eso se llama al controlador directo con esa copia obsoleta.
+
+function crearCompraPendienteConDeuda(Proveedor $proveedor, Almacen $almacen, Categoria $categoria, string $nombreProducto): Compra
+{
+    test()->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $proveedor->nombre_proveedor,
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-09-07',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => $nombreProducto, 'categoria' => $categoria->nombre_categoria, 'codigo_barras' => 'BARCODE-DOBLE', 'cantidad' => 2, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    return Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+}
+
+test('aprobar con el estado desactualizado (otra petición ya la aprobó) no duplica stock, código ni lote', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $almacen = Almacen::factory()->create();
+    $compra = crearCompraPendienteConDeuda($proveedor, $almacen, Categoria::factory()->create(), 'Producto Doble Clic Aprobar');
+
+    $copiaObsoleta = Compra::findOrFail($compra->id);
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    $respuesta = app(CompraController::class)->aprobar($copiaObsoleta);
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede aprobar una compra pendiente.');
+    $producto = Producto::where('nombre_producto', 'Producto Doble Clic Aprobar')->firstOrFail();
+    $this->assertDatabaseHas('almacen_producto', ['almacen_id' => $almacen->id, 'producto_id' => $producto->id, 'cantidad' => 2]);
+    $this->assertDatabaseHas('producto_codigos', ['producto_id' => $producto->id, 'cantidad' => 2]);
+    expect(LoteStock::where('producto_id', $producto->id)->count())->toBe(1);
+});
+
+test('anular con el estado desactualizado (otra petición ya la anuló) no devuelve el dinero dos veces', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $compra = crearCompraPendienteConDeuda($proveedor, Almacen::factory()->create(), Categoria::factory()->create(), 'Producto Doble Clic Anular');
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('480.00');
+
+    $copiaObsoleta = Compra::findOrFail($compra->id);
+    $this->post(route('comprar.anular', $compra->id), [
+        'tipo_anulacion' => 'reversion',
+        'motivo_anulacion' => 'Primer clic',
+    ])->assertSessionHasNoErrors();
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+
+    $peticion = Request::create('/', 'POST', ['tipo_anulacion' => 'reversion', 'motivo_anulacion' => 'Segundo clic']);
+    $respuesta = app(CompraController::class)->anular($peticion, $copiaObsoleta);
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede anular una compra pendiente.');
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+    expect($compra->fresh()->motivo_anulacion)->toBe('Primer clic');
+});
+
+test('editar con el estado desactualizado (otra petición ya la aprobó) no reemplaza las líneas ni toca el dinero', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+    $compra = crearCompraPendienteConDeuda($proveedor, $almacen, $categoria, 'Producto Doble Clic Editar');
+
+    $copiaObsoleta = Compra::findOrFail($compra->id);
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    $peticion = Request::create('/', 'POST', [
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Doble Clic Editar', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 9, 'precio' => 10],
+        ],
+        'nota' => 'Edición tardía',
+    ]);
+    $respuesta = app(CompraController::class)->actualizar($peticion, $copiaObsoleta);
+
+    expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede editar una compra pendiente.');
+    $this->assertDatabaseHas('compra_producto', ['compra_id' => $compra->id, 'cantidad' => 2]);
+    expect($compra->fresh()->total_compra)->toEqual('20.00');
+    expect($proveedor->fresh()->saldo_proveedor)->toEqual('480.00');
+    expect(CompraEdicion::where('compra_id', $compra->id)->count())->toBe(0);
+});
+
+// ─── Eliminar compras de la lista de prorrateos (sin prorratear) y acumular sus lotes ────────
+
+/**
+ * Compra aprobada con su lote (como lo deja aprobar()), sin pasar por todo el flujo de registro.
+ *
+ * @return array{0: Compra, 1: LoteStock}
+ */
+function compraAprobadaConLote(Producto $producto, Almacen $almacen, int $cantidad, float $costo, string $estado = 'aprobada'): array
+{
+    $compra = Compra::factory()->create(['estado' => $estado, 'tipo_compra' => 'deuda_proveedor']);
+    $compra->productos()->attach($producto->id, ['cantidad' => $cantidad, 'precio' => $costo, 'almacen_id' => $almacen->id]);
+    $lote = LoteStock::create([
+        'codigo' => LoteStock::generarCodigo($compra->id, 1),
+        'compra_producto_id' => CompraProducto::where('compra_id', $compra->id)->firstOrFail()->id,
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'cantidad' => $cantidad,
+        'precio_costo' => $costo,
+    ]);
+
+    return [$compra, $lote];
+}
+
+test('eliminar una compra de la lista la marca omitida, la oculta y acumula su lote al lote idéntico del almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $existente = LoteStock::create(['codigo' => 'AJUSTE-LEGADO-X', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 10]);
+    [$compra, $loteDeLaCompra] = compraAprobadaConLote($producto, $almacen, cantidad: 8, costo: 10);
+
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$compra->id]])
+        ->assertSessionHas('success', fn (string $mensaje) => str_contains($mensaje, '1 lote(s) se acumularon'));
+
+    $compra->refresh();
+    expect($compra->prorrateo_decision)->toBe('omitido');
+    expect($compra->prorrateo_decidido_por)->toBe($admin->id);
+    expect($existente->fresh()->cantidad_disponible)->toBe(13);
+    expect($loteDeLaCompra->fresh()->cantidad_disponible)->toBe(0);
+    expect($loteDeLaCompra->fresh()->fusionado_en_lote_id)->toBe($existente->id);
+    $this->get(route('distribucion-costos.index'))
+        ->assertInertia(fn ($page) => $page->where('compras.data', fn ($compras) => ! collect($compras)->pluck('id')->contains($compra->id)));
+});
+
+test('eliminar una compra de la lista NO acumula si el lote del almacén no es idéntico: otro costo, precio propio o de otra compra sin decidir', function (string $caso) {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    [$compra, $loteDeLaCompra] = compraAprobadaConLote($producto, $almacen, cantidad: 8, costo: 10);
+
+    if ($caso === 'de otra compra sin decidir') {
+        [, $existente] = compraAprobadaConLote($producto, $almacen, cantidad: 5, costo: 10); // aprobada, sin prorratear todavía
+    } else {
+        $existente = LoteStock::create([
+            'codigo' => 'AJUSTE-LEGADO-X', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5,
+            'precio_costo' => $caso === 'otro costo' ? 9 : 10, 'precio_venta' => $caso === 'precio propio' ? 30 : null,
+        ]);
+    }
+
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$compra->id]])->assertSessionHasNoErrors();
+
+    expect($compra->fresh()->prorrateo_decision)->toBe('omitido');
+    expect($existente->fresh()->cantidad_disponible)->toBe(5);
+    expect($loteDeLaCompra->fresh()->cantidad_disponible)->toBe(8);
+    expect($loteDeLaCompra->fresh()->fusionado_en_lote_id)->toBeNull();
+})->with(['otro costo', 'precio propio', 'de otra compra sin decidir']);
+
+test('no se elimina de la lista una compra pendiente ni una ya prorrateada; una anulada sí (sin lotes que mover)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create();
+    [$pendiente] = compraAprobadaConLote($producto, $almacen, cantidad: 2, costo: 10, estado: 'pendiente');
+    [$prorrateada] = compraAprobadaConLote($producto, $almacen, cantidad: 2, costo: 10);
+    $prorrateada->update(['prorrateo_decision' => 'aplicado']);
+    [$anulada] = compraAprobadaConLote($producto, $almacen, cantidad: 2, costo: 10, estado: 'anulada');
+
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$pendiente->id, $prorrateada->id]])->assertSessionHas('error');
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$anulada->id]])->assertSessionHasNoErrors();
+
+    expect($pendiente->fresh()->prorrateo_decision)->toBeNull();
+    expect($prorrateada->fresh()->prorrateo_decision)->toBe('aplicado');
+    expect($anulada->fresh()->prorrateo_decision)->toBe('omitido');
+});
+
+test('un moderador sí puede eliminar compras de la lista de prorrateos, ve el botón y se acumulan como con el admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+    crearTurnoActivo($moderador); // sin turno capturado, RequireTurnoActivo bloquea las escrituras del moderador
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+    $existente = LoteStock::create(['codigo' => 'AJUSTE-LEGADO-X', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 10]);
+    [$compra] = compraAprobadaConLote($producto, $almacen, cantidad: 8, costo: 10);
+
+    $this->get(route('distribucion-costos.index'))->assertInertia(fn ($page) => $page->where('puedeEliminarPendientes', true));
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$compra->id]])->assertSessionHasNoErrors();
+
+    expect($compra->fresh()->prorrateo_decision)->toBe('omitido');
+    expect($compra->fresh()->prorrateo_decidido_por)->toBe($moderador->id);
+    expect($existente->fresh()->cantidad_disponible)->toBe(13);
+});
+
+test('un vendedor no puede eliminar compras de la lista de prorrateos (403) y no ve el botón', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+    $almacen = Almacen::factory()->create();
+    [$compra, $lote] = compraAprobadaConLote(Producto::factory()->create(), $almacen, cantidad: 2, costo: 10);
+
+    $this->post(route('distribucion-costos.compras.omitir'), ['compra_ids' => [$compra->id]])->assertForbidden();
+    $this->get(route('distribucion-costos.index'))->assertInertia(fn ($page) => $page->where('puedeEliminarPendientes', false));
+
+    expect($compra->fresh()->prorrateo_decision)->toBeNull();
+    expect($lote->fresh()->cantidad_disponible)->toBe(2);
 });

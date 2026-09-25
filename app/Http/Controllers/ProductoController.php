@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Exports\PlantillaProductoExport;
+use App\Exports\PlantillaProductoLibro;
 use App\Exports\ProductoExport;
 use App\Exports\ProductosListadoExport;
 use App\Imports\ProductoImport;
@@ -17,6 +17,7 @@ use App\Services\CodigoStockService;
 use App\Services\FichasHermanasService;
 use App\Services\FusionLotesService;
 use App\Services\FusionProductosService;
+use App\Services\ImportacionProductosService;
 use App\Services\ValorInventarioService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -945,12 +946,13 @@ class ProductoController extends Controller
     /**
      * Importar productos desde Excel a un almacén específico
      */
-    public function import(Request $request)
+    public function import(Request $request, ImportacionProductosService $servicio)
     {
         // Validación de archivo
         $request->validate([
             'file' => 'required|file|mimes:xlsx,xls|max:5120',
             'almacen_id' => 'required|integer|exists:almacens,id',
+            'confirmar_repetido' => 'sometimes|boolean',
         ], [
             'file.required' => 'Debes seleccionar un archivo para importar',
             'file.file' => 'El archivo debe ser un archivo válido',
@@ -960,50 +962,40 @@ class ProductoController extends Controller
             'almacen_id.exists' => 'El almacén seleccionado no existe',
         ]);
 
-        DB::beginTransaction();
+        $file = $request->file('file');
+        $almacen = Almacen::findOrFail((int) $request->get('almacen_id'));
+        $hashArchivo = hash_file('sha256', $file->getRealPath());
+
+        // Mismo archivo, mismo almacén: la segunda vez duplicaría stock y lotes. Se avisa y se
+        // deja pasar solo si el usuario lo confirma (un mismo Excel sí puede ser legítimo).
+        $previa = $servicio->buscarPrevia($almacen->id, $hashArchivo);
+        if ($previa && ! $request->boolean('confirmar_repetido')) {
+            return redirect()->back()->with('importacion_repetida', $servicio->avisoRepetida($previa));
+        }
+
         try {
-            $file = $request->file('file');
-            $almacenId = $request->get('almacen_id');
+            $importacion = $servicio->ejecutar(
+                $request->user(),
+                $almacen,
+                $file->getClientOriginalName(),
+                $hashArchivo,
+                fn (ProductoImport $importador) => Excel::import($importador, $file),
+            );
 
-            // Validar que el almacén existe
-            $almacen = Almacen::find($almacenId);
-            if (! $almacen) {
-                throw new \Exception('El almacén especificado no existe.');
-            }
-
-            // Crear la instancia del importador
-            $import = new ProductoImport($almacenId);
-            Excel::import($import, $file);
-
-            DB::commit();
-
-            // Obtener estadísticas
-            $stats = $import->getEstadisticas();
-
-            $mensaje = "✓ Importación completada correctamente.\n";
-            $mensaje .= "• Productos creados: {$stats['productos_creados']}\n";
-            $mensaje .= "• Productos actualizados: {$stats['productos_actualizados']}\n";
-            $mensaje .= "• Total procesado: {$stats['filas_procesadas']}\n";
-            if ($stats['filas_omitidas'] > 0) {
-                $mensaje .= "⚠ Filas omitidas: {$stats['filas_omitidas']}";
-            }
-
-            Log::info("Importación exitosa en almacén {$almacen->nombre_almacen}", $stats);
+            Log::info("Importación exitosa en almacén {$almacen->nombre_almacen}", ['importacion_id' => $importacion->id]);
 
             return redirect()
                 ->route('productos.index')
-                ->with('success', $mensaje);
+                ->with('success', $servicio->mensajeResumen($importacion))
+                ->with('importacion_resultado', $servicio->resultadoParaVista($importacion, $almacen));
         } catch (ValidationException $e) {
-            DB::rollBack();
-
             return redirect()->back()
                 ->withErrors($e->errors())
                 ->withInput();
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Error al importar productos: '.$e->getMessage(), [
-                'almacen_id' => $request->get('almacen_id'),
-                'archivo' => $request->file('file')?->getClientOriginalName(),
+                'almacen_id' => $almacen->id,
+                'archivo' => $file->getClientOriginalName(),
             ]);
 
             return redirect()
@@ -1018,18 +1010,18 @@ class ProductoController extends Controller
      */
     public function downloadTemplate()
     {
-        return Excel::download(new PlantillaProductoExport, 'plantilla-importacion-productos.xlsx', \Maatwebsite\Excel\Excel::XLSX);
+        return Excel::download(new PlantillaProductoLibro, 'plantilla-importacion-productos.xlsx', \Maatwebsite\Excel\Excel::XLSX);
     }
 
     /**
      * Importar a un almacén específico (ruta alternativa)
      */
-    public function importToAlmacen(Request $request, $almacenId)
+    public function importToAlmacen(Request $request, ImportacionProductosService $servicio, $almacenId)
     {
         // Redirigir a import con el almacén en el request
         $request->merge(['almacen_id' => $almacenId]);
 
-        return $this->import($request);
+        return $this->import($request, $servicio);
     }
 
     /**

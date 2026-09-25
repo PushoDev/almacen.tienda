@@ -156,6 +156,24 @@ class LoteStock extends Model
     }
 
     /**
+     * Código del lote que crea cada fila de una importación de Excel. Un producto+almacén puede
+     * importarse muchas veces (cada fila es un lote nuevo, aunque coincida en costo con otro),
+     * así que lleva un correlativo. Se salta los códigos ya usados en vez de contar lotes:
+     * si se borran lotes intermedios, contar repetiría un código existente.
+     */
+    public static function generarCodigoImportacion(int $productoId, int $almacenId): string
+    {
+        $prefijo = sprintf('IMP-%d-%d-', $productoId, $almacenId);
+        $siguiente = self::where('codigo', 'like', $prefijo.'%')->count() + 1;
+
+        while (self::where('codigo', $prefijo.$siguiente)->exists()) {
+            $siguiente++;
+        }
+
+        return $prefijo.$siguiente;
+    }
+
+    /**
      * Lote donde vive hoy el stock de este lote: él mismo, o — si se fusionó — el lote en que
      * terminó (siguiendo la cadena, por si el resultante se volvió a fusionar). Usado al
      * devolver unidades (anular una venta) para no revivir un lote ya fusionado.

@@ -638,75 +638,101 @@ class CompraController extends Controller
             return back()->withErrors(['error' => 'Solo se puede aprobar una compra pendiente.']);
         }
 
-        DB::transaction(function () use ($comprar) {
-            $numeroLinea = 0;
+        try {
+            DB::transaction(function () use ($comprar) {
+                $this->bloquearCompraPendiente($comprar, 'Solo se puede aprobar una compra pendiente.');
 
-            foreach ($comprar->productos as $producto) {
-                $numeroLinea++;
+                $numeroLinea = 0;
 
-                $cantidad = (int) $producto->pivot->cantidad;
-                $almacenId = (int) $producto->pivot->almacen_id;
-                $codigoBarrasInput = trim((string) ($producto->pivot->codigo_barras ?? ''));
+                foreach ($comprar->productos as $producto) {
+                    $numeroLinea++;
 
-                if ($codigoBarrasInput !== '') {
-                    $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
-                    $productoCodigo = ProductoCodigo::firstOrNew([
-                        'producto_id' => $producto->id,
-                        'codigo_barras' => $codigoBarrasInput,
-                    ]);
-                    $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
-                    if (! $productoCodigo->exists) {
-                        $productoCodigo->es_default = $esPrimerCodigo;
-                        try {
-                            $productoCodigo->imagen_barcode = ProductoCodigo::generarImagenBarcode($codigoBarrasInput);
-                        } catch (\Exception $e) {
-                            logger()->warning('No se pudo generar barcode para '.$codigoBarrasInput.': '.$e->getMessage());
+                    $cantidad = (int) $producto->pivot->cantidad;
+                    $almacenId = (int) $producto->pivot->almacen_id;
+                    $codigoBarrasInput = trim((string) ($producto->pivot->codigo_barras ?? ''));
+
+                    if ($codigoBarrasInput !== '') {
+                        $esPrimerCodigo = ! ProductoCodigo::where('producto_id', $producto->id)->exists();
+                        $productoCodigo = ProductoCodigo::firstOrNew([
+                            'producto_id' => $producto->id,
+                            'codigo_barras' => $codigoBarrasInput,
+                        ]);
+                        $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
+                        if (! $productoCodigo->exists) {
+                            $productoCodigo->es_default = $esPrimerCodigo;
+                            try {
+                                $productoCodigo->imagen_barcode = ProductoCodigo::generarImagenBarcode($codigoBarrasInput);
+                            } catch (\Exception $e) {
+                                logger()->warning('No se pudo generar barcode para '.$codigoBarrasInput.': '.$e->getMessage());
+                            }
+                        }
+                        $productoCodigo->save();
+                        $codigoIdUsado = $productoCodigo->id;
+                    } else {
+                        $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
+                            ->where('es_default', true)
+                            ->first();
+
+                        if ($defaultCodigo) {
+                            $defaultCodigo->increment('cantidad', $cantidad);
+                            $codigoIdUsado = $defaultCodigo->id;
+                        } else {
+                            $codigoIdUsado = ProductoCodigo::generarYGuardarDefault($producto, $cantidad)->id;
                         }
                     }
-                    $productoCodigo->save();
-                    $codigoIdUsado = $productoCodigo->id;
-                } else {
-                    $defaultCodigo = ProductoCodigo::where('producto_id', $producto->id)
-                        ->where('es_default', true)
-                        ->first();
 
-                    if ($defaultCodigo) {
-                        $defaultCodigo->increment('cantidad', $cantidad);
-                        $codigoIdUsado = $defaultCodigo->id;
-                    } else {
-                        $codigoIdUsado = ProductoCodigo::generarYGuardarDefault($producto, $cantidad)->id;
-                    }
+                    // Reparto por almacén: estas unidades llegan a ESTE almacén con ESTE código.
+                    app(CodigoStockService::class)->agregar($almacenId, $codigoIdUsado, $cantidad);
+
+                    $almacenProducto = AlmacenProducto::firstOrNew([
+                        'almacen_id' => $almacenId,
+                        'producto_id' => $producto->id,
+                    ]);
+                    $almacenProducto->cantidad = max(0, ($almacenProducto->cantidad ?? 0) + $cantidad);
+                    $almacenProducto->save();
+
+                    // Registro de trazabilidad: qué línea de qué compra trajo esta tanda de stock.
+                    // No reemplaza AlmacenProducto (el total real), pero sí es la fuente real de
+                    // consumo por lote — cantidad_disponible se decrementa por Ventas/Movimientos
+                    // (ver LoteConsumoService), cantidad se queda fija como dato histórico.
+                    LoteStock::create([
+                        'codigo' => LoteStock::generarCodigo($comprar->id, $numeroLinea),
+                        'compra_producto_id' => $producto->pivot->id,
+                        'producto_id' => $producto->id,
+                        'almacen_id' => $almacenId,
+                        'cantidad' => $cantidad,
+                        'cantidad_disponible' => $cantidad,
+                        'precio_costo' => $producto->pivot->precio,
+                    ]);
                 }
 
-                // Reparto por almacén: estas unidades llegan a ESTE almacén con ESTE código.
-                app(CodigoStockService::class)->agregar($almacenId, $codigoIdUsado, $cantidad);
-
-                $almacenProducto = AlmacenProducto::firstOrNew([
-                    'almacen_id' => $almacenId,
-                    'producto_id' => $producto->id,
-                ]);
-                $almacenProducto->cantidad = max(0, ($almacenProducto->cantidad ?? 0) + $cantidad);
-                $almacenProducto->save();
-
-                // Registro de trazabilidad: qué línea de qué compra trajo esta tanda de stock.
-                // No reemplaza AlmacenProducto (el total real), pero sí es la fuente real de
-                // consumo por lote — cantidad_disponible se decrementa por Ventas/Movimientos
-                // (ver LoteConsumoService), cantidad se queda fija como dato histórico.
-                LoteStock::create([
-                    'codigo' => LoteStock::generarCodigo($comprar->id, $numeroLinea),
-                    'compra_producto_id' => $producto->pivot->id,
-                    'producto_id' => $producto->id,
-                    'almacen_id' => $almacenId,
-                    'cantidad' => $cantidad,
-                    'cantidad_disponible' => $cantidad,
-                    'precio_costo' => $producto->pivot->precio,
-                ]);
-            }
-
-            $comprar->update(['estado' => 'aprobada']);
-        });
+                $comprar->update(['estado' => 'aprobada']);
+            });
+        } catch (\DomainException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
 
         return redirect()->route('comprar.show', $comprar->id)->with('success', 'Compra aprobada — stock actualizado.');
+    }
+
+    /**
+     * Bloquea la fila de la compra y confirma que sigue pendiente. La revisión de estado que
+     * hacen aprobar()/anular()/actualizar() al empezar usa el modelo cargado al inicio de la
+     * petición: con dos peticiones a la vez (doble clic, o aprobar contra anular/editar) ambas
+     * la pasan, y solo la primera debe actuar. Al terminar, $compra queda con los valores y
+     * relaciones actuales de la fila.
+     *
+     * @throws \DomainException si otra petición ya cambió el estado de la compra
+     */
+    private function bloquearCompraPendiente(Compra $compra, string $mensaje): void
+    {
+        $estadoActual = Compra::whereKey($compra->id)->lockForUpdate()->value('estado');
+
+        if ($estadoActual !== 'pendiente') {
+            throw new \DomainException($mensaje);
+        }
+
+        $compra->refresh();
     }
 
     /**
@@ -737,45 +763,50 @@ class CompraController extends Controller
             ]);
         }
 
-        $comprar->loadMissing(['pagos.cuenta', 'pagos.cliente', 'proveedor', 'cliente']);
+        try {
+            DB::transaction(function () use ($comprar, $validated) {
+                $this->bloquearCompraPendiente($comprar, 'Solo se puede anular una compra pendiente.');
+                $comprar->loadMissing(['pagos.cuenta', 'pagos.cliente', 'proveedor', 'cliente']);
 
-        DB::transaction(function () use ($comprar, $validated) {
-            if ($validated['tipo_anulacion'] === 'reversion') {
-                $this->revertirEfectosMonetarios($comprar);
-            } else {
-                // La porción de deuda (si la hubo, ej. compra parcial) siempre se revierte a 0 —
-                // nunca se convierte en fondo, haya habido pago real en el resto o no.
-                $pagoDeuda = $comprar->pagos->firstWhere('tipo_pago', 'deuda_proveedor');
-                if ($pagoDeuda) {
-                    if ($comprar->proveedor) {
-                        $comprar->proveedor->increment('saldo_proveedor', $pagoDeuda->monto);
-                    } elseif ($comprar->cliente) {
-                        $comprar->cliente->increment('deuda_pago_cliente', $pagoDeuda->monto);
+                if ($validated['tipo_anulacion'] === 'reversion') {
+                    $this->revertirEfectosMonetarios($comprar);
+                } else {
+                    // La porción de deuda (si la hubo, ej. compra parcial) siempre se revierte a 0 —
+                    // nunca se convierte en fondo, haya habido pago real en el resto o no.
+                    $pagoDeuda = $comprar->pagos->firstWhere('tipo_pago', 'deuda_proveedor');
+                    if ($pagoDeuda) {
+                        if ($comprar->proveedor) {
+                            $comprar->proveedor->increment('saldo_proveedor', $pagoDeuda->monto);
+                        } elseif ($comprar->cliente) {
+                            $comprar->cliente->increment('deuda_pago_cliente', $pagoDeuda->monto);
+                        }
                     }
+
+                    // El dinero que sí se pagó (cuentas + clientes-pagadores) no vuelve a su origen —
+                    // se convierte en crédito a favor con el proveedor/cliente-fuente de esta compra.
+                    $montoRealPagado = $comprar->pagos->whereIn('tipo_pago', ['cuenta', 'cliente'])->sum('monto');
+
+                    if ($montoRealPagado > 0) {
+                        if ($comprar->proveedor) {
+                            $comprar->proveedor->increment('saldo_proveedor', $montoRealPagado);
+                        } elseif ($comprar->cliente) {
+                            $comprar->cliente->increment('deuda_pago_cliente', $montoRealPagado);
+                        }
+                    }
+                    // Las filas de compra_pago NO se borran — quedan como el registro de qué cuenta/
+                    // cliente puso cada monto originalmente, para que el detalle de la compra anulada
+                    // lo pueda mostrar (ver shapeCompraParaVista() y el frontend).
                 }
 
-                // El dinero que sí se pagó (cuentas + clientes-pagadores) no vuelve a su origen —
-                // se convierte en crédito a favor con el proveedor/cliente-fuente de esta compra.
-                $montoRealPagado = $comprar->pagos->whereIn('tipo_pago', ['cuenta', 'cliente'])->sum('monto');
-
-                if ($montoRealPagado > 0) {
-                    if ($comprar->proveedor) {
-                        $comprar->proveedor->increment('saldo_proveedor', $montoRealPagado);
-                    } elseif ($comprar->cliente) {
-                        $comprar->cliente->increment('deuda_pago_cliente', $montoRealPagado);
-                    }
-                }
-                // Las filas de compra_pago NO se borran — quedan como el registro de qué cuenta/
-                // cliente puso cada monto originalmente, para que el detalle de la compra anulada
-                // lo pueda mostrar (ver shapeCompraParaVista() y el frontend).
-            }
-
-            $comprar->update([
-                'estado' => 'anulada',
-                'tipo_anulacion' => $validated['tipo_anulacion'],
-                'motivo_anulacion' => $validated['motivo_anulacion'],
-            ]);
-        });
+                $comprar->update([
+                    'estado' => 'anulada',
+                    'tipo_anulacion' => $validated['tipo_anulacion'],
+                    'motivo_anulacion' => $validated['motivo_anulacion'],
+                ]);
+            });
+        } catch (\DomainException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
 
         return redirect()->route('comprar.index')->with('success', 'Compra anulada correctamente.');
     }
@@ -804,11 +835,13 @@ class CompraController extends Controller
         ]);
 
         $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
-        $totalAnterior = (float) $comprar->total_compra;
 
         DB::beginTransaction();
 
         try {
+            $this->bloquearCompraPendiente($comprar, 'Solo se puede editar una compra pendiente.');
+
+            $totalAnterior = (float) $comprar->total_compra;
             $comprar->loadMissing(['proveedor', 'cliente']);
             $tipoProveedor = $comprar->proveedor_id ? 'proveedor' : 'cliente';
             $entidad = $comprar->proveedor_id ? $comprar->proveedor : $comprar->cliente;
@@ -874,6 +907,10 @@ class CompraController extends Controller
                 'productos' => $productosConAlmacen,
                 'success' => 'Compra editada correctamente.',
             ]);
+        } catch (\DomainException $e) {
+            DB::rollBack();
+
+            return back()->withErrors(['error' => $e->getMessage()]);
         } catch (\Exception $e) {
             DB::rollBack();
 

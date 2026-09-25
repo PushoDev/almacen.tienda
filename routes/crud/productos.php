@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\ImportacionBorradorController;
+use App\Http\Controllers\ImportacionProductoController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProductoVendedorController;
 use Illuminate\Support\Facades\Route;
@@ -12,6 +14,19 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/listado-productos/duplicados', [ProductoController::class, 'duplicados'])->name('productos.duplicados');
             Route::post('/listado-productos/normalizar-duplicados', [ProductoController::class, 'normalizarDuplicados'])->name('productos.normalizar');
             Route::post('/listado-productos/fusionar-duplicados', [ProductoController::class, 'fusionarDuplicados'])->name('productos.fusionar');
+
+            // Historial de importaciones de Excel: listado, detalle fila por fila y vista previa de "deshacer".
+            Route::get('/importaciones-productos', [ImportacionProductoController::class, 'index'])->name('importaciones-productos.index');
+            Route::get('/importaciones-productos/{importacion}', [ImportacionProductoController::class, 'show'])->name('importaciones-productos.show');
+            Route::get('/importaciones-productos/{importacion}/vista-previa-reversion', [ImportacionProductoController::class, 'vistaPreviaReversion'])->name('importaciones-productos.vista-previa-reversion');
+
+            // Importar en dos pasos: el Excel se lee a un borrador que se revisa y edita en una hoja
+            // de cálculo antes de guardarlo en el inventario.
+            Route::post('/importaciones-borradores', [ImportacionBorradorController::class, 'preparar'])->name('importaciones-borradores.preparar');
+            Route::get('/importaciones-borradores/{borrador}', [ImportacionBorradorController::class, 'show'])->name('importaciones-borradores.show');
+            Route::put('/importaciones-borradores/{borrador}', [ImportacionBorradorController::class, 'guardar'])->name('importaciones-borradores.guardar');
+            Route::post('/importaciones-borradores/{borrador}/confirmar', [ImportacionBorradorController::class, 'confirmar'])->name('importaciones-borradores.confirmar');
+            Route::delete('/importaciones-borradores/{borrador}', [ImportacionBorradorController::class, 'descartar'])->name('importaciones-borradores.descartar');
         });
 
         Route::resource('listado-productos', ProductoController::class)->parameters([
@@ -51,6 +66,11 @@ Route::middleware(['auth', 'verified'])->group(
 
         // Importar a almacén específico (ruta con parámetro)
         Route::post('/listado-productos/importar/almacen/{almacenId}', [ProductoController::class, 'importToAlmacen'])->name('productos.import.almacen');
+
+        // Deshacer una importación completa (solo admin: descuenta stock, códigos y lotes)
+        Route::post('/importaciones-productos/{importacion}/revertir', [ImportacionProductoController::class, 'revertir'])
+            ->middleware('admin.only')
+            ->name('importaciones-productos.revertir');
 
         // Plantilla de importación
         Route::get('/listado-productos/descargar/plantilla', [ProductoController::class, 'downloadTemplate'])->name('productos.template');

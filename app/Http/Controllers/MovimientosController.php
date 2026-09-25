@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Notifications\MovimientoStockNotification;
 use App\Notifications\ProrrateoRequeridoNotification;
 use App\Services\CodigoStockService;
+use App\Services\FusionLotesService;
 use App\Services\LoteConsumoService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -604,6 +605,13 @@ class MovimientosController extends Controller
                 'observaciones' => $observacion,
                 'user_id' => $user->id,
             ]);
+
+            // Un movimiento que nunca requirió prorrateo no tiene decisión que esperar: sus unidades se
+            // acumulan ya al lote idéntico que el destino tenga (los que sí lo requieren lo hacen al
+            // eliminarse de la lista de pendientes, ver DistribucionCostosController::omitirProrrateo()).
+            if (! $movimiento->requiere_prorrateo) {
+                app(FusionLotesService::class)->acumularMovimientoEnLoteExistente($movimiento, $user);
+            }
 
             DB::commit();
 

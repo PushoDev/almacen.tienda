@@ -62,11 +62,12 @@ class ProductoVendedorController extends Controller
         // Costo real por lote de cada producto+almacén, en una sola query (ver ValorInventarioService).
         $costosReales = $puedeVerCosto ? $valorInventario->costosPorProductoAlmacen() : [];
 
-        // Lotes de las combinaciones producto+almacén con 2+ costos distintos (pocas: la mayoría
-        // del catálogo tiene un solo costo por almacén) — para el desglose por lote opcional.
-        $lotesVariosCostos = $this->lotesConVariosCostos($puedeVerCosto);
+        // Lotes de las combinaciones producto+almacén con 2+ lotes con stock — aunque cuesten lo
+        // mismo: el usuario puede querer fusionarlos (antes solo salían con costos distintos y los
+        // de igual costo no ofrecían fusionar). Para el desglose por lote opcional.
+        $lotesVariosLotes = $this->lotesConVariosLotes($puedeVerCosto);
 
-        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user, $fichasHermanas, $puedeVerCosto, $costosReales, $lotesVariosCostos) {
+        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user, $fichasHermanas, $puedeVerCosto, $costosReales, $lotesVariosLotes) {
             // Fichas hermanas con stock en ESTE almacén (mismo producto repetido): comparten
             // `grupo_clave` para mostrarse juntas y usar el precio del grupo (actualizarPrecioGrupo()).
             $clavesRepetidas = $almacen->productos
@@ -75,7 +76,7 @@ class ProductoVendedorController extends Controller
                 ->countBy()
                 ->filter(fn ($veces) => $veces > 1);
 
-            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user, $fichasHermanas, $clavesRepetidas, $puedeVerCosto, $costosReales, $lotesVariosCostos) {
+            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user, $fichasHermanas, $clavesRepetidas, $puedeVerCosto, $costosReales, $lotesVariosLotes) {
                 $precioVenta = $producto->precio_venta;
                 $clave = $fichasHermanas->clave($producto);
 
@@ -102,7 +103,7 @@ class ProductoVendedorController extends Controller
                         ? ($costosReales[$producto->id.'-'.$almacen->id]['costo'] ?? (float) $producto->precio_compra_producto)
                         : null,
                     // null = un solo costo en este almacén (lo normal); si no, sus lotes con stock.
-                    'lotes' => $lotesVariosCostos[$producto->id.'-'.$almacen->id] ?? null,
+                    'lotes' => $lotesVariosLotes[$producto->id.'-'.$almacen->id] ?? null,
                 ];
             });
 
@@ -240,19 +241,19 @@ class ProductoVendedorController extends Controller
     }
 
     /**
-     * Lotes con stock de cada combinación producto+almacén que tiene 2+ costos distintos, más
-     * viejo primero (orden FIFO). `precio_venta` = precio propio del lote ("Opción A"), null =
+     * Lotes con stock de cada combinación producto+almacén que tiene 2+ lotes con stock (con
+     * el mismo costo o con costos distintos), más viejo primero (orden FIFO). `precio_venta` = precio propio del lote ("Opción A"), null =
      * hereda el precio del producto en el almacén.
      *
      * @return array<string, array<int, array{id: int, codigo: string, cantidad: int, costo: float|null, precio_venta: float|null, prorrateo_pendiente: bool}>> clave "producto_id-almacen_id"
      */
-    private function lotesConVariosCostos(bool $puedeVerCosto): array
+    private function lotesConVariosLotes(bool $puedeVerCosto): array
     {
         $combinaciones = DB::table('lotes_stock')
             ->where('cantidad_disponible', '>', 0)
             ->select('producto_id', 'almacen_id')
             ->groupBy('producto_id', 'almacen_id')
-            ->havingRaw('COUNT(DISTINCT precio_costo) > 1')
+            ->havingRaw('COUNT(*) > 1')
             ->get();
 
         if ($combinaciones->isEmpty()) {
