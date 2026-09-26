@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Almacen;
 use App\Models\Cuenta;
 use App\Models\User;
+use App\Services\CatalogoTarjetasService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class UserController extends Controller
@@ -32,12 +34,10 @@ class UserController extends Controller
      */
     public function create()
     {
-        $almacenes = Almacen::all();
-        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')->get();
-
         return Inertia::render('Empleados/Create', [
-            'almacenes' => $almacenes,
-            'cuentas' => $cuentas,
+            'almacenes' => Almacen::all(),
+            'cuentas' => $this->cuentasParaAsignar(),
+            'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
         ]);
     }
 
@@ -53,7 +53,9 @@ class UserController extends Controller
             'password' => 'required|min:8',
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
-            'cuentas' => 'array|exists:cuentas,id',
+            'cuentas' => 'array',
+            'cuentas.*.id' => 'required|distinct|exists:cuentas,id',
+            'cuentas.*.acceso' => ['required', Rule::in([Cuenta::ACCESO_COMPLETO, Cuenta::ACCESO_COBRO])],
             'telegram_chat_id' => 'nullable|string|max:50',
         ]);
 
@@ -73,7 +75,7 @@ class UserController extends Controller
 
         // Asignar cuentas (solo si no es admin/moderador)
         if (! in_array($validated['role'], ['admin', 'moderador']) && ! empty($validated['cuentas'])) {
-            $user->cuentas()->sync($validated['cuentas']);
+            $user->cuentas()->sync($this->cuentasConAcceso($validated['cuentas']));
         }
 
         return redirect()->route('empleados.index');
@@ -98,13 +100,12 @@ class UserController extends Controller
     public function edit(string $id)
     {
         $empleado = User::with('almacenes', 'cuentas')->findOrFail($id);
-        $almacenes = Almacen::all();
-        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')->get();
 
         return Inertia::render('Empleados/Edit', [
             'empleado' => $empleado,
-            'almacenes' => $almacenes,
-            'cuentas' => $cuentas,
+            'almacenes' => Almacen::all(),
+            'cuentas' => $this->cuentasParaAsignar(),
+            'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
         ]);
     }
 
@@ -122,7 +123,9 @@ class UserController extends Controller
             'password' => 'nullable|min:8',
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
-            'cuentas' => 'array|exists:cuentas,id',
+            'cuentas' => 'array',
+            'cuentas.*.id' => 'required|distinct|exists:cuentas,id',
+            'cuentas.*.acceso' => ['required', Rule::in([Cuenta::ACCESO_COMPLETO, Cuenta::ACCESO_COBRO])],
             'telegram_chat_id' => 'nullable|string|max:50',
         ]);
 
@@ -144,7 +147,7 @@ class UserController extends Controller
 
         // Actualizar cuentas (solo si no es admin/moderador)
         if (! in_array($validated['role'], ['admin', 'moderador'])) {
-            $user->cuentas()->sync($validated['cuentas'] ?? []);
+            $user->cuentas()->sync($this->cuentasConAcceso($validated['cuentas'] ?? []));
         } else {
             $user->cuentas()->detach();
         }
@@ -161,5 +164,42 @@ class UserController extends Controller
         $user->delete();
 
         return redirect()->route('empleados.index');
+    }
+
+    /**
+     * Arma el mapa que espera `sync()` para la tabla `user_cuentas`: id de cuenta => nivel de acceso.
+     *
+     * @param  array<int, array{id: int|string, acceso: string}>  $cuentas
+     * @return array<int, array{acceso: string}>
+     */
+    private function cuentasConAcceso(array $cuentas): array
+    {
+        return collect($cuentas)
+            ->mapWithKeys(fn (array $cuenta) => [(int) $cuenta['id'] => ['acceso' => $cuenta['acceso']]])
+            ->all();
+    }
+
+    /**
+     * Cuentas que se pueden asignar a un empleado, con lo justo para reconocerlas en las tarjetas de
+     * Crear/Editar Empleado (sin saldo: ahí se decide el acceso, no se consulta el dinero).
+     *
+     * @return array<int, array{id: int, nombre_cuenta: string, moneda: string|null, tipo: string, tipo_titular: string|null, estado: string, banco: array{slug: string, nombre: string, imagen_url: string}|null}>
+     */
+    private function cuentasParaAsignar(): array
+    {
+        return Cuenta::with('moneda')
+            ->where('tipo_cuenta', 'permanentes')
+            ->orderBy('nombre_cuenta')
+            ->get()
+            ->map(fn (Cuenta $cuenta) => [
+                'id' => $cuenta->id,
+                'nombre_cuenta' => $cuenta->nombre_cuenta,
+                'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                'tipo' => $cuenta->tipo,
+                'tipo_titular' => $cuenta->tipo_titular,
+                'estado' => $cuenta->estado,
+                'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
+            ])
+            ->all();
     }
 }

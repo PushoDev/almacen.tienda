@@ -703,22 +703,50 @@ test('la comisión se paga desde una cuenta USD en efectivo asignada al vendedor
     expect((float) $cuentaUsd->fresh()->saldo_cuenta)->toBe(500.0);
 });
 
-test('la comisión no se puede pagar desde una cuenta USD que no es del vendedor de la venta, que no es de efectivo, ni desde otra moneda', function (string $caso) {
-    $this->actingAs(User::factory()->admin()->create());
+test('un admin o moderador paga la comisión desde cualquier cuenta USD en efectivo, aunque no sea del vendedor de la venta, pero no desde una de tarjeta ni de otra moneda', function (string $rol) {
+    $this->actingAs(User::factory()->{$rol}()->create());
+    crearTurnoActivo(auth()->user());
     $vendedor = User::factory()->vendedor()->create();
+    $ajena = tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => User::factory()->vendedor()->create()->cuentas()->attach($c->id));
+    $sinAsignar = crearCuentaComision('USD', 'efectivo');
+
+    foreach ([$ajena, $sinAsignar] as $cuenta) {
+        $venta = ventaPendienteConComision($vendedor);
+        $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuenta->id, 'comision_tasa' => 365])->assertOk();
+        expect((float) $venta->fresh()->comision_tasa)->toBe(1.0);
+    }
+
+    foreach ([crearCuentaComision('USD', 'tarjeta'), crearCuentaComision('EUR', 'efectivo')] as $cuenta) {
+        $venta = ventaPendienteConComision($vendedor);
+        $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuenta->id, 'comision_tasa' => 1])->assertStatus(422);
+        expect($venta->fresh()->comision_cuenta_id)->toBeNull();
+    }
+})->with(['admin', 'moderador']);
+
+test('un vendedor solo paga la comisión desde sus cuentas USD en efectivo de acceso completo', function (string $caso, int $estado) {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+    crearTurnoActivo($vendedor);
     $venta = ventaPendienteConComision($vendedor);
 
     $cuenta = match ($caso) {
-        'USD de otro vendedor' => tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => User::factory()->vendedor()->create()->cuentas()->attach($c->id)),
-        'USD sin asignar a nadie' => crearCuentaComision('USD', 'efectivo'),
-        'USD tarjeta del vendedor' => tap(crearCuentaComision('USD', 'tarjeta'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
-        'EUR efectivo del vendedor' => tap(crearCuentaComision('EUR', 'efectivo'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
+        'propia de acceso completo' => tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => $vendedor->cuentas()->attach($c->id, ['acceso' => Cuenta::ACCESO_COMPLETO])),
+        'propia de cobro' => tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => $vendedor->cuentas()->attach($c->id, ['acceso' => Cuenta::ACCESO_COBRO])),
+        'de otro vendedor' => tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => User::factory()->vendedor()->create()->cuentas()->attach($c->id)),
+        'sin asignar a nadie' => crearCuentaComision('USD', 'efectivo'),
+        'propia pero de tarjeta' => tap(crearCuentaComision('USD', 'tarjeta'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
     };
 
-    $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuenta->id, 'comision_tasa' => 1])->assertStatus(422);
+    $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuenta->id, 'comision_tasa' => 1])->assertStatus($estado);
 
-    expect($venta->fresh()->comision_cuenta_id)->toBeNull();
-})->with(['USD de otro vendedor', 'USD sin asignar a nadie', 'USD tarjeta del vendedor', 'EUR efectivo del vendedor']);
+    expect($venta->fresh()->comision_cuenta_id)->toBe($estado === 200 ? $cuenta->id : null);
+})->with([
+    ['propia de acceso completo', 200],
+    ['propia de cobro', 422],
+    ['de otro vendedor', 422],
+    ['sin asignar a nadie', 422],
+    ['propia pero de tarjeta', 422],
+]);
 
 test('la comisión sigue pudiendo salir de una cuenta CUP con su tasa (el monto en CUP se mantiene)', function () {
     $this->actingAs(User::factory()->admin()->create());
@@ -732,14 +760,22 @@ test('la comisión sigue pudiendo salir de una cuenta CUP con su tasa (el monto 
     expect((float) $venta->fresh()->comision_tasa)->toBe(365.0);
 });
 
-test('show() entrega las cuentas asignadas al vendedor de la venta para elegir la cuenta de la comisión', function () {
+test('show() entrega las cuentas que puede usar quien configura la comisión: todas para admin y moderador, solo las suyas de acceso completo para un vendedor', function () {
     $vendedor = User::factory()->vendedor()->create();
-    $cuentaUsd = crearCuentaComision('USD', 'efectivo');
-    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $completa = crearCuentaComision('USD', 'efectivo');
+    $cobro = crearCuentaComision('USD', 'efectivo');
+    $ajena = crearCuentaComision('USD', 'efectivo');
+    $vendedor->cuentas()->attach($completa->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
     $venta = ventaPendienteConComision($vendedor);
-    $this->actingAs(User::factory()->admin()->create());
 
-    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page->where('venta.vendedor_cuentas_ids', [$cuentaUsd->id]));
+    foreach (['admin', 'moderador'] as $rol) {
+        $this->actingAs(User::factory()->{$rol}()->create());
+        $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page->where('venta.cuentas_usables_ids', [$completa->id, $cobro->id, $ajena->id]));
+    }
+
+    $this->actingAs($vendedor);
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page->where('venta.cuentas_usables_ids', [$completa->id]));
 });
 
 test('aprobarVenta descuenta la comisión aunque la cuenta no tenga saldo suficiente, dejándola en deuda', function () {
