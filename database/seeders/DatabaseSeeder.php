@@ -95,7 +95,6 @@ class DatabaseSeeder extends Seeder
                 'nombre_moneda' => 'Dólar Estadounidense',
                 'simbolo_moneda' => 'USD',
                 'tasa_cambio' => 1.0,
-                'commission' => 0,
                 'estado' => true,
                 'principal' => true,
             ]
@@ -106,7 +105,6 @@ class DatabaseSeeder extends Seeder
                 'nombre_moneda' => 'Peso Cubano MN',
                 'simbolo_moneda' => 'CUP',
                 'tasa_cambio' => 540.0,
-                'commission' => 0,
                 'estado' => true,
                 'principal' => false,
             ],
@@ -115,7 +113,6 @@ class DatabaseSeeder extends Seeder
                 'nombre_moneda' => 'Moneda Euro, Europea',
                 'simbolo_moneda' => 'EUR',
                 'tasa_cambio' => 1.0,
-                'commission' => 0,
                 'estado' => true,
                 'principal' => false,
             ],

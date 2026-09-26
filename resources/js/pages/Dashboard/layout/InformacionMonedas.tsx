@@ -88,21 +88,14 @@ export default function InformacionMonedas() {
                                                 <p className="text-xs text-gray-500 dark:text-gray-400">{moneda.codigo_moneda}</p>
                                             </div>
 
-                                            {/* Tasa/comisión como badges — más claras de leer de un vistazo que
-                                                texto plano, mismo lenguaje visual que el resto del proyecto. */}
+                                            {/* Tasa como badge — más clara de leer de un vistazo que texto plano,
+                                                mismo lenguaje visual que el resto del proyecto. */}
                                             <div className="flex flex-wrap items-center gap-1.5">
                                                 <Badge variant="outline" className={`font-mono text-sm font-bold ${c.text} ${c.border}`}>
                                                     {moneda.tasa_cambio.toLocaleString('es-ES', {
                                                         minimumFractionDigits: 2,
                                                         maximumFractionDigits: 6,
                                                     })}
-                                                </Badge>
-                                                <Badge variant="secondary" className="text-orange-600 dark:text-orange-400">
-                                                    {moneda.commission.toLocaleString('es-ES', {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 4,
-                                                    })}
-                                                    %
                                                 </Badge>
                                             </div>
                                         </div>

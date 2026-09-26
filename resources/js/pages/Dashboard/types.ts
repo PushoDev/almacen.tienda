@@ -12,7 +12,6 @@ export interface Moneda {
     simbolo_moneda: string;
     imagen_url: string | null;
     tasa_cambio: number;
-    commission: number;
     estado: boolean;
     principal: boolean;
 }

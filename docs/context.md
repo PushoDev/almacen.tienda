@@ -429,6 +429,7 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 | `ResumenAlmacenService` | Datos de la card "Resumen por Almacén" de Logística |
 | `ImportacionProductosService` | Ejecuta una importación de Excel (un lote `IMP-…` por fila, una transacción por fila) y la deja en el historial; lo usan `ProductoController::import` y la confirmación de un borrador |
 | `DetalleOperacionService` | Detalle de operaciones para Cuentas/Clientes/Proveedores y Rastreo de Operaciones (sin documentar por el cliente, ver `ESTADO_DESARROLLO.md`) |
+| `MetodosPagoService` | Métodos (efectivo / transferencia) y vías de pago (Zelle, EnZona, Transfermóvil…) que admite cada moneda: catálogo, configuración, resumen y guardado desde el CRUD de Monedas |
 | `CatalogoTarjetasService` | Catálogo de bancos/tarjetas para las cuentas (`cuentas.tipo_banco`) |
 
 ---
@@ -439,6 +440,7 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 
 - **2026-09-25:** Compras con `lockForUpdate` en aprobar/anular/editar; importación de Excel en dos pasos con hoja de revisión (`react-data-grid`), un lote `IMP-…` por fila, historial y deshacer; lotes de movimientos y compras que se acumulan al lote idéntico ("Eliminar de la lista" en Distribución de Costos); fusión de lotes sin bloqueo por prorrateo. 5 migraciones nuevas.
 - **2026-09-24:** códigos de barras por almacén, `/disponibles` con agotadas, devoluciones de venta a su lote y código, ventas especiales en 2 tipos (`descuento` / `bajo_costo`), acceso denegado + páginas de error con la mascota, accesos rápidos en el encabezado.
+- **2026-09-26 (Monedas):** cada moneda define en su CRUD qué métodos de pago admite y, en transferencia, sus vías (tablas `metodos_pago`, `vias_pago`, `moneda_metodo_pago`, `moneda_via_pago`); la columna `monedas.commission` se eliminó. El cobro (POS) aún no lee esa configuración.
 - **2026-09-26 (comisión):** la cuenta de donde sale la comisión del vendedor se elige en el detalle de la venta (`Vendor/Show.tsx`, solo con la venta pendiente): cuentas CUP y cuentas USD de efectivo asignadas al vendedor de la venta; en USD `comision_tasa` = 1 y se debita `total_comision` en USD. El servidor lo valida en `guardarDistribucion`.
 - **2026-09-26:** POS con selector de lote (2+ lotes, el más antiguo por defecto), comisión por lote (`lotes_stock.comision`, `venta_detalles.comision_base`) y precio propio de lote como precio base; `consumir()` trata el lote elegido como preferencia. 2 migraciones nuevas. Detalle en la primera fila del historial de `ESTADO_DESARROLLO.md`.
 - **Sigue abierto (verificado 2026-09-26):** 3 huecos de lotes del POS (el cliente los rechazó dos veces; no tocar sin que los pida), ventas devueltas sin pantalla en el Cierre, notificaciones/bot de Telegram sin ponerse al día, rol de la importación directa (`productos.import`), estilo de los 4 export de Excel, reporte Valor del Inventario, despliegue del 09-25 a producción.

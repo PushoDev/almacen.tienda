@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { type CatalogoMetodosPago, MetodosPagoSelector } from '@/components/monedas/metodos-pago-selector';
 import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,6 @@ interface Moneda {
     simbolo_moneda: string;
     imagen: string | null;
     tasa_cambio: number;
-    commission: number;
     estado: boolean;
     principal: boolean;
     created_at: string;
@@ -45,6 +45,8 @@ interface PageProps {
     };
     es_principal_actual: boolean;
     catalogoImagenes: CatalogoImagen[];
+    catalogoMetodosPago: CatalogoMetodosPago;
+    metodosPagoActuales: { metodos: string[]; vias: string[] };
     errors?: Record<string, string>;
     [key: string]: unknown;
 }
@@ -66,7 +68,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function MonedaEdit() {
     const { props } = usePage<PageProps>();
-    const { moneda, moneda_principal, es_principal_actual, catalogoImagenes, errors } = props;
+    const { moneda, moneda_principal, es_principal_actual, catalogoImagenes, catalogoMetodosPago, metodosPagoActuales, errors } = props;
 
     // Función para formatear a 2 decimales asegurando que sea número
     const formatToTwoDecimals = (value: number | string): number => {
@@ -80,9 +82,10 @@ export default function MonedaEdit() {
         simbolo_moneda: moneda.simbolo_moneda,
         imagen: moneda.imagen,
         tasa_cambio: formatToTwoDecimals(moneda.tasa_cambio),
-        commission: formatToTwoDecimals(moneda.commission),
         estado: moneda.estado,
         principal: moneda.principal,
+        metodos_pago: metodosPagoActuales.metodos,
+        vias_pago: metodosPagoActuales.vias,
     });
 
     // Insignia elegida en vivo (reacciona a cada cambio en el selector, antes de guardar) —
@@ -129,7 +132,7 @@ export default function MonedaEdit() {
     };
 
     // Función para manejar cambios en números con 2 decimales
-    const handleNumberChange = (field: 'tasa_cambio' | 'commission', value: string) => {
+    const handleNumberChange = (field: 'tasa_cambio', value: string) => {
         const numValue = parseFloat(value) || 0;
         setData(field, formatToTwoDecimals(numValue));
     };
@@ -265,44 +268,34 @@ export default function MonedaEdit() {
                                     {errors?.imagen && <p className="text-sm text-red-500">{errors.imagen}</p>}
                                 </div>
 
-                                {/* Tasa de Cambio y Comisión */}
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="tasa_cambio">
-                                            Tasa de Cambio <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input
-                                            id="tasa_cambio"
-                                            type="number"
-                                            step="0.01"
-                                            min="0.01"
-                                            placeholder="1.00"
-                                            value={data.tasa_cambio}
-                                            onChange={(e) => handleNumberChange('tasa_cambio', e.target.value)}
-                                            className={errors?.tasa_cambio ? 'border-red-500' : ''}
-                                        />
-                                        {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}
-                                        <p className="text-muted-foreground text-sm">Tasa respecto a la moneda principal</p>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="commission">
-                                            Comisión (%) <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input
-                                            id="commission"
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            placeholder="0.00"
-                                            value={data.commission}
-                                            onChange={(e) => handleNumberChange('commission', e.target.value)}
-                                            className={errors?.commission ? 'border-red-500' : ''}
-                                        />
-                                        {errors?.commission && <p className="text-sm text-red-500">{errors.commission}</p>}
-                                        <p className="text-muted-foreground text-sm">Comisión porcentual aplicada</p>
-                                    </div>
+                                {/* Tasa de Cambio */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="tasa_cambio">
+                                        Tasa de Cambio <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Input
+                                        id="tasa_cambio"
+                                        type="number"
+                                        step="0.01"
+                                        min="0.01"
+                                        placeholder="1.00"
+                                        value={data.tasa_cambio}
+                                        onChange={(e) => handleNumberChange('tasa_cambio', e.target.value)}
+                                        className={errors?.tasa_cambio ? 'border-red-500' : ''}
+                                    />
+                                    {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}
+                                    <p className="text-muted-foreground text-sm">Tasa respecto a la moneda principal</p>
                                 </div>
+
+                                {/* Métodos de pago que admite la moneda y, en transferencia, sus vías */}
+                                <MetodosPagoSelector
+                                    catalogo={catalogoMetodosPago}
+                                    metodos={data.metodos_pago}
+                                    vias={data.vias_pago}
+                                    onChange={(metodos, vias) => setData((previo) => ({ ...previo, metodos_pago: metodos, vias_pago: vias }))}
+                                    errorMetodos={errors?.metodos_pago}
+                                    errorVias={errors?.vias_pago}
+                                />
 
                                 {/* Estado y Principal */}
                                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

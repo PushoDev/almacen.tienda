@@ -278,7 +278,9 @@ Trazabilidad de costo por lote (desde 2026-09-07; consumo por lote desde 2026-09
 | `tasa_cambio` | decimal | Unidades de esta moneda por 1 USD |
 | `principal` | boolean | La moneda base del sistema |
 | `activa` | boolean | |
-| `commission` | decimal nullable | Comisión por cambio de moneda |
+| `imagen` | string nullable | Slug de la insignia (`public/projects/monedas/{imagen}.webp`) |
+
+> Desde 2026-09-26 `monedas` ya no tiene `commission` (no entraba en ningún cálculo). Qué métodos y vías de pago admite cada moneda está en las tablas `metodos_pago`, `vias_pago`, `moneda_metodo_pago` y `moneda_via_pago`.
 
 ---
 
