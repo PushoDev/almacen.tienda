@@ -74,6 +74,9 @@ export interface DetalleVenta {
         monto_usd: number;
         tasa: number | null;
         monto_cup: number | null;
+        /** Lo debitado, en la moneda de la cuenta (CUP con la tasa, o USD con tasa 1). */
+        monto_cuenta?: number | null;
+        moneda_cuenta?: string | null;
         cuenta: string | null;
     } | null;
     mensajero: {
@@ -306,8 +309,14 @@ export const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) =>
                     </CardHeader>
                     <CardContent className="space-y-1 text-xs">
                         <p><strong>Monto en USD:</strong> {fmt(detalle.comision_pv.monto_usd)}</p>
-                        <p><strong>Tasa aplicada:</strong> {detalle.comision_pv.tasa ?? '—'}</p>
-                        <p><strong>Monto en CUP:</strong> {detalle.comision_pv.monto_cup !== null ? `${detalle.comision_pv.monto_cup.toFixed(2)} CUP` : '—'}</p>
+                        {detalle.comision_pv.moneda_cuenta === 'USD' ? (
+                            <p><strong>Monto debitado:</strong> {detalle.comision_pv.monto_cuenta != null ? `${detalle.comision_pv.monto_cuenta.toFixed(2)} USD` : '—'}</p>
+                        ) : (
+                            <>
+                                <p><strong>Tasa aplicada:</strong> {detalle.comision_pv.tasa ?? '—'}</p>
+                                <p><strong>Monto en CUP:</strong> {detalle.comision_pv.monto_cup !== null ? `${detalle.comision_pv.monto_cup.toFixed(2)} CUP` : '—'}</p>
+                            </>
+                        )}
                         <p><strong>Cuenta debitada:</strong> {detalle.comision_pv.cuenta ?? '—'}</p>
                     </CardContent>
                 </Card>

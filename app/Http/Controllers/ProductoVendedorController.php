@@ -243,9 +243,9 @@ class ProductoVendedorController extends Controller
     /**
      * Lotes con stock de cada combinación producto+almacén que tiene 2+ lotes con stock (con
      * el mismo costo o con costos distintos), más viejo primero (orden FIFO). `precio_venta` = precio propio del lote ("Opción A"), null =
-     * hereda el precio del producto en el almacén.
+     * hereda el precio del producto en el almacén; `comision` = comisión propia, null = la del producto.
      *
-     * @return array<string, array<int, array{id: int, codigo: string, cantidad: int, costo: float|null, precio_venta: float|null, prorrateo_pendiente: bool}>> clave "producto_id-almacen_id"
+     * @return array<string, array<int, array{id: int, codigo: string, cantidad: int, costo: float|null, precio_venta: float|null, comision: float|null, prorrateo_pendiente: bool}>> clave "producto_id-almacen_id"
      */
     private function lotesConVariosLotes(bool $puedeVerCosto): array
     {
@@ -283,7 +283,8 @@ class ProductoVendedorController extends Controller
                 'cantidad' => (int) $lote->cantidad_disponible,
                 'costo' => $puedeVerCosto ? round((float) $lote->precio_costo, 2) : null,
                 'precio_venta' => $lote->precio_venta !== null ? round((float) $lote->precio_venta, 2) : null,
-                // Bloquea la fusión (FusionLotesService): el prorrateo no llegaría al lote resultante.
+                'comision' => $lote->comision !== null ? round((float) $lote->comision, 2) : null,
+                // Solo avisa (no bloquea la fusión): el prorrateo posterior no llegaría al lote resultante.
                 'prorrateo_pendiente' => in_array($lote->movimiento_id, $movimientosPendientes),
             ])->values()->all())
             ->all();

@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { MetodosPagoResumen, type MetodoResumen } from '@/components/monedas/metodos-pago-resumen';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,10 +18,10 @@ import {
     Edit,
     Hash,
     Info,
-    Percent,
     Settings,
     Star,
     Tag,
+    Wallet,
     XCircle,
     Zap,
 } from 'lucide-react';
@@ -36,7 +37,7 @@ interface Moneda {
     imagen: string | null;
     imagen_url: string | null;
     tasa_cambio: number;
-    commission: number;
+    metodos_pago_resumen: MetodoResumen[];
     estado: boolean;
     principal: boolean;
     created_at: string;
@@ -203,14 +204,27 @@ export default function MonedaShow() {
                                         <p className="text-2xl font-bold">{moneda.simbolo_moneda}</p>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                                            <Percent className="h-4 w-4" />
-                                            Comisión
-                                        </div>
-                                        <p className="text-lg font-medium">{formatNumber(moneda.commission, 4)}%</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Tarjeta de Métodos de Pago — qué admite esta moneda al cobrar (se edita en Editar Moneda) */}
+                        <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <Wallet className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Métodos de Pago</CardTitle>
+                                        <CardDescription className="text-violet-100">
+                                            Cómo se puede cobrar en {moneda.codigo_moneda}: efectivo o transferencia, y las vías de la transferencia
+                                        </CardDescription>
                                     </div>
                                 </div>
+                            </CardHeader>
+                            <CardContent>
+                                <MetodosPagoResumen metodos={moneda.metodos_pago_resumen} />
                             </CardContent>
                         </Card>
 
@@ -367,11 +381,6 @@ export default function MonedaShow() {
                                     ) : (
                                         <Badge variant="outline">Secundaria</Badge>
                                     )}
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm">Comisión</span>
-                                    <span className="text-sm font-medium">{formatNumber(moneda.commission, 4)}%</span>
                                 </div>
 
                                 <div className="flex items-center justify-between">

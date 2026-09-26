@@ -224,6 +224,36 @@ test('una comisión de gestor resta del saldo esperado y se registra en comision
     ]);
 });
 
+test('las comisiones en CUP del cierre no cuentan las que se pagaron desde una cuenta USD', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = crearMonedaUsd();
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true, 'tasa_cambio' => 365]);
+    $cuentaUsd = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $cuentaCup = crearCuentaEnMoneda($monedaCup, saldo: 5000);
+
+    foreach ([[$cuentaCup, 365], [$cuentaUsd, 1]] as [$cuenta, $tasa]) {
+        Venta::factory()->completada()->create([
+            'user_id' => $vendedor->id,
+            'almacen_id' => $almacen->id,
+            'moneda_id' => $monedaUsd->id,
+            'total' => 100,
+            'es_venta_gestor' => false,
+            'total_comision' => 10,
+            'comision_cuenta_id' => $cuenta->id,
+            'comision_tasa' => $tasa,
+        ]);
+    }
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(function ($page) {
+        $page->where('calculos.comisiones_pv_cup', fn ($cup) => (float) $cup === 3650.0) // solo la de la cuenta CUP
+            ->where('calculos.comision_pv_total', fn ($usd) => (float) $usd === 20.0);    // el total en USD cuenta las dos
+    });
+});
+
 test('el mensajero se excluye del saldo esperado (pass-through) pero se reporta aparte', function () {
     $vendedor = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedor);

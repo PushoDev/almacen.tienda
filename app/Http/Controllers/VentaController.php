@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\DestinatarioVenta;
 use App\Models\HistorialStock;
+use App\Models\LoteStock;
 use App\Models\Moneda;
 use App\Models\PagoVenta;
 use App\Models\Producto;
@@ -24,6 +25,7 @@ use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
 use App\Services\LoteConsumoService;
+use App\Services\PrecioLoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -131,6 +133,16 @@ class VentaController extends Controller
         $codigoStock = app(CodigoStockService::class);
         $repartoCodigos = $codigoStock->repartoDelAlmacen((int) $id);
 
+        // Lotes con stock del almacén, cargados una sola vez y en orden FIFO: cada producto recibe los
+        // suyos con el precio y la comisión con los que vendería (ver PrecioLoteService).
+        $lotesPorProducto = LoteStock::where('almacen_id', $id)
+            ->where('cantidad_disponible', '>', 0)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('producto_id');
+        $precioLoteService = app(PrecioLoteService::class);
+
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
         })
@@ -143,7 +155,7 @@ class VentaController extends Controller
                 },
             ])
             ->get()
-            ->map(function ($producto) use ($preciosAlmacen, $id, $codigoStock, $repartoCodigos) {
+            ->map(function ($producto) use ($preciosAlmacen, $id, $codigoStock, $repartoCodigos, $lotesPorProducto, $precioLoteService) {
                 $precioRow = $preciosAlmacen->get($producto->id);
                 $almacen = $producto->almacenes->first();
 
@@ -173,43 +185,18 @@ class VentaController extends Controller
                     'precio_base' => $precioRow ? (float) $precioRow->precio_venta : null,
                     'comision' => $precioRow ? (float) ($precioRow->comision ?? 0) : 0,
                     'es_precio_vendedor' => false,
-                    // Lotes activos en este almacén (2026-09-20) — cuando hay 2+, el picker de
-                    // venta ofrece elegir de cuál vender (LoteConsumoService consume FIFO si no
-                    // se elige ninguno). 'precio_venta' es el efectivo de ESE lote ("Opción A"):
-                    // hereda el precio general del almacén salvo que tenga override propio — el
-                    // frontend lo usa para autocompletar el precio al elegir un lote puntual.
-                    'lotes' => $this->lotesParaElegirEnPos($producto, (int) $id),
+                    // Lotes con stock en este almacén, del más viejo al más nuevo. Cada uno trae el precio y la
+                    // comisión con los que vendería (PrecioLoteService): con 2+ el POS muestra el selector,
+                    // con el más antiguo elegido por defecto; con uno solo lo usa sin preguntar.
+                    'lotes' => $precioLoteService->lotesParaPos(
+                        $lotesPorProducto->get($producto->id, collect()),
+                        $precioRow ? (float) $precioRow->precio_venta : null,
+                        $precioRow ? (float) ($precioRow->comision ?? 0) : 0.0,
+                    ),
                 ];
             });
 
         return response()->json($productos->filter(fn ($p) => $p['tiene_precio'])->values());
-    }
-
-    /**
-     * Lotes que el POS ofrece elegir para un producto en el almacén. Solo se ofrecen cuando de verdad
-     * se diferencian (otro costo u otro precio de venta efectivo): con lotes idénticos elegir no
-     * cambia nada, así que se vende del más viejo sin preguntar (LoteConsumoService, FIFO). Antes el
-     * selector salía siempre que había 2+ lotes, aunque fueran iguales.
-     *
-     * @return array<int, array{id: int, codigo: string, cantidad: int, precio_venta: float|null}>
-     */
-    private function lotesParaElegirEnPos(Producto $producto, int $almacenId): array
-    {
-        $lotes = $producto->lotesActivosEnAlmacen($almacenId);
-
-        $seDiferencian = $lotes->map(fn ($lote) => round((float) $lote->precio_costo, 2))->unique()->count() > 1
-            || $lotes->map(fn ($lote) => $producto->precioVentaEfectivo($lote))->unique()->count() > 1;
-
-        if (! $seDiferencian) {
-            return [];
-        }
-
-        return $lotes->map(fn ($lote) => [
-            'id' => $lote->id,
-            'codigo' => $lote->codigo,
-            'cantidad' => $lote->cantidad_disponible,
-            'precio_venta' => $producto->precioVentaEfectivo($lote),
-        ])->values()->all();
     }
 
     /**
@@ -581,6 +568,8 @@ class VentaController extends Controller
                 'email' => $venta->usuario->email,
                 'rol' => $venta->usuario->role,
             ],
+            // Cuentas asignadas al vendedor de la venta: las USD entre ellas se pueden usar para pagar su comisión.
+            'vendedor_cuentas_ids' => $venta->usuario->cuentas()->pluck('cuentas.id')->all(),
             // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
             // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin, que
             // nunca captura uno, o ventas anteriores a esta feature): ahí se cae al nombre
@@ -675,18 +664,7 @@ class VentaController extends Controller
                     'nombre' => $venta->mensajeroOrigenCuenta->nombre_cuenta,
                 ] : null,
             ] : null,
-            'comision_pago' => $venta->comision_cuenta_id ? [
-                'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
-                'monto_cup' => ($venta->comision_tasa > 0)
-                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
-                    : null,
-                'cuenta' => $venta->comisionCuenta ? [
-                    'id' => $venta->comisionCuenta->id,
-                    'nombre' => $venta->comisionCuenta->nombre_cuenta,
-                    'moneda' => $venta->comisionCuenta->moneda?->codigo_moneda,
-                    'saldo_disponible' => (float) $venta->comisionCuenta->saldo_cuenta,
-                ] : null,
-            ] : null,
+            'comision_pago' => $this->comisionPago($venta),
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'monto_usd' => $venta->tasa_aplicada_gestor > 0
@@ -978,17 +956,29 @@ class VentaController extends Controller
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
             $loteConsumoService = app(LoteConsumoService::class);
+            $precioLoteService = app(PrecioLoteService::class);
             // Desglose real de lote(s) consumidos por línea (índice del item => Collection de
             // LoteConsumoService::consumir()) — la segunda pasada (creación de VentaDetalle, más
             // abajo) lo usa para el costo/ganancia real y para dejar auditoría en
             // venta_detalle_lotes, en vez de recalcular con el campo global de la ficha.
             $consumoPorIndice = [];
+            // Precio base y comisión de cada línea según su lote de referencia (PrecioLoteService),
+            // calculados ANTES de consumir: después de la salida el lote puede quedar sin stock.
+            $referenciaPorIndice = [];
             // Alguna línea vendida por debajo de su costo real: la venta especial pasa a ser de
             // tipo 'bajo_costo' y solo un admin puede decidirla. Lo decide el servidor (el POS de un
             // vendedor no conoce el costo).
             $hayLineaBajoCosto = false;
             foreach ($validatedData['items'] as $idx => $item) {
                 $producto = Producto::find($item['producto_id']);
+
+                $precioRowLinea = $preciosAlmacen->get($item['producto_id']);
+                $referenciaPorIndice[$idx] = $precioLoteService->referencia(
+                    $producto->lotesActivosEnAlmacen((int) $validatedData['almacen_id']),
+                    $precioRowLinea ? (float) $precioRowLinea->precio_venta : null,
+                    $precioRowLinea ? (float) ($precioRowLinea->comision ?? 0) : 0.0,
+                    $item['lote_id'] ?? null
+                );
 
                 // Costo real de esta línea: consume del/los lote(s) del almacén de venta (FIFO,
                 // o el lote puntual elegido a mano vía items.*.lote_id) ANTES de validar el
@@ -1015,11 +1005,12 @@ class VentaController extends Controller
                     throw new \Exception("El precio de venta de \"{$producto->nombre_producto}\" no puede ser menor que su costo de compra.");
                 }
 
-                // Validar que el precio no baje del límite permitido (precio_base - comisión)
+                // Validar que el precio no baje del límite permitido (precio_base - comisión), con el
+                // precio base y la comisión del lote de referencia (no los del almacén a secas).
                 if (! $esEspecial) {
-                    $precioRow = $preciosAlmacen->get($item['producto_id']);
-                    if ($precioRow) {
-                        $precioMinimo = round((float) $precioRow->precio_venta - (float) $precioRow->comision, 2);
+                    if ($precioRowLinea) {
+                        $referencia = $referenciaPorIndice[$idx];
+                        $precioMinimo = round((float) $referencia['precio_base'] - $referencia['comision'], 2);
                         if ((float) $item['precio_venta'] < $precioMinimo) {
                             throw new \Exception(
                                 "El precio de \"{$producto->nombre_producto}\" (\${$item['precio_venta']}) ".
@@ -1135,9 +1126,12 @@ class VentaController extends Controller
 
                 // Usar datos precargados del almacén
                 $productoVendedor = $preciosAlmacen->get($item['producto_id']);
+                $referencia = $referenciaPorIndice[$idx];
 
-                $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
-                $baseComision = (! $esEspecial && $productoVendedor) ? (float) $productoVendedor->comision : 0;
+                // Precio base y comisión del lote de referencia (elegido, o el más antiguo): un precio
+                // propio de lote es el precio base de la línea y la comisión sigue siendo la definida.
+                $precioBase = $productoVendedor ? (float) $referencia['precio_base'] : (float) $item['precio_venta'];
+                $baseComision = (! $esEspecial && $productoVendedor) ? $referencia['comision'] : 0;
 
                 // Calcular comisión según el precio aplicado
                 if ($esEspecial || $esGestor) {
@@ -1159,6 +1153,7 @@ class VentaController extends Controller
                     'cantidad' => $item['cantidad'],
                     'precio_venta' => $item['precio_venta'],
                     'precio_base' => $precioBase,
+                    'comision_base' => $productoVendedor ? $referencia['comision'] : null,
                     'subtotal' => $item['subtotal'],
                     'costo_unitario' => $costoUnitarioReal,
                     'ganancia' => $ganancia,
@@ -1400,6 +1395,39 @@ class VentaController extends Controller
      * Admin/moderador pueden gestionar cualquier venta; un vendedor solo las suyas.
      * Mismo criterio que ya usa listadoVentas() para filtrar por dueño.
      */
+    /**
+     * Cómo se paga la comisión del vendedor: la cuenta de donde sale y el monto en la moneda de esa
+     * cuenta. `comision_tasa` es la tasa CUP/USD cuando la cuenta es CUP y siempre 1 cuando es USD,
+     * así que `total_comision × comision_tasa` es lo que se debita, en la moneda de la cuenta.
+     * `monto_cup` solo se llena si la cuenta es CUP (los reportes en CUP no deben contar una cuenta USD).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function comisionPago(Venta $venta): ?array
+    {
+        if (! $venta->comision_cuenta_id) {
+            return null;
+        }
+
+        $cuenta = $venta->comisionCuenta;
+        $monto = $venta->comision_tasa > 0
+            ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
+            : null;
+        $moneda = $cuenta?->moneda?->codigo_moneda;
+
+        return [
+            'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
+            'monto_cup' => $moneda === 'USD' ? null : $monto,
+            'monto_cuenta' => $monto,
+            'cuenta' => $cuenta ? [
+                'id' => $cuenta->id,
+                'nombre' => $cuenta->nombre_cuenta,
+                'moneda' => $moneda,
+                'saldo_disponible' => (float) ($cuenta->saldo_cuenta ?? 0),
+            ] : null,
+        ];
+    }
+
     private function puedeGestionarVenta(Venta $venta): bool
     {
         $user = Auth::user();
@@ -1625,14 +1653,15 @@ class VentaController extends Controller
                 $cuentaComision = $venta->comisionCuenta;
 
                 if ($cuentaComision) {
-                    $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                    // En la moneda de la cuenta: CUP con la tasa CUP/USD, o USD directo (tasa 1).
+                    $montoComision = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
 
                     // Se permite dejar la cuenta en deuda (saldo negativo) — decisión del cliente.
                     $comisionSaldoAnterior = (float) $cuentaComision->saldo_cuenta;
-                    $cuentaComision->decrement('saldo_cuenta', $montoCUP);
+                    $cuentaComision->decrement('saldo_cuenta', $montoComision);
                     $venta->update([
                         'comision_saldo_anterior' => $comisionSaldoAnterior,
-                        'comision_saldo_posterior' => $comisionSaldoAnterior - $montoCUP,
+                        'comision_saldo_posterior' => $comisionSaldoAnterior - $montoComision,
                     ]);
                 }
             }
@@ -1871,11 +1900,17 @@ class VentaController extends Controller
                         $nuevoPrecio = (float) $itemData['precio_venta'];
                         $costo = (float) $detalle->costo_unitario;
 
+                        // Base de la línea: las vendidas con lote de referencia (desde 2026-09-26) guardan
+                        // su precio y comisión base; las anteriores siguen con los del almacén.
+                        $precioRow = $preciosAlmacen->get($detalle->producto_id);
+                        $baseGuardada = $detalle->comision_base !== null;
+                        $precioBaseLinea = $baseGuardada ? (float) $detalle->precio_base : ($precioRow ? (float) $precioRow->precio_venta : null);
+                        $comisionBaseLinea = $baseGuardada ? (float) $detalle->comision_base : ($precioRow ? (float) $precioRow->comision : null);
+
                         // Validar mínimo solo si no es venta especial
                         if (! $venta->es_venta_especial) {
-                            $precioRow = $preciosAlmacen->get($detalle->producto_id);
-                            if ($precioRow) {
-                                $precioMinimo = round((float) $precioRow->precio_venta - (float) $precioRow->comision, 2);
+                            if ($precioBaseLinea !== null) {
+                                $precioMinimo = round($precioBaseLinea - $comisionBaseLinea, 2);
                                 if ($nuevoPrecio < $precioMinimo) {
                                     throw new \Exception(
                                         "El precio de \"{$detalle->producto->nombre_producto}\" (\${$nuevoPrecio}) ".
@@ -1900,9 +1935,8 @@ class VentaController extends Controller
                         }
 
                         // Recalcular comisión
-                        $precioRow = $preciosAlmacen->get($detalle->producto_id);
-                        $precioBase = $precioRow ? (float) $precioRow->precio_venta : $nuevoPrecio;
-                        $baseComision = (! $venta->es_venta_especial && $precioRow) ? (float) $precioRow->comision : 0;
+                        $precioBase = $precioBaseLinea ?? $nuevoPrecio;
+                        $baseComision = (! $venta->es_venta_especial && $comisionBaseLinea !== null) ? $comisionBaseLinea : 0;
 
                         if ($venta->es_venta_especial) {
                             $comisionUnitaria = 0;
@@ -2036,6 +2070,29 @@ class VentaController extends Controller
         $limpiarComision = $validated['limpiar_comision'] ?? false;
         $limpiarGestor = $validated['limpiar_gestor'] ?? false;
 
+        // La comisión del vendedor sale de una cuenta CUP, o de una cuenta USD en efectivo asignada al vendedor de la
+        // venta. En una cuenta USD no hay conversión: la tasa es siempre 1 y se debita `total_comision` en USD.
+        if (! $limpiarComision && ! empty($validated['comision_cuenta_id'])) {
+            $cuentaComision = Cuenta::with('moneda')->find($validated['comision_cuenta_id']);
+            $monedaComision = $cuentaComision?->moneda?->codigo_moneda;
+
+            if (! in_array($monedaComision, ['CUP', 'USD'], true)) {
+                return response()->json(['success' => false, 'message' => 'La comisión solo se puede pagar desde una cuenta CUP o USD en efectivo.'], 422);
+            }
+
+            if ($monedaComision === 'USD') {
+                if ($cuentaComision->tipo !== 'efectivo') {
+                    return response()->json(['success' => false, 'message' => 'La cuenta USD para la comisión debe ser de efectivo.'], 422);
+                }
+
+                if (! $venta->usuario->cuentas()->where('cuentas.id', $cuentaComision->id)->exists()) {
+                    return response()->json(['success' => false, 'message' => 'La cuenta USD debe estar asignada al vendedor de la venta.'], 422);
+                }
+
+                $validated['comision_tasa'] = 1;
+            }
+        }
+
         // El monto USD del mensajero viene del POS y no cambia desde Show.
         // Solo se actualiza si el payload incluye explícitamente mensajero_monto (caso raro).
         $nuevoMensajeroMonto = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? $venta->mensajero_monto);
@@ -2107,18 +2164,7 @@ class VentaController extends Controller
                     'nombre' => $venta->mensajeroOrigenCuenta->nombre_cuenta,
                 ] : null,
             ] : null,
-            'comision_pago' => $venta->comision_cuenta_id ? [
-                'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
-                'monto_cup' => $venta->comision_tasa > 0
-                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
-                    : null,
-                'cuenta' => $venta->comisionCuenta ? [
-                    'id' => $venta->comisionCuenta->id,
-                    'nombre' => $venta->comisionCuenta->nombre_cuenta,
-                    'moneda' => $venta->comisionCuenta->moneda?->codigo_moneda,
-                    'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_cuenta ?? 0),
-                ] : null,
-            ] : null,
+            'comision_pago' => $this->comisionPago($venta),
         ]);
     }
 
@@ -2305,8 +2351,9 @@ class VentaController extends Controller
                     if (! $venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
                         $cuentaComision = $venta->comisionCuenta;
                         if ($cuentaComision) {
-                            $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
-                            $cuentaComision->increment('saldo_cuenta', $montoCUP);
+                            // En la moneda de la cuenta (CUP con la tasa, o USD con tasa 1), igual que al aprobar.
+                            $montoComision = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                            $cuentaComision->increment('saldo_cuenta', $montoComision);
                         }
                     }
                 }

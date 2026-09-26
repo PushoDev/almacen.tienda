@@ -6,6 +6,7 @@ use App\Models\Cuenta;
 use App\Models\HistorialTasaCambio;
 use App\Models\Moneda;
 use App\Services\CatalogoTarjetasService;
+use App\Services\MetodosPagoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,17 +15,21 @@ use Inertia\Inertia;
 
 class MonedaController extends Controller
 {
+    public function __construct(private MetodosPagoService $metodosPago) {}
+
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        $monedas = Moneda::orderBy('principal', 'desc')
+        $monedas = Moneda::with(['metodosPago', 'viasPago'])
+            ->orderBy('principal', 'desc')
             ->orderBy('codigo_moneda')
             ->get()
             ->map(function (Moneda $moneda) {
                 return $moneda->toArray() + [
                     'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+                    'metodos_pago_resumen' => $this->metodosPago->resumenDeMoneda($moneda),
                 ];
             });
 
@@ -44,6 +49,7 @@ class MonedaController extends Controller
         return Inertia::render('Monedas/Create', [
             'moneda_principal' => Moneda::where('principal', true)->first(),
             'catalogoImagenes' => CatalogoTarjetasService::monedaImagenes(),
+            'catalogoMetodosPago' => $this->metodosPago->catalogo(),
         ]);
     }
 
@@ -61,13 +67,15 @@ class MonedaController extends Controller
             // cuentas.imagen.
             'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
-            'commission' => 'nullable|numeric|min:0',
             'estado' => 'boolean',
             'principal' => 'boolean',
-        ], [
+        ] + $this->metodosPago->reglas(), [
             'nombre_moneda.unique' => 'El nombre de moneda ya existe.',
             'tasa_cambio.min' => 'La tasa de cambio debe ser mayor a 0.',
+            'metodos_pago.required' => 'Elige al menos un método de pago.',
+            'metodos_pago.min' => 'Elige al menos un método de pago.',
         ]);
+        $validator->after(fn ($validator) => $this->validarCoherenciaDePagos($validator, $request));
 
         if ($validator->fails()) {
             return redirect()->back()
@@ -82,16 +90,18 @@ class MonedaController extends Controller
                     Moneda::where('principal', true)->update(['principal' => false]);
                 }
 
-                Moneda::create([
+                $moneda = Moneda::create([
                     'codigo_moneda' => strtoupper($request->codigo_moneda),
                     'nombre_moneda' => $request->nombre_moneda,
                     'simbolo_moneda' => $request->simbolo_moneda,
                     'imagen' => $request->imagen ?: null,
                     'tasa_cambio' => $request->tasa_cambio,
-                    'commission' => $request->commission ?? 0,
                     'estado' => $request->estado ?? true,
                     'principal' => $request->principal ?? false,
                 ]);
+
+                // Lo que eligió el formulario reemplaza la configuración por defecto con la que nace la moneda.
+                $this->metodosPago->sincronizar($moneda, (array) $request->metodos_pago, (array) $request->vias_pago);
             });
 
             return redirect()->route('monedas.index')
@@ -108,9 +118,12 @@ class MonedaController extends Controller
      */
     public function show(Moneda $moneda)
     {
+        $moneda->load(['metodosPago', 'viasPago']);
+
         return Inertia::render('Monedas/Show', [
             'moneda' => $moneda->toArray() + [
                 'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+                'metodos_pago_resumen' => $this->metodosPago->resumenDeMoneda($moneda),
             ],
         ]);
     }
@@ -127,6 +140,8 @@ class MonedaController extends Controller
             'moneda_principal' => $moneda_principal,
             'es_principal_actual' => $moneda->principal,
             'catalogoImagenes' => CatalogoTarjetasService::monedaImagenes(),
+            'catalogoMetodosPago' => $this->metodosPago->catalogo(),
+            'metodosPagoActuales' => $this->metodosPago->configuracion($moneda),
         ]);
     }
 
@@ -141,13 +156,15 @@ class MonedaController extends Controller
             'simbolo_moneda' => 'required|string|max:10',
             'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
-            'commission' => 'required|numeric|min:0',
             'estado' => 'boolean',
             'principal' => 'boolean',
-        ], [
+        ] + $this->metodosPago->reglas(), [
             'nombre_moneda.unique' => 'El nombre de moneda ya existe.',
             'tasa_cambio.min' => 'La tasa de cambio debe ser mayor a 0.',
+            'metodos_pago.required' => 'Elige al menos un método de pago.',
+            'metodos_pago.min' => 'Elige al menos un método de pago.',
         ]);
+        $validator->after(fn ($validator) => $this->validarCoherenciaDePagos($validator, $request));
 
         if ($validator->fails()) {
             return redirect()->back()
@@ -193,7 +210,6 @@ class MonedaController extends Controller
                         'simbolo_moneda' => $request->simbolo_moneda,
                         'imagen' => $request->imagen ?: null,
                         'tasa_cambio' => $request->tasa_cambio,
-                        'commission' => $request->commission,
                         'estado' => $request->estado,
                         'principal' => $request->principal,
                     ]);
@@ -225,11 +241,12 @@ class MonedaController extends Controller
                         'simbolo_moneda' => $request->simbolo_moneda,
                         'imagen' => $request->imagen ?: null,
                         'tasa_cambio' => $request->tasa_cambio,
-                        'commission' => $request->commission,
                         'estado' => $request->estado,
                         'principal' => $request->principal,
                     ]);
                 }
+
+                $this->metodosPago->sincronizar($moneda, (array) $request->metodos_pago, (array) $request->vias_pago);
             });
 
             return redirect()->route('monedas.index')
@@ -238,6 +255,18 @@ class MonedaController extends Controller
             return redirect()->back()
                 ->with('error', 'Error al actualizar la moneda: '.$e->getMessage())
                 ->withInput();
+        }
+    }
+
+    /**
+     * Regla que no expresa `exists`: una moneda que admite transferencia necesita al menos una vía.
+     */
+    private function validarCoherenciaDePagos(\Illuminate\Validation\Validator $validator, Request $request): void
+    {
+        $error = $this->metodosPago->errorDeCoherencia((array) $request->metodos_pago, (array) $request->vias_pago);
+
+        if ($error) {
+            $validator->errors()->add('vias_pago', $error);
         }
     }
 

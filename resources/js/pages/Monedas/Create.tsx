@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { type CatalogoMetodosPago, MetodosPagoSelector } from '@/components/monedas/metodos-pago-selector';
 import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { Coins, DollarSign, Info, Save } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
@@ -27,6 +28,7 @@ interface PageProps {
         nombre_moneda: string;
     };
     catalogoImagenes: CatalogoImagen[];
+    catalogoMetodosPago: CatalogoMetodosPago;
     errors?: Record<string, string>;
     [key: string]: unknown;
 }
@@ -48,7 +50,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function MonedaCreate() {
     const { props } = usePage<PageProps>();
-    const { moneda_principal, catalogoImagenes, errors } = props;
+    const { moneda_principal, catalogoImagenes, catalogoMetodosPago, errors } = props;
+
+    // Vías que se sugieren al crear una moneda: CUP con las cubanas (EnZona, Transfermóvil) y las demás con
+    // las internacionales. Se pueden cambiar a mano; en cuanto se toca la lista, el código deja de cambiarla.
+    const viasPorDefecto = (codigo: string) =>
+        catalogoMetodosPago.vias.filter((via) => via.ambito === (codigo === 'CUP' ? 'cuba' : 'internacional')).map((via) => via.slug);
+    const [viasTocadas, setViasTocadas] = useState(false);
 
     const { data, setData, post, processing, reset } = useForm({
         codigo_moneda: '',
@@ -56,9 +64,10 @@ export default function MonedaCreate() {
         simbolo_moneda: '',
         imagen: null as string | null,
         tasa_cambio: '' as number | '',
-        commission: '' as number | '',
         estado: true,
         principal: false,
+        metodos_pago: catalogoMetodosPago.metodos.map((metodo) => metodo.slug),
+        vias_pago: viasPorDefecto(''),
     });
 
     // Insignia elegida en vivo (reacciona a cada cambio en el selector, antes de guardar) —
@@ -78,6 +87,7 @@ export default function MonedaCreate() {
             preserveScroll: true,
             onSuccess: () => {
                 sileo.success({ title: 'Moneda creada', description: 'La moneda se creó correctamente' });
+                setViasTocadas(false);
                 reset();
             },
             onError: () => {
@@ -162,7 +172,14 @@ export default function MonedaCreate() {
                                             maxLength={3}
                                             placeholder="Ej: USD, EUR, CUP"
                                             value={data.codigo_moneda}
-                                            onChange={(e) => setData('codigo_moneda', e.target.value.toUpperCase())}
+                                            onChange={(e) => {
+                                                const codigo = e.target.value.toUpperCase();
+                                                setData((previo) => ({
+                                                    ...previo,
+                                                    codigo_moneda: codigo,
+                                                    vias_pago: viasTocadas ? previo.vias_pago : viasPorDefecto(codigo),
+                                                }));
+                                            }}
                                             className={errors?.codigo_moneda ? 'border-red-500' : ''}
                                         />
                                         {errors?.codigo_moneda && <p className="text-sm text-red-500">{errors.codigo_moneda}</p>}
@@ -213,42 +230,37 @@ export default function MonedaCreate() {
                                     {errors?.imagen && <p className="text-sm text-red-500">{errors.imagen}</p>}
                                 </div>
 
-                                {/* Tasa de Cambio y Comisión */}
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="tasa_cambio">
-                                            Tasa de Cambio <span className="text-red-500">*</span>
-                                        </Label>
-                                        <Input
-                                            id="tasa_cambio"
-                                            type="number"
-                                            step="0.000001"
-                                            min="0.000001"
-                                            placeholder="1.0"
-                                            value={data.tasa_cambio}
-                                            onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || '')}
-                                            className={errors?.tasa_cambio ? 'border-red-500' : ''}
-                                        />
-                                        {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}
-                                        <p className="text-muted-foreground text-sm">Tasa respecto a la moneda principal</p>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="commission">Comisión (%)</Label>
-                                        <Input
-                                            id="commission"
-                                            type="number"
-                                            step="0.0001"
-                                            min="0"
-                                            placeholder="0.0000"
-                                            value={data.commission}
-                                            onChange={(e) => setData('commission', parseFloat(e.target.value) || '')}
-                                            className={errors?.commission ? 'border-red-500' : ''}
-                                        />
-                                        {errors?.commission && <p className="text-sm text-red-500">{errors.commission}</p>}
-                                        <p className="text-muted-foreground text-sm">Opcional — comisión porcentual aplicada, 0 si se deja vacío</p>
-                                    </div>
+                                {/* Tasa de Cambio */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="tasa_cambio">
+                                        Tasa de Cambio <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Input
+                                        id="tasa_cambio"
+                                        type="number"
+                                        step="0.000001"
+                                        min="0.000001"
+                                        placeholder="1.0"
+                                        value={data.tasa_cambio}
+                                        onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || '')}
+                                        className={errors?.tasa_cambio ? 'border-red-500' : ''}
+                                    />
+                                    {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}
+                                    <p className="text-muted-foreground text-sm">Tasa respecto a la moneda principal</p>
                                 </div>
+
+                                {/* Métodos de pago que admite la moneda y, en transferencia, sus vías */}
+                                <MetodosPagoSelector
+                                    catalogo={catalogoMetodosPago}
+                                    metodos={data.metodos_pago}
+                                    vias={data.vias_pago}
+                                    onChange={(metodos, vias) => {
+                                        setViasTocadas(true);
+                                        setData((previo) => ({ ...previo, metodos_pago: metodos, vias_pago: vias }));
+                                    }}
+                                    errorMetodos={errors?.metodos_pago}
+                                    errorVias={errors?.vias_pago}
+                                />
 
                                 {/* Estado y Principal */}
                                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

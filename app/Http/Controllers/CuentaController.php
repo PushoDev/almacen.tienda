@@ -156,6 +156,7 @@ class CuentaController extends Controller
             'monedaPrincipal' => $monedaPrincipal,
             'resumen' => $resumen,
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
+            'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
         ]);
     }
 
@@ -179,6 +180,7 @@ class CuentaController extends Controller
                 }),
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
             'bancos' => CatalogoTarjetasService::bancos(),
+            'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
         ]);
     }
 
@@ -263,6 +265,7 @@ class CuentaController extends Controller
                 'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
             ],
             'puedeEditar' => $esAdminOModerador,
+            'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
             'historialTransacciones' => $this->obtenerHistorialTransacciones($cuenta, $request),
             'historialVentas' => $this->obtenerHistorialVentas($cuenta, $request, $esAdminOModerador),
             'historialCompras' => $esAdminOModerador
@@ -762,6 +765,7 @@ class CuentaController extends Controller
                 }),
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
             'bancos' => CatalogoTarjetasService::bancos(),
+            'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
         ]);
     }
 

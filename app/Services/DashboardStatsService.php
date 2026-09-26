@@ -377,15 +377,19 @@ class DashboardStatsService
             ->get()
             ->each(fn ($r) => $sumar($r->moneda, (float) $r->total));
 
-        $comisionPv = (float) DB::table('ventas')
-            ->whereNotNull('comision_cuenta_id')
-            ->where('estado', 'completada')
-            ->where('es_venta_gestor', false)
-            ->where('total_comision', '>', 0)
-            ->where('comision_tasa', '>', 0)
-            ->whereBetween('updated_at', [$desde, $hasta])
-            ->sum(DB::raw('total_comision * comision_tasa'));
-        $sumar('CUP', -$comisionPv);
+        // La comisión sale de la cuenta que se eligió: en CUP con la tasa, o en USD (tasa 1) si es una cuenta USD.
+        DB::table('ventas as v')
+            ->join('cuentas as c', 'c.id', '=', 'v.comision_cuenta_id')
+            ->leftJoin('monedas as m', 'm.id', '=', 'c.moneda_id')
+            ->where('v.estado', 'completada')
+            ->where('v.es_venta_gestor', false)
+            ->where('v.total_comision', '>', 0)
+            ->where('v.comision_tasa', '>', 0)
+            ->whereBetween('v.updated_at', [$desde, $hasta])
+            ->selectRaw("CASE WHEN m.codigo_moneda = 'USD' THEN 'USD' ELSE 'CUP' END as moneda, SUM(v.total_comision * v.comision_tasa) as total")
+            ->groupBy('moneda')
+            ->get()
+            ->each(fn ($r) => $sumar($r->moneda, -(float) $r->total));
 
         $comisionGestor = (float) DB::table('ventas')
             ->whereNotNull('gestor_cuenta_id')

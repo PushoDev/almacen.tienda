@@ -643,6 +643,105 @@ test('aprobarVenta sin gestor descuenta la comisión del vendedor de su cuenta C
     ]);
 });
 
+/**
+ * Cuenta de efectivo/tarjeta en la moneda dada (USD o EUR) para probar de dónde puede salir la comisión.
+ */
+function crearCuentaComision(string $codigoMoneda, string $tipo, float $saldo = 500): Cuenta
+{
+    $moneda = Moneda::firstOrCreate(
+        ['codigo_moneda' => $codigoMoneda],
+        ['nombre_moneda' => $codigoMoneda, 'simbolo_moneda' => $codigoMoneda, 'tasa_cambio' => 1, 'estado' => true, 'principal' => false]
+    );
+
+    return Cuenta::create([
+        'nombre_cuenta' => "Cuenta {$codigoMoneda} {$tipo} ".uniqid(),
+        'saldo_cuenta' => $saldo,
+        'tipo_cuenta' => 'permanentes',
+        'tipo' => $tipo,
+        'moneda_id' => $moneda->id,
+        'estado' => 'activa',
+    ]);
+}
+
+function ventaPendienteConComision(User $vendedor, float $comision = 10): Venta
+{
+    $moneda = Moneda::firstOrCreate(['codigo_moneda' => 'USD'], ['nombre_moneda' => 'Dólar', 'simbolo_moneda' => '$', 'tasa_cambio' => 1, 'estado' => true, 'principal' => true]);
+
+    return Venta::factory()->create([
+        'user_id' => $vendedor->id,
+        'almacen_id' => Almacen::factory()->puntoVenta()->create()->id,
+        'estado' => 'pendiente',
+        'moneda_id' => $moneda->id,
+        'total' => 100,
+        'es_venta_gestor' => false,
+        'total_comision' => $comision,
+    ]);
+}
+
+test('la comisión se paga desde una cuenta USD en efectivo asignada al vendedor: sin tasa, y aprobar y anular la debitan y devuelven en USD', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $vendedor = User::factory()->vendedor()->create();
+    $cuentaUsd = crearCuentaComision('USD', 'efectivo', saldo: 500);
+    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $venta = ventaPendienteConComision($vendedor, comision: 10);
+    crearDestinatario($venta);
+
+    // El cliente manda una tasa cualquiera: en USD no hay conversión, queda en 1.
+    $respuesta = $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaUsd->id, 'comision_tasa' => 365]);
+
+    $respuesta->assertOk()
+        ->assertJsonPath('comision_pago.cuenta.moneda', 'USD')
+        ->assertJsonPath('comision_pago.monto_cuenta', 10)
+        ->assertJsonPath('comision_pago.monto_cup', null);
+    expect((float) $venta->fresh()->comision_tasa)->toBe(1.0);
+
+    $this->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
+    expect((float) $cuentaUsd->fresh()->saldo_cuenta)->toBe(490.0); // 500 - 10 USD, no 3650
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'comision_saldo_anterior' => 500, 'comision_saldo_posterior' => 490]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+    expect((float) $cuentaUsd->fresh()->saldo_cuenta)->toBe(500.0);
+});
+
+test('la comisión no se puede pagar desde una cuenta USD que no es del vendedor de la venta, que no es de efectivo, ni desde otra moneda', function (string $caso) {
+    $this->actingAs(User::factory()->admin()->create());
+    $vendedor = User::factory()->vendedor()->create();
+    $venta = ventaPendienteConComision($vendedor);
+
+    $cuenta = match ($caso) {
+        'USD de otro vendedor' => tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => User::factory()->vendedor()->create()->cuentas()->attach($c->id)),
+        'USD sin asignar a nadie' => crearCuentaComision('USD', 'efectivo'),
+        'USD tarjeta del vendedor' => tap(crearCuentaComision('USD', 'tarjeta'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
+        'EUR efectivo del vendedor' => tap(crearCuentaComision('EUR', 'efectivo'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
+    };
+
+    $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuenta->id, 'comision_tasa' => 1])->assertStatus(422);
+
+    expect($venta->fresh()->comision_cuenta_id)->toBeNull();
+})->with(['USD de otro vendedor', 'USD sin asignar a nadie', 'USD tarjeta del vendedor', 'EUR efectivo del vendedor']);
+
+test('la comisión sigue pudiendo salir de una cuenta CUP con su tasa (el monto en CUP se mantiene)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $venta = ventaPendienteConComision(User::factory()->vendedor()->create(), comision: 10);
+    $cuentaCup = crearCuentaCup(saldo: 5000);
+
+    $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaCup->id, 'comision_tasa' => 365])
+        ->assertOk()
+        ->assertJsonPath('comision_pago.monto_cup', 3650)
+        ->assertJsonPath('comision_pago.monto_cuenta', 3650);
+    expect((float) $venta->fresh()->comision_tasa)->toBe(365.0);
+});
+
+test('show() entrega las cuentas asignadas al vendedor de la venta para elegir la cuenta de la comisión', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $cuentaUsd = crearCuentaComision('USD', 'efectivo');
+    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $venta = ventaPendienteConComision($vendedor);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page->where('venta.vendedor_cuentas_ids', [$cuentaUsd->id]));
+});
+
 test('aprobarVenta descuenta la comisión aunque la cuenta no tenga saldo suficiente, dejándola en deuda', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
@@ -1894,22 +1993,238 @@ test('getProductosPorAlmacen() expone el precio de venta efectivo de cada lote (
     expect((float) $lotes[$loteConOverride->id]['precio_venta'])->toBe(25.0); // su propio override
 });
 
-test('getProductosPorAlmacen() solo ofrece elegir lote cuando los lotes se diferencian en costo o en precio', function (array $primero, array $segundo, bool $seOfrece) {
+test('getProductosPorAlmacen() entrega los lotes con stock del más viejo al más nuevo, aunque sean idénticos', function () {
     $this->actingAs(User::factory()->admin()->create());
     $almacen = Almacen::factory()->create();
+    $otroAlmacen = Almacen::factory()->create();
     [$producto] = crearProductoConPrecio($almacen, 10, 20);
-    foreach ([$primero, $segundo] as $i => $datos) {
-        LoteStock::create($datos + ['codigo' => "LOTE-POS-{$i}", 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5]);
+    [$productoUnLote] = crearProductoConPrecio($almacen, 10, 20);
+
+    $nuevo = LoteStock::create(['codigo' => 'LOTE-NUEVO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
+    $viejo = LoteStock::create(['codigo' => 'LOTE-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
+    $viejo->created_at = now()->subDay(); // created_at no es asignable en masa
+    $viejo->save();
+    LoteStock::create(['codigo' => 'LOTE-AGOTADO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'cantidad_disponible' => 0, 'precio_costo' => 12]);
+    LoteStock::create(['codigo' => 'LOTE-OTRO-ALMACEN', 'producto_id' => $producto->id, 'almacen_id' => $otroAlmacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
+    LoteStock::create(['codigo' => 'LOTE-UNICO', 'producto_id' => $productoUnLote->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
+
+    $productos = collect($this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json())->keyBy('id');
+
+    // Idénticos en costo y precio: igual se entregan todos (el POS muestra el selector con 2 o más).
+    expect(collect($productos[$producto->id]['lotes'])->pluck('id')->all())->toBe([$viejo->id, $nuevo->id]);
+    expect($productos[$productoUnLote->id]['lotes'])->toHaveCount(1);
+});
+
+test('getProductosPorAlmacen() resuelve la comisión de cada lote: la propia, la del primer lote que la tenga o la del producto', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    [$conComisiones] = crearProductoConPrecio($almacen, 10, 20, comision: 2);
+    [$sinComisiones] = crearProductoConPrecio($almacen, 10, 20, comision: 2);
+
+    $sinPropia = LoteStock::create(['codigo' => 'A-SIN', 'producto_id' => $conComisiones->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
+    $ochoPropia = LoteStock::create(['codigo' => 'B-OCHO', 'producto_id' => $conComisiones->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12, 'comision' => 8]);
+    $cincoPropia = LoteStock::create(['codigo' => 'C-CINCO', 'producto_id' => $conComisiones->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12, 'comision' => 5]);
+    foreach (['D-1', 'D-2'] as $i => $codigo) {
+        LoteStock::create(['codigo' => $codigo, 'producto_id' => $sinComisiones->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
     }
 
-    $lotes = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json('0.lotes');
+    $productos = collect($this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json())->keyBy('id');
+    $comisiones = collect($productos[$conComisiones->id]['lotes'])->pluck('comision', 'id');
 
-    expect($lotes)->toHaveCount($seOfrece ? 2 : 0);
-})->with([
-    'lotes idénticos (mismo costo y mismo precio): no se pregunta' => [['precio_costo' => 12], ['precio_costo' => 12], false],
-    'mismo precio pero otro costo: se ofrece' => [['precio_costo' => 12], ['precio_costo' => 18], true],
-    'mismo costo pero uno con precio propio: se ofrece' => [['precio_costo' => 12], ['precio_costo' => 12, 'precio_venta' => 25], true],
-]);
+    expect((float) $comisiones[$sinPropia->id])->toBe(8.0)   // no tiene: toma la del primer lote que sí
+        ->and((float) $comisiones[$ochoPropia->id])->toBe(8.0)
+        ->and((float) $comisiones[$cincoPropia->id])->toBe(5.0); // la propia manda sobre la de otros
+    expect(collect($productos[$sinComisiones->id]['lotes'])->pluck('comision')->map(fn ($c) => (float) $c)->all())->toBe([2.0, 2.0]); // ninguno: la del producto
+});
+
+test('vender con el lote elegido usa su precio propio como base y mantiene la comisión (el excedente no va al vendedor)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    LoteStock::create(['codigo' => 'LOTE-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 12]);
+    $conPrecioPropio = LoteStock::create(['codigo' => 'LOTE-PROPIO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 18, 'precio_venta' => 40, 'comision' => 3]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 40, cantidad: 2, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $conPrecioPropio->id;
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 80);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk()->assertJson(['success' => true]);
+
+    $detalle = VentaDetalle::where('producto_id', $producto->id)->sole();
+    expect((float) $detalle->precio_base)->toBe(40.0)          // no los 30 del almacén
+        ->and((float) $detalle->comision_base)->toBe(3.0)
+        ->and((float) $detalle->comision_unitaria)->toBe(3.0)  // no 3 + (40 - 30)
+        ->and((float) Venta::sole()->total_comision)->toBe(6.0);
+});
+
+test('vender sin elegir lote toma el precio base y la comisión del lote más antiguo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    LoteStock::create(['codigo' => 'LOTE-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 12, 'precio_venta' => 35, 'comision' => 4]);
+    LoteStock::create(['codigo' => 'LOTE-NUEVO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 18]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 35, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 35);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $detalle = VentaDetalle::where('producto_id', $producto->id)->sole();
+    expect((float) $detalle->precio_base)->toBe(35.0)->and((float) $detalle->comision_unitaria)->toBe(4.0);
+});
+
+test('si el lote elegido no tiene comisión se vende con la del primer lote que sí la tenga', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $sinComision = LoteStock::create(['codigo' => 'LOTE-SIN', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 12]);
+    LoteStock::create(['codigo' => 'LOTE-CON', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 12, 'comision' => 6]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $sinComision->id;
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 30);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    expect((float) VentaDetalle::where('producto_id', $producto->id)->sole()->comision_unitaria)->toBe(6.0); // no los 2 del producto
+});
+
+test('el precio mínimo se valida con el precio base y la comisión del lote elegido', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    LoteStock::create(['codigo' => 'LOTE-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 12]);
+    $propio = LoteStock::create(['codigo' => 'LOTE-PROPIO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 18, 'precio_venta' => 40, 'comision' => 3]);
+    $vender = function (float $precio) use ($almacen, $producto, $codigo, $monedaUsd, $propio) {
+        $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: $precio, cantidad: 1, monedaPrincipal: $monedaUsd);
+        $payload['items'][0]['lote_id'] = $propio->id;
+        $payload['pagos'] = pagoEfectivoUsd($monedaUsd, $precio);
+
+        return $this->postJson(route('ventas.procesar'), $payload);
+    };
+
+    // Mínimo = 40 - 3 = 37 (con el precio del almacén sería 30 - 2 = 28 y 36 pasaría).
+    $rechazada = $vender(36);
+    $rechazada->assertJson(['success' => false]);
+    expect($rechazada->json('message'))->toContain('por debajo del mínimo permitido');
+    $vender(37)->assertOk()->assertJson(['success' => true]);
+});
+
+test('un lote elegido con menos unidades que la venta sigue con los demás lotes en FIFO, sin dejar unidades sin lote', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $viejo = LoteStock::create(['codigo' => 'LOTE-VIEJO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 40, 'precio_costo' => 12]);
+    $chico = LoteStock::create(['codigo' => 'LOTE-CHICO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 18]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 5, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $chico->id;
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 150);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    expect($chico->fresh()->cantidad_disponible)->toBe(0)   // el elegido sale primero
+        ->and($viejo->fresh()->cantidad_disponible)->toBe(37); // y el resto sigue en FIFO
+    $detalle = VentaDetalle::where('producto_id', $producto->id)->sole();
+    expect(DB::table('venta_detalle_lotes')->where('venta_detalle_id', $detalle->id)->whereNull('lote_stock_id')->count())->toBe(0);
+    expect((float) $detalle->costo_unitario)->toBe(14.4); // (2×18 + 3×12) / 5
+});
+
+test('un lote que no es del almacén de la venta se ignora y se vende en FIFO', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $otroAlmacen = Almacen::factory()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $propio = LoteStock::create(['codigo' => 'LOTE-PROPIO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 12]);
+    $ajeno = LoteStock::create(['codigo' => 'LOTE-AJENO', 'producto_id' => $producto->id, 'almacen_id' => $otroAlmacen->id, 'cantidad' => 50, 'precio_costo' => 99]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 30, cantidad: 3, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $ajeno->id;
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 90);
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    expect($propio->fresh()->cantidad_disponible)->toBe(47)->and($ajeno->fresh()->cantidad_disponible)->toBe(50);
+    expect((float) VentaDetalle::where('producto_id', $producto->id)->sole()->costo_unitario)->toBe(12.0);
+});
+
+test('editar el precio de una venta pendiente recalcula la comisión con la base guardada de la línea (la del lote)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 30, comision: 2);
+    $propio = LoteStock::create(['codigo' => 'LOTE-PROPIO', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 50, 'precio_costo' => 18, 'precio_venta' => 40, 'comision' => 3]);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 40, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['items'][0]['lote_id'] = $propio->id;
+    $payload['pagos'] = pagoEfectivoUsd($monedaUsd, 40);
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $venta = Venta::sole();
+    $detalle = $venta->detalles()->sole();
+
+    // Aunque el lote cambie después, la línea conserva su base (40 / 3): 41 → 3 + 1.
+    $propio->update(['precio_venta' => 50, 'comision' => 9]);
+    $edicion = fn (float $precio) => [
+        'pagos' => pagoEfectivoUsd($monedaUsd, $precio),
+        'items' => [['venta_detalle_id' => $detalle->id, 'precio_venta' => $precio]],
+    ];
+    $this->postJson(route('ventas.editar.pendiente', $venta), $edicion(41))->assertOk();
+    expect((float) $detalle->fresh()->comision_unitaria)->toBe(4.0);
+
+    // Y el mínimo también sale de esa base: 37.
+    $this->postJson(route('ventas.editar.pendiente', $venta), $edicion(36))->assertStatus(422);
+    $this->postJson(route('ventas.editar.pendiente', $venta), $edicion(37))->assertOk();
+    expect((float) $detalle->fresh()->comision_unitaria)->toBe(0.0);
+});
+
+test('editar una línea anterior a la comisión por lote (sin comision_base) sigue usando la base del almacén', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+    $venta = Venta::factory()->create(['almacen_id' => $almacen->id, 'estado' => 'pendiente', 'moneda_id' => $monedaUsd->id]);
+    $detalle = $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => 20, 'precio_base' => 999, 'subtotal' => 20,
+        'costo_unitario' => 10, 'ganancia' => 10, 'comision_unitaria' => 2,
+    ]);
+
+    $this->postJson(route('ventas.editar.pendiente', $venta), [
+        'pagos' => pagoEfectivoUsd($monedaUsd, 21),
+        'items' => [['venta_detalle_id' => $detalle->id, 'precio_venta' => 21]],
+    ])->assertOk();
+
+    expect((float) $detalle->fresh()->comision_unitaria)->toBe(3.0); // 2 + (21 - 20 del almacén), ignora el precio_base viejo
+});
+
+test('solo admin o moderador ponen o quitan la comisión propia de un lote', function () {
+    $almacen = Almacen::factory()->create();
+    [$producto] = crearProductoConPrecio($almacen, 10, 20);
+    [$otroProducto] = crearProductoConPrecio($almacen, 10, 20);
+    $lote = LoteStock::create(['codigo' => 'LOTE-COM', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => 12]);
+    $url = route('productos.lotes.comision', [$producto, $lote]);
+
+    $vendedor = User::factory()->vendedor()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $this->actingAs($vendedor)->putJson($url, ['comision' => 9])->assertForbidden();
+    expect($lote->fresh()->comision)->toBeNull();
+
+    $this->actingAs(User::factory()->admin()->create());
+    $this->putJson($url, ['comision' => 4.5])->assertOk()->assertJson(['success' => true, 'comision' => 4.5]);
+    expect((float) $lote->fresh()->comision)->toBe(4.5);
+    $this->putJson($url, ['comision' => 0])->assertOk();
+    expect((float) $lote->fresh()->comision)->toBe(0.0); // 0 es una comisión propia, no "sin comisión"
+    $this->putJson($url, ['comision' => null])->assertOk();
+    expect($lote->fresh()->comision)->toBeNull();
+    $this->putJson($url, ['comision' => -1])->assertJsonValidationErrors('comision');
+    $this->putJson(route('productos.lotes.comision', [$otroProducto, $lote]), ['comision' => 1])->assertNotFound();
+});
 
 test('show() oculta costo_unitario a un vendedor, incluso en su propia venta', function () {
     $vendedor = User::factory()->vendedor()->create();

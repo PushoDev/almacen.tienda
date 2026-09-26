@@ -311,7 +311,6 @@ class ReporteController extends Controller
                 'monedas.codigo_moneda',
                 'monedas.simbolo_moneda',
                 'monedas.tasa_cambio',
-                'monedas.commission',
                 'monedas.estado as estado_moneda',
                 'users.id as usuario_id',
                 'users.name as usuario_nombre',
@@ -346,7 +345,6 @@ class ReporteController extends Controller
                         'codigo_moneda' => $row->codigo_moneda,
                         'simbolo_moneda' => $row->simbolo_moneda,
                         'tasa_cambio' => (float) $row->tasa_cambio,
-                        'commission' => (float) $row->commission,
                         'estado' => $row->estado_moneda,
                     ],
                     'usuarios' => [],
@@ -390,7 +388,7 @@ class ReporteController extends Controller
     public function getMonedas()
     {
         $monedas = DB::table('monedas')
-            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'imagen', 'tasa_cambio', 'commission', 'estado', 'principal')
+            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'imagen', 'tasa_cambio', 'estado', 'principal')
             ->where('estado', true)
             ->orderBy('principal', 'desc')
             ->orderBy('nombre_moneda')
@@ -403,7 +401,6 @@ class ReporteController extends Controller
                     'simbolo_moneda' => $moneda->simbolo_moneda,
                     'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
                     'tasa_cambio' => (float) $moneda->tasa_cambio,
-                    'commission' => (float) $moneda->commission,
                     'estado' => (bool) $moneda->estado,
                     'principal' => (bool) $moneda->principal,
                 ];

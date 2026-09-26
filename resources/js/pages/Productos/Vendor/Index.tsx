@@ -84,7 +84,7 @@ interface Producto {
     precio_de_grupo: boolean;
     // Costo real por lote en este almacén (incluye prorrateos) — solo admin/moderador.
     costo_real: number | null;
-    // Solo cuando el producto tiene 2+ lotes a costo distinto en este almacén (raro); si no, null.
+    // Solo cuando el producto tiene 2+ lotes con stock en este almacén; si no, null.
     lotes: LoteDisponible[] | null;
 }
 
@@ -95,6 +95,8 @@ interface LoteDisponible {
     costo: number | null;
     // Precio propio del lote ("Opción A"); null = hereda el precio del producto en el almacén.
     precio_venta: number | null;
+    // Comisión propia del lote (2026-09-26); null = usa la de otro lote que la tenga o, si ninguno, la del producto.
+    comision: number | null;
     // El movimiento que creó el lote tiene el prorrateo sin decidir: no bloquea la fusión (el prorrateo es opcional), solo se avisa.
     prorrateo_pendiente: boolean;
 }
@@ -232,6 +234,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [lotesExpandidos, setLotesExpandidos] = useState<Record<string, boolean>>({});
     const [lotesSeleccionados, setLotesSeleccionados] = useState<Record<string, number[]>>({});
     const [precioLotesInput, setPrecioLotesInput] = useState<Record<string, string>>({});
+    const [comisionLotesInput, setComisionLotesInput] = useState<Record<string, string>>({});
     const [lotesGuardando, setLotesGuardando] = useState<string | null>(null);
     const [loteFusion, setLoteFusion] = useState<{ producto: Producto; lotes: LoteDisponible[] } | null>(null);
     const [loteFusionPrecioPropio, setLoteFusionPrecioPropio] = useState(false);
@@ -968,11 +971,16 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         </TableRow>
     );
 
-    // ─── Desglose por lote (opcional): solo productos con 2+ lotes a costo distinto ─────────
+    // ─── Desglose por lote: productos con 2+ lotes con stock (mismo costo o no) ─────────
     const claveLotes = (producto: Producto) => `${producto.id}-${producto.almacen_id}`;
 
     // Precio con el que vende un lote: el propio si lo tiene, si no el del producto en el almacén.
     const precioDeLote = (producto: Producto, lote: LoteDisponible) => lote.precio_venta ?? producto.precio_venta;
+
+    // Comisión con la que se vende un lote (misma regla que el POS): la propia, si no la del primer
+    // lote que la tenga y, si ninguno, la del producto.
+    const comisionDeLote = (producto: Producto, lote: LoteDisponible) =>
+        lote.comision ?? producto.lotes?.find((otro) => otro.comision !== null)?.comision ?? producto.comision ?? 0;
 
     const toggleLoteSeleccionado = (clave: string, loteId: number) =>
         setLotesSeleccionados((prev) => {
@@ -1032,6 +1040,66 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             sileo.success({
                 title: precio === null ? 'Lotes al precio del producto' : 'Precio propio aplicado',
                 description: `${producto.nombre_producto} — ${ids.length} lote(s)${precio !== null ? ` a ${formatCurrency(precio)}` : ''}`,
+            });
+        } catch (err) {
+            sileo.error({ title: 'No se pudo actualizar', description: err instanceof Error ? err.message : 'Error inesperado' });
+        } finally {
+            setLotesGuardando(null);
+        }
+    };
+
+    // Pone (o quita, con `comision` null) la comisión propia de los lotes seleccionados — uno por
+    // uno contra ProductoController::actualizarComisionLote (solo admin/moderador).
+    const aplicarComisionLotes = async (producto: Producto, comision: number | null) => {
+        const clave = claveLotes(producto);
+        const ids = lotesSeleccionados[clave] ?? [];
+        if (ids.length === 0) return;
+
+        if (comision !== null && (isNaN(comision) || comision < 0)) {
+            sileo.warning({ title: 'Comisión inválida', description: 'La comisión debe ser un número igual o mayor a 0.00' });
+            return;
+        }
+
+        setLotesGuardando(clave);
+
+        try {
+            for (const loteId of ids) {
+                const response = await fetch(route('productos.lotes.comision', { producto: producto.id, lote: loteId }), {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    },
+                    body: JSON.stringify({ comision }),
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(mensajeDeError(data, 'No se pudo actualizar la comisión del lote'));
+                }
+            }
+
+            setAlmacenes((prev) =>
+                prev.map((almacen) =>
+                    almacen.almacen_id !== producto.almacen_id
+                        ? almacen
+                        : {
+                              ...almacen,
+                              productos: almacen.productos.map((p) =>
+                                  p.id !== producto.id || !p.lotes
+                                      ? p
+                                      : { ...p, lotes: p.lotes.map((l) => (ids.includes(l.id) ? { ...l, comision } : l)) },
+                              ),
+                          },
+                ),
+            );
+            setLotesSeleccionados((prev) => ({ ...prev, [clave]: [] }));
+            setComisionLotesInput((prev) => ({ ...prev, [clave]: '' }));
+            sileo.success({
+                title: comision === null ? 'Comisión propia quitada' : 'Comisión propia aplicada',
+                description: `${producto.nombre_producto} — ${ids.length} lote(s)${comision !== null ? ` a ${formatCurrency(comision)}` : ''}`,
             });
         } catch (err) {
             sileo.error({ title: 'No se pudo actualizar', description: err instanceof Error ? err.message : 'Error inesperado' });
@@ -1133,7 +1201,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         return [
             ...lotes.map((lote) => {
                 const precio = precioDeLote(producto, lote);
-                const margen = precio === null || lote.costo === null ? null : precio - (producto.comision ?? 0) - lote.costo;
+                const comisionLote = comisionDeLote(producto, lote);
+                const margen = precio === null || lote.costo === null ? null : precio - comisionLote - lote.costo;
 
                 return (
                     <TableRow key={`lote-${lote.id}`} className="bg-sky-50/50 dark:bg-sky-950/20">
@@ -1164,7 +1233,18 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                 {lote.precio_venta !== null ? 'Propio' : 'Heredado'}
                             </Badge>
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">—</TableCell>
+                        <TableCell>
+                            {formatCurrency(comisionLote)}
+                            <Badge
+                                variant="outline"
+                                className={cn(
+                                    'ml-2 text-[10px]',
+                                    lote.comision !== null ? 'border-sky-500/50 text-sky-700 dark:text-sky-400' : 'text-muted-foreground',
+                                )}
+                            >
+                                {lote.comision !== null ? 'Propia' : 'Heredada'}
+                            </Badge>
+                        </TableCell>
                         {canViewSensitiveData && (
                             <TableCell
                                 className={cn(
@@ -1184,7 +1264,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="text-muted-foreground">
                             {seleccionados.length === 0
-                                ? 'Marca los lotes a los que quieres darles un precio distinto (margen = precio − comisión − costo del lote).'
+                                ? 'Marca los lotes a los que quieres darles un precio o una comisión distintos (margen = precio − comisión − costo del lote).'
                                 : `${seleccionados.length} lote(s) seleccionado(s):`}
                         </span>
                         {seleccionados.length > 0 && (
@@ -1216,6 +1296,37 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                 >
                                     Vender al precio del producto
                                 </Button>
+                                {puedeGestionar && (
+                                    <>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="Comisión propia"
+                                            aria-label="Comisión propia de los lotes seleccionados"
+                                            className="h-8 w-36"
+                                            value={comisionLotesInput[clave] ?? ''}
+                                            onChange={(e) => setComisionLotesInput((prev) => ({ ...prev, [clave]: e.target.value }))}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            className="h-8 bg-sky-600 hover:bg-sky-700"
+                                            disabled={lotesGuardando === clave || (comisionLotesInput[clave] ?? '') === ''}
+                                            onClick={() => aplicarComisionLotes(producto, parseFloat(comisionLotesInput[clave] ?? ''))}
+                                        >
+                                            Poner comisión
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8"
+                                            disabled={lotesGuardando === clave}
+                                            onClick={() => aplicarComisionLotes(producto, null)}
+                                        >
+                                            Quitar comisión propia
+                                        </Button>
+                                    </>
+                                )}
                                 {puedeGestionar && seleccionados.length >= 2 && (
                                     <Button
                                         size="sm"

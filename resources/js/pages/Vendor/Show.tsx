@@ -230,6 +230,8 @@ interface Venta {
     ganancia_real_total: number;
     fecha: string;
     usuario: Usuario;
+    /** Cuentas asignadas al vendedor de la venta: las USD en efectivo entre ellas pueden pagar su comisión. */
+    vendedor_cuentas_ids?: number[];
     // Quién atendía realmente (feature "Atendido por" / Turnos) — el backend ya cae al
     // nombre de la cuenta cuando no hay turno (admin), así que siempre trae un nombre.
     atendido_por: string | null;
@@ -283,6 +285,8 @@ interface Venta {
     comision_pago: {
         tasa: number | null;
         monto_cup: number | null;
+        /** Lo que se debita, en la moneda de la cuenta (CUP con la tasa, o USD con tasa 1). */
+        monto_cuenta?: number | null;
         cuenta: {
             id: number;
             nombre: string;
@@ -462,11 +466,15 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             .get(route('ventas.getCuentasParaGestor'))
             .then((r) => {
                 const cup = (r.data as Cuenta[]).filter((c) => c.moneda?.codigo === 'CUP');
-                setCuentasComision(cup);
+                // La comisión también puede salir de una cuenta USD en efectivo asignada al vendedor de la venta.
+                const usdDelVendedor = (r.data as Cuenta[]).filter(
+                    (c) => c.moneda?.codigo === 'USD' && c.tipo === 'efectivo' && (venta.vendedor_cuentas_ids ?? []).includes(c.id),
+                );
+                setCuentasComision([...cup, ...usdDelVendedor]);
                 setCuentasMensajero(cup);
             })
             .catch(() => { });
-    }, []);
+    }, [venta.vendedor_cuentas_ids]);
 
     // Pre-llenar form mensajero al abrirlo
     useEffect(() => {
@@ -629,12 +637,19 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         });
     };
 
+    // Cuenta elegida para pagar la comisión y su moneda: en USD no hay tasa (se debita el monto en USD).
+    const cuentaComisionSel = cuentasComision.find((c) => String(c.id) === comisionFormCuentaId);
+    const comisionEsUsd = cuentaComisionSel?.moneda?.codigo === 'USD';
+    // Comisión ya guardada: monto que se debita y moneda de esa cuenta (CUP si es una venta anterior).
+    const comisionMontoCuenta = currentVenta.comision_pago?.monto_cuenta ?? currentVenta.comision_pago?.monto_cup ?? null;
+    const comisionMoneda = currentVenta.comision_pago?.cuenta?.moneda ?? 'CUP';
+
     const guardarComisionVendedor = () => {
-        if (!comisionFormCuentaId) { sileo.warning({ title: 'Selecciona una cuenta CUP.' }); return; }
-        if (!comisionFormTasa || parseFloat(comisionFormTasa) <= 0) { sileo.warning({ title: 'Ingresa la tasa CUP/USD.' }); return; }
+        if (!comisionFormCuentaId) { sileo.warning({ title: 'Selecciona una cuenta CUP o USD.' }); return; }
+        if (!comisionEsUsd && (!comisionFormTasa || parseFloat(comisionFormTasa) <= 0)) { sileo.warning({ title: 'Ingresa la tasa CUP/USD.' }); return; }
         guardarDistribucion({
             comision_cuenta_id: Number(comisionFormCuentaId),
-            comision_tasa: parseFloat(comisionFormTasa),
+            comision_tasa: comisionEsUsd ? 1 : parseFloat(comisionFormTasa),
         });
     };
 
@@ -1280,9 +1295,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <p className="text-2xl font-bold text-orange-600">
                                 {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
                             </p>
-                            {currentVenta.comision_pago?.monto_cup ? (
+                            {comisionMontoCuenta ? (
                                 <p className="mt-1 text-xs font-semibold text-orange-500">
-                                    = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                    = {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                 </p>
                             ) : (
                                 <p className="text-muted-foreground mt-1 text-xs">Punto de venta</p>
@@ -1338,9 +1353,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <p className="text-2xl font-bold text-orange-600">
                                 {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
                             </p>
-                            {currentVenta.comision_pago?.monto_cup ? (
+                            {comisionMontoCuenta ? (
                                 <p className="mt-1 text-xs font-semibold text-orange-500">
-                                    = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                    = {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                 </p>
                             ) : currentVenta.gestor ? (
                                 <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
@@ -2212,11 +2227,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             de <strong>{currentVenta.gestor.cuenta_nombre}</strong> (gestor)
                                                         </li>
                                                     )}
-                                                    {currentVenta.comision_pago?.monto_cup && currentVenta.comision_pago.cuenta && (
+                                                    {comisionMontoCuenta && currentVenta.comision_pago.cuenta && (
                                                         <li>
                                                             Debitará{' '}
                                                             <strong>
-                                                                {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                                {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                                             </strong>{' '}
                                                             de <strong>{currentVenta.comision_pago.cuenta.nombre}</strong> (comisión vendedor)
                                                         </li>
@@ -2718,9 +2733,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <span className="font-bold text-amber-700">
                                                     {formatCurrency(currentVenta.total_comision, 'USD')}
                                                 </span>
-                                                {currentVenta.comision_pago?.monto_cup && (
+                                                {comisionMontoCuenta && (
                                                     <span className="ml-1 text-amber-600">
-                                                        = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        = {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                                     </span>
                                                 )}
                                             </div>
@@ -2745,9 +2760,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <div className="flex justify-between rounded-md bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950">
                                                 <span className="text-muted-foreground">{currentVenta.comision_pago.cuenta.nombre}</span>
                                                 <span className="font-semibold text-amber-700">
-                                                    {Number(currentVenta.comision_pago.monto_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    {Number(comisionMontoCuenta ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                                     {currentVenta.comision_pago.cuenta.saldo_disponible !== undefined && (
-                                                        <span className={`ml-2 text-xs ${currentVenta.comision_pago.cuenta.saldo_disponible >= (currentVenta.comision_pago.monto_cup ?? 0) ? 'text-green-600' : 'text-red-600'}`}>
+                                                        <span className={`ml-2 text-xs ${currentVenta.comision_pago.cuenta.saldo_disponible >= (comisionMontoCuenta ?? 0) ? 'text-green-600' : 'text-red-600'}`}>
                                                             (saldo: {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })})
                                                         </span>
                                                     )}
@@ -2762,14 +2777,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     <span className="text-muted-foreground">Comisión a distribuir: </span>
                                                     <span className="font-bold text-amber-700">{formatCurrency(currentVenta.total_comision, 'USD')}</span>
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Tasa CUP/USD</Label>
-                                                    <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
-                                                        onChange={e => setComisionFormTasa(e.target.value)}
-                                                        className="h-8 text-sm" />
-                                                </div>
-                                                {/* CUP en vivo */}
-                                                {comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
+                                                {/* Tasa y CUP en vivo: solo con una cuenta CUP (una cuenta USD no convierte) */}
+                                                {!comisionEsUsd && (
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs">Tasa CUP/USD</Label>
+                                                        <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
+                                                            onChange={e => setComisionFormTasa(e.target.value)}
+                                                            className="h-8 text-sm" />
+                                                    </div>
+                                                )}
+                                                {!comisionEsUsd && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
                                                     <div className="rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-950">
                                                         <span className="text-muted-foreground">Equivale a: </span>
                                                         <span className="font-bold text-sky-700">
@@ -2781,24 +2798,24 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
                                                     <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
                                                     <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
-                                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP..." /></SelectTrigger>
+                                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP o USD efectivo..." /></SelectTrigger>
                                                         <SelectContent>
                                                             {cuentasComision.map(c => (
                                                                 <SelectItem key={c.id} value={String(c.id)}>
-                                                                    {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                                    {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
                                                                 </SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
-                                                    {comisionFormCuentaId && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (() => {
-                                                        const cup = currentVenta.total_comision * parseFloat(comisionFormTasa);
-                                                        const cuentaSel = cuentasComision.find(c => String(c.id) === comisionFormCuentaId);
-                                                        const saldo = cuentaSel?.saldo_actual ?? 0;
-                                                        const alcanza = saldo >= cup;
+                                                    {comisionFormCuentaId && (comisionEsUsd || (comisionFormTasa && parseFloat(comisionFormTasa) > 0)) && (() => {
+                                                        const necesario = comisionEsUsd ? currentVenta.total_comision : currentVenta.total_comision * parseFloat(comisionFormTasa);
+                                                        const moneda = comisionEsUsd ? 'USD' : 'CUP';
+                                                        const saldo = cuentaComisionSel?.saldo_actual ?? 0;
+                                                        const alcanza = saldo >= necesario;
                                                         return (
                                                             <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                                Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
-                                                                {' — '}Necesario: <strong>{cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}
+                                                                Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {moneda}</strong>
+                                                                {' — '}Necesario: <strong>{necesario.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {moneda}</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}
                                                             </p>
                                                         );
                                                     })()}
@@ -2809,9 +2826,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">→ Destino (a donde va)</p>
                                                     <p className="text-xs text-amber-700">
                                                         Comisión del vendedor <strong>{currentVenta.usuario?.nombre}</strong>
-                                                        {comisionFormTasa && parseFloat(comisionFormTasa) > 0
-                                                            ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                            : ''}
+                                                        {comisionEsUsd
+                                                            ? ` — ${Number(currentVenta.total_comision).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD`
+                                                            : comisionFormTasa && parseFloat(comisionFormTasa) > 0
+                                                                ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                                : ''}
                                                     </p>
                                                 </div>
                                                 <div className="flex justify-end gap-2">
@@ -2933,7 +2952,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             {formatCurrency(currentVenta.total_comision, 'USD')}
                                         </Badge>
                                     </div>
-                                    {currentVenta.comision_pago.tasa && (
+                                    {currentVenta.comision_pago.tasa && comisionMoneda === 'CUP' && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">Tasa aplicada:</span>
                                             <span className="text-sm font-medium">
@@ -2941,11 +2960,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             </span>
                                         </div>
                                     )}
-                                    {currentVenta.comision_pago.monto_cup && (
+                                    {comisionMontoCuenta && (
                                         <div className="flex items-center justify-between">
-                                            <span className="text-muted-foreground text-xs font-medium">Monto en CUP:</span>
+                                            <span className="text-muted-foreground text-xs font-medium">Monto en {comisionMoneda}:</span>
                                             <Badge variant="secondary">
-                                                {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                             </Badge>
                                         </div>
                                     )}
@@ -2957,17 +2976,17 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <span className="text-sm font-medium">{currentVenta.comision_pago.cuenta.nombre}</span>
                                         </div>
                                     )}
-                                    {isVentaPendiente && currentVenta.comision_pago.cuenta?.saldo_disponible !== undefined && currentVenta.comision_pago.monto_cup && (
-                                        <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
+                                    {isVentaPendiente && currentVenta.comision_pago.cuenta?.saldo_disponible !== undefined && comisionMontoCuenta && (
+                                        <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${currentVenta.comision_pago.cuenta.saldo_disponible >= comisionMontoCuenta
                                             ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
                                             : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
                                             }`}>
                                             <span className="text-xs font-medium">Saldo disponible:</span>
-                                            <span className={`text-sm font-bold ${currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
+                                            <span className={`text-sm font-bold ${currentVenta.comision_pago.cuenta.saldo_disponible >= comisionMontoCuenta
                                                 ? 'text-green-700 dark:text-green-300'
                                                 : 'text-red-700 dark:text-red-300'
                                                 }`}>
-                                                {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                             </span>
                                         </div>
                                     )}
@@ -3539,11 +3558,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </span>
                                     </div>
                                 )}
-                                {currentVenta.comision_pago?.monto_cup && (
+                                {comisionMontoCuenta && (
                                     <div className="flex justify-between pl-4 text-sm">
-                                        <span className="text-muted-foreground">→ Pago vendedor (CUP):</span>
+                                        <span className="text-muted-foreground">→ Pago vendedor ({comisionMoneda}):</span>
                                         <span className="font-semibold text-orange-500">
-                                            {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                         </span>
                                     </div>
                                 )}

@@ -257,6 +257,11 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `VentaController` | POS completo: crear venta, aprobar, anular, listado, reporte diario, datos JSON para el frontend |
 | `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías |
 | `ProductoController` | CRUD de productos, búsqueda, transferencia de códigos, import/export Excel, detección/fusión de duplicados |
+| `ImportacionBorradorController` | Importación de Excel en dos pasos: subir → borrador editable (hoja `Productos/Importaciones/Revisar.tsx`) → confirmar; admin/moderador, con bloqueo de fila al confirmar |
+| `ImportacionProductoController` | Historial de importaciones (listado, detalle por fila) y deshacer una importación completa (solo admin, motivo + contraseña) |
+| `LoteStockController` | Edición del código de un lote (`actualizarCodigo`) |
+| `TurnoVendedorController` | Captura del turno ("Atendido por") de moderador/vendedor |
+| `RemesaController` | Remesas / operaciones múltiples (admin/moderador) |
 | `AlmacenController` | CRUD de almacenes, vista de inventario por almacén |
 | `MovimientosController` | Traslados de stock: crear, aprobar, enviar, recibir, rechazar, seguimiento, discrepancias |
 | `CuentaController` | CRUD de cuentas, control de saldo con contraseña, resumen con KPIs |
@@ -415,12 +420,32 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 |---|---|
 | `DashboardStatsService` | `getLogisticaStats()`, `getPeriodKpis()`, `getResumenCuentas()`, `getResumenClientes()`, `getResumenProveedores()`, `getResumenProductos()`, `getResumenPorMonedaPerm()`, `getMonedaPrincipal()`, y todos los KPIs auxiliares (counters, sums, etc.) |
 | `NotificationService` | Determina destinatarios de notificaciones según contexto del movimiento/cierre |
+| `LoteConsumoService` | Motor de consumo de `lotes_stock` compartido por Ventas y Movimientos: `consumir()` (FIFO o lote elegido), `devolver()`, `costoPromedio()` |
+| `FusionLotesService` | Fusión de lotes con auditoría (`lote_fusions`) y acumulación de lotes idénticos al recibir un movimiento o al "Eliminar de la lista" un prorrateo (`acumularMovimientoEnLoteExistente`, `acumularCompraEnLoteExistente`, `acumularEnLoteIdentico`) |
+| `FichasHermanasService` / `FusionProductosService` | Identidad de "fichas hermanas" (mismo producto físico en 2+ fichas) y su fusión sin borrar historial |
+| `CodigoStockService` | Reparto por almacén de cada código de barras (`almacen_producto_codigos`): agregar, descontar, mover, reasignar, unir |
+| `PrecioLoteService` | Precio base y comisión de una línea de venta según su lote de referencia (el elegido o el más antiguo): precio efectivo del lote, comisión propia → la del primer lote que la tenga → la del producto; lo usan el POS y `procesarVenta`/`editarVentaPendiente` |
+| `ValorInventarioService` | Única fuente del valor de costo del inventario (costo real por lote); lo usan Productos, Dashboard/Logística, el reporte Valor del Inventario y el Excel |
+| `ResumenAlmacenService` | Datos de la card "Resumen por Almacén" de Logística |
+| `ImportacionProductosService` | Ejecuta una importación de Excel (un lote `IMP-…` por fila, una transacción por fila) y la deja en el historial; lo usan `ProductoController::import` y la confirmación de un borrador |
+| `DetalleOperacionService` | Detalle de operaciones para Cuentas/Clientes/Proveedores y Rastreo de Operaciones (sin documentar por el cliente, ver `ESTADO_DESARROLLO.md`) |
+| `MetodosPagoService` | Métodos (efectivo / transferencia) y vías de pago (Zelle, EnZona, Transfermóvil…) que admite cada moneda: catálogo, configuración, resumen y guardado desde el CRUD de Monedas |
+| `CatalogoTarjetasService` | Catálogo de bancos/tarjetas para las cuentas (`cuentas.tipo_banco`) |
 
 ---
 
 ## Branch Actual
 
-`feature/desarrollo-caliente` — Trabajo activo (2026-09-20, sesión larga — empezar por `docs/arreglos-pendientes/resumen-cambios-2026-09-20.md` para continuar):
+`feature/desarrollo-caliente` — Estado al 2026-09-26 (todo lo de abajo hasta el 09-25 ya está commiteado; empezar por `docs/arreglos-pendientes/resumen-cambios-2026-09-25.md` y luego `docs/ESTADO_DESARROLLO.md`, cuya primera fila del historial es la verificación contra el código del 09-26):
+
+- **2026-09-25:** Compras con `lockForUpdate` en aprobar/anular/editar; importación de Excel en dos pasos con hoja de revisión (`react-data-grid`), un lote `IMP-…` por fila, historial y deshacer; lotes de movimientos y compras que se acumulan al lote idéntico ("Eliminar de la lista" en Distribución de Costos); fusión de lotes sin bloqueo por prorrateo. 5 migraciones nuevas.
+- **2026-09-24:** códigos de barras por almacén, `/disponibles` con agotadas, devoluciones de venta a su lote y código, ventas especiales en 2 tipos (`descuento` / `bajo_costo`), acceso denegado + páginas de error con la mascota, accesos rápidos en el encabezado.
+- **2026-09-26 (Monedas):** cada moneda define en su CRUD qué métodos de pago admite y, en transferencia, sus vías (tablas `metodos_pago`, `vias_pago`, `moneda_metodo_pago`, `moneda_via_pago`); la columna `monedas.commission` se eliminó. El cobro (POS) aún no lee esa configuración.
+- **2026-09-26 (comisión):** la cuenta de donde sale la comisión del vendedor se elige en el detalle de la venta (`Vendor/Show.tsx`, solo con la venta pendiente): cuentas CUP y cuentas USD de efectivo asignadas al vendedor de la venta; en USD `comision_tasa` = 1 y se debita `total_comision` en USD. El servidor lo valida en `guardarDistribucion`.
+- **2026-09-26:** POS con selector de lote (2+ lotes, el más antiguo por defecto), comisión por lote (`lotes_stock.comision`, `venta_detalles.comision_base`) y precio propio de lote como precio base; `consumir()` trata el lote elegido como preferencia. 2 migraciones nuevas. Detalle en la primera fila del historial de `ESTADO_DESARROLLO.md`.
+- **Sigue abierto (verificado 2026-09-26):** 3 huecos de lotes del POS (el cliente los rechazó dos veces; no tocar sin que los pida), ventas devueltas sin pantalla en el Cierre, notificaciones/bot de Telegram sin ponerse al día, rol de la importación directa (`productos.import`), estilo de los 4 export de Excel, reporte Valor del Inventario, despliegue del 09-25 a producción.
+
+Track anterior (2026-09-20, sesión larga — `docs/arreglos-pendientes/resumen-cambios-2026-09-20.md`):
 
 1. **Backfill de lotes de ajuste para stock viejo sin `lotes_stock` propio**: 1,512 lotes creados en todo el catálogo (comando `lotes:backfill-ajustes-legado`), cierra el hueco de stock previo al 2026-09-07 que caía al costo global sin lote propio.
 2. **"Opción A" — precio de venta con override opcional por lote**: `lotes_stock.precio_venta` nullable, hereda el precio del almacén salvo que se corrija a mano por lote puntual (POS + `Show.tsx`/`Edit.tsx`).

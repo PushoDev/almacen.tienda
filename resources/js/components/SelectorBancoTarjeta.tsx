@@ -59,7 +59,7 @@ export function SelectorBancoTarjeta({ catalogo, value, onChange, disabled = fal
             </button>
 
             <Dialog open={abierto} onOpenChange={setAbierto}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Elegir banco / diseño de tarjeta</DialogTitle>
                         <DialogDescription>

@@ -542,7 +542,7 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
     $responseCreate = $this->get(route('cuentas.create'));
     $responseCreate->assertInertia(fn ($page) => $page
         ->has('catalogoTarjetas.interna', 5)
-        ->has('catalogoTarjetas.externa', 15)
+        ->has('catalogoTarjetas.externa', 19)
         ->has('catalogoTarjetas.efectivo', 3)
         ->where('catalogoTarjetas.interna.0.slug', 'bandec')
         ->where('catalogoTarjetas.externa.0.slug', 'visa')
@@ -562,7 +562,7 @@ test('create() y edit() exponen el catálogo de tarjetas agrupado en internas/ex
 
     $responseEdit = $this->get(route('cuentas.edit', $cuenta));
     $responseEdit->assertInertia(fn ($page) => $page
-        ->has('catalogoTarjetas.externa', 15)
+        ->has('catalogoTarjetas.externa', 19)
         ->where('cuenta.imagen', 'zelle')
     );
 });
@@ -675,7 +675,7 @@ test('create() y edit() exponen la lista plana de bancos para el select de tipo_
 
     $responseCreate = $this->get(route('cuentas.create'));
     $responseCreate->assertInertia(fn ($page) => $page
-        ->has('bancos', 20)
+        ->has('bancos', 24)
         ->where('bancos.0.slug', 'bandec')
         ->where('bancos.0.nombre', 'BANDEC')
     );
@@ -693,7 +693,7 @@ test('create() y edit() exponen la lista plana de bancos para el select de tipo_
 
     $responseEdit = $this->get(route('cuentas.edit', $cuenta));
     $responseEdit->assertInertia(fn ($page) => $page
-        ->has('bancos', 20)
+        ->has('bancos', 24)
         ->where('cuenta.tipo_banco', 'zelle')
     );
 });
@@ -993,4 +993,60 @@ test('la búsqueda y el rango de fechas en Ventas filtran correctamente', functi
     $responseFecha = $this->get(route('cuentas.show', ['cuenta' => $cuenta->id, 'desde_ventas' => '2026-07-01']), ['X-Inertia' => 'true']);
     $historialFecha = collect($responseFecha->json('props.historialVentas.data'));
     expect($historialFecha->pluck('contraparte')->all())->toBe(['YALIANNIS BARROSO']);
+});
+
+test('el catálogo de imágenes de cuentas incluye PayPal, Stripe, QvaPay y TropiPay en Externas, con el logo de las vías de pago', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('cuentas.create'))->assertInertia(fn ($page) => $page
+        ->where('catalogoTarjetas.externa', function ($externas) {
+            $porSlug = collect($externas)->keyBy('slug');
+
+            foreach (['paypal' => 'PayPal', 'stripe' => 'Stripe', 'qvapay' => 'QvaPay', 'tropipay' => 'TropiPay'] as $slug => $nombre) {
+                if (! isset($porSlug[$slug]) || $porSlug[$slug]['nombre'] !== $nombre || ! str_ends_with($porSlug[$slug]['imagen_url'], "projects/metodos_pago/{$slug}.webp")) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
+
+    foreach (['paypal', 'stripe', 'qvapay', 'tropipay'] as $slug) {
+        expect(file_exists(public_path("projects/metodos_pago/{$slug}.webp")))->toBeTrue("falta el logo {$slug}");
+    }
+});
+
+test('una cuenta tipo tarjeta se puede guardar con la imagen de PayPal, TropiPay, Stripe o QvaPay', function (string $slug) {
+    $this->actingAs(User::factory()->admin()->create());
+    $moneda = crearMonedaUsd();
+
+    $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => "Cuenta {$slug} ".uniqid(),
+        'tipo_cuenta' => 'permanentes',
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'estado' => 'activa',
+        'imagen' => $slug,
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('cuentas', ['tipo' => 'tarjeta', 'imagen' => $slug]);
+})->with(['paypal', 'stripe', 'qvapay', 'tropipay']);
+
+test('index(), create(), edit() y show() entregan los tipos de cuenta con su imagen: Efectivo con logo y Tarjeta con ícono hasta que exista tarjeta.webp', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 100);
+    $hayLogoDeTarjeta = file_exists(public_path('projects/metodos_pago/tarjeta.webp'));
+
+    $revisar = function ($tipos) use ($hayLogoDeTarjeta) {
+        $porSlug = collect($tipos)->keyBy('slug');
+
+        return array_values($porSlug->keys()->sort()->all()) === ['efectivo', 'tarjeta']
+            && str_ends_with($porSlug['efectivo']['imagen_url'], 'projects/metodos_pago/efectivo.webp')
+            && ($hayLogoDeTarjeta ? str_ends_with((string) $porSlug['tarjeta']['imagen_url'], 'projects/metodos_pago/tarjeta.webp') : $porSlug['tarjeta']['imagen_url'] === null);
+    };
+
+    $this->get(route('cuentas.index'))->assertInertia(fn ($page) => $page->where('tiposCuenta', $revisar));
+    $this->get(route('cuentas.create'))->assertInertia(fn ($page) => $page->where('tiposCuenta', $revisar));
+    $this->get(route('cuentas.edit', $cuenta))->assertInertia(fn ($page) => $page->where('tiposCuenta', $revisar));
+    $this->get(route('cuentas.show', $cuenta))->assertInertia(fn ($page) => $page->where('tiposCuenta', $revisar));
 });

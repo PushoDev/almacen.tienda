@@ -127,9 +127,13 @@ class DetalleOperacionService
     public function detalleVenta(Venta $venta, bool $puedeVerCosto): array
     {
         $totalPagado = $venta->pagos->sum('monto_equivalente');
-        $comisionCupCalculada = $venta->comision_tasa > 0
+        // La comisión sale de una cuenta CUP (con la tasa CUP/USD) o de una cuenta USD (tasa 1): el monto
+        // en CUP solo existe si la cuenta es CUP; `monto_cuenta` es lo debitado en la moneda de la cuenta.
+        $comisionEnUsd = $venta->comisionCuenta?->moneda?->codigo_moneda === 'USD';
+        $comisionMontoCuenta = $venta->comision_tasa > 0
             ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
             : null;
+        $comisionCupCalculada = $comisionEnUsd ? null : $comisionMontoCuenta;
         $gananciaAgencia = round($venta->detalles->sum(
             fn ($d) => (float) $d->ganancia - ((float) $d->comision_unitaria * $d->cantidad)
         ), 2);
@@ -215,6 +219,8 @@ class DetalleOperacionService
                 'monto_usd' => (float) $venta->total_comision,
                 'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
                 'monto_cup' => $comisionCupCalculada,
+                'monto_cuenta' => $comisionMontoCuenta,
+                'moneda_cuenta' => $venta->comisionCuenta?->moneda?->codigo_moneda,
                 'cuenta' => $venta->comisionCuenta?->nombre_cuenta,
             ] : null,
             // Independiente del XOR comisión PV/Gestor — una venta puede tener

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { MetodosPagoResumen, type MetodoResumen } from '@/components/monedas/metodos-pago-resumen';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -32,7 +33,7 @@ interface Moneda {
     imagen: string | null;
     imagen_url: string | null;
     tasa_cambio: number;
-    commission: number;
+    metodos_pago_resumen: MetodoResumen[];
     estado: boolean;
     principal: boolean;
     created_at: string;
@@ -173,7 +174,7 @@ export default function MonedasIndex() {
                                     <TableHead className="text-white">Nombre</TableHead>
                                     <TableHead className="text-white">Símbolo</TableHead>
                                     <TableHead className="text-white">Tasa Cambio</TableHead>
-                                    <TableHead className="text-white">Comisión</TableHead>
+                                    <TableHead className="text-white">Métodos de pago</TableHead>
                                     <TableHead className="text-white">Estado</TableHead>
                                     <TableHead className="text-white">Principal</TableHead>
                                     <TableHead className="text-right text-white">Acciones</TableHead>
@@ -206,8 +207,11 @@ export default function MonedasIndex() {
                                             </TableCell>
                                             <TableCell className="font-medium">{moneda.nombre_moneda}</TableCell>
                                             <TableCell>{moneda.simbolo_moneda}</TableCell>
-                                            <TableCell>{formatNumber(moneda.tasa_cambio, 2)}</TableCell> {/* 2 decimales para tasa */}
-                                            <TableCell>{formatNumber(moneda.commission, 4)}%</TableCell> {/* 4 decimales para comisión */}
+                                            {/* 2 decimales para tasa */}
+                                            <TableCell>{formatNumber(moneda.tasa_cambio, 2)}</TableCell>
+                                            <TableCell>
+                                                <MetodosPagoResumen metodos={moneda.metodos_pago_resumen} compacto />
+                                            </TableCell>
                                             <TableCell>
                                                 <Badge
                                                     variant={moneda.estado ? 'default' : 'secondary'}

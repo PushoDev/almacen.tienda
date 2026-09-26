@@ -15,7 +15,6 @@ class MonedaFactory extends Factory
             'nombre_moneda' => fake()->unique()->word(),
             'simbolo_moneda' => $codigo,
             'tasa_cambio' => fake()->randomFloat(6, 0.5, 500),
-            'commission' => fake()->randomFloat(4, 0, 5),
             'estado' => true,
             'principal' => false,
         ];

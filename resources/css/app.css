@@ -244,7 +244,8 @@
     box-shadow: 0 0 22px -6px var(--spotlight-medio);
 }
 
-.spotlight-card[data-estado='disponible'] {
+.spotlight-card[data-estado='disponible'],
+.spotlight-card[data-estado='efectivo'] {
     --spotlight-base: oklch(0.596 0.145 163.225 / 0.4);
     --spotlight-medio: oklch(0.696 0.17 162.48);
     --spotlight-brillo: oklch(0.845 0.143 164.978);
@@ -255,6 +256,12 @@
     --spotlight-base: oklch(0.577 0.245 27.325 / 0.4);
     --spotlight-medio: oklch(0.637 0.237 25.331);
     --spotlight-brillo: oklch(0.808 0.114 19.571);
+}
+
+.spotlight-card[data-estado='tarjeta'] {
+    --spotlight-base: oklch(0.546 0.245 262.881 / 0.4);
+    --spotlight-medio: oklch(0.623 0.214 259.815);
+    --spotlight-brillo: oklch(0.809 0.105 251.813);
 }
 
 .spotlight-card[data-estado='especial'] {

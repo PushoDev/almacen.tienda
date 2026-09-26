@@ -333,7 +333,7 @@ test('eliminar de la lista (omitir) acumula los lotes del movimiento al lote id�
     $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => 'omitido']);
 });
 
-test('eliminar de la lista NO acumula si el lote existente no es idéntico: otro costo, precio propio o de otro movimiento con prorrateo pendiente', function (string $caso) {
+test('eliminar de la lista NO acumula si el lote existente no es idéntico: otro costo, precio o comisión propios, o de otro movimiento con prorrateo pendiente', function (string $caso) {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -349,6 +349,8 @@ test('eliminar de la lista NO acumula si el lote existente no es idéntico: otro
         $datos['precio_costo'] = 90;
     } elseif ($caso === 'precio propio') {
         $datos['precio_venta'] = 200;
+    } elseif ($caso === 'comisión propia') {
+        $datos['comision'] = 3;
     } else {
         $otroMovimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 5); // sin decidir
         $datos['movimiento_id'] = $otroMovimiento->id;
@@ -361,7 +363,26 @@ test('eliminar de la lista NO acumula si el lote existente no es idéntico: otro
     expect($loteDelMovimiento->fresh()->cantidad_disponible)->toBe(10);
     expect($loteDelMovimiento->fresh()->fusionado_en_lote_id)->toBeNull();
     $this->assertDatabaseCount('lote_fusions', 0);
-})->with(['otro costo', 'precio propio', 'de otro movimiento pendiente']);
+})->with(['otro costo', 'precio propio', 'comisión propia', 'de otro movimiento pendiente']);
+
+test('eliminar de la lista NO absorbe un lote del movimiento que tiene comisión propia (se perdería)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $existente = LoteStock::create(['codigo' => 'LOTE-EXISTENTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $loteDelMovimiento = crearLoteStockRecibido($movimiento, $producto, $destino, cantidad: 10);
+    $loteDelMovimiento->update(['precio_costo' => 100, 'comision' => 4]);
+
+    $this->post(route('distribucion-costos.movimientos.omitir'), ['movimiento_ids' => [$movimiento->id]])->assertSessionHasNoErrors();
+
+    expect($existente->fresh()->cantidad_disponible)->toBe(5)
+        ->and($loteDelMovimiento->fresh()->cantidad_disponible)->toBe(10)
+        ->and($loteDelMovimiento->fresh()->fusionado_en_lote_id)->toBeNull();
+});
 
 test('eliminar de la lista acumula entre sí las partes del mismo movimiento que tienen el mismo costo', function () {
     $admin = User::factory()->admin()->create();

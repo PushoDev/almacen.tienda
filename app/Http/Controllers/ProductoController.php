@@ -20,6 +20,7 @@ use App\Services\FusionProductosService;
 use App\Services\ImportacionProductosService;
 use App\Services\ValorInventarioService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 // NOTE: Removed automatic migration/seed calls for safety in production
 use Illuminate\Support\Facades\Auth;
@@ -640,6 +641,31 @@ class ProductoController extends Controller
             ->with('success', $validated['precio_venta'] !== null
                 ? "Precio de venta corregido para el lote {$lote->codigo}."
                 : "El lote {$lote->codigo} vuelve a usar el precio del almacén.");
+    }
+
+    /**
+     * Comisión propia de UN lote puntual (2026-09-26). El POS vende con la comisión del lote elegido;
+     * si no tiene, con la del primer lote que sí la tenga, y si ninguno, con la del producto en el
+     * almacén (ver PrecioLoteService). Enviar `comision` vacío/null la quita. Solo admin/moderador
+     * (ruta): a diferencia del precio propio, la comisión es lo que cobra el vendedor.
+     */
+    public function actualizarComisionLote(Request $request, Producto $producto, LoteStock $lote): JsonResponse
+    {
+        if ($lote->producto_id !== $producto->id) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'comision' => 'nullable|numeric|min:0|max:999999.99',
+        ]);
+
+        $lote->update(['comision' => isset($validated['comision']) ? round((float) $validated['comision'], 2) : null]);
+
+        return response()->json([
+            'success' => true,
+            'lote_id' => $lote->id,
+            'comision' => $lote->comision !== null ? (float) $lote->comision : null,
+        ]);
     }
 
     /**
