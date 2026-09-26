@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -87,7 +88,16 @@ class User extends Authenticatable
      */
     public function cuentas()
     {
-        return $this->belongsToMany(Cuenta::class, 'user_cuentas');
+        return $this->belongsToMany(Cuenta::class, 'user_cuentas')->withPivot('acceso');
+    }
+
+    /**
+     * Cuentas con acceso completo: las únicas cuyo saldo ve el vendedor y desde las que puede operar.
+     * Las de acceso `cobro` solo sirven para recibir pagos de ventas.
+     */
+    public function cuentasCompletas(): BelongsToMany
+    {
+        return $this->cuentas()->wherePivot('acceso', Cuenta::ACCESO_COMPLETO);
     }
 
     public function getAvatarUrlAttribute(): ?string

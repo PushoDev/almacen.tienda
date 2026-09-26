@@ -14,14 +14,29 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import { sileo } from '@/lib/sileo';
 import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BookUser, Edit2, FileText, Key, Mail, Sheet, Trash2, UserCircle, Warehouse, DollarSign, Users, ShieldCheck, UserCheck, Building2, Wallet } from 'lucide-react';
-import { sileo } from '@/lib/sileo';
-import { Toaster } from '@/components/ui/sileo-toaster';
+import {
+    BookUser,
+    Building2,
+    DollarSign,
+    Edit2,
+    FileText,
+    Key,
+    Mail,
+    Sheet,
+    ShieldCheck,
+    Trash2,
+    UserCircle,
+    Users,
+    Wallet,
+    Warehouse,
+} from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -49,7 +64,7 @@ export default function PageEmpleado({ empleados, almacenes, cuentas }: { emplea
 
     const renderTooltipList = (items: string[]) => {
         if (items.length === 0) {
-            return <span className="text-xs text-muted-foreground">Sin asignaciones</span>;
+            return <span className="text-muted-foreground text-xs">Sin asignaciones</span>;
         }
 
         return (
@@ -65,9 +80,7 @@ export default function PageEmpleado({ empleados, almacenes, cuentas }: { emplea
 
     const renderBadgeWithTooltip = (label: string, items: string[], variant: 'default' | 'neutral' = 'default') => {
         const badgeStyles =
-            variant === 'neutral'
-                ? 'bg-muted text-muted-foreground border border-border'
-                : 'bg-primary/10 text-primary border border-primary/20';
+            variant === 'neutral' ? 'bg-muted text-muted-foreground border border-border' : 'bg-primary/10 text-primary border border-primary/20';
 
         return (
             <Tooltip>
@@ -114,53 +127,53 @@ export default function PageEmpleado({ empleados, almacenes, cuentas }: { emplea
 
                 {/* Widgets */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-                    <Card className="border-sidebar-border/70 bg-card shadow-sm border-l-4 border-l-primary">
+                    <Card className="border-sidebar-border/70 bg-card border-l-primary border-l-4 shadow-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-sm font-medium">Total Empleados</CardTitle>
                             <Users className="text-primary" size={18} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-semibold text-foreground">{totalEmpleados}</div>
+                            <div className="text-foreground text-2xl font-semibold">{totalEmpleados}</div>
                             <CardDescription className="mt-1">Usuarios registrados</CardDescription>
                         </CardContent>
                     </Card>
-                    <Card className="border-sidebar-border/70 bg-card shadow-sm border-l-4 border-l-emerald-500">
+                    <Card className="border-sidebar-border/70 bg-card border-l-4 border-l-emerald-500 shadow-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-sm font-medium">Administradores</CardTitle>
                             <ShieldCheck className="text-emerald-600" size={18} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-semibold text-foreground">{totalAdmins}</div>
+                            <div className="text-foreground text-2xl font-semibold">{totalAdmins}</div>
                             <CardDescription className="mt-1">Rol admin</CardDescription>
                         </CardContent>
                     </Card>
-                    <Card className="border-sidebar-border/70 bg-card shadow-sm border-l-4 border-l-amber-500">
+                    <Card className="border-sidebar-border/70 bg-card border-l-4 border-l-amber-500 shadow-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-sm font-medium">Vendedores</CardTitle>
                             <UserCircle className="text-amber-600" size={18} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-semibold text-foreground">{totalVendedores}</div>
+                            <div className="text-foreground text-2xl font-semibold">{totalVendedores}</div>
                             <CardDescription className="mt-1">Rol vendedor</CardDescription>
                         </CardContent>
                     </Card>
-                    <Card className="border-sidebar-border/70 bg-card shadow-sm border-l-4 border-l-sky-500">
+                    <Card className="border-sidebar-border/70 bg-card border-l-4 border-l-sky-500 shadow-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-sm font-medium">Total Almacenes</CardTitle>
                             <Building2 className="text-sky-600" size={18} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-semibold text-foreground">{totalAlmacenes}</div>
+                            <div className="text-foreground text-2xl font-semibold">{totalAlmacenes}</div>
                             <CardDescription className="mt-1">Almacenes activos</CardDescription>
                         </CardContent>
                     </Card>
-                    <Card className="border-sidebar-border/70 bg-card shadow-sm border-l-4 border-l-fuchsia-500">
+                    <Card className="border-sidebar-border/70 bg-card border-l-4 border-l-fuchsia-500 shadow-sm">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-sm font-medium">Total Cuentas</CardTitle>
                             <Wallet className="text-fuchsia-600" size={18} />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-semibold text-foreground">{totalCuentas}</div>
+                            <div className="text-foreground text-2xl font-semibold">{totalCuentas}</div>
                             <CardDescription className="mt-1">Cuentas monetarias</CardDescription>
                         </CardContent>
                     </Card>
@@ -171,7 +184,7 @@ export default function PageEmpleado({ empleados, almacenes, cuentas }: { emplea
                     <CardContent className="flex flex-col gap-3 pt-6 md:flex-row md:items-center md:justify-between">
                         <div>
                             <div className="text-sm font-medium">Acciones rápidas</div>
-                            <div className="text-xs text-muted-foreground">Crea o exporta la lista de empleados.</div>
+                            <div className="text-muted-foreground text-xs">Crea o exporta la lista de empleados.</div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {/* Botón Crear Nuevo Empleado */}

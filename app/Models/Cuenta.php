@@ -10,6 +10,11 @@ class Cuenta extends Model
 {
     use HasFactory;
 
+    /** Nivel de acceso de un vendedor a una cuenta asignada (`user_cuentas.acceso`). */
+    public const ACCESO_COMPLETO = 'completo';
+
+    public const ACCESO_COBRO = 'cobro';
+
     protected $primaryKey = 'id';
 
     protected $table = 'cuentas';

@@ -79,6 +79,8 @@ export interface User {
     updated_at: string;
     [key: string]: unknown;
     almacenes?: AlmacenProps[];
+    /** Cuentas asignadas; `pivot.acceso` es el nivel de acceso: completo o cobro. */
+    cuentas?: { id: number; nombre_cuenta: string; pivot?: { acceso: 'completo' | 'cobro' } }[];
 }
 
 // Interfaces del Proyecto:

@@ -6,8 +6,9 @@ interface SpotlightCardProps extends React.ComponentProps<'div'> {
      * Color del borde animado: verde si hay stock ('disponible'), rojo si está agotado ('agotado'),
      * ámbar en una venta especial ('especial') y rojo en una venta bajo costo ('bajo-costo').
      * En las tarjetas de cuenta distingue el tipo: esmeralda para 'efectivo' y azul para 'tarjeta'.
+     * En las tarjetas asignadas de Empleados: esmeralda para acceso 'completo' y ámbar para 'cobro'.
      */
-    estado: 'disponible' | 'agotado' | 'especial' | 'bajo-costo' | 'efectivo' | 'tarjeta';
+    estado: 'disponible' | 'agotado' | 'especial' | 'bajo-costo' | 'efectivo' | 'tarjeta' | 'completo' | 'cobro';
 }
 
 /**
