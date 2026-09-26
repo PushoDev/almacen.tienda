@@ -643,6 +643,105 @@ test('aprobarVenta sin gestor descuenta la comisión del vendedor de su cuenta C
     ]);
 });
 
+/**
+ * Cuenta de efectivo/tarjeta en la moneda dada (USD o EUR) para probar de dónde puede salir la comisión.
+ */
+function crearCuentaComision(string $codigoMoneda, string $tipo, float $saldo = 500): Cuenta
+{
+    $moneda = Moneda::firstOrCreate(
+        ['codigo_moneda' => $codigoMoneda],
+        ['nombre_moneda' => $codigoMoneda, 'simbolo_moneda' => $codigoMoneda, 'tasa_cambio' => 1, 'estado' => true, 'principal' => false]
+    );
+
+    return Cuenta::create([
+        'nombre_cuenta' => "Cuenta {$codigoMoneda} {$tipo} ".uniqid(),
+        'saldo_cuenta' => $saldo,
+        'tipo_cuenta' => 'permanentes',
+        'tipo' => $tipo,
+        'moneda_id' => $moneda->id,
+        'estado' => 'activa',
+    ]);
+}
+
+function ventaPendienteConComision(User $vendedor, float $comision = 10): Venta
+{
+    $moneda = Moneda::firstOrCreate(['codigo_moneda' => 'USD'], ['nombre_moneda' => 'Dólar', 'simbolo_moneda' => '$', 'tasa_cambio' => 1, 'estado' => true, 'principal' => true]);
+
+    return Venta::factory()->create([
+        'user_id' => $vendedor->id,
+        'almacen_id' => Almacen::factory()->puntoVenta()->create()->id,
+        'estado' => 'pendiente',
+        'moneda_id' => $moneda->id,
+        'total' => 100,
+        'es_venta_gestor' => false,
+        'total_comision' => $comision,
+    ]);
+}
+
+test('la comisión se paga desde una cuenta USD en efectivo asignada al vendedor: sin tasa, y aprobar y anular la debitan y devuelven en USD', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $vendedor = User::factory()->vendedor()->create();
+    $cuentaUsd = crearCuentaComision('USD', 'efectivo', saldo: 500);
+    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $venta = ventaPendienteConComision($vendedor, comision: 10);
+    crearDestinatario($venta);
+
+    // El cliente manda una tasa cualquiera: en USD no hay conversión, queda en 1.
+    $respuesta = $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaUsd->id, 'comision_tasa' => 365]);
+
+    $respuesta->assertOk()
+        ->assertJsonPath('comision_pago.cuenta.moneda', 'USD')
+        ->assertJsonPath('comision_pago.monto_cuenta', 10)
+        ->assertJsonPath('comision_pago.monto_cup', null);
+    expect((float) $venta->fresh()->comision_tasa)->toBe(1.0);
+
+    $this->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
+    expect((float) $cuentaUsd->fresh()->saldo_cuenta)->toBe(490.0); // 500 - 10 USD, no 3650
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'comision_saldo_anterior' => 500, 'comision_saldo_posterior' => 490]);
+
+    $this->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_precio'])->assertJson(['success' => true]);
+    expect((float) $cuentaUsd->fresh()->saldo_cuenta)->toBe(500.0);
+});
+
+test('la comisión no se puede pagar desde una cuenta USD que no es del vendedor de la venta, que no es de efectivo, ni desde otra moneda', function (string $caso) {
+    $this->actingAs(User::factory()->admin()->create());
+    $vendedor = User::factory()->vendedor()->create();
+    $venta = ventaPendienteConComision($vendedor);
+
+    $cuenta = match ($caso) {
+        'USD de otro vendedor' => tap(crearCuentaComision('USD', 'efectivo'), fn ($c) => User::factory()->vendedor()->create()->cuentas()->attach($c->id)),
+        'USD sin asignar a nadie' => crearCuentaComision('USD', 'efectivo'),
+        'USD tarjeta del vendedor' => tap(crearCuentaComision('USD', 'tarjeta'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
+        'EUR efectivo del vendedor' => tap(crearCuentaComision('EUR', 'efectivo'), fn ($c) => $vendedor->cuentas()->attach($c->id)),
+    };
+
+    $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuenta->id, 'comision_tasa' => 1])->assertStatus(422);
+
+    expect($venta->fresh()->comision_cuenta_id)->toBeNull();
+})->with(['USD de otro vendedor', 'USD sin asignar a nadie', 'USD tarjeta del vendedor', 'EUR efectivo del vendedor']);
+
+test('la comisión sigue pudiendo salir de una cuenta CUP con su tasa (el monto en CUP se mantiene)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $venta = ventaPendienteConComision(User::factory()->vendedor()->create(), comision: 10);
+    $cuentaCup = crearCuentaCup(saldo: 5000);
+
+    $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaCup->id, 'comision_tasa' => 365])
+        ->assertOk()
+        ->assertJsonPath('comision_pago.monto_cup', 3650)
+        ->assertJsonPath('comision_pago.monto_cuenta', 3650);
+    expect((float) $venta->fresh()->comision_tasa)->toBe(365.0);
+});
+
+test('show() entrega las cuentas asignadas al vendedor de la venta para elegir la cuenta de la comisión', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $cuentaUsd = crearCuentaComision('USD', 'efectivo');
+    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $venta = ventaPendienteConComision($vendedor);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page->where('venta.vendedor_cuentas_ids', [$cuentaUsd->id]));
+});
+
 test('aprobarVenta descuenta la comisión aunque la cuenta no tenga saldo suficiente, dejándola en deuda', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

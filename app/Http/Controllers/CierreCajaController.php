@@ -489,20 +489,21 @@ class CierreCajaController extends Controller
         ]);
 
         // Calcular comisiones y ganancia desde las ventas del turno del cierre
-        $comisionesPVVentasCierre = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+        $comisionesPVVentasCierre = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto', 'comisionCuenta.moneda'])
             ->where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
             ->where('total_comision', '>', 0)
-            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
+            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'comision_cuenta_id', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentasCierre->sum(fn ($v) => (float) $v->total_comision);
 
         $comisionesPVDetallesCierre = $comisionesPVVentasCierre->map(fn ($v) => [
             'venta_id' => $v->id,
             'comision_usd' => round((float) $v->total_comision, 2),
-            'comision_cup' => round((float) $v->total_comision * (float) $v->comision_tasa, 2),
+            // Una comisión pagada desde una cuenta USD no tiene monto en CUP.
+            'comision_cup' => $v->comisionCuenta?->moneda?->codigo_moneda === 'USD' ? 0.0 : round((float) $v->total_comision * (float) $v->comision_tasa, 2),
             'fecha' => $v->created_at->format('Y-m-d H:i'),
             'total_venta' => round((float) $v->total, 2),
             'productos' => $v->detalles->map(fn ($d) => [
@@ -533,10 +534,12 @@ class CierreCajaController extends Controller
             ->where('estado', 'completada')
             ->sum('total_esperado_usd');
 
+        // Solo comisiones pagadas desde cuentas CUP: las de una cuenta USD (tasa 1) no son CUP.
         $comisionesPVCUP = Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
+            ->whereDoesntHave('comisionCuenta.moneda', fn ($q) => $q->where('codigo_moneda', 'USD'))
             ->whereNotNull('comision_tasa')
             ->where('comision_tasa', '>', 0)
             ->selectRaw('COALESCE(SUM(total_comision * comision_tasa), 0) as total_cup')
@@ -1455,13 +1458,13 @@ class CierreCajaController extends Controller
         $ventasEspecialesImpactoUSD = round($ventasEspecialesTotalUSD - $ventasEspecialesCostoUSD, 2);
 
         // --- COMISIÓN PUNTO DE VENTA (ventas sin gestor) ---
-        $comisionesPVVentas = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+        $comisionesPVVentas = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto', 'comisionCuenta.moneda'])
             ->where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
             ->where('total_comision', '>', 0)
-            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
+            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'comision_cuenta_id', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentas->sum(fn ($v) => (float) $v->total_comision
         );
@@ -1469,7 +1472,7 @@ class CierreCajaController extends Controller
         $comisionesPVDetalles = $comisionesPVVentas->map(fn ($v) => [
             'venta_id' => $v->id,
             'comision_usd' => round((float) $v->total_comision, 2),
-            'comision_cup' => round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
+            'comision_cup' => $v->comisionCuenta?->moneda?->codigo_moneda === 'USD' ? 0.0 : round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
             'fecha' => $v->created_at->format('Y-m-d H:i'),
             'total_venta' => round((float) $v->total, 2),
             'productos' => $v->detalles->map(fn ($d) => [
@@ -1503,6 +1506,7 @@ class CierreCajaController extends Controller
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
+            ->whereDoesntHave('comisionCuenta.moneda', fn ($q) => $q->where('codigo_moneda', 'USD'))
             ->whereNotNull('comision_tasa')
             ->where('comision_tasa', '>', 0)
             ->selectRaw('COALESCE(SUM(total_comision * comision_tasa), 0) as total_cup')

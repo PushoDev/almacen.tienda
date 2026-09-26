@@ -568,6 +568,8 @@ class VentaController extends Controller
                 'email' => $venta->usuario->email,
                 'rol' => $venta->usuario->role,
             ],
+            // Cuentas asignadas al vendedor de la venta: las USD entre ellas se pueden usar para pagar su comisión.
+            'vendedor_cuentas_ids' => $venta->usuario->cuentas()->pluck('cuentas.id')->all(),
             // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
             // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin, que
             // nunca captura uno, o ventas anteriores a esta feature): ahí se cae al nombre
@@ -662,18 +664,7 @@ class VentaController extends Controller
                     'nombre' => $venta->mensajeroOrigenCuenta->nombre_cuenta,
                 ] : null,
             ] : null,
-            'comision_pago' => $venta->comision_cuenta_id ? [
-                'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
-                'monto_cup' => ($venta->comision_tasa > 0)
-                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
-                    : null,
-                'cuenta' => $venta->comisionCuenta ? [
-                    'id' => $venta->comisionCuenta->id,
-                    'nombre' => $venta->comisionCuenta->nombre_cuenta,
-                    'moneda' => $venta->comisionCuenta->moneda?->codigo_moneda,
-                    'saldo_disponible' => (float) $venta->comisionCuenta->saldo_cuenta,
-                ] : null,
-            ] : null,
+            'comision_pago' => $this->comisionPago($venta),
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'monto_usd' => $venta->tasa_aplicada_gestor > 0
@@ -1404,6 +1395,39 @@ class VentaController extends Controller
      * Admin/moderador pueden gestionar cualquier venta; un vendedor solo las suyas.
      * Mismo criterio que ya usa listadoVentas() para filtrar por dueño.
      */
+    /**
+     * Cómo se paga la comisión del vendedor: la cuenta de donde sale y el monto en la moneda de esa
+     * cuenta. `comision_tasa` es la tasa CUP/USD cuando la cuenta es CUP y siempre 1 cuando es USD,
+     * así que `total_comision × comision_tasa` es lo que se debita, en la moneda de la cuenta.
+     * `monto_cup` solo se llena si la cuenta es CUP (los reportes en CUP no deben contar una cuenta USD).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function comisionPago(Venta $venta): ?array
+    {
+        if (! $venta->comision_cuenta_id) {
+            return null;
+        }
+
+        $cuenta = $venta->comisionCuenta;
+        $monto = $venta->comision_tasa > 0
+            ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
+            : null;
+        $moneda = $cuenta?->moneda?->codigo_moneda;
+
+        return [
+            'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
+            'monto_cup' => $moneda === 'USD' ? null : $monto,
+            'monto_cuenta' => $monto,
+            'cuenta' => $cuenta ? [
+                'id' => $cuenta->id,
+                'nombre' => $cuenta->nombre_cuenta,
+                'moneda' => $moneda,
+                'saldo_disponible' => (float) ($cuenta->saldo_cuenta ?? 0),
+            ] : null,
+        ];
+    }
+
     private function puedeGestionarVenta(Venta $venta): bool
     {
         $user = Auth::user();
@@ -1629,14 +1653,15 @@ class VentaController extends Controller
                 $cuentaComision = $venta->comisionCuenta;
 
                 if ($cuentaComision) {
-                    $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                    // En la moneda de la cuenta: CUP con la tasa CUP/USD, o USD directo (tasa 1).
+                    $montoComision = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
 
                     // Se permite dejar la cuenta en deuda (saldo negativo) — decisión del cliente.
                     $comisionSaldoAnterior = (float) $cuentaComision->saldo_cuenta;
-                    $cuentaComision->decrement('saldo_cuenta', $montoCUP);
+                    $cuentaComision->decrement('saldo_cuenta', $montoComision);
                     $venta->update([
                         'comision_saldo_anterior' => $comisionSaldoAnterior,
-                        'comision_saldo_posterior' => $comisionSaldoAnterior - $montoCUP,
+                        'comision_saldo_posterior' => $comisionSaldoAnterior - $montoComision,
                     ]);
                 }
             }
@@ -2045,6 +2070,29 @@ class VentaController extends Controller
         $limpiarComision = $validated['limpiar_comision'] ?? false;
         $limpiarGestor = $validated['limpiar_gestor'] ?? false;
 
+        // La comisión del vendedor sale de una cuenta CUP, o de una cuenta USD en efectivo asignada al vendedor de la
+        // venta. En una cuenta USD no hay conversión: la tasa es siempre 1 y se debita `total_comision` en USD.
+        if (! $limpiarComision && ! empty($validated['comision_cuenta_id'])) {
+            $cuentaComision = Cuenta::with('moneda')->find($validated['comision_cuenta_id']);
+            $monedaComision = $cuentaComision?->moneda?->codigo_moneda;
+
+            if (! in_array($monedaComision, ['CUP', 'USD'], true)) {
+                return response()->json(['success' => false, 'message' => 'La comisión solo se puede pagar desde una cuenta CUP o USD en efectivo.'], 422);
+            }
+
+            if ($monedaComision === 'USD') {
+                if ($cuentaComision->tipo !== 'efectivo') {
+                    return response()->json(['success' => false, 'message' => 'La cuenta USD para la comisión debe ser de efectivo.'], 422);
+                }
+
+                if (! $venta->usuario->cuentas()->where('cuentas.id', $cuentaComision->id)->exists()) {
+                    return response()->json(['success' => false, 'message' => 'La cuenta USD debe estar asignada al vendedor de la venta.'], 422);
+                }
+
+                $validated['comision_tasa'] = 1;
+            }
+        }
+
         // El monto USD del mensajero viene del POS y no cambia desde Show.
         // Solo se actualiza si el payload incluye explícitamente mensajero_monto (caso raro).
         $nuevoMensajeroMonto = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? $venta->mensajero_monto);
@@ -2116,18 +2164,7 @@ class VentaController extends Controller
                     'nombre' => $venta->mensajeroOrigenCuenta->nombre_cuenta,
                 ] : null,
             ] : null,
-            'comision_pago' => $venta->comision_cuenta_id ? [
-                'tasa' => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
-                'monto_cup' => $venta->comision_tasa > 0
-                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
-                    : null,
-                'cuenta' => $venta->comisionCuenta ? [
-                    'id' => $venta->comisionCuenta->id,
-                    'nombre' => $venta->comisionCuenta->nombre_cuenta,
-                    'moneda' => $venta->comisionCuenta->moneda?->codigo_moneda,
-                    'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_cuenta ?? 0),
-                ] : null,
-            ] : null,
+            'comision_pago' => $this->comisionPago($venta),
         ]);
     }
 
@@ -2314,8 +2351,9 @@ class VentaController extends Controller
                     if (! $venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
                         $cuentaComision = $venta->comisionCuenta;
                         if ($cuentaComision) {
-                            $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
-                            $cuentaComision->increment('saldo_cuenta', $montoCUP);
+                            // En la moneda de la cuenta (CUP con la tasa, o USD con tasa 1), igual que al aprobar.
+                            $montoComision = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                            $cuentaComision->increment('saldo_cuenta', $montoComision);
                         }
                     }
                 }
