@@ -51,7 +51,7 @@ export function SelectorImagenEfectivo({ catalogo, value, onChange, disabled = f
             </button>
 
             <Dialog open={abierto} onOpenChange={setAbierto}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Elegir insignia de moneda</DialogTitle>
                         <DialogDescription>

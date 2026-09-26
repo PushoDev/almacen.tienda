@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
 import { CuentaCard, type CuentaCardData } from '@/components/CuentaCard';
+import { type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -91,11 +92,13 @@ export default function CuentasPage({
     monedaPrincipal,
     resumen,
     catalogoTarjetas,
+    tiposCuenta,
 }: {
     cuentas: CuentaConMoneda[];
     monedaPrincipal: MonedaInfo | null;
     resumen: ResumenData;
     catalogoTarjetas: CatalogoTarjetas;
+    tiposCuenta: TipoCuenta[];
 }) {
     const { props } = usePage();
     const isAdmin = props.auth?.user?.role === 'admin';
@@ -498,6 +501,7 @@ export default function CuentasPage({
                                 isAdmin={isAdmin}
                                 onEditClick={handleEditClick}
                                 onDeleteClick={(c) => handleDeleteClick(c as CuentaConMoneda)}
+                                tipoCuenta={tiposCuenta.find((tipo) => tipo.slug === cuenta.tipo)}
                             />
                         ))}
                     </div>

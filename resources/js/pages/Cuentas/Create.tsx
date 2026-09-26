@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { TipoCuentaLogo, type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { SelectorBancoTarjeta, type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
 import { Button } from '@/components/ui/button';
@@ -46,10 +47,11 @@ interface BancoOption {
 interface CreateCuentasPageProps {
     monedas: MonedaOption[];
     catalogoTarjetas: CatalogoTarjetas;
+    tiposCuenta: TipoCuenta[];
     bancos: BancoOption[];
 }
 
-export default function CreateCuentasPage({ monedas, catalogoTarjetas, bancos }: CreateCuentasPageProps) {
+export default function CreateCuentasPage({ monedas, catalogoTarjetas, bancos, tiposCuenta }: CreateCuentasPageProps) {
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
         tipo: 'tarjeta' as 'tarjeta' | 'efectivo',
@@ -152,8 +154,14 @@ export default function CreateCuentasPage({ monedas, catalogoTarjetas, bancos }:
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                                                <SelectItem value="efectivo">Efectivo</SelectItem>
+                                                {tiposCuenta.map((tipo) => (
+                                                    <SelectItem key={tipo.slug} value={tipo.slug}>
+                                                        <span className="flex items-center gap-2">
+                                                            <TipoCuentaLogo tipo={tipo} className="h-6" />
+                                                            {tipo.nombre}
+                                                        </span>
+                                                    </SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                         <InputError message={errors.tipo} />

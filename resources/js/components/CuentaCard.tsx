@@ -1,6 +1,8 @@
+import { TipoCuentaLogo, type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import { Link } from '@inertiajs/react';
 import { Banknote, CreditCard, Edit3, Eye, Globe, Lock, MoreVertical, Trash2, User, Wallet } from 'lucide-react';
 
@@ -34,17 +36,23 @@ export function CuentaCard({
     isAdmin,
     onEditClick,
     onDeleteClick,
+    tipoCuenta,
 }: {
     cuenta: CuentaCardData;
     isAdmin: boolean;
     onEditClick: (e: React.MouseEvent) => void;
     onDeleteClick: (cuenta: CuentaCardData) => void;
+    /** Imagen del tipo de cuenta (Efectivo / Tarjeta): ocupa el espacio libre a la derecha de las insignias. Opcional. */
+    tipoCuenta?: TipoCuenta;
 }) {
     const activa = cuenta.estado === 'activa';
     const puedeEliminar = isAdmin && Number(cuenta.saldo_cuenta ?? 0) === 0;
 
     return (
-        <div className="bg-card overflow-hidden rounded-2xl border shadow-sm transition-all hover:shadow-md">
+        <SpotlightCard
+            estado={cuenta.tipo === 'efectivo' ? 'efectivo' : 'tarjeta'}
+            className="bg-card overflow-hidden rounded-2xl border shadow-sm transition-all hover:shadow-md"
+        >
             {/* Header — la tarjeta real del banco elegido, o la insignia de moneda elegida
                 para efectivo, ambas a bleed completo (mismo tratamiento visual), o un fondo
                 genérico si no hay imagen asignada todavía */}
@@ -84,7 +92,11 @@ export function CuentaCard({
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={() => onDeleteClick(cuenta)}
-                            className={puedeEliminar ? 'flex cursor-pointer items-center gap-2 text-red-600' : 'flex cursor-pointer items-center gap-2 text-muted-foreground'}
+                            className={
+                                puedeEliminar
+                                    ? 'flex cursor-pointer items-center gap-2 text-red-600'
+                                    : 'text-muted-foreground flex cursor-pointer items-center gap-2'
+                            }
                         >
                             {puedeEliminar ? <Trash2 className="h-4 w-4" /> : <Lock className="h-4 w-4" />} Eliminar
                         </DropdownMenuItem>
@@ -108,23 +120,33 @@ export function CuentaCard({
                     </Badge>
                 </div>
 
-                <p className="text-muted-foreground font-mono text-xs tracking-wider">{numeroDecorativo(cuenta.id)}</p>
+                <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 space-y-3">
+                        <p className="text-muted-foreground font-mono text-xs tracking-wider">{numeroDecorativo(cuenta.id)}</p>
 
-                <div>
-                    <p
-                        className={
-                            cuenta.saldo_cuenta != null
-                                ? cuenta.saldo_cuenta > 0
-                                    ? 'text-xl font-bold text-emerald-600'
-                                    : cuenta.saldo_cuenta < 0
-                                      ? 'text-xl font-bold text-red-600'
-                                      : 'text-xl font-bold'
-                                : 'text-xl font-bold'
-                        }
-                    >
-                        {cuenta.moneda?.simbolo_moneda || '$'} {Math.abs(cuenta.saldo_cuenta ?? 0).toFixed(2)}
-                    </p>
-                    <p className="text-muted-foreground text-xs">Saldo disponible</p>
+                        <div>
+                            <p
+                                className={
+                                    cuenta.saldo_cuenta != null
+                                        ? cuenta.saldo_cuenta > 0
+                                            ? 'text-xl font-bold text-emerald-600'
+                                            : cuenta.saldo_cuenta < 0
+                                              ? 'text-xl font-bold text-red-600'
+                                              : 'text-xl font-bold'
+                                        : 'text-xl font-bold'
+                                }
+                            >
+                                {cuenta.moneda?.simbolo_moneda || '$'} {Math.abs(cuenta.saldo_cuenta ?? 0).toFixed(2)}
+                            </p>
+                            <p className="text-muted-foreground text-xs">Saldo disponible</p>
+                        </div>
+                    </div>
+
+                    {tipoCuenta && (
+                        <div className="flex h-16 w-24 shrink-0 items-center justify-center">
+                            <TipoCuentaLogo tipo={tipoCuenta} className="h-14" />
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
@@ -158,6 +180,6 @@ export function CuentaCard({
                     )}
                 </div>
             </div>
-        </div>
+        </SpotlightCard>
     );
 }

@@ -38,6 +38,13 @@ class CatalogoTarjetasService
             'bank_of_america' => ['nombre' => 'Bank of America', 'grupo' => 'externa', 'imagen' => 'card_interacionales/BankOfAmerica.webp'],
             'freedom_unlimited' => ['nombre' => 'Chase Freedom Unlimited', 'grupo' => 'externa', 'imagen' => 'card_interacionales/FreedomUnlimited.webp'],
             'square' => ['nombre' => 'Square', 'grupo' => 'externa', 'imagen' => 'card_interacionales/Square.webp'],
+            // Plataformas de pago digitales: reutilizan los logos de las vías de pago (public/projects/metodos_pago/),
+            // los mismos slugs que `vias_pago`. Una cuenta de PayPal, Stripe, QvaPay o TropiPay es tipo=tarjeta
+            // igual que las de Zelle y Cash App.
+            'paypal' => ['nombre' => 'PayPal', 'grupo' => 'externa', 'imagen' => 'metodos_pago/paypal.webp'],
+            'stripe' => ['nombre' => 'Stripe', 'grupo' => 'externa', 'imagen' => 'metodos_pago/stripe.webp'],
+            'qvapay' => ['nombre' => 'QvaPay', 'grupo' => 'externa', 'imagen' => 'metodos_pago/qvapay.webp'],
+            'tropipay' => ['nombre' => 'TropiPay', 'grupo' => 'externa', 'imagen' => 'metodos_pago/tropipay.webp'],
             // Efectivo — insignias por moneda, para cuentas tipo=efectivo (mismo mecanismo,
             // no un mapeo automático desde cuentas.moneda_id: el usuario elige explícitamente,
             // igual que con el banco de una tarjeta).
@@ -45,6 +52,30 @@ class CatalogoTarjetasService
             'cup' => ['nombre' => 'CUP', 'grupo' => 'efectivo', 'imagen' => 'efectivo/cup.webp'],
             'eur' => ['nombre' => 'EUR', 'grupo' => 'efectivo', 'imagen' => 'efectivo/eur.webp'],
         ];
+    }
+
+    /**
+     * Tipos de cuenta (`cuentas.tipo`) con su imagen, para los formularios y el detalle de Cuentas.
+     * La imagen es `public/projects/metodos_pago/{slug}.webp` (efectivo ya existe; para tarjeta basta con guardar
+     * `tarjeta.webp` ahí y aparece sola): sin archivo, `imagen_url` es null y el frontend muestra un ícono.
+     *
+     * @return array<int, array{slug: string, nombre: string, imagen_url: string|null}>
+     */
+    public static function tiposDeCuenta(): array
+    {
+        $tipos = [];
+
+        foreach (['tarjeta' => 'Tarjeta', 'efectivo' => 'Efectivo'] as $slug => $nombre) {
+            $tipos[] = [
+                'slug' => $slug,
+                'nombre' => $nombre,
+                'imagen_url' => file_exists(public_path("projects/metodos_pago/{$slug}.webp"))
+                    ? asset("projects/metodos_pago/{$slug}.webp")
+                    : null,
+            ];
+        }
+
+        return $tipos;
     }
 
     /**

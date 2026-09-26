@@ -9,6 +9,7 @@ import {
     DetalleVenta,
     DetalleVentaExpandido,
 } from '@/components/detalle-operacion';
+import { TipoCuentaLogo, type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -121,6 +122,7 @@ interface ShowCuentasPageProps {
     historialAjustes: HistorialPaginado;
     historialRemesas: HistorialPaginado;
     puedeEditar: boolean;
+    tiposCuenta: TipoCuenta[];
     filtros: {
         transacciones: { q_transacciones?: string; tipo_transacciones?: string; desde_transacciones?: string; hasta_transacciones?: string };
         ventas: { q_ventas?: string; tipo_ventas?: string; desde_ventas?: string; hasta_ventas?: string };
@@ -488,8 +490,11 @@ export default function ShowCuentasPage({
     historialAjustes,
     historialRemesas,
     puedeEditar,
+    tiposCuenta,
     filtros,
 }: ShowCuentasPageProps) {
+    const tipoDeCuenta = tiposCuenta.find((tipo) => tipo.slug === cuenta.tipo);
+
     const formatearMoneda = (valor: number, simbolo: string) =>
         `${simbolo} ${Math.abs(valor).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -594,10 +599,10 @@ export default function ShowCuentasPage({
                                         <Tag className="text-muted-foreground h-4 w-4" />
                                         <span className="text-sm font-medium">Tipo de Activo:</span>
                                     </div>
-                                    <Badge variant="outline" className="capitalize">
-                                        {cuenta.tipo === 'efectivo' ? <Banknote size={12} className="mr-1" /> : <CreditCard size={12} className="mr-1" />}
-                                        {cuenta.tipo}
-                                    </Badge>
+                                    <div className="flex items-center gap-2">
+                                        {tipoDeCuenta && <TipoCuentaLogo tipo={tipoDeCuenta} className="h-8" />}
+                                        <span className="text-sm font-medium capitalize">{tipoDeCuenta?.nombre ?? cuenta.tipo}</span>
+                                    </div>
                                 </div>
                                 {cuenta.tipo === 'tarjeta' && (
                                     <div className="flex items-center justify-between">
