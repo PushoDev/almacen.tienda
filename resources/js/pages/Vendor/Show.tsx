@@ -30,7 +30,7 @@ import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { Switch } from '@/components/ui/switch';
@@ -230,8 +230,8 @@ interface Venta {
     ganancia_real_total: number;
     fecha: string;
     usuario: Usuario;
-    /** Cuentas asignadas al vendedor de la venta: las USD en efectivo entre ellas pueden pagar su comisión. */
-    vendedor_cuentas_ids?: number[];
+    /** Cuentas que puede usar quien configura la comisión (admin/moderador: todas): las USD en efectivo entre ellas pueden pagarla. */
+    cuentas_usables_ids?: number[];
     // Quién atendía realmente (feature "Atendido por" / Turnos) — el backend ya cae al
     // nombre de la cuenta cuando no hay turno (admin), así que siempre trae un nombre.
     atendido_por: string | null;
@@ -466,15 +466,15 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             .get(route('ventas.getCuentasParaGestor'))
             .then((r) => {
                 const cup = (r.data as Cuenta[]).filter((c) => c.moneda?.codigo === 'CUP');
-                // La comisión también puede salir de una cuenta USD en efectivo asignada al vendedor de la venta.
+                // La comisión también puede salir de una cuenta USD en efectivo que el usuario pueda usar (admin/moderador: cualquiera).
                 const usdDelVendedor = (r.data as Cuenta[]).filter(
-                    (c) => c.moneda?.codigo === 'USD' && c.tipo === 'efectivo' && (venta.vendedor_cuentas_ids ?? []).includes(c.id),
+                    (c) => c.moneda?.codigo === 'USD' && c.tipo === 'efectivo' && (venta.cuentas_usables_ids ?? []).includes(c.id),
                 );
                 setCuentasComision([...cup, ...usdDelVendedor]);
                 setCuentasMensajero(cup);
             })
             .catch(() => { });
-    }, [venta.vendedor_cuentas_ids]);
+    }, [venta.cuentas_usables_ids]);
 
     // Pre-llenar form mensajero al abrirlo
     useEffect(() => {
@@ -2800,10 +2800,19 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
                                                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP o USD efectivo..." /></SelectTrigger>
                                                         <SelectContent>
-                                                            {cuentasComision.map(c => (
-                                                                <SelectItem key={c.id} value={String(c.id)}>
-                                                                    {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
-                                                                </SelectItem>
+                                                            {/* Agrupadas con su cantidad: con decenas de cuentas CUP, las USD quedaban enterradas al final de una lista larga */}
+                                                            {[
+                                                                { titulo: 'USD en efectivo', cuentas: cuentasComision.filter(c => c.moneda?.codigo === 'USD') },
+                                                                { titulo: 'CUP', cuentas: cuentasComision.filter(c => c.moneda?.codigo !== 'USD') },
+                                                            ].filter(g => g.cuentas.length > 0).map(g => (
+                                                                <SelectGroup key={g.titulo}>
+                                                                    <SelectLabel>{g.titulo} ({g.cuentas.length})</SelectLabel>
+                                                                    {g.cuentas.map(c => (
+                                                                        <SelectItem key={c.id} value={String(c.id)}>
+                                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>

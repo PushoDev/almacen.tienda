@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -98,6 +99,20 @@ class User extends Authenticatable
     public function cuentasCompletas(): BelongsToMany
     {
         return $this->cuentas()->wherePivot('acceso', Cuenta::ACCESO_COMPLETO);
+    }
+
+    /**
+     * Cuentas que este usuario puede usar como propias: admin y moderador tienen acceso a todas (no se les
+     * asigna ninguna en `user_cuentas`), y un vendedor solo las asignadas con acceso completo.
+     */
+    public function cuentasUsables(): Builder|BelongsToMany
+    {
+        return $this->isAdmin() || $this->isModerator() ? Cuenta::query() : $this->cuentasCompletas();
+    }
+
+    public function puedeUsarCuenta(int $cuentaId): bool
+    {
+        return $this->cuentasUsables()->where('cuentas.id', $cuentaId)->exists();
     }
 
     public function getAvatarUrlAttribute(): ?string

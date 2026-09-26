@@ -568,8 +568,9 @@ class VentaController extends Controller
                 'email' => $venta->usuario->email,
                 'rol' => $venta->usuario->role,
             ],
-            // Cuentas asignadas al vendedor de la venta: las USD entre ellas se pueden usar para pagar su comisión.
-            'vendedor_cuentas_ids' => $venta->usuario->cuentas()->pluck('cuentas.id')->all(),
+            // Cuentas que puede usar QUIEN configura la comisión (admin/moderador: todas; vendedor: las suyas de acceso completo):
+            // las USD en efectivo entre ellas se pueden usar para pagarla.
+            'cuentas_usables_ids' => Auth::user()->cuentasUsables()->pluck('cuentas.id')->all(),
             // Quién atendía realmente (feature "Atendido por" / Turnos) — distinto de
             // `usuario` (cuenta de punto de venta), salvo cuando no hay turno (admin, que
             // nunca captura uno, o ventas anteriores a esta feature): ahí se cae al nombre
@@ -890,6 +891,19 @@ class VentaController extends Controller
         $user = Auth::user();
         if (! $user) {
             return response()->json(['error' => 'Usuario no autenticado'], 401);
+        }
+
+        // Mismo criterio que guardarDistribucion(): el POS hoy no la envía, pero no debe aceptarse una cuenta cualquiera.
+        if (! empty($validatedData['comision_cuenta_id'])) {
+            $cuentaComision = Cuenta::with('moneda')->find($validatedData['comision_cuenta_id']);
+
+            if ($mensajeError = $this->errorCuentaComision($cuentaComision, $user)) {
+                return response()->json(['error' => $mensajeError], 422);
+            }
+
+            if ($cuentaComision->moneda->codigo_moneda === 'USD') {
+                $validatedData['comision_tasa'] = 1;
+            }
         }
 
         // ✅ CAMBIO 2: Agregar validación lógica después del validate
@@ -1395,6 +1409,31 @@ class VentaController extends Controller
      * Admin/moderador pueden gestionar cualquier venta; un vendedor solo las suyas.
      * Mismo criterio que ya usa listadoVentas() para filtrar por dueño.
      */
+    /**
+     * Por qué una cuenta no sirve para pagar la comisión (null si sirve): tiene que ser CUP, o USD en efectivo que
+     * pueda usar quien la configura (admin/moderador: cualquiera; vendedor: solo las suyas de acceso completo).
+     */
+    private function errorCuentaComision(?Cuenta $cuenta, User $quien): ?string
+    {
+        $moneda = $cuenta?->moneda?->codigo_moneda;
+
+        if (! in_array($moneda, ['CUP', 'USD'], true)) {
+            return 'La comisión solo se puede pagar desde una cuenta CUP o USD en efectivo.';
+        }
+
+        if ($moneda === 'USD') {
+            if ($cuenta->tipo !== 'efectivo') {
+                return 'La cuenta USD para la comisión debe ser de efectivo.';
+            }
+
+            if (! $quien->puedeUsarCuenta($cuenta->id)) {
+                return 'No tienes acceso a esa cuenta USD para pagar la comisión.';
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Cómo se paga la comisión del vendedor: la cuenta de donde sale y el monto en la moneda de esa
      * cuenta. `comision_tasa` es la tasa CUP/USD cuando la cuenta es CUP y siempre 1 cuando es USD,
@@ -2070,25 +2109,16 @@ class VentaController extends Controller
         $limpiarComision = $validated['limpiar_comision'] ?? false;
         $limpiarGestor = $validated['limpiar_gestor'] ?? false;
 
-        // La comisión del vendedor sale de una cuenta CUP, o de una cuenta USD en efectivo asignada al vendedor de la
-        // venta. En una cuenta USD no hay conversión: la tasa es siempre 1 y se debita `total_comision` en USD.
+        // La comisión del vendedor sale de una cuenta CUP, o de una cuenta USD en efectivo que el vendedor de la venta pueda
+        // usar. En una cuenta USD no hay conversión: la tasa es siempre 1 y se debita `total_comision` en USD.
         if (! $limpiarComision && ! empty($validated['comision_cuenta_id'])) {
             $cuentaComision = Cuenta::with('moneda')->find($validated['comision_cuenta_id']);
-            $monedaComision = $cuentaComision?->moneda?->codigo_moneda;
 
-            if (! in_array($monedaComision, ['CUP', 'USD'], true)) {
-                return response()->json(['success' => false, 'message' => 'La comisión solo se puede pagar desde una cuenta CUP o USD en efectivo.'], 422);
+            if ($mensajeError = $this->errorCuentaComision($cuentaComision, Auth::user())) {
+                return response()->json(['success' => false, 'message' => $mensajeError], 422);
             }
 
-            if ($monedaComision === 'USD') {
-                if ($cuentaComision->tipo !== 'efectivo') {
-                    return response()->json(['success' => false, 'message' => 'La cuenta USD para la comisión debe ser de efectivo.'], 422);
-                }
-
-                if (! $venta->usuario->cuentas()->where('cuentas.id', $cuentaComision->id)->exists()) {
-                    return response()->json(['success' => false, 'message' => 'La cuenta USD debe estar asignada al vendedor de la venta.'], 422);
-                }
-
+            if ($cuentaComision->moneda->codigo_moneda === 'USD') {
                 $validated['comision_tasa'] = 1;
             }
         }
