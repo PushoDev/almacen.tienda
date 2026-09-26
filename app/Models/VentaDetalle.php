@@ -16,6 +16,7 @@ class VentaDetalle extends Model
         'cantidad',
         'precio_venta',
         'precio_base',
+        'comision_base',
         'subtotal',
         'costo_unitario',
         'ganancia',

@@ -54,6 +54,12 @@ Route::middleware(['auth', 'verified'])->group(
         Route::put('/listado-productos/{producto}/lotes/{lote}/precio-venta', [ProductoController::class, 'actualizarPrecioVentaLote'])
             ->name('productos.lotes.precio-venta');
 
+        // Comisión propia de un lote puntual (2026-09-26): la comisión afecta lo que cobra el vendedor,
+        // así que solo la fijan admin/moderador (el precio propio sí lo puede poner el vendedor del almacén).
+        Route::put('/listado-productos/{producto}/lotes/{lote}/comision', [ProductoController::class, 'actualizarComisionLote'])
+            ->middleware('admin')
+            ->name('productos.lotes.comision');
+
         // Rutas para importar/exportar
         // Exportar productos
         Route::get('/listado-productos/exportar/excel', [ProductoController::class, 'export'])->name('productos.export');

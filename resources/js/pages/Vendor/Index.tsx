@@ -86,8 +86,11 @@ interface LoteVenta {
     // Precio de venta efectivo de este lote ("Opción A", 2026-09-20) — ya resuelto por el
     // backend (override propio del lote, o el precio general del almacén si no tiene). Casi
     // siempre igual a `producto.precio_venta`; solo difiere cuando un admin/moderador le puso
-    // un precio propio a este lote puntual.
+    // un precio propio a este lote puntual. Es el precio base de la línea que se vende de él.
     precio_venta: number | null;
+    // Comisión con la que se vende de este lote (2026-09-26), ya resuelta por el backend: la propia
+    // del lote, si no la tiene la del primer lote que sí la tenga, y si ninguno la del producto.
+    comision: number;
 }
 interface Producto {
     id: number | string;
@@ -110,10 +113,10 @@ interface Producto {
     precio_base: number | null;
     comision: number;
     es_precio_vendedor: boolean;
-    // Lotes activos en el almacén seleccionado (2026-09-20) — cuando hay 2+, se puede elegir de
-    // cuál vender; por defecto el precio de venta es el mismo sin importar el lote (solo cambia
-    // de dónde sale el costo real, ver LoteConsumoService, FIFO si no se elige ninguno), salvo
-    // que ese lote tenga su propio precio_venta seteado a mano ("Opción A") — ver agregarAlCarrito.
+    // Lotes con stock en el almacén seleccionado, del más antiguo al más nuevo. Con 2+ se muestra el
+    // selector "Vender de este lote", con el más antiguo elegido por defecto (el que sale primero en
+    // FIFO, ver LoteConsumoService). El precio base y la comisión de la línea salen del lote elegido
+    // — ver loteActualDe() y agregarAlCarrito().
     lotes?: LoteVenta[];
 }
 interface ItemCarrito {
@@ -127,6 +130,8 @@ interface ItemCarrito {
     comision: number;
     subtotal: number;
     lote_id?: number;
+    /** Código del lote con el que se agregó la línea (solo cuando el producto tenía 2+ lotes). */
+    lote_codigo?: string;
 }
 interface Moneda {
     id: number | string;
@@ -380,6 +385,15 @@ export default function PuntoVentaOficial({
         return codigosDisponibles.find((codigo) => codigo.es_default) || codigosDisponibles[0];
     };
 
+    // Lote con el que se vendería este producto: el elegido en el selector y, por defecto (o si lo
+    // elegido ya no es de este almacén), el más antiguo — el primero de la lista.
+    const loteActualDe = (producto: Producto): LoteVenta | undefined => {
+        const lotes = producto.lotes ?? [];
+        const elegidoId = loteSeleccionadoPorProducto[String(producto.id)];
+
+        return lotes.find((lote) => lote.id === elegidoId) ?? lotes[0];
+    };
+
     const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number, loteForzadoId?: number) => {
         if (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) {
             sileo.error({ title: 'Este producto no tiene un precio de venta configurado' });
@@ -418,15 +432,15 @@ export default function PuntoVentaOficial({
                 ),
             );
         } else {
-            // Sin elección explícita, queda undefined — el backend consume FIFO automático
-            // (LoteConsumoService), no bloquea el flujo rápido de escanear-y-agregar.
-            const loteId = loteForzadoId ?? loteSeleccionadoPorProducto[String(producto.id)];
-            // "Opción A" (2026-09-20): si el lote elegido tiene su propio precio_venta, se usa
-            // ese en vez del precio general del almacén — el vendedor lo puede seguir corrigiendo
-            // a mano después, como con cualquier otro item del carrito.
-            const loteElegido = loteId ? producto.lotes?.find((lote) => lote.id === loteId) : undefined;
+            // El lote es el elegido en el selector o, por defecto (también al escanear), el más antiguo.
+            // Su precio efectivo es el precio base de la línea y su comisión la que se cobra: un precio
+            // propio de lote no cambia la comisión. El vendedor puede seguir corrigiendo el precio a
+            // mano después, como con cualquier otro item del carrito.
+            const loteElegido = loteForzadoId ? producto.lotes?.find((lote) => lote.id === loteForzadoId) : loteActualDe(producto);
+            const variosLotes = (producto.lotes?.length ?? 0) > 1;
+            const loteId = variosLotes ? loteElegido?.id : undefined;
             const precioVenta = loteElegido?.precio_venta ?? producto.precio_venta ?? 0;
-            const precioBase = producto.precio_base ?? precioVenta;
+            const precioBase = loteElegido?.precio_venta ?? producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
@@ -435,14 +449,15 @@ export default function PuntoVentaOficial({
                 cantidad: 1,
                 precio_venta: precioVenta,
                 precio_base: precioBase,
-                comision: producto.comision ?? 0,
+                comision: loteElegido?.comision ?? producto.comision ?? 0,
                 subtotal: precioVenta,
                 lote_id: loteId,
+                lote_codigo: variosLotes ? loteElegido?.codigo : undefined,
             };
             setCarrito([...carrito, nuevoItem]);
             sileo.success({
                 title: producto.nombre_producto,
-                description: `$${precioVenta.toFixed(2)} · Código ${codigoVenta.codigo_barras}`,
+                description: `$${precioVenta.toFixed(2)} · Código ${codigoVenta.codigo_barras}${variosLotes && loteElegido ? ` · Lote ${loteElegido.codigo}` : ''}`,
                 icon: (
                     <img
                         src={producto.imagen_url || '/placeholder-product.png'}
@@ -945,6 +960,8 @@ export default function PuntoVentaOficial({
                                                     const codigosDisponibles = (producto.codigos || []).filter((codigo) => codigo.cantidad > 0);
                                                     const codigoSeleccionadoActual =
                                                         codigoSeleccionadoPorProducto[String(producto.id)]?.toString() || '';
+                                                    const loteActual = loteActualDe(producto);
+                                                    const precioMostrado = loteActual?.precio_venta ?? producto.precio_venta;
                                                     return (
                                                         <SpotlightCard
                                                             key={producto.id}
@@ -1069,21 +1086,29 @@ export default function PuntoVentaOficial({
                                                                 )}
                                                                 {(producto.lotes || []).length > 1 && (
                                                                     <div className="mt-3 space-y-1">
-                                                                        <Label className="text-xs">Vender de este lote</Label>
+                                                                        <div className="flex items-center justify-between">
+                                                                            <Label className="text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                                                                Vender de este lote
+                                                                            </Label>
+                                                                            <Badge variant="outline" className="border-sky-500 text-[10px] text-sky-700 dark:text-sky-300">
+                                                                                {(producto.lotes || []).length} lotes
+                                                                            </Badge>
+                                                                        </div>
                                                                         <Select
-                                                                            value={loteSeleccionadoPorProducto[String(producto.id)]?.toString() || ''}
+                                                                            value={loteActual?.id.toString() ?? ''}
                                                                             onValueChange={(value) => handleSeleccionLoteProducto(producto.id, value)}
                                                                         >
-                                                                            <SelectTrigger className="h-8 text-xs">
-                                                                                <SelectValue placeholder="Cualquiera (el más viejo primero)" />
+                                                                            <SelectTrigger className="h-8 border-2 border-sky-500 bg-sky-50 text-xs font-medium text-sky-900 shadow-sm ring-2 ring-sky-500/20 dark:bg-sky-950/40 dark:text-sky-100">
+                                                                                <SelectValue placeholder="Seleccionar lote" />
                                                                             </SelectTrigger>
                                                                             <SelectContent>
-                                                                                {(producto.lotes || []).map((lote) => (
+                                                                                {(producto.lotes || []).map((lote, posicion) => (
                                                                                     <SelectItem key={lote.id} value={lote.id.toString()}>
-                                                                                        {lote.codigo} ({lote.cantidad})
+                                                                                        {lote.codigo} ({lote.cantidad}){posicion === 0 ? ' · más antiguo' : ''}
                                                                                         {lote.precio_venta !== null && lote.precio_venta !== producto.precio_venta
                                                                                             ? ` · $${lote.precio_venta.toFixed(2)}`
                                                                                             : ''}
+                                                                                        {lote.comision !== producto.comision ? ` · com. $${lote.comision.toFixed(2)}` : ''}
                                                                                     </SelectItem>
                                                                                 ))}
                                                                             </SelectContent>
@@ -1093,10 +1118,10 @@ export default function PuntoVentaOficial({
                                                                 <div className="mt-4 flex items-end justify-between">
                                                                     <div>
                                                                         <p className="text-muted-foreground mb-0.5 text-xs">Precio</p>
-                                                                        {producto.precio_venta && producto.precio_venta > 0 ? (
+                                                                        {precioMostrado && precioMostrado > 0 ? (
                                                                             <p className="text-success text-xl font-bold">
                                                                                 $
-                                                                                {Number(producto.precio_venta).toLocaleString('es-ES', {
+                                                                                {Number(precioMostrado).toLocaleString('es-ES', {
                                                                                     minimumFractionDigits: 2,
                                                                                     maximumFractionDigits: 2,
                                                                                 })}
@@ -1244,6 +1269,9 @@ export default function PuntoVentaOficial({
                                                             <p className="text-sm font-medium">{item.producto.nombre_producto}</p>
                                                             <p className="text-xs text-gray-500">{item.producto.marca_producto || 'Sin marca'}</p>
                                                             <p className="font-mono text-xs text-gray-500">Codebar: {item.codigo_barras_usado}</p>
+                                                            {item.lote_codigo && (
+                                                                <p className="font-mono text-xs font-medium text-sky-600 dark:text-sky-400">Lote: {item.lote_codigo}</p>
+                                                            )}
                                                         </div>
                                                         <Button
                                                             variant="ghost"
@@ -1634,7 +1662,9 @@ export default function PuntoVentaOficial({
                             const codigosDisponiblesModal = (productoVistaRapida.codigos || []).filter((c) => c.cantidad > 0);
                             const codigoSeleccionadoModal = codigoSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
                             const lotesDisponiblesModal = productoVistaRapida.lotes || [];
-                            const loteSeleccionadoModal = loteSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
+                            const loteActualModal = loteActualDe(productoVistaRapida);
+                            const loteSeleccionadoModal = loteActualModal?.id.toString() ?? '';
+                            const precioMostradoModal = loteActualModal?.precio_venta ?? productoVistaRapida.precio_venta;
                             return (
                                 <div className="grid grid-cols-1 gap-6 px-6 py-4 md:grid-cols-2">
                                     {/* Columna de Imagen */}
@@ -1714,30 +1744,31 @@ export default function PuntoVentaOficial({
 
                                         {lotesDisponiblesModal.length > 1 && (
                                             <div className="space-y-1">
-                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">
+                                                <p className="text-xs font-semibold tracking-wider text-sky-700 uppercase dark:text-sky-300">
                                                     Vender de este lote
                                                 </p>
                                                 <Select
                                                     value={loteSeleccionadoModal}
                                                     onValueChange={(value) => handleSeleccionLoteProducto(productoVistaRapida.id, value)}
                                                 >
-                                                    <SelectTrigger className="h-8 text-xs">
-                                                        <SelectValue placeholder="Cualquiera (el más viejo primero)" />
+                                                    <SelectTrigger className="h-8 border-2 border-sky-500 bg-sky-50 text-xs font-medium text-sky-900 shadow-sm ring-2 ring-sky-500/20 dark:bg-sky-950/40 dark:text-sky-100">
+                                                        <SelectValue placeholder="Seleccionar lote" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {lotesDisponiblesModal.map((lote) => (
+                                                        {lotesDisponiblesModal.map((lote, posicion) => (
                                                             <SelectItem key={lote.id} value={lote.id.toString()}>
-                                                                {lote.codigo} ({lote.cantidad} disponibles)
+                                                                {lote.codigo} ({lote.cantidad} disponibles){posicion === 0 ? ' · más antiguo' : ''}
                                                                 {lote.precio_venta !== null && lote.precio_venta !== productoVistaRapida.precio_venta
                                                                     ? ` · $${lote.precio_venta.toFixed(2)}`
                                                                     : ''}
+                                                                {lote.comision !== productoVistaRapida.comision ? ` · com. $${lote.comision.toFixed(2)}` : ''}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
                                                 <p className="text-muted-foreground text-[11px]">
-                                                    Este producto tiene {lotesDisponiblesModal.length} lotes en este almacén. Sin elegir, se vende
-                                                    del más viejo automáticamente.
+                                                    Este producto tiene {lotesDisponiblesModal.length} lotes en este almacén. Por defecto sale el más
+                                                    antiguo; el precio y la comisión son los del lote elegido.
                                                 </p>
                                             </div>
                                         )}
@@ -1750,7 +1781,7 @@ export default function PuntoVentaOficial({
                                                 <div className="text-right">
                                                     {productoVistaRapida.tiene_precio ? (
                                                         <span className="text-primary text-xl font-bold">
-                                                            ${Number(productoVistaRapida.precio_venta).toFixed(2)}
+                                                            ${Number(precioMostradoModal).toFixed(2)}
                                                         </span>
                                                     ) : (
                                                         <span className="text-destructive text-sm font-medium">No definido</span>

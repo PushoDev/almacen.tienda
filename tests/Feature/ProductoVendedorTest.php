@@ -395,14 +395,29 @@ test('el listado de disponibles trae los lotes cuando el producto tiene 2+ lotes
 
         return $porId[$unSoloLote->id]['lotes'] === null
             && $porId[$mismoCosto->id]['lotes'] == [
-                ['id' => $loteA->id, 'codigo' => 'LOTE-A', 'cantidad' => 2, 'costo' => 50.0, 'precio_venta' => null, 'prorrateo_pendiente' => false],
-                ['id' => $loteB->id, 'codigo' => 'LOTE-B', 'cantidad' => 2, 'costo' => 50.0, 'precio_venta' => null, 'prorrateo_pendiente' => false],
+                ['id' => $loteA->id, 'codigo' => 'LOTE-A', 'cantidad' => 2, 'costo' => 50.0, 'precio_venta' => null, 'comision' => null, 'prorrateo_pendiente' => false],
+                ['id' => $loteB->id, 'codigo' => 'LOTE-B', 'cantidad' => 2, 'costo' => 50.0, 'precio_venta' => null, 'comision' => null, 'prorrateo_pendiente' => false],
             ]
             // == (no ===): al pasar por JSON, 36.0 llega como 36.
             && $porId[$variosCostos->id]['lotes'] == [
-                ['id' => $loteViejo->id, 'codigo' => 'AJUSTE-LEGADO-1', 'cantidad' => 28, 'costo' => 21.38, 'precio_venta' => null, 'prorrateo_pendiente' => false],
-                ['id' => $loteNuevo->id, 'codigo' => 'LOTE-MOV-209-1', 'cantidad' => 50, 'costo' => 21.85, 'precio_venta' => 36.0, 'prorrateo_pendiente' => false],
+                ['id' => $loteViejo->id, 'codigo' => 'AJUSTE-LEGADO-1', 'cantidad' => 28, 'costo' => 21.38, 'precio_venta' => null, 'comision' => null, 'prorrateo_pendiente' => false],
+                ['id' => $loteNuevo->id, 'codigo' => 'LOTE-MOV-209-1', 'cantidad' => 50, 'costo' => 21.85, 'precio_venta' => 36.0, 'comision' => null, 'prorrateo_pendiente' => false],
             ];
+    }));
+});
+
+test('el listado de disponibles trae la comisión propia de cada lote (null si no tiene)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $producto = Producto::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 4]);
+    $sinComision = LoteStock::create(['codigo' => 'LOTE-SIN', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50]);
+    $conComision = LoteStock::create(['codigo' => 'LOTE-CON', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 2, 'precio_costo' => 50, 'comision' => 4.5]);
+
+    $this->get(route('disponibles.index'))->assertInertia(fn ($page) => $page->where('almacenes.0.productos.0.lotes', function ($lotes) use ($sinComision, $conComision) {
+        $porId = collect($lotes)->keyBy('id');
+
+        return $porId[$sinComision->id]['comision'] === null && $porId[$conComision->id]['comision'] == 4.5;
     }));
 });
 

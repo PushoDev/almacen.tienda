@@ -49,6 +49,8 @@ class FusionLotesService
                 'cantidad_disponible' => $cantidadTotal,
                 'precio_costo' => $costoResultante,
                 'precio_venta' => $precioVenta !== null ? round($precioVenta, 2) : null,
+                // Misma regla que el POS: la comisión propia del lote más viejo que la tenga.
+                'comision' => $lotes->first(fn (LoteStock $lote) => $lote->comision !== null)?->comision,
             ]);
 
             // Misma antigüedad que el lote más viejo unido: el consumo FIFO (LoteConsumoService)
@@ -67,6 +69,7 @@ class FusionLotesService
                     'cantidad' => $lote->cantidad_disponible,
                     'precio_costo' => (float) $lote->precio_costo,
                     'precio_venta' => $lote->precio_venta !== null ? (float) $lote->precio_venta : null,
+                    'comision' => $lote->comision !== null ? (float) $lote->comision : null,
                 ])->values()->all(),
                 'cantidad_total' => $cantidadTotal,
                 'costo_resultante' => $costoResultante,
@@ -122,7 +125,7 @@ class FusionLotesService
     /**
      * Sin prorrateo, las unidades que llegaron por un movimiento no tienen por qué seguir en un lote
      * aparte: se ACUMULAN al lote que el destino ya tenía del mismo producto cuando es idéntico —
-     * mismo costo, sin precio propio y sin un prorrateo pendiente que después le cambiaría el costo
+     * mismo costo, sin precio ni comisión propios y sin un prorrateo pendiente que después le cambiaría el costo
      * a las unidades ajenas. Si no hay un lote así, el lote del movimiento se queda como está.
      *
      * Se llama cuando el movimiento ya no tiene nada que prorratear: al recibirlo si nunca requirió
@@ -202,6 +205,11 @@ class FusionLotesService
         $bases = [];
 
         foreach ($lotes as $lote) {
+            // Un lote con comisión propia no es idéntico a otro: al absorberlo se perdería.
+            if ($lote->comision !== null) {
+                continue;
+            }
+
             $clave = $lote->producto_id.'|'.round((float) $lote->precio_costo, 2);
 
             $destino = $bases[$clave] ?? LoteStock::where('producto_id', $lote->producto_id)
@@ -210,6 +218,7 @@ class FusionLotesService
                 ->where('cantidad_disponible', '>', 0)
                 ->whereNull('fusionado_en_lote_id')
                 ->whereNull('precio_venta')
+                ->whereNull('comision')
                 ->where('precio_costo', $lote->precio_costo)
                 ->when($movimientosPendientes !== [], fn ($query) => $query->where(
                     fn ($q) => $q->whereNull('movimiento_id')->orWhereNotIn('movimiento_id', $movimientosPendientes)

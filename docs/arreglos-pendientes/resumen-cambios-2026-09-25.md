@@ -1,6 +1,6 @@
 # Resumen de cambios — 2026-09-25
 
-Sesión sobre **Compras** (doble clic) y sobre la **importación de productos desde Excel**: un lote por fila, historial, deshacer, filas sin stock, plantilla con instrucciones y un flujo en dos pasos con una hoja de revisión tipo Excel. Verificado con tests y en el navegador (rol admin). Tests relacionados: **307/307** (Compras, Productos, Ventas, Movimientos, códigos, fusiones, acceso denegado, valor de inventario e importación); la suite completa no se corrió. Pint y ESLint limpios en lo tocado. Nada commiteado — el cliente maneja git.
+Sesión sobre **Compras** (doble clic) y sobre la **importación de productos desde Excel**: un lote por fila, historial, deshacer, filas sin stock, plantilla con instrucciones y un flujo en dos pasos con una hoja de revisión tipo Excel. Verificado con tests y en el navegador (rol admin). Tests relacionados: **307/307** (Compras, Productos, Ventas, Movimientos, códigos, fusiones, acceso denegado, valor de inventario e importación); la suite completa no se corrió. Pint y ESLint limpios en lo tocado. Al escribir este resumen no estaba commiteado (el cliente maneja git); **verificado el 2026-09-26: ya está commiteado** (árbol limpio y todo el código presente).
 
 ## 1. Compras: aprobar / anular / editar con bloqueo de fila
 

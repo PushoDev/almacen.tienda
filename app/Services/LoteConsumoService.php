@@ -14,9 +14,9 @@ use Illuminate\Support\Collection;
  * tenía 2+ lotes a precios distintos y alguna salida de por medio (confirmado con datos reales
  * el 2026-09-20).
  *
- * Regla de consumo: FIFO por defecto (lote más viejo primero, por `created_at`), salvo que se
- * pida un lote puntual (`$loteId`) — para cuando el vendedor/operador elige a mano de cuál
- * tanda vender/trasladar.
+ * Regla de consumo: FIFO por defecto (lote más viejo primero, por `created_at`). Si se pide un
+ * lote puntual (`$loteId`, cuando el vendedor elige de cuál tanda vender) ese sale primero y, si
+ * no alcanza, se sigue con el FIFO de los demás: nunca limita la cantidad al tamaño del lote.
  */
 class LoteConsumoService
 {
@@ -39,15 +39,22 @@ class LoteConsumoService
             return collect();
         }
 
-        $query = LoteStock::where('producto_id', $productoId)
+        $lotes = LoteStock::where('producto_id', $productoId)
             ->where('almacen_id', $almacenId)
-            ->where('cantidad_disponible', '>', 0);
+            ->where('cantidad_disponible', '>', 0)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
 
-        if ($loteId !== null) {
-            $query->where('id', $loteId);
+        // El lote elegido es una preferencia, no un límite: sale primero y, si no alcanza, sigue el
+        // FIFO con los demás. Un lote que no es de este producto y almacén (o ya sin stock) se
+        // ignora en vez de mandar toda la salida "sin lote".
+        $preferido = $loteId !== null ? $lotes->firstWhere('id', $loteId) : null;
+
+        if ($preferido) {
+            $lotes = $lotes->reject(fn (LoteStock $lote) => $lote->id === $preferido->id)->prepend($preferido)->values();
         }
-
-        $lotes = $query->orderBy('created_at')->orderBy('id')->lockForUpdate()->get();
 
         $restante = $cantidad;
         $consumido = collect();

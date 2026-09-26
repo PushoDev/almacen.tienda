@@ -66,6 +66,27 @@ test('fusionar dos lotes crea uno solo con la cantidad sumada, costo ponderado y
         ->and(collect($fusion->lotes_origen)->pluck('codigo')->all())->toBe(['AJUSTE-LEGADO-OLLA', 'LOTE-MOV-209-OLLA']);
 });
 
+test('el lote fusionado hereda la comisión propia del lote más viejo que la tenga', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    ['producto' => $producto, 'almacen' => $almacen, 'viejo' => $viejo, 'nuevo' => $nuevo] = ollaConDosLotes();
+    $nuevo->update(['comision' => 7]);
+
+    $this->postJson(route('productos.lotes.fusionar', $producto), ['almacen_id' => $almacen->id, 'lote_ids' => [$viejo->id, $nuevo->id]])->assertOk();
+
+    $resultante = LoteStock::where('codigo', "FUSION-{$producto->id}-{$almacen->id}-1")->sole();
+    expect((float) $resultante->comision)->toBe(7.0); // el viejo no tenía: queda la del que sí
+    expect(collect(LoteFusion::sole()->lotes_origen)->pluck('comision')->all())->toEqual([null, 7]);
+});
+
+test('si ningún lote tiene comisión propia, el fusionado tampoco (usa la del producto)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    ['producto' => $producto, 'almacen' => $almacen, 'viejo' => $viejo, 'nuevo' => $nuevo] = ollaConDosLotes();
+
+    $this->postJson(route('productos.lotes.fusionar', $producto), ['almacen_id' => $almacen->id, 'lote_ids' => [$viejo->id, $nuevo->id]])->assertOk();
+
+    expect(LoteStock::where('codigo', "FUSION-{$producto->id}-{$almacen->id}-1")->sole()->comision)->toBeNull();
+});
+
 test('sin precio de venta, el lote fusionado hereda el precio del producto', function () {
     $this->actingAs(User::factory()->admin()->create());
     ['producto' => $producto, 'almacen' => $almacen, 'viejo' => $viejo, 'nuevo' => $nuevo] = ollaConDosLotes();

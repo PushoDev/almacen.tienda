@@ -21,6 +21,7 @@ class LoteStock extends Model
         'cantidad_disponible',
         'precio_costo',
         'precio_venta',
+        'comision',
     ];
 
     protected $casts = [
@@ -28,6 +29,7 @@ class LoteStock extends Model
         'cantidad_disponible' => 'integer',
         'precio_costo' => 'decimal:2',
         'precio_venta' => 'decimal:2',
+        'comision' => 'decimal:2',
     ];
 
     protected static function boot()
