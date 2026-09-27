@@ -1,7 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ViaLogo } from '@/components/monedas/via-logo';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sileo } from '@/lib/sileo';
@@ -11,6 +13,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
+export interface ViaPagoMoneda {
+    slug: string;
+    nombre: string;
+    imagen_url: string | null;
+}
+
 export interface Moneda {
     id: number | string;
     codigo_moneda: string;
@@ -18,6 +26,8 @@ export interface Moneda {
     simbolo_moneda: string;
     tasa_cambio: number;
     imagen_url?: string | null;
+    /** Vías de transferencia que esta moneda admite (catálogo del CRUD de Monedas). */
+    vias_transferencia?: ViaPagoMoneda[];
 }
 
 export interface ClienteFisico {
@@ -65,21 +75,6 @@ const METODOS_PAGO: { id: 'efectivo' | 'transferencia'; name: string; imagen: st
     { id: 'transferencia', name: 'Transferencia', imagen: '/projects/metodos_pago/transferencia.webp' },
 ];
 
-// ─── Vías de pago disponibles ─────────────────────────────────────────────────
-
-const PAYMENT_VIAS = [
-    { id: 'zelle', name: 'Zelle' },
-    { id: 'cashapp', name: 'CashApp' },
-    { id: 'square', name: 'Square' },
-    { id: 'visa', name: 'Visa' },
-    { id: 'mastercard', name: 'MasterCard' },
-    { id: 'stripe', name: 'Stripe' },
-    { id: 'paypal', name: 'Paypal' },
-    { id: 'qvapay', name: 'QvaPay' },
-    { id: 'enzona', name: 'EnZona' },
-    { id: 'transfermovil', name: 'Transfermóvil' },
-];
-
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, onAddPayment }: PaymentFormProps) {
@@ -125,6 +120,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             symbol: m.simbolo_moneda,
             exchangeRate: m.tasa_cambio,
             imagenUrl: m.imagen_url ?? null,
+            viasTransferencia: m.vias_transferencia ?? [],
         })),
         [monedas]);
 
@@ -239,6 +235,9 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             amount: monto,
             cuenta_id: '',
             cliente_id: '',
+            // Las vías dependen de la moneda: una vía elegida para la moneda anterior puede no
+            // existir en esta (efectivo no lleva vía, así que no hay nada que limpiar ahí).
+            via: prev.method === 'transferencia' ? '' : prev.via,
         }));
         setDestinoSearch('');
         cargarCuentasFiltradas(monedaId, currentPayment.method);
@@ -393,6 +392,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                         disabled={!currentPayment.moneda_id}
                         min="0.0001"
                         step="0.0001"
+                        className="h-14"
                     />
                 </div>
 
@@ -407,7 +407,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                     >
                         <ComboboxInput
                             id="destino_pago"
-                            className="w-full"
+                            className="h-14 w-full"
                             placeholder="Buscar cuenta o cliente..."
                             showClear
                             disabled={!currentPayment.moneda_id}
@@ -433,18 +433,33 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                     </Combobox>
                 </div>
 
-                {/* Vía (solo transferencia) */}
+                {/* Vía (solo transferencia) — las que esta moneda admite, configuradas en Gestión de Monedas */}
                 {currentPayment.method === 'transferencia' && (
                     <div className="space-y-2">
                         <Label>Vía de pago</Label>
-                        <Select value={currentPayment.via} onValueChange={(v) => setCurrentPayment((prev) => ({ ...prev, via: v }))}>
-                            <SelectTrigger><SelectValue placeholder="Seleccione vía" /></SelectTrigger>
-                            <SelectContent>
-                                {PAYMENT_VIAS.map((via) => (
-                                    <SelectItem key={via.id} value={via.id}>{via.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        {selectedCurrencyInfo && selectedCurrencyInfo.viasTransferencia.length === 0 ? (
+                            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+                                {selectedCurrencyInfo.name} no tiene vías de transferencia configuradas.
+                            </p>
+                        ) : (
+                            <Select
+                                value={currentPayment.via}
+                                onValueChange={(v) => setCurrentPayment((prev) => ({ ...prev, via: v }))}
+                                disabled={!selectedCurrencyInfo}
+                            >
+                                <SelectTrigger className="h-14"><SelectValue placeholder="Seleccione vía" /></SelectTrigger>
+                                <SelectContent>
+                                    {(selectedCurrencyInfo?.viasTransferencia ?? []).map((via) => (
+                                        <SelectItem key={via.slug} value={via.slug} className="py-2">
+                                            <span className="flex items-center gap-2">
+                                                <ViaLogo slug={via.slug} nombre={via.nombre} imagenUrl={via.imagen_url} className="h-10" />
+                                                {via.nombre}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                 )}
 
@@ -456,6 +471,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                             value={currentPayment.referencia}
                             onChange={(e) => setCurrentPayment((prev) => ({ ...prev, referencia: e.target.value }))}
                             placeholder="Número de referencia"
+                            className="h-14"
                         />
                     </div>
                 )}
@@ -466,29 +482,39 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                 <Label>Monto a Pagar</Label>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
-                        <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={currentPayment.amount}
-                            onChange={(e) => setCurrentPayment((prev) => ({ ...prev, amount: e.target.value }))}
-                            placeholder="0.00"
-                            className="h-12 text-lg font-medium"
-                        />
+                        <InputGroup className="h-14 border-2 focus-within:border-primary">
+                            <InputGroupAddon className="text-muted-foreground text-xl font-bold">
+                                {selectedCurrencyInfo?.symbol ?? '$'}
+                            </InputGroupAddon>
+                            <InputGroupInput
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={currentPayment.amount}
+                                onChange={(e) => setCurrentPayment((prev) => ({ ...prev, amount: e.target.value }))}
+                                placeholder="0.00"
+                                className="text-xl font-bold tabular-nums"
+                            />
+                        </InputGroup>
                         {conversionCalculada && (
-                            <div className="rounded-lg bg-green-50 p-2 text-center">
-                                <p className="text-sm font-medium text-green-700">
-                                    {conversionCalculada.montoOriginal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                    {conversionCalculada.monedaSimbolo}{' '}={' '}
-                                    <span className="font-bold">
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5">
+                                <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                                    <span className="tabular-nums">
+                                        {conversionCalculada.montoOriginal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                        {conversionCalculada.monedaSimbolo}
+                                    </span>
+                                    <ArrowLeftRight className="h-4 w-4 shrink-0 text-emerald-500" />
+                                    <span className="text-base font-bold tabular-nums">
                                         {conversionCalculada.montoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                     </span>
-                                </p>
-                                <p className="mt-1 text-xs text-green-600">Tasa: {conversionCalculada.tasaCambio}</p>
+                                </div>
+                                <Badge className="shrink-0 gap-1 border-emerald-500/30 bg-emerald-500/15 font-mono text-emerald-700 tabular-nums dark:text-emerald-300">
+                                    Tasa {conversionCalculada.tasaCambio}
+                                </Badge>
                             </div>
                         )}
                     </div>
-                    <Button onClick={handleAddPayment} disabled={!canAdd} className="h-12 px-6">
+                    <Button onClick={handleAddPayment} disabled={!canAdd} className="h-14 px-6">
                         Agregar
                     </Button>
                 </div>
