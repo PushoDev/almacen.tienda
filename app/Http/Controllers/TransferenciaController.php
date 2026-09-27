@@ -20,11 +20,7 @@ class TransferenciaController extends Controller
 {
     public function formData()
     {
-        if (auth()->user()->role === 'vendedor') {
-            $cuentasOrigen = auth()->user()->cuentas()->with('moneda')->get();
-        } else {
-            $cuentasOrigen = Cuenta::with('moneda')->get();
-        }
+        $cuentasOrigen = auth()->user()->cuentasPropias()->with('moneda')->get();
         $cuentasDestino = $cuentasOrigen;
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();

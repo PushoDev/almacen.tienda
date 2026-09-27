@@ -10,6 +10,76 @@ use App\Models\User;
 // están declaradas globalmente en tests/Pest.php (compartidas entre archivos).
 
 // ==========================================================================
+// cuentasPropias() — admin/moderador deben ver SIEMPRE todas las cuentas (acceso
+// global, sin filas en user_cuentas); un vendedor solo las suyas asignadas. Antes
+// del fix, formData()/index() decidían con un `if role === 'vendedor'` copiado en
+// cada controlador — un olvido en cualquiera dejaba al admin sin ninguna cuenta.
+// ==========================================================================
+
+test('formData() de Ingreso entrega todas las cuentas a un admin, aunque no tenga ninguna asignada', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearCuentaEnMoneda(crearMonedaUsd());
+    crearCuentaEnMoneda(crearMonedaUsd());
+
+    $this->getJson(route('transacciones.ingreso.data'))
+        ->assertOk()
+        ->assertJsonCount(2, 'cuentasDestino');
+});
+
+test('formData() de Transferencia entrega todas las cuentas a un moderador, aunque no tenga ninguna asignada', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    crearCuentaEnMoneda(crearMonedaUsd());
+    crearCuentaEnMoneda(crearMonedaUsd());
+
+    $this->getJson(route('transacciones.transferencia.data'))
+        ->assertOk()
+        ->assertJsonCount(2, 'cuentasOrigen')
+        ->assertJsonCount(2, 'cuentasDestino');
+});
+
+test('index() de Transacciones entrega todas las cuentas de origen a un admin, sin filtrar por tipo_titular', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $cuenta->update(['tipo_titular' => 'externa']); // a un vendedor esta se le ocultaría
+
+    $this->get(route('transacciones'))->assertInertia(fn ($page) => $page
+        ->has('cuentasOrigen', 1)
+        ->where('cuentasOrigen.0.id', $cuenta->id));
+});
+
+test('index() de Distribución de Costos entrega todas las cuentas a un moderador, sin filtrar por tipo_titular', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $cuenta->update(['tipo_titular' => 'externa']);
+
+    $this->get(route('distribucion-costos.index'))->assertInertia(fn ($page) => $page
+        ->has('cuentas', 1)
+        ->where('cuentas.0.id', $cuenta->id));
+});
+
+test('un vendedor solo ve sus cuentas asignadas en formData() de Ingreso, sin distinguir el nivel de acceso todavía', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $propia = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
+    $cuentaCobro = crearCuentaEnMoneda(crearMonedaUsd());
+    $vendedor->cuentas()->attach($cuentaCobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+    crearCuentaEnMoneda(crearMonedaUsd()); // no asignada, no debe salir
+
+    $this->getJson(route('transacciones.ingreso.data'))
+        ->assertOk()
+        ->assertJsonCount(2, 'cuentasDestino');
+});
+
+// ==========================================================================
 // GASTO
 // ==========================================================================
 

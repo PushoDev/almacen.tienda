@@ -31,7 +31,7 @@ class CuentaController extends Controller
         $user = auth()->user();
         $cuentas = in_array($user->role, ['admin', 'moderador'])
             ? Cuenta::with('moneda')->get()
-            : $user->cuentas()->with('moneda')->get();
+            : $user->cuentasCompletas()->with('moneda')->get();
 
         $monedaPrincipal = Moneda::where('principal', true)
             ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'principal')
@@ -232,8 +232,9 @@ class CuentaController extends Controller
         $user = auth()->user();
         $esAdminOModerador = in_array($user->role, ['admin', 'moderador']);
 
-        // Vendedor solo puede ver el detalle de sus propias cuentas asignadas
-        if (! $esAdminOModerador && ! $user->cuentas()->where('cuentas.id', $cuenta->id)->exists()) {
+        // Vendedor solo puede ver el detalle de sus propias cuentas de acceso completo
+        // (una de cobro es compartida: solo la usa para cobrar, sin ver su saldo).
+        if (! $esAdminOModerador && ! $user->cuentasCompletas()->where('cuentas.id', $cuenta->id)->exists()) {
             abort(403);
         }
 

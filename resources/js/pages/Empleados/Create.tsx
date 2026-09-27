@@ -1,4 +1,5 @@
 import type { TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
+import { AccesoGlobalCard } from '@/components/empleados/acceso-global-card';
 import { AsignacionesCard } from '@/components/empleados/asignaciones-card';
 import type { CuentaAsignada, CuentaDisponible } from '@/components/empleados/tipos';
 import HeadingSmall from '@/components/heading-small';
@@ -150,15 +151,11 @@ export default function CreateEmpleadoPage({
                                     </Select>
                                     <InputError message={errors.role} />
                                 </div>
-
-                                {!isVendedor && (
-                                    <div className="bg-muted text-muted-foreground rounded-lg p-4 text-sm">
-                                        Los administradores y moderadores tienen acceso global. No requieren asignación de almacenes ni cuentas.
-                                    </div>
-                                )}
                             </div>
                         </CardContent>
                     </Card>
+
+                    {!isVendedor && <AccesoGlobalCard almacenes={almacenes} cuentas={cuentas} tiposCuenta={tiposCuenta} />}
 
                     {isVendedor && (
                         <>
