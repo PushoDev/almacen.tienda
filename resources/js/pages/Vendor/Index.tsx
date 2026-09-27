@@ -141,6 +141,7 @@ interface Moneda {
     tasa_cambio: number;
     principal?: boolean;
     estado?: boolean;
+    imagen_url?: string | null;
 }
 interface Payment {
     id: string;

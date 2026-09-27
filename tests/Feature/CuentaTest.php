@@ -64,6 +64,33 @@ test('un vendedor NO puede ver el detalle de una cuenta que no tiene asignada (4
     $response->assertStatus(403);
 });
 
+test('un vendedor NO puede ver el detalle de una cuenta asignada con acceso de cobro (403)', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $vendedor->cuentas()->attach($cuenta->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->get(route('cuentas.show', $cuenta->id));
+
+    $response->assertStatus(403);
+});
+
+test('el listado de Cuentas del vendedor solo trae sus cuentas de acceso completo', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $completa = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
+    $cobro = crearCuentaEnMoneda(crearMonedaUsd());
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $this->get(route('cuentas.index'))->assertInertia(fn ($page) => $page
+        ->has('cuentas', 1)
+        ->where('cuentas.0.id', $completa->id));
+});
+
 // ==========================================================================
 // EDITAR/ELIMINAR — admin-only (middleware check.cuenta.permission), CREAR —
 // abierto a cualquier rol autenticado. Cubre lo que la UI de Cuentas replica

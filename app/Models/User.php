@@ -115,6 +115,23 @@ class User extends Authenticatable
         return $this->cuentasUsables()->where('cuentas.id', $cuentaId)->exists();
     }
 
+    /**
+     * Cuentas "propias" de este usuario para elegir como origen/destino en Gasto, Ingreso,
+     * Transferencia, Transacciones y Distribución de Costos: admin y moderador ven TODAS las
+     * cuentas (acceso global, sin filas en `user_cuentas` — igual que `cuentasUsables()`); un
+     * vendedor ve las que tiene asignadas, sin distinguir todavía el nivel de acceso (`completo`/
+     * `cobro`) — eso es un paso aparte, pendiente de confirmar con el cliente.
+     *
+     * Único punto de verdad para el patrón repetido `role === 'vendedor' ? cuentas() :
+     * Cuenta::all()` que existía copiado en varios controladores — evita que alguno se quede
+     * comparando solo `cuentas()` y termine mostrándole al admin/moderador una lista vacía (ya
+     * pasó una vez con la comisión de venta, ver `cuentasUsables()`).
+     */
+    public function cuentasPropias(): Builder|BelongsToMany
+    {
+        return $this->isAdmin() || $this->isModerator() ? Cuenta::query() : $this->cuentas();
+    }
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (! $this->avatar) {

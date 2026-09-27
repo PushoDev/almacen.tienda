@@ -272,6 +272,14 @@
     --spotlight-brillo: oklch(0.879 0.169 91.605);
 }
 
+/* Acceso global (admin/moderador) en Crear/Editar Empleado — violeta, distinto de completo
+   (esmeralda), cobro (ámbar) y tarjeta (azul), para no confundir "puede usar" con "asignada". */
+.spotlight-card[data-estado='global'] {
+    --spotlight-base: oklch(0.541 0.281 293.009 / 0.4);
+    --spotlight-medio: oklch(0.606 0.25 292.717);
+    --spotlight-brillo: oklch(0.812 0.148 293.756);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .spotlight-card::before {
         animation: none;

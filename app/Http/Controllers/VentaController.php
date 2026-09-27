@@ -25,6 +25,7 @@ use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
 use App\Services\LoteConsumoService;
+use App\Services\MetodosPagoService;
 use App\Services\PrecioLoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,8 @@ use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class VentaController extends Controller
 {
+    public function __construct(private MetodosPagoService $metodosPago) {}
+
     // ========================================================================
     // MÉTODOS DE CARGA DE DATOS (API / JSON)
     // ========================================================================
@@ -282,7 +285,7 @@ class VentaController extends Controller
                             ->where('tipo_moneda', $moneda->codigo_moneda);
                     });
             })
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo', 'imagen');
 
         // ✅ NUEVO: Filtrar por tipo de cuenta según método de pago
         if ($request->has('metodo_pago') && $request->metodo_pago) {
@@ -306,6 +309,10 @@ class VentaController extends Controller
                     'id' => $cuenta->id,
                     'nombre_cuenta' => $cuenta->nombre_cuenta,
                     'saldo_actual' => $cuenta->saldo_cuenta,
+                    'tipo' => $cuenta->tipo,
+                    // Logo real del banco/tarjeta (o insignia de efectivo) para identificar la cuenta
+                    // de un vistazo en "Destino del Pago" — mismo mecanismo que Cuentas/Index.tsx.
+                    'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                     'moneda' => $cuenta->moneda ? [
                         'id' => $cuenta->moneda->id,
                         'codigo' => $cuenta->moneda->codigo_moneda,
@@ -417,6 +424,11 @@ class VentaController extends Controller
 
         $monedas = Moneda::where('estado', true)->get()
             ->map(function ($moneda) {
+                // Vías de pago que esta moneda admite dentro de la transferencia (catálogo configurado
+                // en el CRUD de Monedas) — el POS solo debe ofrecer las que la moneda elegida admite.
+                $resumenMetodos = $this->metodosPago->resumenDeMoneda($moneda);
+                $viasTransferencia = collect($resumenMetodos)->firstWhere('slug', 'transferencia')['vias'] ?? [];
+
                 return [
                     'id' => (string) $moneda->id, // Convertir a string para consistencia
                     'codigo_moneda' => $moneda->codigo_moneda,
@@ -425,6 +437,8 @@ class VentaController extends Controller
                     'tasa_cambio' => (float) $moneda->tasa_cambio,
                     'principal' => (bool) $moneda->principal,
                     'estado' => (bool) $moneda->estado,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+                    'vias_transferencia' => $viasTransferencia,
                 ];
             });
 
