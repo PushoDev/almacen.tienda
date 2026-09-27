@@ -285,7 +285,7 @@ class VentaController extends Controller
                             ->where('tipo_moneda', $moneda->codigo_moneda);
                     });
             })
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo', 'imagen');
 
         // ✅ NUEVO: Filtrar por tipo de cuenta según método de pago
         if ($request->has('metodo_pago') && $request->metodo_pago) {
@@ -309,6 +309,10 @@ class VentaController extends Controller
                     'id' => $cuenta->id,
                     'nombre_cuenta' => $cuenta->nombre_cuenta,
                     'saldo_actual' => $cuenta->saldo_cuenta,
+                    'tipo' => $cuenta->tipo,
+                    // Logo real del banco/tarjeta (o insignia de efectivo) para identificar la cuenta
+                    // de un vistazo en "Destino del Pago" — mismo mecanismo que Cuentas/Index.tsx.
+                    'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                     'moneda' => $cuenta->moneda ? [
                         'id' => $cuenta->moneda->id,
                         'codigo' => $cuenta->moneda->codigo_moneda,

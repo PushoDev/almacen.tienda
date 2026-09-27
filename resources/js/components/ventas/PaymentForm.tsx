@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sileo } from '@/lib/sileo';
 import axios from 'axios';
-import { ArrowLeftRight, DollarSign } from 'lucide-react';
+import { ArrowLeftRight, CreditCard, DollarSign, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -59,6 +59,10 @@ interface Cuenta {
     tipo_moneda: string;
     moneda?: { id: number | string; codigo: string; simbolo: string };
     saldo_actual?: number;
+    /** 'efectivo' | 'tarjeta' — para el ícono de respaldo cuando no tiene logo de banco. */
+    tipo?: string;
+    /** Logo real del banco/tarjeta (null si la cuenta no tiene imagen asignada). */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
 }
 
 interface PaymentFormProps {
@@ -133,15 +137,21 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
     // nunca mezclar <div> de encabezado como hermanos de ComboboxItem en la misma lista.
     const opcionesDestino = useMemo(() => {
         const cuentas = cuentasFiltradas.map((c) => ({
+            kind: 'cuenta' as const,
             value: `cuenta_${c.id}`,
             label: `🏦 ${c.nombre_cuenta}`,
             nombre: c.nombre_cuenta,
+            tipo: c.tipo,
+            banco: c.banco,
         }));
         const clientes = selectedCurrencyInfo?.code === 'USD'
             ? clientesFisicos.map((c) => ({
+                kind: 'cliente' as const,
                 value: `cliente_${c.id}`,
                 label: `👤 ${c.nombre_cliente}`,
                 nombre: c.nombre_cliente,
+                tipo: undefined,
+                banco: undefined,
             }))
             : [];
         return [...cuentas, ...clientes];
@@ -419,8 +429,31 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                                 ) : (
                                     <>
                                         {opcionesDestinoFiltradas.map((opcion) => (
-                                            <ComboboxItem key={opcion.value} value={opcion.value}>
-                                                <span className="min-w-0 truncate" title={opcion.nombre}>{opcion.label}</span>
+                                            <ComboboxItem key={opcion.value} value={opcion.value} className="py-2">
+                                                {opcion.kind === 'cuenta' ? (
+                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                        {opcion.banco ? (
+                                                            <img
+                                                                src={opcion.banco.imagen_url}
+                                                                alt=""
+                                                                aria-hidden="true"
+                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                            />
+                                                        ) : opcion.tipo === 'efectivo' ? (
+                                                            <Wallet className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                        ) : (
+                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                        )}
+                                                        <span className="min-w-0 flex-1 truncate" title={opcion.nombre}>{opcion.nombre}</span>
+                                                        {opcion.tipo && (
+                                                            <Badge variant="outline" className="ml-auto shrink-0 text-[10px] capitalize">
+                                                                {opcion.tipo}
+                                                            </Badge>
+                                                        )}
+                                                    </span>
+                                                ) : (
+                                                    <span className="min-w-0 truncate" title={opcion.nombre}>{opcion.label}</span>
+                                                )}
                                             </ComboboxItem>
                                         ))}
                                         {opcionesDestinoFiltradas.length === 0 && (
