@@ -425,6 +425,7 @@ class VentaController extends Controller
                     'tasa_cambio' => (float) $moneda->tasa_cambio,
                     'principal' => (bool) $moneda->principal,
                     'estado' => (bool) $moneda->estado,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
                 ];
             });
 

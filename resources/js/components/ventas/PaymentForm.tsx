@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
@@ -5,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sileo } from '@/lib/sileo';
 import axios from 'axios';
-import { DollarSign } from 'lucide-react';
+import { ArrowLeftRight, DollarSign } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -16,6 +17,7 @@ export interface Moneda {
     nombre_moneda: string;
     simbolo_moneda: string;
     tasa_cambio: number;
+    imagen_url?: string | null;
 }
 
 export interface ClienteFisico {
@@ -55,6 +57,13 @@ interface PaymentFormProps {
     remainingInUsd: number;
     onAddPayment: (payment: Payment) => void;
 }
+
+// ─── Métodos de pago (mismas imágenes que el CRUD de Monedas, components/monedas/metodos-pago-selector.tsx) ───
+
+const METODOS_PAGO: { id: 'efectivo' | 'transferencia'; name: string; imagen: string }[] = [
+    { id: 'efectivo', name: 'Efectivo', imagen: '/projects/metodos_pago/efectivo.webp' },
+    { id: 'transferencia', name: 'Transferencia', imagen: '/projects/metodos_pago/transferencia.webp' },
+];
 
 // ─── Vías de pago disponibles ─────────────────────────────────────────────────
 
@@ -115,6 +124,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             name: m.nombre_moneda,
             symbol: m.simbolo_moneda,
             exchangeRate: m.tasa_cambio,
+            imagenUrl: m.imagen_url ?? null,
         })),
         [monedas]);
 
@@ -327,10 +337,16 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                 <div className="space-y-2">
                     <Label>Método de pago</Label>
                     <Select value={currentPayment.method} onValueChange={handleMetodoChange}>
-                        <SelectTrigger><SelectValue placeholder="Seleccione método" /></SelectTrigger>
+                        <SelectTrigger className="h-14"><SelectValue placeholder="Seleccione método" /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="transferencia">Transferencia</SelectItem>
-                            <SelectItem value="efectivo">Efectivo</SelectItem>
+                            {METODOS_PAGO.map((metodo) => (
+                                <SelectItem key={metodo.id} value={metodo.id} className="py-2">
+                                    <span className="flex items-center gap-2">
+                                        <img src={metodo.imagen} alt="" aria-hidden="true" className="h-10 w-auto object-contain" />
+                                        {metodo.name}
+                                    </span>
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -339,11 +355,27 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                 <div className="space-y-2">
                     <Label>Moneda</Label>
                     <Select value={currentPayment.moneda_id} onValueChange={handleMonedaChange} disabled={!currentPayment.method}>
-                        <SelectTrigger><SelectValue placeholder="Seleccione moneda" /></SelectTrigger>
+                        <SelectTrigger className="h-14"><SelectValue placeholder="Seleccione moneda" /></SelectTrigger>
                         <SelectContent>
                             {currencies.map((c) => (
-                                <SelectItem key={c.id} value={c.id.toString()}>
-                                    {c.name} ({c.symbol}) — Tasa: {c.exchangeRate}
+                                <SelectItem key={c.id} value={c.id.toString()} className="py-2">
+                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                        {c.imagenUrl ? (
+                                            <img src={c.imagenUrl} alt="" aria-hidden="true" className="h-10 w-auto shrink-0 rounded object-contain" />
+                                        ) : (
+                                            <span className="bg-muted flex h-10 w-14 shrink-0 items-center justify-center rounded text-xs font-semibold">
+                                                {c.code}
+                                            </span>
+                                        )}
+                                        <span className="flex min-w-0 flex-col items-start leading-tight">
+                                            <span className="truncate font-medium">{c.name}</span>
+                                            <span className="text-muted-foreground text-xs">{c.symbol}</span>
+                                        </span>
+                                        <Badge className="ml-auto shrink-0 gap-1 border-sky-500/30 bg-sky-500/15 font-mono text-sky-700 tabular-nums dark:text-sky-300">
+                                            <ArrowLeftRight className="h-3 w-3" />
+                                            {c.exchangeRate}
+                                        </Badge>
+                                    </span>
                                 </SelectItem>
                             ))}
                         </SelectContent>
