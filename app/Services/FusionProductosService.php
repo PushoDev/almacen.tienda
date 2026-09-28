@@ -89,13 +89,23 @@ class FusionProductosService
     /**
      * Fusiona `$eliminar` dentro de `$conservar`.
      *
+     * Con `$almacenId`: la fusión queda acotada a ESE almacén — ninguna ficha de `$eliminar`
+     * puede tener stock en NINGÚN otro almacén (si lo tiene, se rechaza con un mensaje claro en
+     * vez de fusionarla completa "a ciegas"). `$conservar` sí puede existir en otros almacenes —
+     * esos quedan intactos, la fusión solo le suma lo de este almacén. Sin `$almacenId` se
+     * comporta como antes (fusión global) — lo sigue usando el buscador de duplicados de
+     * `/productos`, que no conoce el almacén; la pantalla por almacén (Productos/Edit.tsx,
+     * "Fusionar fichas en este almacén") siempre manda `$almacenId`. Pedido del cliente
+     * 2026-09-28: la fusión "general" mezclaba almacenes sin relación entre sí y confundía.
+     *
      * @param  Collection<int, Producto>  $eliminar
      * @param  array<int, array{precio_venta: float, comision?: float|null}>  $preciosPorAlmacen  almacen_id => precio elegido; obligatorio para cada almacén de conflictosDePrecio()
      * @return array{producto_id: int, fichas_fusionadas: int, cantidad_total: int, registros_reasignados: array<string, int>}
      *
-     * @throws ValidationException si las fichas no son hermanas o falta resolver algún precio
+     * @throws ValidationException si las fichas no son hermanas, falta resolver algún precio, o
+     *                             (con `$almacenId`) alguna ficha a eliminar tiene stock en otro almacén
      */
-    public function fusionar(Producto $conservar, Collection $eliminar, array $preciosPorAlmacen, User $user): array
+    public function fusionar(Producto $conservar, Collection $eliminar, array $preciosPorAlmacen, User $user, ?int $almacenId = null): array
     {
         $clave = $this->fichasHermanas->clave($conservar);
         $ajenas = $eliminar->reject(fn (Producto $p) => $this->fichasHermanas->clave($p) === $clave);
@@ -103,6 +113,21 @@ class FusionProductosService
             throw ValidationException::withMessages([
                 'productos_eliminar_ids' => 'Solo se pueden fusionar fichas del mismo producto (nombre, marca, modelo, capacidad y color). No coinciden: #'.$ajenas->pluck('id')->implode(', #').'.',
             ]);
+        }
+
+        if ($almacenId !== null) {
+            $fueraDelAlmacen = DB::table('almacen_producto')
+                ->whereIn('producto_id', $eliminar->pluck('id'))
+                ->where('almacen_id', '!=', $almacenId)
+                ->where('cantidad', '>', 0)
+                ->pluck('producto_id')
+                ->unique();
+
+            if ($fueraDelAlmacen->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'almacen_id' => 'La(s) ficha(s) #'.$fueraDelAlmacen->implode(', #').' también tienen stock en otro almacén — una fusión por almacén no puede tocarlas. Fusiónalas desde "Limpiar duplicados" si de verdad quieres juntarlas en todos sus almacenes.',
+                ]);
+            }
         }
 
         $todas = collect([$conservar])->merge($eliminar)->values();

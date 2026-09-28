@@ -2073,6 +2073,63 @@ test('getProductosPorAlmacen() resuelve la comisión de cada lote: la propia, la
     expect(collect($productos[$sinComisiones->id]['lotes'])->pluck('comision')->map(fn ($c) => (float) $c)->all())->toBe([2.0, 2.0]); // ninguno: la del producto
 });
 
+// ==========================================================================
+// FICHAS HERMANAS AGRUPADAS EN EL POS (2026-09-28) — "Vender de esta ficha"
+// ==========================================================================
+
+/**
+ * Dos fichas del mismo producto físico (nombre/marca/modelo/capacidad/color idénticos, distinto
+ * costo — el caso típico de la duplicación de fichas por precio) con precio en el almacén dado.
+ *
+ * @return array{0: Producto, 1: Producto} la más antigua primero
+ */
+function fichasHermanasConPrecio(Almacen $almacen, float $costoA, float $precioA, float $costoB, float $precioB): array
+{
+    $atributos = ['nombre_producto' => 'VENTILADOR HERMANAS', 'marca_producto' => 'F6', 'modelo_producto' => 'RECARGABLE', 'capacidad_producto' => '20000 MAH', 'color_producto' => null];
+
+    $vieja = Producto::factory()->create(array_merge($atributos, ['precio_compra_producto' => $costoA]));
+    $vieja->created_at = now()->subDay();
+    $vieja->save();
+    LoteStock::create(['codigo' => 'LOTE-VIEJA', 'producto_id' => $vieja->id, 'almacen_id' => $almacen->id, 'cantidad' => 10, 'precio_costo' => $costoA]);
+    $vieja->almacenes()->attach($almacen->id, ['cantidad' => 10]);
+    DB::table('producto_vendedors')->insert(['producto_id' => $vieja->id, 'almacen_id' => $almacen->id, 'precio_venta' => $precioA, 'venta_ganancia' => $precioA - $costoA, 'created_at' => now(), 'updated_at' => now()]);
+
+    $nueva = Producto::factory()->create(array_merge($atributos, ['precio_compra_producto' => $costoB]));
+    LoteStock::create(['codigo' => 'LOTE-NUEVA', 'producto_id' => $nueva->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => $costoB]);
+    $nueva->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    DB::table('producto_vendedors')->insert(['producto_id' => $nueva->id, 'almacen_id' => $almacen->id, 'precio_venta' => $precioB, 'venta_ganancia' => $precioB - $costoB, 'created_at' => now(), 'updated_at' => now()]);
+
+    return [$vieja, $nueva];
+}
+
+test('getProductosPorAlmacen() agrupa fichas hermanas en una sola tarjeta con "opciones", la más antigua primero', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    [$vieja, $nueva] = fichasHermanasConPrecio($almacen, costoA: 30.09, precioA: 49, costoB: 37.34, precioB: 45);
+
+    $productos = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json();
+
+    expect($productos)->toHaveCount(1);
+    expect($productos[0]['id'])->toBe($vieja->id);
+    $opcionesIds = collect($productos[0]['opciones'])->pluck('id')->all();
+    expect($opcionesIds)->toBe([$vieja->id, $nueva->id]);
+    expect((float) $productos[0]['opciones'][0]['precio_venta'])->toBe(49.0)
+        ->and((float) $productos[0]['opciones'][1]['precio_venta'])->toBe(45.0);
+});
+
+test('getProductosPorAlmacen() no agrupa fichas de productos distintos', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    crearProductoConPrecio($almacen, 10, 20);
+    crearProductoConPrecio($almacen, 15, 25);
+
+    $productos = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json();
+
+    expect($productos)->toHaveCount(2);
+    expect($productos[0])->not->toHaveKey('opciones');
+    expect($productos[1])->not->toHaveKey('opciones');
+});
+
 test('vender con el lote elegido usa su precio propio como base y mantiene la comisión (el excedente no va al vendedor)', function () {
     $this->actingAs(User::factory()->admin()->create());
     $almacen = Almacen::factory()->puntoVenta()->create();

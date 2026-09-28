@@ -228,3 +228,82 @@ test('duplicados agrupa fichas hermanas aunque difieran en mayúsculas y comilla
         ->assertJsonPath('grupos.0.conflictos_precio.0.almacen_id', $almacen->id)
         ->assertJsonPath('grupos.0.conflictos_precio.0.promedio_ponderado', 49.25);
 });
+
+// ==========================================================================
+// FUSIÓN POR ALMACÉN (2026-09-28) — Productos/Edit.tsx, "Fusionar fichas en este almacén"
+// ==========================================================================
+
+test('fusionar-en-almacen rechaza una ficha que también tiene stock en otro almacén', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $bejucal = Almacen::factory()->create(['nombre_almacen' => 'BEJUCAL']);
+    $otroAlmacen = Almacen::factory()->create(['nombre_almacen' => 'MANZANILLO']);
+    $conservar = fichaVentilador();
+    $eliminar = fichaVentilador();
+    stockConLote($conservar, $bejucal, 257, 30);
+    // La ficha a eliminar vive en Bejucal Y en Manzanillo — no se puede fusionar solo en Bejucal.
+    stockConLote($eliminar, $bejucal, 23, 37);
+    stockConLote($eliminar, $otroAlmacen, 50, 37);
+
+    $response = $this->post(route('productos.fusionar-en-almacen', $conservar), [
+        'almacen_id' => $bejucal->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ]);
+
+    $response->assertSessionHasErrors('almacen_id');
+    $this->assertModelExists($eliminar);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $eliminar->id, 'almacen_id' => $otroAlmacen->id, 'cantidad' => 50]);
+});
+
+test('fusionar-en-almacen junta las fichas confinadas a ese almacén sin tocar al conservar en sus otros almacenes', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $bejucal = Almacen::factory()->create(['nombre_almacen' => 'BEJUCAL']);
+    $manzanillo = Almacen::factory()->create(['nombre_almacen' => 'MANZANILLO']);
+    $conservar = fichaVentilador();
+    $eliminar = fichaVentilador();
+    // El conservar también vive en Manzanillo — eso no debe cambiar.
+    stockConLote($conservar, $bejucal, 257, 30);
+    stockConLote($conservar, $manzanillo, 61, 30);
+    stockConLote($eliminar, $bejucal, 23, 37);
+
+    $response = $this->post(route('productos.fusionar-en-almacen', $conservar), [
+        'almacen_id' => $bejucal->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ]);
+
+    $response->assertRedirect(route('productos.edit', $conservar));
+    $this->assertModelMissing($eliminar);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $conservar->id, 'almacen_id' => $bejucal->id, 'cantidad' => 280]);
+    $this->assertDatabaseHas('almacen_producto', ['producto_id' => $conservar->id, 'almacen_id' => $manzanillo->id, 'cantidad' => 61]);
+});
+
+test('fusionar-en-almacen no deja fusionar la ficha consigo misma', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $conservar = fichaVentilador();
+    stockConLote($conservar, $almacen, 10, 30);
+
+    $response = $this->post(route('productos.fusionar-en-almacen', $conservar), [
+        'almacen_id' => $almacen->id,
+        'productos_eliminar_ids' => [$conservar->id],
+    ]);
+
+    $response->assertSessionHasErrors('productos_eliminar_ids.0');
+    $this->assertModelExists($conservar);
+});
+
+test('un vendedor no puede fusionar-en-almacen', function () {
+    $this->actingAs(User::factory()->vendedor()->create());
+    $almacen = Almacen::factory()->create();
+    $conservar = fichaVentilador();
+    $eliminar = fichaVentilador();
+    stockConLote($conservar, $almacen, 10, 30);
+    stockConLote($eliminar, $almacen, 5, 37);
+
+    $response = $this->post(route('productos.fusionar-en-almacen', $conservar), [
+        'almacen_id' => $almacen->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ]);
+
+    $response->assertForbidden();
+    $this->assertModelExists($eliminar);
+});

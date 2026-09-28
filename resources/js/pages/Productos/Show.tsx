@@ -100,6 +100,19 @@ export default function ShowPageProductos({
         return ((costoAlmacen ?? 0) * (cantidadAlmacen ?? 0)).toFixed(2);
     };
 
+    // Fichas hermanas con stock en un almacén puntual — mismo criterio que Edit.tsx, para que la
+    // tarjeta de ese almacén se vea igual de detallada aunque el "lote" sea en realidad otra ficha.
+    const hermanasEnAlmacen = (almacenId: number) => fichas_hermanas.filter((f) => f.almacenes.some((a) => a.id === almacenId));
+
+    // Almacenes donde SOLO viven fichas hermanas (esta ficha no tiene stock ahí) — de solo
+    // lectura, para ver el producto completo sin importar por cuál ID entraste.
+    const idsAlmacenesPropios = new Set((producto.almacenes ?? []).map((a) => a.id));
+    const almacenesSoloHermanas = Array.from(
+        new Map(
+            fichas_hermanas.flatMap((f) => f.almacenes.filter((a) => !idsAlmacenesPropios.has(a.id))).map((a) => [a.id, a]),
+        ).values(),
+    );
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Producto - ${producto.nombre_producto}`} />
@@ -301,28 +314,55 @@ export default function ShowPageProductos({
                                     </div>
                                 </CardHeader>
                                 <CardContent className="space-y-3 pt-6">
-                                    {fichas_hermanas.map((hermana) => (
-                                        <Link
-                                            key={hermana.id}
-                                            href={route('productos.show', { producto: hermana.id })}
-                                            className="block rounded-lg border p-3 transition-colors hover:bg-muted/50"
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <p className="font-mono text-xs text-muted-foreground">{hermana.codigo_producto}</p>
-                                                    <p className="font-semibold text-green-600">${formatPrecio(hermana.precio_compra_producto)}</p>
-                                                </div>
-                                                <div className="text-right text-sm">
-                                                    <p className="font-medium">{hermana.cantidad_total} unidades</p>
-                                                    <p className="text-muted-foreground">
-                                                        {hermana.almacenes.length > 0
-                                                            ? hermana.almacenes.map((a) => a.nombre_almacen).join(', ')
-                                                            : 'Sin stock'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </Link>
-                                    ))}
+                                    {(() => {
+                                        const misAlmacenIds = (producto.almacenes ?? []).map((a) => a.id);
+                                        const enComun = (hermana: FichaHermanaProps) =>
+                                            hermana.almacenes.filter((a) => misAlmacenIds.includes(a.id));
+
+                                        return fichas_hermanas.map((hermana) => {
+                                            const comunes = enComun(hermana);
+
+                                            return (
+                                                <Link
+                                                    key={hermana.id}
+                                                    href={route('productos.show', { producto: hermana.id })}
+                                                    className="block rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="font-mono text-xs text-muted-foreground">{hermana.codigo_producto}</p>
+                                                            <p className="font-semibold text-green-600">
+                                                                ${formatPrecio(hermana.precio_compra_producto)}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right text-sm">
+                                                            <p className="font-medium">{hermana.cantidad_total} unidades</p>
+                                                            <p className="text-muted-foreground">
+                                                                {hermana.almacenes.length > 0
+                                                                    ? hermana.almacenes.map((a) => a.nombre_almacen).join(', ')
+                                                                    : 'Sin stock'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {comunes.length > 0 && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="mt-2 gap-1 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                                                        >
+                                                            <Layers size={11} />
+                                                            También en {comunes.map((a) => a.nombre_almacen).join(', ')} — se pueden fusionar ahí
+                                                        </Badge>
+                                                    )}
+                                                </Link>
+                                            );
+                                        });
+                                    })()}
+                                    <Link href={route('productos.edit', { producto: producto.id })}>
+                                        <Button type="button" variant="outline" size="sm" className="w-full gap-1.5">
+                                            <Edit2 size={13} />
+                                            Ir a Editar Producto para fusionar en un almacén
+                                        </Button>
+                                    </Link>
                                 </CardContent>
                             </Card>
                         )}
@@ -431,13 +471,15 @@ export default function ShowPageProductos({
                                                         </div>
                                                     </div>
 
-                                                    {almacen.lotes.length > 1 && (
+                                                    {(almacen.lotes.length > 1 || hermanasEnAlmacen(almacen.id).length > 0) && (
                                                         <div className="rounded-md border border-dashed bg-white/60 p-3 dark:bg-black/10">
                                                             <p className="mb-2 flex items-center gap-1 text-xs font-medium text-muted-foreground">
                                                                 <Layers size={12} />
-                                                                {new Set(almacen.lotes.map((lote) => lote.costo)).size > 1
-                                                                    ? `Este almacén tiene ${almacen.lotes.length} lotes a costo distinto`
-                                                                    : `Este almacén tiene ${almacen.lotes.length} lotes (mismo costo)`}
+                                                                {almacen.lotes.length > 1
+                                                                    ? new Set(almacen.lotes.map((lote) => lote.costo)).size > 1
+                                                                        ? `Este almacén tiene ${almacen.lotes.length} lotes a costo distinto`
+                                                                        : `Este almacén tiene ${almacen.lotes.length} lotes (mismo costo)`
+                                                                    : 'Este almacén tiene lotes a costo distinto, en otra ficha'}
                                                             </p>
                                                             <div className="space-y-1.5">
                                                                 {almacen.lotes.map((lote) => (
@@ -480,6 +522,33 @@ export default function ShowPageProductos({
                                                                         </div>
                                                                     </div>
                                                                 ))}
+                                                                {hermanasEnAlmacen(almacen.id).map((hermana) => {
+                                                                    const cantidadAqui = hermana.almacenes.find((a) => a.id === almacen.id)?.cantidad ?? 0;
+
+                                                                    return (
+                                                                        <Link
+                                                                            key={`hermana-${hermana.id}`}
+                                                                            href={route('productos.show', { producto: hermana.id })}
+                                                                            className="flex items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50/50 px-2 py-1.5 text-xs hover:bg-amber-100/60 dark:border-amber-900 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+                                                                        >
+                                                                            <span className="font-mono text-muted-foreground">
+                                                                                {hermana.codigo_producto} <span className="text-amber-600">· otra ficha</span>
+                                                                            </span>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Badge variant="outline" className="gap-1">
+                                                                                    <Package size={10} />
+                                                                                    {cantidadAqui} uds.
+                                                                                </Badge>
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                                >
+                                                                                    <DollarSign size={10} />${formatPrecio(hermana.precio_compra_producto)}
+                                                                                </Badge>
+                                                                            </div>
+                                                                        </Link>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}
@@ -505,6 +574,50 @@ export default function ShowPageProductos({
                                                             </AccordionContent>
                                                         </AccordionItem>
                                                     </Accordion>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {/* Almacenes donde esta ficha no tiene stock, pero una hermana sí — de solo
+                                            lectura, para ver el producto completo sin importar por cuál ID entraste. */}
+                                        {almacenesSoloHermanas.map((almacenForaneo) => (
+                                            <div
+                                                key={`foraneo-${almacenForaneo.id}`}
+                                                className="rounded-lg border border-dashed bg-gray-50 p-4 opacity-90 dark:bg-gray-800"
+                                            >
+                                                <div className="flex items-center space-x-2">
+                                                    <Warehouse className="text-sidebar-accent" size={20} />
+                                                    <h4 className="text-sidebar-accent font-medium">{almacenForaneo.nombre_almacen}</h4>
+                                                    <span className="text-xs text-muted-foreground">(otra ficha, no esta)</span>
+                                                </div>
+                                                <Separator className="my-3" />
+                                                <div className="space-y-1.5">
+                                                    {hermanasEnAlmacen(almacenForaneo.id).map((hermana) => {
+                                                        const cantidadAqui = hermana.almacenes.find((a) => a.id === almacenForaneo.id)?.cantidad ?? 0;
+
+                                                        return (
+                                                            <Link
+                                                                key={`hermana-${hermana.id}`}
+                                                                href={route('productos.show', { producto: hermana.id })}
+                                                                className="flex items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50/50 px-2 py-1.5 text-xs hover:bg-amber-100/60 dark:border-amber-900 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+                                                            >
+                                                                <span className="font-mono text-muted-foreground">
+                                                                    {hermana.codigo_producto} <span className="text-amber-600">· otra ficha</span>
+                                                                </span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Badge variant="outline" className="gap-1">
+                                                                        <Package size={10} />
+                                                                        {cantidadAqui} uds.
+                                                                    </Badge>
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                    >
+                                                                        <DollarSign size={10} />${formatPrecio(hermana.precio_compra_producto)}
+                                                                    </Badge>
+                                                                </div>
+                                                            </Link>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         ))}

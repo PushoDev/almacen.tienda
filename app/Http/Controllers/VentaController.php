@@ -24,6 +24,7 @@ use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
+use App\Services\FichasHermanasService;
 use App\Services\LoteConsumoService;
 use App\Services\MetodosPagoService;
 use App\Services\PrecioLoteService;
@@ -38,7 +39,7 @@ use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class VentaController extends Controller
 {
-    public function __construct(private MetodosPagoService $metodosPago) {}
+    public function __construct(private MetodosPagoService $metodosPago, private FichasHermanasService $fichasHermanas) {}
 
     // ========================================================================
     // MÉTODOS DE CARGA DE DATOS (API / JSON)
@@ -166,6 +167,9 @@ class VentaController extends Controller
 
                 return [
                     'id' => $producto->id,
+                    // Solo para agrupar fichas hermanas más abajo — no llega al JSON final.
+                    '_clave_hermanas' => $this->fichasHermanas->clave($producto),
+                    '_created_at' => $producto->created_at,
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
                     'modelo_producto' => $producto->modelo_producto,
@@ -199,7 +203,30 @@ class VentaController extends Controller
                 ];
             });
 
-        return response()->json($productos->filter(fn ($p) => $p['tiene_precio'])->values());
+        $limpiar = fn (array $p) => collect($p)->except(['_clave_hermanas', '_created_at'])->all();
+
+        // Fichas hermanas con precio en este almacén (mismo producto, costo/precio distinto —
+        // ver FichasHermanasService) se agrupan en UNA sola tarjeta: la más antigua es la que se
+        // ve, con las demás en 'opciones' para el selector "Vender de esta ficha" del POS. Pedido
+        // del cliente 2026-09-28: antes salían como tarjetas sueltas, sin forma de saber que eran
+        // el mismo producto ni de elegir a propósito de cuál vender.
+        $agrupados = $productos->filter(fn ($p) => $p['tiene_precio'])
+            ->values()
+            ->groupBy('_clave_hermanas')
+            ->flatMap(function ($grupo) use ($limpiar) {
+                if ($grupo->count() < 2) {
+                    return [$limpiar($grupo->first())];
+                }
+
+                $ordenado = $grupo->sortBy('_created_at')->values();
+                $principal = $limpiar($ordenado->first());
+                $principal['opciones'] = $ordenado->map($limpiar)->values()->all();
+
+                return [$principal];
+            })
+            ->values();
+
+        return response()->json($agrupados);
     }
 
     /**

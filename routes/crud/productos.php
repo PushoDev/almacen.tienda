@@ -14,6 +14,11 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/listado-productos/duplicados', [ProductoController::class, 'duplicados'])->name('productos.duplicados');
             Route::post('/listado-productos/normalizar-duplicados', [ProductoController::class, 'normalizarDuplicados'])->name('productos.normalizar');
             Route::post('/listado-productos/fusionar-duplicados', [ProductoController::class, 'fusionarDuplicados'])->name('productos.fusionar');
+            // Fusión acotada a un solo almacén, desde Productos/Edit.tsx — a diferencia de la de
+            // arriba, rechaza cualquier ficha que también tenga stock en otro almacén (ver
+            // FusionProductosService::fusionar()). Pedido del cliente 2026-09-28: no mezclar
+            // almacenes sin relación entre sí.
+            Route::post('/listado-productos/{producto}/fusionar-en-almacen', [ProductoController::class, 'fusionarEnAlmacen'])->name('productos.fusionar-en-almacen');
 
             // Historial de importaciones de Excel: listado, detalle fila por fila y vista previa de "deshacer".
             Route::get('/importaciones-productos', [ImportacionProductoController::class, 'index'])->name('importaciones-productos.index');

@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -1194,5 +1195,49 @@ class ProductoController extends Controller
             'message' => 'Fusión completada. Producto conservado: ID '.$resultado['producto_id'].' — '.$resultado['cantidad_total'].' unidades totales. Ventas, compras, lotes y movimientos de las fichas fusionadas pasaron a esta ficha.',
             'resultado' => $resultado,
         ]);
+    }
+
+    /**
+     * Fusiona fichas hermanas dentro de UN SOLO almacén, desde el lápiz de "Fusionar fichas en
+     * este almacén" de Productos/Edit.tsx. A diferencia de fusionarDuplicados() (el buscador
+     * global de /productos), rechaza cualquier ficha a eliminar que también tenga stock en otro
+     * almacén — ver FusionProductosService::fusionar(). `$producto` es la ficha que se conserva.
+     */
+    public function fusionarEnAlmacen(Request $request, Producto $producto, FusionProductosService $fusion, FichasHermanasService $fichasHermanas)
+    {
+        $validated = $request->validate([
+            'almacen_id' => 'required|exists:almacens,id',
+            'productos_eliminar_ids' => 'required|array|min:1',
+            'productos_eliminar_ids.*' => ['integer', 'distinct', 'exists:productos,id', Rule::notIn([$producto->id])],
+            'precio_venta' => 'nullable|numeric|min:0.01',
+            'comision' => 'nullable|numeric|min:0',
+        ]);
+
+        $almacenId = (int) $validated['almacen_id'];
+        // hermanasConStockEnAlmacen() incluye a $producto mismo si tiene stock ahí — se excluye
+        // a propósito: fusionar una ficha consigo misma la borraría al final (each->delete()).
+        $candidatas = $fichasHermanas->hermanasConStockEnAlmacen($producto, $almacenId)
+            ->pluck('id')
+            ->reject(fn ($id) => $id === $producto->id)
+            ->all();
+        $noSonHermanasAqui = array_diff($validated['productos_eliminar_ids'], $candidatas);
+
+        if ($noSonHermanasAqui !== []) {
+            throw ValidationException::withMessages([
+                'productos_eliminar_ids' => 'Ficha(s) #'.implode(', #', $noSonHermanasAqui).' no son hermanas de esta con stock en este almacén.',
+            ]);
+        }
+
+        $eliminar = Producto::whereIn('id', $validated['productos_eliminar_ids'])->get();
+        $preciosPorAlmacen = isset($validated['precio_venta'])
+            ? [$almacenId => ['precio_venta' => $validated['precio_venta'], 'comision' => $validated['comision'] ?? null]]
+            : [];
+
+        $resultado = DB::transaction(
+            fn () => $fusion->fusionar($producto, $eliminar, $preciosPorAlmacen, $request->user(), $almacenId)
+        );
+
+        return redirect()->route('productos.edit', $producto->id)
+            ->with('success', 'Fichas fusionadas en este almacén — '.$resultado['cantidad_total'].' unidades totales.');
     }
 }

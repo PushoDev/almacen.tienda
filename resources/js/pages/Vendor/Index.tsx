@@ -118,6 +118,10 @@ interface Producto {
     // FIFO, ver LoteConsumoService). El precio base y la comisión de la línea salen del lote elegido
     // — ver loteActualDe() y agregarAlCarrito().
     lotes?: LoteVenta[];
+    // Fichas hermanas con precio en este almacén (2026-09-28, mismo producto físico, costo/precio
+    // distinto — ver FichasHermanasService): con 2+ el backend agrupa en una sola tarjeta y manda
+    // aquí cada opción completa (la más antigua primero). Ver productoActivo().
+    opciones?: Producto[];
 }
 interface ItemCarrito {
     id: string;
@@ -187,6 +191,12 @@ export default function PuntoVentaOficial({
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [loteSeleccionadoPorProducto, setLoteSeleccionadoPorProducto] = useState<Record<string, number>>({});
+    // "Vender de esta ficha" (2026-09-28): cuando el mismo producto tiene 2+ fichas con precio en
+    // este almacén (ver FichasHermanasService), getProductosPorAlmacen() las agrupa en una sola
+    // tarjeta con `opciones` — este Record guarda cuál eligió el vendedor, por id de la ficha
+    // MÁS ANTIGUA del grupo (la que identifica la tarjeta). Sin elegir, se usa la más antigua
+    // (opciones[0], mismo criterio FIFO que los lotes).
+    const [fichaSeleccionadaPorGrupo, setFichaSeleccionadaPorGrupo] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
 
@@ -226,6 +236,9 @@ export default function PuntoVentaOficial({
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
 
     const [productoVistaRapida, setProductoVistaRapida] = useState<Producto | null>(null);
+    // Grupo original de productoVistaRapida (si venía de una tarjeta con "opciones") — para poder
+    // exigir la misma confirmación de precio distinto también desde el modal de Vista Rápida.
+    const [grupoVistaRapida, setGrupoVistaRapida] = useState<Producto | null>(null);
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
 
     const currencies = useMemo(() => {
@@ -338,6 +351,9 @@ export default function PuntoVentaOficial({
                     producto.marca_producto?.toLowerCase().includes(termino) ||
                     producto.codigo_barras?.toLowerCase().includes(termino) ||
                     producto.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase().includes(termino)) ||
+                    // El código escaneado puede ser de una ficha hermana (2026-09-28) — la tarjeta
+                    // agrupada solo trae sus propios códigos arriba, hay que mirar también en opciones.
+                    producto.opciones?.some((opcion) => opcion.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase().includes(termino))) ||
                     producto.categoria_nombre?.toLowerCase().includes(termino)) ??
                 false,
         );
@@ -385,6 +401,41 @@ export default function PuntoVentaOficial({
 
         return codigosDisponibles.find((codigo) => codigo.es_default) || codigosDisponibles[0];
     };
+
+    // Si lo que está en el buscador es justo el código de barras de una de las fichas del grupo,
+    // esa es la que se vende — quien escanea ya resolvió la ambigüedad, no tiene sentido pedirle
+    // que además confirme el selector.
+    const fichaEscaneada = (grupo: Producto): Producto | null => {
+        const termino = busqueda.trim().toLowerCase();
+        if (!termino || !grupo.opciones) {
+            return null;
+        }
+
+        return grupo.opciones.find((opcion) => opcion.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase() === termino)) ?? null;
+    };
+
+    // Ficha con la que se vendería esta tarjeta: la escaneada, si no la elegida en "Vender de esta
+    // ficha", y si no la más antigua (opciones[0], la propia tarjeta si no hay grupo).
+    const productoActivo = (grupo: Producto): Producto => {
+        if (!grupo.opciones || grupo.opciones.length <= 1) {
+            return grupo;
+        }
+
+        const escaneada = fichaEscaneada(grupo);
+        if (escaneada) {
+            return escaneada;
+        }
+
+        const elegidoId = fichaSeleccionadaPorGrupo[String(grupo.id)];
+
+        return grupo.opciones.find((opcion) => opcion.id === elegidoId) ?? grupo.opciones[0];
+    };
+
+    // Si las fichas del grupo venden a precios distintos, no basta con el default silencioso — el
+    // vendedor tiene que abrir el selector y elegir a propósito antes de poder agregar al carrito
+    // (si no, el cliente podría pagar de más o de menos solo por cuál tarjeta tocó el vendedor).
+    const preciosDistintosEnGrupo = (grupo: Producto): boolean =>
+        !!grupo.opciones && new Set(grupo.opciones.map((opcion) => opcion.precio_venta)).size > 1;
 
     // Lote con el que se vendería este producto: el elegido en el selector y, por defecto (o si lo
     // elegido ya no es de este almacén), el más antiguo — el primero de la lista.
@@ -956,7 +1007,15 @@ export default function PuntoVentaOficial({
                                     <CardContent className="pt-5">
                                         {productosFiltrados.length > 0 ? (
                                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                                                {productosFiltrados.map((producto, index) => {
+                                                {productosFiltrados.map((productoGrupo, index) => {
+                                                    // La tarjeta se dibuja con la ficha ACTIVA del grupo (por defecto la más antigua) —
+                                                    // todo lo de abajo sigue igual, solo cambia cuál "producto" resuelve.
+                                                    const producto = productoActivo(productoGrupo);
+                                                    const tieneOpciones = (productoGrupo.opciones?.length ?? 0) > 1;
+                                                    const fichaConfirmada =
+                                                        fichaSeleccionadaPorGrupo[String(productoGrupo.id)] !== undefined ||
+                                                        !!fichaEscaneada(productoGrupo);
+                                                    const requiereConfirmarFicha = tieneOpciones && preciosDistintosEnGrupo(productoGrupo) && !fichaConfirmada;
                                                     const stockStatus = getStockStatus(producto.stock_disponible);
                                                     const codigosDisponibles = (producto.codigos || []).filter((codigo) => codigo.cantidad > 0);
                                                     const codigoSeleccionadoActual =
@@ -991,6 +1050,7 @@ export default function PuntoVentaOficial({
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             setProductoVistaRapida(producto);
+                                                                            setGrupoVistaRapida(tieneOpciones ? productoGrupo : null);
                                                                             setIsVistaRapidaOpen(true);
                                                                         }}
                                                                     >
@@ -1063,6 +1123,45 @@ export default function PuntoVentaOficial({
                                                                         </div>
                                                                     )}
                                                                 </div>
+                                                                {tieneOpciones && productoGrupo.opciones && (
+                                                                    <div className="mt-3 space-y-1">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <Label className="text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                                                                Vender de este lote
+                                                                            </Label>
+                                                                            <Badge variant="outline" className="border-sky-500 text-[10px] text-sky-700 dark:text-sky-300">
+                                                                                {productoGrupo.opciones.length} lotes
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <Select
+                                                                            value={producto.id.toString()}
+                                                                            onValueChange={(value) =>
+                                                                                setFichaSeleccionadaPorGrupo((prev) => ({
+                                                                                    ...prev,
+                                                                                    [String(productoGrupo.id)]: Number(value),
+                                                                                }))
+                                                                            }
+                                                                        >
+                                                                            <SelectTrigger className="h-8 border-2 border-sky-500 bg-sky-50 text-xs font-medium text-sky-900 shadow-sm ring-2 ring-sky-500/20 dark:bg-sky-950/40 dark:text-sky-100">
+                                                                                <SelectValue placeholder="Seleccionar lote" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {productoGrupo.opciones.map((opcion, posicion) => (
+                                                                                    <SelectItem key={opcion.id} value={opcion.id.toString()}>
+                                                                                        ${(opcion.precio_venta ?? 0).toFixed(2)} · {opcion.stock_disponible} uds.
+                                                                                        {posicion === 0 ? ' · más antiguo' : ''}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                        {requiereConfirmarFicha && (
+                                                                            <p className="text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                                                                                Este producto tiene lotes a precios distintos — confirma de cuál
+                                                                                vas a vender antes de agregar.
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                                 {codigosDisponibles.length > 1 && (
                                                                     <div className="mt-3 space-y-1">
                                                                         <Label className="text-xs">Codebar para esta venta</Label>
@@ -1139,11 +1238,12 @@ export default function PuntoVentaOficial({
                                                                                     !producto.precio_venta ||
                                                                                     producto.precio_venta <= 0)) ||
                                                                             producto.stock_disponible <= 0 ||
-                                                                            codigosDisponibles.length === 0
+                                                                            codigosDisponibles.length === 0 ||
+                                                                            requiereConfirmarFicha
                                                                         }
                                                                         size="sm"
                                                                         className="bg-primary text-primary-foreground h-10 w-10 rounded-full p-0 shadow-md transition-all hover:scale-105 hover:shadow-lg disabled:opacity-50"
-                                                                        title="Agregar al carrito"
+                                                                        title={requiereConfirmarFicha ? 'Confirma de cuál lote vender primero' : 'Agregar al carrito'}
                                                                     >
                                                                         <Plus className="h-5 w-5" />
                                                                     </Button>
@@ -1666,6 +1766,11 @@ export default function PuntoVentaOficial({
                             const loteActualModal = loteActualDe(productoVistaRapida);
                             const loteSeleccionadoModal = loteActualModal?.id.toString() ?? '';
                             const precioMostradoModal = loteActualModal?.precio_venta ?? productoVistaRapida.precio_venta;
+                            const requiereConfirmarFichaModal =
+                                !!grupoVistaRapida &&
+                                preciosDistintosEnGrupo(grupoVistaRapida) &&
+                                fichaSeleccionadaPorGrupo[String(grupoVistaRapida.id)] === undefined &&
+                                !fichaEscaneada(grupoVistaRapida);
                             return (
                                 <div className="grid grid-cols-1 gap-6 px-6 py-4 md:grid-cols-2">
                                     {/* Columna de Imagen */}
@@ -1812,8 +1917,10 @@ export default function PuntoVentaOficial({
                                                 disabled={
                                                     !productoVistaRapida.tiene_precio ||
                                                     productoVistaRapida.stock_disponible <= 0 ||
-                                                    codigosDisponiblesModal.length === 0
+                                                    codigosDisponiblesModal.length === 0 ||
+                                                    requiereConfirmarFichaModal
                                                 }
+                                                title={requiereConfirmarFichaModal ? 'Confirma de cuál lote vender primero, en la tarjeta' : undefined}
                                             >
                                                 <ShoppingCart className="mr-2 h-4 w-4" />
                                                 Agregar a la Venta
