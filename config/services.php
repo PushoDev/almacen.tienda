@@ -39,4 +39,10 @@ return [
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
     ],
 
+    // Cuenta de servicio para subir los backups de la BD (App\Services\GoogleDriveBackupUploader).
+    'google_drive' => [
+        'credentials_path' => env('GOOGLE_DRIVE_CREDENTIALS_PATH'),
+        'folder_id' => env('GOOGLE_DRIVE_BACKUPS_FOLDER_ID'),
+    ],
+
 ];
