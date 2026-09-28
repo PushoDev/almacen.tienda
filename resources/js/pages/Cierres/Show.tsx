@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { ViaLogo } from '@/components/monedas/via-logo';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -103,6 +104,7 @@ interface OperacionDetaile {
     hora: string;
     tipo_pago: string;
     via_pago?: string | null;
+    via_info?: { slug: string; nombre: string; imagen_url: string | null } | null;
     cuenta_nombre?: string | null;
     destino_nombre?: string | null;
     productos: ProductItem[];
@@ -2183,8 +2185,16 @@ export default function Show({
                                         <div key={idx} className="rounded-md border p-3">
                                             <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
                                                 <div className="flex items-center gap-2">
+                                                    {op.tipo_pago !== 'efectivo' && op.via_info && (
+                                                        <ViaLogo
+                                                            slug={op.via_info.slug}
+                                                            nombre={op.via_info.nombre}
+                                                            imagenUrl={op.via_info.imagen_url}
+                                                            className="h-4"
+                                                        />
+                                                    )}
                                                     <span className="font-medium">
-                                                        {op.tipo_pago === 'efectivo' ? 'Efectivo' : op.via_pago || 'Transferencia'}
+                                                        {op.tipo_pago === 'efectivo' ? 'Efectivo' : (op.via_info?.nombre ?? op.via_pago) || 'Transferencia'}
                                                     </span>
                                                     {op.cuenta_nombre && <span className="text-muted-foreground text-sm">- {op.cuenta_nombre}</span>}
                                                 </div>

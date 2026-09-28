@@ -603,6 +603,7 @@ class VentaController extends Controller
                     ] : null,
                     'monto' => $pago->monto,
                     'via' => $pago->via_pago,
+                    'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                     'tasa_cambio' => $pago->tasa_cambio_aplicada,
                     'monto_equivalente' => $pago->monto_equivalente,
                     // ✅ NUEVO: Información del destino
@@ -930,6 +931,11 @@ class VentaController extends Controller
             // No pueden tener ambos
             if (! empty($pago['cuenta_id']) && ! empty($pago['cliente_id'])) {
                 throw new \Exception('Un pago no puede tener cuenta y cliente al mismo tiempo.');
+            }
+
+            // La vía elegida debe estar habilitada para la moneda del pago (antes se aceptaba cualquier texto).
+            if (! empty($pago['via']) && ! empty($pago['moneda_id']) && ! $this->metodosPago->viaValidaParaMoneda($pago['via'], (int) $pago['moneda_id'])) {
+                throw new \Exception('La vía de pago seleccionada no está habilitada para esa moneda.');
             }
         }
 
@@ -1922,6 +1928,9 @@ class VentaController extends Controller
             if (! empty($pago['cuenta_id']) && ! empty($pago['cliente_id'])) {
                 return response()->json(['success' => false, 'message' => 'Un pago no puede tener cuenta y cliente al mismo tiempo.'], 422);
             }
+            if (! empty($pago['via']) && ! empty($pago['moneda_id']) && ! $this->metodosPago->viaValidaParaMoneda($pago['via'], (int) $pago['moneda_id'])) {
+                return response()->json(['success' => false, 'message' => 'La vía de pago seleccionada no está habilitada para esa moneda.'], 422);
+            }
         }
 
         $user = Auth::user();
@@ -2064,6 +2073,7 @@ class VentaController extends Controller
                 'monto' => $p->monto,
                 'monto_equivalente' => $p->monto_equivalente,
                 'via' => $p->via_pago,
+                'via_info' => $this->metodosPago->viaPorSlug($p->via_pago),
                 'tasa_cambio' => $p->tasa_cambio_aplicada,
                 'moneda' => $p->moneda ? [
                     'id' => $p->moneda->id,

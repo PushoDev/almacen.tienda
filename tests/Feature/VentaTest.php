@@ -2849,3 +2849,101 @@ test('el POS envía el costo real del producto en el almacén a todos los roles'
         expect($this->actingAs($usuario)->getJson($ruta)->json('0.costo_real'))->toEqual(12.5);
     }
 });
+
+// ==========================================================================
+// VÍA DE PAGO — whitelist por moneda + logo en el detalle (2026-09-28)
+// ==========================================================================
+
+test('procesarVenta rechaza una vía que no pertenece a la moneda del pago', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaCup();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaCup);
+    $payload['pagos'] = [[
+        'metodo' => 'transferencia',
+        'moneda_id' => $monedaCup->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+        // 'zelle' es de ámbito internacional — CUP solo admite enzona/transfermovil por defecto.
+        'via' => 'zelle',
+    ]];
+
+    $this->postJson(route('ventas.procesar'), $payload);
+
+    expect(Venta::count())->toBe(0);
+});
+
+test('procesarVenta acepta una vía válida para la moneda y el detalle la muestra con su logo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'transferencia',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+        'via' => 'zelle',
+    ]];
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $venta = Venta::firstOrFail();
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page
+        ->where('venta.pagos.0.via', 'zelle')
+        ->where('venta.pagos.0.via_info.slug', 'zelle')
+        ->where('venta.pagos.0.via_info.nombre', 'Zelle'));
+});
+
+test('editarVentaPendiente rechaza una vía que no pertenece a la moneda del pago', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $venta = Venta::firstOrFail();
+
+    $response = $this->postJson(route('ventas.editar.pendiente', $venta), [
+        'pagos' => [[
+            'metodo' => 'transferencia',
+            'moneda_id' => $monedaUsd->id,
+            'monto' => 20,
+            'tasa_cambio' => 1,
+            'monto_equivalente' => 20,
+            'cuenta_id' => $cuenta->id,
+            // 'enzona' es de ámbito cuba — USD no la admite por defecto.
+            'via' => 'enzona',
+        ]],
+    ]);
+
+    $response->assertStatus(422);
+    $response->assertJson(['success' => false]);
+    expect($venta->fresh()->pagos()->count())->toBe(1);
+});
