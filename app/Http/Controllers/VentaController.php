@@ -24,6 +24,7 @@ use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
+use App\Services\FichasHermanasService;
 use App\Services\LoteConsumoService;
 use App\Services\MetodosPagoService;
 use App\Services\PrecioLoteService;
@@ -38,7 +39,7 @@ use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class VentaController extends Controller
 {
-    public function __construct(private MetodosPagoService $metodosPago) {}
+    public function __construct(private MetodosPagoService $metodosPago, private FichasHermanasService $fichasHermanas) {}
 
     // ========================================================================
     // MÉTODOS DE CARGA DE DATOS (API / JSON)
@@ -166,6 +167,9 @@ class VentaController extends Controller
 
                 return [
                     'id' => $producto->id,
+                    // Solo para agrupar fichas hermanas más abajo — no llega al JSON final.
+                    '_clave_hermanas' => $this->fichasHermanas->clave($producto),
+                    '_created_at' => $producto->created_at,
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
                     'modelo_producto' => $producto->modelo_producto,
@@ -199,7 +203,30 @@ class VentaController extends Controller
                 ];
             });
 
-        return response()->json($productos->filter(fn ($p) => $p['tiene_precio'])->values());
+        $limpiar = fn (array $p) => collect($p)->except(['_clave_hermanas', '_created_at'])->all();
+
+        // Fichas hermanas con precio en este almacén (mismo producto, costo/precio distinto —
+        // ver FichasHermanasService) se agrupan en UNA sola tarjeta: la más antigua es la que se
+        // ve, con las demás en 'opciones' para el selector "Vender de esta ficha" del POS. Pedido
+        // del cliente 2026-09-28: antes salían como tarjetas sueltas, sin forma de saber que eran
+        // el mismo producto ni de elegir a propósito de cuál vender.
+        $agrupados = $productos->filter(fn ($p) => $p['tiene_precio'])
+            ->values()
+            ->groupBy('_clave_hermanas')
+            ->flatMap(function ($grupo) use ($limpiar) {
+                if ($grupo->count() < 2) {
+                    return [$limpiar($grupo->first())];
+                }
+
+                $ordenado = $grupo->sortBy('_created_at')->values();
+                $principal = $limpiar($ordenado->first());
+                $principal['opciones'] = $ordenado->map($limpiar)->values()->all();
+
+                return [$principal];
+            })
+            ->values();
+
+        return response()->json($agrupados);
     }
 
     /**
@@ -603,6 +630,7 @@ class VentaController extends Controller
                     ] : null,
                     'monto' => $pago->monto,
                     'via' => $pago->via_pago,
+                    'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                     'tasa_cambio' => $pago->tasa_cambio_aplicada,
                     'monto_equivalente' => $pago->monto_equivalente,
                     // ✅ NUEVO: Información del destino
@@ -930,6 +958,11 @@ class VentaController extends Controller
             // No pueden tener ambos
             if (! empty($pago['cuenta_id']) && ! empty($pago['cliente_id'])) {
                 throw new \Exception('Un pago no puede tener cuenta y cliente al mismo tiempo.');
+            }
+
+            // La vía elegida debe estar habilitada para la moneda del pago (antes se aceptaba cualquier texto).
+            if (! empty($pago['via']) && ! empty($pago['moneda_id']) && ! $this->metodosPago->viaValidaParaMoneda($pago['via'], (int) $pago['moneda_id'])) {
+                throw new \Exception('La vía de pago seleccionada no está habilitada para esa moneda.');
             }
         }
 
@@ -1922,6 +1955,9 @@ class VentaController extends Controller
             if (! empty($pago['cuenta_id']) && ! empty($pago['cliente_id'])) {
                 return response()->json(['success' => false, 'message' => 'Un pago no puede tener cuenta y cliente al mismo tiempo.'], 422);
             }
+            if (! empty($pago['via']) && ! empty($pago['moneda_id']) && ! $this->metodosPago->viaValidaParaMoneda($pago['via'], (int) $pago['moneda_id'])) {
+                return response()->json(['success' => false, 'message' => 'La vía de pago seleccionada no está habilitada para esa moneda.'], 422);
+            }
         }
 
         $user = Auth::user();
@@ -2064,6 +2100,7 @@ class VentaController extends Controller
                 'monto' => $p->monto,
                 'monto_equivalente' => $p->monto_equivalente,
                 'via' => $p->via_pago,
+                'via_info' => $this->metodosPago->viaPorSlug($p->via_pago),
                 'tasa_cambio' => $p->tasa_cambio_aplicada,
                 'moneda' => $p->moneda ? [
                     'id' => $p->moneda->id,

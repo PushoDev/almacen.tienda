@@ -2,6 +2,7 @@ import AppLogoIcon from '@/components/app-logo-icon';
 import HeadingSmall from '@/components/heading-small';
 import PaymentForm, { type Moneda as MonedaForm, type Payment as PaymentEdit } from '@/components/ventas/PaymentForm';
 import PaymentList from '@/components/ventas/PaymentList';
+import { ViaLogo } from '@/components/monedas/via-logo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     AlertDialog,
@@ -154,6 +155,7 @@ interface Pago {
     moneda: MonedaPago | null;
     monto: number;
     via: string | null;
+    via_info?: { slug: string; nombre: string; imagen_url: string | null } | null;
     tasa_cambio: number;
     monto_equivalente: number;
     cuenta: CuentaPago | null;
@@ -3492,8 +3494,17 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             variant="outline"
                                                             className="inline-flex items-center gap-1 border-violet-200 bg-violet-50 text-violet-700 capitalize dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300"
                                                         >
-                                                            <ArrowRightLeft className="h-3 w-3" />
-                                                            {pago.via}
+                                                            {pago.via_info ? (
+                                                                <ViaLogo
+                                                                    slug={pago.via_info.slug}
+                                                                    nombre={pago.via_info.nombre}
+                                                                    imagenUrl={pago.via_info.imagen_url}
+                                                                    className="h-3.5"
+                                                                />
+                                                            ) : (
+                                                                <ArrowRightLeft className="h-3 w-3" />
+                                                            )}
+                                                            {pago.via_info?.nombre ?? pago.via}
                                                         </Badge>
                                                     )}
                                                     {pago.referencia && (

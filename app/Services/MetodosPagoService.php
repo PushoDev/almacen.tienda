@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\MetodoPago;
 use App\Models\Moneda;
 use App\Models\ViaPago;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -13,6 +14,9 @@ use Illuminate\Support\Facades\DB;
  */
 class MetodosPagoService
 {
+    /** @var Collection<string, ViaPago>|null caché por request: catálogo completo de vías, tabla chica (~14 filas) */
+    private ?Collection $viasPorSlug = null;
+
     /**
      * Catálogo completo para los formularios de Monedas: todos los métodos y todas las vías, con su logo.
      *
@@ -74,6 +78,35 @@ class MetodosPagoService
             'vias_pago' => ['nullable', 'array'],
             'vias_pago.*' => ['string', 'distinct', 'exists:vias_pago,slug'],
         ];
+    }
+
+    /**
+     * ¿Esa vía está habilitada para esa moneda? Whitelist para el pago del POS/venta pendiente — hoy el
+     * servidor acepta cualquier texto en `pagos.*.via` sin cruzarlo contra la moneda elegida.
+     */
+    public function viaValidaParaMoneda(string $viaSlug, int $monedaId): bool
+    {
+        $moneda = Moneda::find($monedaId);
+
+        return $moneda !== null && $moneda->viasPago()->where('slug', $viaSlug)->exists();
+    }
+
+    /**
+     * La vía ya armada para mostrarla (nombre y logo) a partir del slug guardado en un pago — para el
+     * detalle de la venta y el Cierre de Caja, que hoy solo muestran el slug en crudo.
+     *
+     * @return array{slug: string, nombre: string, imagen_url: string|null}|null
+     */
+    public function viaPorSlug(?string $slug): ?array
+    {
+        if (empty($slug)) {
+            return null;
+        }
+
+        $this->viasPorSlug ??= ViaPago::all()->keyBy('slug');
+        $via = $this->viasPorSlug->get($slug);
+
+        return $via ? $this->viaParaFront($via) : null;
     }
 
     /**

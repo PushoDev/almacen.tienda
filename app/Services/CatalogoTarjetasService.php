@@ -2,8 +2,23 @@
 
 namespace App\Services;
 
+use App\Models\ViaPago;
+
 class CatalogoTarjetasService
 {
+    /**
+     * Slugs que son a la vez una cuenta (acá) y una vía de pago real (`vias_pago`, ver
+     * MetodosPagoService): el nombre se toma de ahí en `todos()` en vez de mantener una
+     * segunda copia a mano — así no se desincronizan (ej. "Mastercard" aquí vs "MasterCard"
+     * en vías, "PayPal" aquí vs "Paypal" en vías, hasta hoy). El logo de estos 9 ya apunta
+     * al mismo archivo en los dos catálogos, así que no hace falta tocarlo.
+     *
+     * @var array<int, string>
+     */
+    private const SLUGS_COMPARTIDOS_CON_VIAS_PAGO = [
+        'zelle', 'cashapp', 'square', 'visa', 'mastercard', 'stripe', 'paypal', 'qvapay', 'tropipay',
+    ];
+
     /**
      * Catálogo de bancos/diseños de tarjeta (+ imágenes de moneda para cuentas tipo
      * "efectivo") para la feature "Cuentas → tarjetas de banco". No es una tabla en base de
@@ -15,7 +30,7 @@ class CatalogoTarjetasService
      */
     private static function todos(): array
     {
-        return [
+        $catalogo = [
             // Internas — bancos cubanos (público objetivo del proyecto).
             'bandec' => ['nombre' => 'BANDEC', 'grupo' => 'interna', 'imagen' => 'card_cubans/bandec_tarjeta.webp'],
             'bpa' => ['nombre' => 'BPA', 'grupo' => 'interna', 'imagen' => 'card_cubans/bpa_tarjeta.webp'],
@@ -52,6 +67,14 @@ class CatalogoTarjetasService
             'cup' => ['nombre' => 'CUP', 'grupo' => 'efectivo', 'imagen' => 'efectivo/cup.webp'],
             'eur' => ['nombre' => 'EUR', 'grupo' => 'efectivo', 'imagen' => 'efectivo/eur.webp'],
         ];
+
+        foreach (ViaPago::whereIn('slug', self::SLUGS_COMPARTIDOS_CON_VIAS_PAGO)->pluck('nombre', 'slug') as $slug => $nombreReal) {
+            if (isset($catalogo[$slug])) {
+                $catalogo[$slug]['nombre'] = $nombreReal;
+            }
+        }
+
+        return $catalogo;
     }
 
     /**

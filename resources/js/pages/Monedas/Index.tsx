@@ -19,7 +19,7 @@ import { MetodosPagoResumen, type MetodoResumen } from '@/components/monedas/met
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Coins, Edit, Eye, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react'; // Importamos useEffect
 import { sileo } from '@/lib/sileo';
@@ -76,52 +76,23 @@ export default function MonedasIndex() {
         }
     }, [success, error]);
 
-    const handleAction = async (monedaId: number, action: string) => {
+    const handleAction = (monedaId: number, action: 'cambiar-estado' | 'establecer-principal') => {
         setLoadingStates((prev) => ({ ...prev, [monedaId]: action }));
 
-        try {
-            switch (action) {
-                case 'cambiar-estado':
-                    await fetch(`/monedas/${monedaId}/cambiar-estado`, {
-                        method: 'PATCH',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Content-Type': 'application/json',
-                        },
-                    });
-                    break;
-                case 'establecer-principal':
-                    await fetch(`/monedas/${monedaId}/establecer-principal`, {
-                        method: 'PATCH',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Content-Type': 'application/json',
-                        },
-                    });
-                    break;
-            }
-
-            window.location.reload();
-        } catch {
-            sileo.error({ title: 'Error al realizar la acción' });
-        } finally {
-            setLoadingStates((prev) => ({ ...prev, [monedaId]: '' }));
-        }
+        router.patch(
+            route(`monedas.${action}`, { moneda: monedaId }),
+            {},
+            {
+                onError: () => sileo.error({ title: 'Error al realizar la acción' }),
+                onFinish: () => setLoadingStates((prev) => ({ ...prev, [monedaId]: '' })),
+            },
+        );
     };
 
-    const handleDelete = async (monedaId: number) => {
-        try {
-            await fetch(`/monedas/${monedaId}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json',
-                },
-            });
-            window.location.reload();
-        } catch {
-            sileo.error({ title: 'Error al eliminar', description: 'No se pudo eliminar la moneda' });
-        }
+    const handleDelete = (monedaId: number) => {
+        router.delete(route('monedas.destroy', { moneda: monedaId }), {
+            onError: () => sileo.error({ title: 'Error al eliminar', description: 'No se pudo eliminar la moneda' }),
+        });
     };
 
     const formatNumber = (num: number, decimals: number = 2) => {
