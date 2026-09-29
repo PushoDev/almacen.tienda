@@ -364,7 +364,7 @@ class VentaController extends Controller
         $user = Auth::user();
 
         $query = Cuenta::with('moneda')
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo', 'imagen');
 
         // No-admin: solo sus cuentas
         if (! in_array($user->role, ['admin', 'moderador'])) {
@@ -384,6 +384,10 @@ class VentaController extends Controller
                     'tasa_cambio' => (float) ($cuenta->moneda?->tasa_cambio ?? 1),
                 ],
                 'tipo' => $cuenta->tipo,
+                // Logo real del banco/tarjeta (o insignia de efectivo) — mismo mecanismo que
+                // getCuentasFiltradas(), para identificar la cuenta de un vistazo en los
+                // selectores de Mensajería/Comisión/Gestor, hoy solo con texto plano.
+                'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
             ];
         });
 

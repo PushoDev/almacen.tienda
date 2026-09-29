@@ -1957,6 +1957,25 @@ test('getCuentasParaGestor() solo devuelve al vendedor sus propias cuentas', fun
     expect($ids->all())->toBe([$cuentaAsignada->id]);
 });
 
+test('getCuentasParaGestor() manda el logo real del banco, para los selectores de Mensajería/Comisión/Gestor', function () {
+    // Regresión 2026-09-29: esos 3 selectores solo mostraban el nombre de la cuenta en texto
+    // plano — este endpoint nunca mandó el campo `banco`, a diferencia de getCuentasFiltradas()
+    // (POS) que sí lo manda desde antes.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaCup();
+    $cuenta->update(['imagen' => 'bandec']);
+
+    $response = $this->getJson(route('ventas.getCuentasParaGestor'));
+
+    $response->assertOk();
+    $fila = collect($response->json())->firstWhere('id', $cuenta->id);
+    expect($fila['banco'])->not->toBeNull();
+    expect($fila['banco']['slug'])->toBe('bandec');
+    expect($fila['banco']['imagen_url'])->toContain('bandec');
+});
+
 test('getProductosPorAlmacen() rechaza con 403 a un vendedor sin acceso al almacén', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);

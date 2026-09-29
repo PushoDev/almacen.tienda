@@ -31,7 +31,7 @@ import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { Switch } from '@/components/ui/switch';
@@ -148,6 +148,8 @@ interface Cuenta {
     };
     tipo: string;
     tipo_moneda: string;
+    /** Logo real del banco/tarjeta (null si la cuenta no tiene imagen asignada) — mismo mecanismo que "Destino del Pago" en el POS. */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
 }
 
 interface Pago {
@@ -565,6 +567,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [tasaAplicadaGestor, setTasaAplicadaGestor] = useState('');
     const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
     const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
+    // Búsqueda de los 3 Combobox de cuenta (Gestor/Mensajería/Comisión) — cada uno con su propio
+    // texto, no comparten estado aunque se parezcan.
+    const [gestorCuentaSearch, setGestorCuentaSearch] = useState('');
 
     // ── Distribución (mensajero + comisión) ──
     const [showCambiarAComisionPV, setShowCambiarAComisionPV] = useState(false);
@@ -572,10 +577,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [mensajeroFormMontoCUP, setMensajeroFormMontoCUP] = useState('');
     const [mensajeroFormTasa, setMensajeroFormTasa] = useState('');
     const [mensajeroFormCuentaId, setMensajeroFormCuentaId] = useState('');
+    const [mensajeroCuentaSearch, setMensajeroCuentaSearch] = useState('');
     const [cuentasMensajero, setCuentasMensajero] = useState<Cuenta[]>([]);
     const [showComisionForm, setShowComisionForm] = useState(false);
     const [comisionFormCuentaId, setComisionFormCuentaId] = useState('');
     const [comisionFormTasa, setComisionFormTasa] = useState('');
+    const [comisionCuentaSearch, setComisionCuentaSearch] = useState('');
     const [cuentasComision, setCuentasComision] = useState<Cuenta[]>([]);
     const [guardandoDistribucion, setGuardandoDistribucion] = useState(false);
     const [monedaGestorSeleccionada, setMonedaGestorSeleccionada] = useState<MonedaParaReporte | null>(null);
@@ -1669,7 +1676,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         <AlertDialogTrigger asChild>
                             <span className="hidden" />
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="flex max-h-[92vh] max-w-2xl flex-col">
+                        <AlertDialogContent className="flex max-h-[92vh] max-w-3xl flex-col">
                             <AlertDialogHeader className="shrink-0">
                                 <AlertDialogTitle className="flex items-center gap-2">
                                     <Users size={20} />
@@ -1879,7 +1886,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     {/* Badges de todas las monedas del sistema */}
                                                     {monedasSistema.length > 0 && (
                                                         <div className="space-y-2">
-                                                            <Label>Moneda del Gestor</Label>
+                                                            <Label className="flex items-center gap-1.5">
+                                                                <Coins className="h-4 w-4" /> Moneda del Gestor
+                                                            </Label>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {monedasSistema.map((m) => (
                                                                     <button
@@ -1893,7 +1902,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                             const montoCalculado = currentVenta.total_comision * m.tasa;
                                                                             setGestorMonto(montoCalculado.toFixed(2));
                                                                         }}
-                                                                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
+                                                                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
                                                                             ? 'bg-primary text-primary-foreground border-primary'
                                                                             : 'bg-background text-foreground hover:bg-muted'
                                                                             }`}
@@ -1906,7 +1915,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     )}
                                                     {/* Tasa aplicada — editable */}
                                                     <div className="space-y-2">
-                                                        <Label>Tasa Aplicada del Gestor</Label>
+                                                        <Label className="flex items-center gap-1.5">
+                                                            <Percent className="h-4 w-4" /> Tasa Aplicada del Gestor
+                                                        </Label>
                                                         <Input
                                                             type="number"
                                                             step="0.0001"
@@ -1922,39 +1933,67 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                 }
                                                             }}
                                                             placeholder="Ej: 500"
+                                                            className="h-11"
                                                         />
                                                     </div>
                                                     <div className="grid gap-4 md:grid-cols-2">
                                                         <div className="space-y-2">
                                                             <Label>Cuenta del Gestor</Label>
-                                                            <Select
-                                                                value={gestorCuentaId}
+                                                            <Combobox
+                                                                value={gestorCuentaId || null}
                                                                 onValueChange={(val) => {
-                                                                    setGestorCuentaId(val);
+                                                                    setGestorCuentaId(val ?? '');
                                                                     setCuentaGestorSeleccionada(cuentasGestor.find((c) => String(c.id) === val) || null);
                                                                 }}
+                                                                onInputValueChange={setGestorCuentaSearch}
+                                                                itemToStringLabel={(id: string) => cuentasGestor.find((c) => String(c.id) === id)?.nombre_cuenta ?? ''}
                                                             >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Seleccione cuenta..." />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {(monedaGestorSeleccionada
-                                                                        ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
-                                                                        : cuentasGestor
-                                                                    ).map((cuenta) => (
-                                                                        <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
-                                                                            {' · '}
-                                                                            <span className={cuenta.saldo_actual <= 0 ? 'text-red-500' : 'text-green-600'}>
-                                                                                Saldo: {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                                            </span>
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
+                                                                <ComboboxInput className="h-12" placeholder="Buscar cuenta..." showClear />
+                                                                <ComboboxContent container={destinatarioDialogContainer}>
+                                                                    <ComboboxEmpty>Sin coincidencias</ComboboxEmpty>
+                                                                    <ComboboxList>
+                                                                        {(monedaGestorSeleccionada
+                                                                            ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
+                                                                            : cuentasGestor
+                                                                        )
+                                                                            .filter((c) => !gestorCuentaSearch || c.nombre_cuenta.toLowerCase().includes(gestorCuentaSearch.toLowerCase()))
+                                                                            .map((cuenta) => (
+                                                                                <ComboboxItem key={cuenta.id} value={String(cuenta.id)} className="py-2">
+                                                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                                                        {cuenta.banco ? (
+                                                                                            <img
+                                                                                                src={cuenta.banco.imagen_url}
+                                                                                                alt=""
+                                                                                                aria-hidden="true"
+                                                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                                                        )}
+                                                                                        <span className="min-w-0 flex-1 truncate">
+                                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                                        </span>
+                                                                                        <Badge
+                                                                                            variant="outline"
+                                                                                            className={`shrink-0 font-semibold ${
+                                                                                                cuenta.saldo_actual > 0
+                                                                                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                                                    : 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                                            }`}
+                                                                                        >
+                                                                                            {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                                        </Badge>
+                                                                                    </span>
+                                                                                </ComboboxItem>
+                                                                            ))}
+                                                                    </ComboboxList>
+                                                                </ComboboxContent>
+                                                            </Combobox>
                                                         </div>
                                                         <div className="space-y-2">
-                                                            <Label>Monto de Comisión</Label>
+                                                            <Label className="flex items-center gap-1.5">
+                                                                <DollarSign className="h-4 w-4" /> Monto de Comisión
+                                                            </Label>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-muted-foreground shrink-0 text-sm font-medium">
                                                                     {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || 'USD'}
@@ -1965,6 +2004,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                     value={gestorMonto}
                                                                     onChange={(e) => setGestorMonto(e.target.value)}
                                                                     placeholder="0.00"
+                                                                    className="h-11"
                                                                 />
                                                             </div>
                                                         </div>
@@ -2010,12 +2050,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                         );
                                                     })()}
                                                     <div className="space-y-2">
-                                                        <Label>Comentario</Label>
+                                                        <Label className="flex items-center gap-1.5">
+                                                            <MessageSquare className="h-4 w-4" /> Comentario
+                                                        </Label>
                                                         <Textarea
                                                             placeholder="Ej: Gestor externo, acuerdo 50/50..."
                                                             value={gestorComentario}
                                                             onChange={(e) => setGestorComentario(e.target.value)}
-                                                            rows={2}
+                                                            rows={3}
                                                             className="resize-none"
                                                         />
                                                     </div>
@@ -2621,19 +2663,34 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                 )}
                             </div>
+                        </CardContent>
+                    </Card>
+                )}
 
-                            {/* ── Mensajero ── */}
-                            <div className="mb-4 border-t pt-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="flex items-center gap-2 text-sm font-semibold">
-                                        <Truck className="h-4 w-4 text-sky-600" />
-                                        Mensajería
-                                        {currentVenta.mensajero && (
-                                            <Badge variant="outline" className="text-sky-600 text-xs">
-                                                {currentVenta.mensajero.tipo === 'propio' ? 'Propio' : 'Externo'}
-                                            </Badge>
-                                        )}
-                                    </h4>
+                {/* ── Cards: Mensajería y Comisión, lado a lado para no ocupar tanto alto ── */}
+                {isVentaPendiente && (
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Truck className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Mensajería</CardTitle>
+                                    <CardDescription className="text-xs text-sky-100">Entrega a domicilio, si aplica</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-5">
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                    {currentVenta.mensajero && (
+                                        <Badge variant="outline" className="text-sky-600 text-xs">
+                                            {currentVenta.mensajero.tipo === 'propio' ? 'Propio' : 'Externo'}
+                                        </Badge>
+                                    )}
+                                </h4>
                                     {currentVenta.mensajero && (
                                         <Button size="sm" variant="outline" onClick={() => {
                                             setShowMensajeroForm(!showMensajeroForm);
@@ -2670,20 +2727,27 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             const tasa = monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
                                             const refCUP = Number(m.monto) * tasa;
                                             return (
-                                                <div className="rounded-md bg-muted px-3 py-2 text-xs">
-                                                    <span className="text-muted-foreground">Cobrado al cliente: </span>
-                                                    <span className="font-semibold">
+                                                <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/50 px-3 py-2">
+                                                    <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                        <span className="bg-background flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                                                            <Wallet className="h-3.5 w-3.5" />
+                                                        </span>
+                                                        Cobrado al cliente
+                                                    </span>
+                                                    <Badge variant="outline" className="font-semibold">
                                                         {refCUP > 0
                                                             ? `${refCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
                                                             : formatCurrency(m.monto ?? 0, 'USD')}
-                                                    </span>
+                                                    </Badge>
                                                 </div>
                                             );
                                         })()}
 
                                         {/* Tasa de cambio para procesar el pago — editable, independiente de la tasa del sistema */}
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Tasa de cambio para el pago (CUP/USD)</Label>
+                                            <Label className="flex items-center gap-1.5 text-xs">
+                                                <Percent className="h-3.5 w-3.5" /> Tasa de cambio para el pago (CUP/USD)
+                                            </Label>
                                             <Input
                                                 type="number"
                                                 min="0.0001"
@@ -2699,7 +2763,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     }
                                                 }}
                                                 placeholder="Ej: 380.00"
-                                                className="h-8 text-sm"
+                                                className="h-11"
                                             />
                                             <p className="text-xs text-muted-foreground">
                                                 Recalcula el monto CUP de abajo. Se sugiere con la tasa del sistema, pero puedes ajustarla al momento de pagar.
@@ -2708,7 +2772,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                                         {/* Monto final al mensajero — editable (permite ajuste manual adicional) */}
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Monto final al mensajero (CUP)</Label>
+                                            <Label className="flex items-center gap-1.5 text-xs">
+                                                <DollarSign className="h-3.5 w-3.5" /> Monto final al mensajero (CUP)
+                                            </Label>
                                             <Input
                                                 type="number"
                                                 min="0.01"
@@ -2716,7 +2782,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 value={mensajeroFormMontoCUP}
                                                 onChange={e => setMensajeroFormMontoCUP(e.target.value)}
                                                 placeholder="Ej: 10000.00"
-                                                className="h-8 text-sm"
+                                                className="h-11"
                                             />
                                             {mensajeroFormMontoCUP && parseFloat(mensajeroFormMontoCUP) > 0 && (
                                                 <p className="text-xs font-medium text-sky-600">
@@ -2726,18 +2792,52 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </div>
 
                                         {/* EXTERNO: cuenta de donde sale el pago */}
-                                        <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">🛵 Cuenta de donde sale el pago</p>
-                                            <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
-                                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {cuentasMensajero.map(c => (
-                                                        <SelectItem key={c.id} value={String(c.id)}>
-                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                        <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3 space-y-2 dark:border-orange-800 dark:bg-orange-900/20">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 uppercase tracking-wide dark:text-orange-300">
+                                                <Truck className="h-3.5 w-3.5" /> Cuenta de donde sale el pago
+                                            </p>
+                                            <Combobox
+                                                value={mensajeroFormCuentaId || null}
+                                                onValueChange={(val) => setMensajeroFormCuentaId(val ?? '')}
+                                                onInputValueChange={setMensajeroCuentaSearch}
+                                                itemToStringLabel={(id: string) => cuentasMensajero.find((c) => String(c.id) === id)?.nombre_cuenta ?? ''}
+                                            >
+                                                <ComboboxInput className="h-11" placeholder="Buscar cuenta CUP..." showClear />
+                                                <ComboboxContent>
+                                                    <ComboboxEmpty>Sin coincidencias</ComboboxEmpty>
+                                                    <ComboboxList>
+                                                        {cuentasMensajero
+                                                            .filter((c) => !mensajeroCuentaSearch || c.nombre_cuenta.toLowerCase().includes(mensajeroCuentaSearch.toLowerCase()))
+                                                            .map((c) => (
+                                                                <ComboboxItem key={c.id} value={String(c.id)} className="py-2">
+                                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                                        {c.banco ? (
+                                                                            <img
+                                                                                src={c.banco.imagen_url}
+                                                                                alt=""
+                                                                                aria-hidden="true"
+                                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                                            />
+                                                                        ) : (
+                                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                                        )}
+                                                                        <span className="min-w-0 flex-1 truncate">{c.nombre_cuenta}</span>
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={`shrink-0 font-semibold ${
+                                                                                (c.saldo_actual ?? 0) > 0
+                                                                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                                    : 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                            }`}
+                                                                        >
+                                                                            {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                                        </Badge>
+                                                                    </span>
+                                                                </ComboboxItem>
+                                                            ))}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
                                             {mensajeroFormCuentaId && (() => {
                                                 const montoCUP = parseFloat(mensajeroFormMontoCUP);
                                                 const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
@@ -2765,18 +2865,25 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </div>
                                     </div>
                                 )}
+                        </CardContent>
+                    </Card>
+
+                    {/* ── Card: Comisión ── */}
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Store className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Comisión</CardTitle>
+                                    <CardDescription className="text-xs text-amber-100">
+                                        {formatCurrency(currentVenta.total_comision, 'USD')} a distribuir — punto de venta o gestor
+                                    </CardDescription>
+                                </div>
                             </div>
-
-                            {/* ── Comisión: vendedor O gestor (XOR) ── */}
-                            <div className="border-t pt-4">
-                                <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                                    <Store className="h-4 w-4 text-amber-600" />
-                                    Comisión
-                                    <span className="text-xs font-normal text-muted-foreground">
-                                        {formatCurrency(currentVenta.total_comision, 'USD')}
-                                    </span>
-                                </h4>
-
+                        </CardHeader>
+                        <CardContent className="pt-5">
                                 {/* Selector XOR */}
                                 <div className="flex gap-2 mb-3">
                                     <Button
@@ -2890,50 +2997,100 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                                         {showComisionForm && (
                                             <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                                {/* Comisión USD fija de la venta */}
-                                                <div className="rounded-md bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950">
-                                                    <span className="text-muted-foreground">Comisión a distribuir: </span>
-                                                    <span className="font-bold text-amber-700">{formatCurrency(currentVenta.total_comision, 'USD')}</span>
+                                                {/* Comisión a distribuir */}
+                                                <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/20">
+                                                    <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
+                                                            <DollarSign className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                                        </span>
+                                                        Comisión a distribuir
+                                                    </span>
+                                                    <Badge variant="outline" className="border-amber-300 bg-amber-100 font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                                        {formatCurrency(currentVenta.total_comision, 'USD')}
+                                                    </Badge>
                                                 </div>
                                                 {/* Tasa y CUP en vivo: solo con una cuenta CUP (una cuenta USD no convierte) */}
                                                 {!comisionEsUsd && (
                                                     <div className="space-y-1">
-                                                        <Label className="text-xs">Tasa CUP/USD</Label>
+                                                        <Label className="flex items-center gap-1.5 text-xs">
+                                                            <Percent className="h-3.5 w-3.5" /> Tasa CUP/USD
+                                                        </Label>
                                                         <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
                                                             onChange={e => setComisionFormTasa(e.target.value)}
-                                                            className="h-8 text-sm" />
+                                                            className="h-11" />
                                                     </div>
                                                 )}
                                                 {!comisionEsUsd && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
-                                                    <div className="rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-950">
-                                                        <span className="text-muted-foreground">Equivale a: </span>
-                                                        <span className="font-bold text-sky-700">
-                                                            {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    <div className="flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50/50 px-3 py-2 dark:border-sky-800 dark:bg-sky-900/20">
+                                                        <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900/40">
+                                                                <ArrowRightLeft className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                                                            </span>
+                                                            Equivale a
                                                         </span>
+                                                        <Badge variant="outline" className="border-sky-300 bg-sky-100 font-semibold text-sky-800 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                                                            {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </Badge>
                                                     </div>
                                                 )}
                                                 {/* ORIGEN: de donde sale */}
-                                                <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                                    <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
-                                                    <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
-                                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP o USD efectivo..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {/* Agrupadas con su cantidad: con decenas de cuentas CUP, las USD quedaban enterradas al final de una lista larga */}
-                                                            {[
-                                                                { titulo: 'USD en efectivo', cuentas: cuentasComision.filter(c => c.moneda?.codigo === 'USD') },
-                                                                { titulo: 'CUP', cuentas: cuentasComision.filter(c => c.moneda?.codigo !== 'USD') },
-                                                            ].filter(g => g.cuentas.length > 0).map(g => (
-                                                                <SelectGroup key={g.titulo}>
-                                                                    <SelectLabel>{g.titulo} ({g.cuentas.length})</SelectLabel>
-                                                                    {g.cuentas.map(c => (
-                                                                        <SelectItem key={c.id} value={String(c.id)}>
-                                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3 space-y-2 dark:border-orange-800 dark:bg-orange-900/20">
+                                                    <p className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 uppercase tracking-wide dark:text-orange-300">
+                                                        <Wallet className="h-3.5 w-3.5" /> Origen (de dónde sale)
+                                                    </p>
+                                                    <Combobox
+                                                        value={comisionFormCuentaId || null}
+                                                        onValueChange={(val) => setComisionFormCuentaId(val ?? '')}
+                                                        onInputValueChange={setComisionCuentaSearch}
+                                                        itemToStringLabel={(id: string) => cuentasComision.find((c) => String(c.id) === id)?.nombre_cuenta ?? ''}
+                                                    >
+                                                        <ComboboxInput className="h-11" placeholder="Buscar cuenta CUP o USD efectivo..." showClear />
+                                                        <ComboboxContent>
+                                                            <ComboboxEmpty>Sin coincidencias</ComboboxEmpty>
+                                                            <ComboboxList>
+                                                                {/* Agrupadas con su cantidad: con decenas de cuentas CUP, las USD quedaban enterradas al final de una lista larga */}
+                                                                {[
+                                                                    { titulo: 'USD en efectivo', cuentas: cuentasComision.filter(c => c.moneda?.codigo === 'USD') },
+                                                                    { titulo: 'CUP', cuentas: cuentasComision.filter(c => c.moneda?.codigo !== 'USD') },
+                                                                ].filter(g => g.cuentas.length > 0).map(g => (
+                                                                    <div key={g.titulo}>
+                                                                        <p className="text-muted-foreground px-2 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wide">
+                                                                            {g.titulo} ({g.cuentas.length})
+                                                                        </p>
+                                                                        {g.cuentas
+                                                                            .filter((c) => !comisionCuentaSearch || c.nombre_cuenta.toLowerCase().includes(comisionCuentaSearch.toLowerCase()))
+                                                                            .map((c) => (
+                                                                                <ComboboxItem key={c.id} value={String(c.id)} className="py-2">
+                                                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                                                        {c.banco ? (
+                                                                                            <img
+                                                                                                src={c.banco.imagen_url}
+                                                                                                alt=""
+                                                                                                aria-hidden="true"
+                                                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                                                        )}
+                                                                                        <span className="min-w-0 flex-1 truncate">{c.nombre_cuenta}</span>
+                                                                                        <Badge
+                                                                                            variant="outline"
+                                                                                            className={`shrink-0 font-semibold ${
+                                                                                                (c.saldo_actual ?? 0) > 0
+                                                                                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                                                    : 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                                            }`}
+                                                                                        >
+                                                                                            {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
+                                                                                        </Badge>
+                                                                                    </span>
+                                                                                </ComboboxItem>
+                                                                            ))}
+                                                                    </div>
+                                                                ))}
+                                                            </ComboboxList>
+                                                        </ComboboxContent>
+                                                    </Combobox>
                                                     {comisionFormCuentaId && (comisionEsUsd || (comisionFormTasa && parseFloat(comisionFormTasa) > 0)) && (() => {
                                                         const necesario = comisionEsUsd ? currentVenta.total_comision : currentVenta.total_comision * parseFloat(comisionFormTasa);
                                                         const moneda = comisionEsUsd ? 'USD' : 'CUP';
@@ -2949,16 +3106,28 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </div>
 
                                                 {/* DESTINO: a donde va */}
-                                                <div className="rounded-md border border-dashed border-amber-300 p-2 space-y-1">
-                                                    <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">→ Destino (a donde va)</p>
-                                                    <p className="text-xs text-amber-700">
-                                                        Comisión del vendedor <strong>{currentVenta.usuario?.nombre}</strong>
-                                                        {comisionEsUsd
-                                                            ? ` — ${Number(currentVenta.total_comision).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD`
-                                                            : comisionFormTasa && parseFloat(comisionFormTasa) > 0
-                                                                ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                                : ''}
+                                                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2 dark:border-amber-800 dark:bg-amber-900/20">
+                                                    <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 uppercase tracking-wide dark:text-amber-300">
+                                                        <User className="h-3.5 w-3.5" /> Destino (a dónde va)
                                                     </p>
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <span className="flex min-w-0 items-center gap-2 text-sm">
+                                                            <span className="bg-background flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
+                                                                <User className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                                            </span>
+                                                            <span className="min-w-0 truncate">
+                                                                Comisión del vendedor{' '}
+                                                                <strong>{currentVenta.usuario?.nombre}</strong>
+                                                            </span>
+                                                        </span>
+                                                        <Badge className="shrink-0 border-amber-300 bg-amber-100 font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                                            {comisionEsUsd
+                                                                ? `${Number(currentVenta.total_comision).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD`
+                                                                : comisionFormTasa && parseFloat(comisionFormTasa) > 0
+                                                                    ? `${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                                    : '—'}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
                                                 <div className="flex justify-end gap-2">
                                                     {currentVenta.comision_pago?.cuenta && (
@@ -2975,9 +3144,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         )}
                                     </div>
                                 )}
-                            </div>
                         </CardContent>
                     </Card>
+                    </div>
                 )}
 
                 {/* ── Cards: Destinatario, Comisión PV, Gestor y Mensajero ── */}
