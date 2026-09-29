@@ -1676,7 +1676,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         <AlertDialogTrigger asChild>
                             <span className="hidden" />
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="flex max-h-[92vh] max-w-3xl flex-col">
+                        <AlertDialogContent className="flex max-h-[92vh] !max-w-[800px] flex-col">
                             <AlertDialogHeader className="shrink-0">
                                 <AlertDialogTitle className="flex items-center gap-2">
                                     <Users size={20} />
@@ -1711,7 +1711,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         <DollarSign className="h-4 w-4" />
                                         Gestor
                                         {esVentaGestor && !gestorCuentaId && (
-                                            <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 text-xs">
+                                            <Badge className="ml-1 h-5 w-5 border-amber-300 bg-amber-500 p-0 text-xs text-white dark:border-amber-700">
                                                 !
                                             </Badge>
                                         )}
@@ -1726,9 +1726,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 <ScrollProgress className="min-h-0 flex-1">
                                     {/* Tab: Receptor */}
                                     <TabsContent value="receptor" className="mt-4">
-                                        <div ref={resolveDestinatarioDialogContainer} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div ref={resolveDestinatarioDialogContainer} className="space-y-4">
+                                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 space-y-4 dark:border-blue-800 dark:bg-blue-900/20">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide dark:text-blue-300">
+                                                <User className="h-3.5 w-3.5" /> Datos del receptor
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                             <div className="space-y-2">
-                                                <Label htmlFor="nombre">Nombre *</Label>
+                                                <Label htmlFor="nombre" className="flex items-center gap-1.5">
+                                                    <User className="h-3.5 w-3.5" /> Nombre *
+                                                </Label>
                                                 <Combobox
                                                     items={destinatarioSugerencias}
                                                     itemToStringLabel={(d: DestinatarioSugerido) => d.nombre}
@@ -1770,7 +1777,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </Combobox>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="apellidos">Apellidos *</Label>
+                                                <Label htmlFor="apellidos" className="flex items-center gap-1.5">
+                                                    <UserCheck className="h-3.5 w-3.5" /> Apellidos *
+                                                </Label>
                                                 <Input
                                                     id="apellidos"
                                                     value={formDestinatario.apellidos}
@@ -1779,7 +1788,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
+                                                <Label htmlFor="carnet_identidad" className="flex items-center gap-1.5">
+                                                    <IdCard className="h-3.5 w-3.5" /> Carnet de Identidad *
+                                                </Label>
                                                 <Combobox
                                                     items={destinatarioSugerencias}
                                                     itemToStringLabel={(d: DestinatarioSugerido) => d.carnet_identidad ?? ''}
@@ -1819,7 +1830,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </Combobox>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="telefono_contacto">Teléfono Contacto *</Label>
+                                                <Label htmlFor="telefono_contacto" className="flex items-center gap-1.5">
+                                                    <Phone className="h-3.5 w-3.5" /> Teléfono Contacto *
+                                                </Label>
                                                 <Input
                                                     id="telefono_contacto"
                                                     value={formDestinatario.telefono_contacto}
@@ -1827,8 +1840,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     placeholder="53 0000 0000"
                                                 />
                                             </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-4 space-y-4 dark:border-violet-800 dark:bg-violet-900/20">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 uppercase tracking-wide dark:text-violet-300">
+                                                <MapPin className="h-3.5 w-3.5" /> Entrega
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                             <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
+                                                <Label htmlFor="direccion_residencia" className="flex items-center gap-1.5">
+                                                    <MapPin className="h-3.5 w-3.5" /> Dirección de Residencia
+                                                </Label>
                                                 <Textarea
                                                     id="direccion_residencia"
                                                     value={formDestinatario.direccion_residencia}
@@ -1838,7 +1861,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                                <Label htmlFor="parentesco_cliente" className="flex items-center gap-1.5">
+                                                    <Users className="h-3.5 w-3.5" /> Parentesco con Cliente
+                                                </Label>
                                                 <Input
                                                     id="parentesco_cliente"
                                                     value={formDestinatario.parentesco_cliente}
@@ -1846,16 +1871,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     placeholder="Ej: Familiar, Amigo, etc."
                                                 />
                                             </div>
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="observaciones">Observaciones</Label>
-                                                <Textarea
-                                                    id="observaciones"
-                                                    value={formDestinatario.observaciones}
-                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, observaciones: e.target.value }))}
-                                                    placeholder="Observaciones adicionales"
-                                                    rows={2}
-                                                />
                                             </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="observaciones" className="flex items-center gap-1.5">
+                                                <MessageSquare className="h-3.5 w-3.5" /> Observaciones
+                                            </Label>
+                                            <Textarea
+                                                id="observaciones"
+                                                value={formDestinatario.observaciones}
+                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, observaciones: e.target.value }))}
+                                                placeholder="Observaciones adicionales"
+                                                rows={2}
+                                            />
+                                        </div>
                                         </div>
                                     </TabsContent>
 
@@ -1877,6 +1907,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             setEsVentaGestor(checked);
                                                             if (!checked) limpiarEstadosGestor();
                                                         }}
+                                                        className="data-[state=checked]:bg-emerald-600"
                                                     />
                                                 </div>
                                             </div>
@@ -1903,7 +1934,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                             setGestorMonto(montoCalculado.toFixed(2));
                                                                         }}
                                                                         className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
-                                                                            ? 'bg-primary text-primary-foreground border-primary'
+                                                                            ? 'bg-emerald-600 text-white border-emerald-600'
                                                                             : 'bg-background text-foreground hover:bg-muted'
                                                                             }`}
                                                                     >
@@ -1936,8 +1967,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             className="h-11"
                                                         />
                                                     </div>
-                                                    <div className="grid gap-4 md:grid-cols-2">
-                                                        <div className="space-y-2">
+                                                    <div className="grid gap-4 md:grid-cols-3">
+                                                        <div className="space-y-2 md:col-span-2">
                                                             <Label>Cuenta del Gestor</Label>
                                                             <Combobox
                                                                 value={gestorCuentaId || null}
@@ -2074,7 +2105,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </AlertDialogCancel>
                                 <Button
                                     onClick={handleGuardarDestinatario}
-                                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                                    className="bg-blue-700 hover:bg-blue-800 disabled:opacity-50"
                                     disabled={
                                         isSavingDestinatario ||
                                         !formDestinatario.nombre?.trim() ||
