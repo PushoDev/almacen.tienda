@@ -1,14 +1,23 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ViaLogo } from '@/components/monedas/via-logo';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sileo } from '@/lib/sileo';
 import axios from 'axios';
-import { DollarSign } from 'lucide-react';
+import { ArrowLeftRight, CreditCard, DollarSign, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
+
+export interface ViaPagoMoneda {
+    slug: string;
+    nombre: string;
+    imagen_url: string | null;
+}
 
 export interface Moneda {
     id: number | string;
@@ -16,6 +25,9 @@ export interface Moneda {
     nombre_moneda: string;
     simbolo_moneda: string;
     tasa_cambio: number;
+    imagen_url?: string | null;
+    /** Vías de transferencia que esta moneda admite (catálogo del CRUD de Monedas). */
+    vias_transferencia?: ViaPagoMoneda[];
 }
 
 export interface ClienteFisico {
@@ -47,6 +59,10 @@ interface Cuenta {
     tipo_moneda: string;
     moneda?: { id: number | string; codigo: string; simbolo: string };
     saldo_actual?: number;
+    /** 'efectivo' | 'tarjeta' — para el ícono de respaldo cuando no tiene logo de banco. */
+    tipo?: string;
+    /** Logo real del banco/tarjeta (null si la cuenta no tiene imagen asignada). */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
 }
 
 interface PaymentFormProps {
@@ -56,19 +72,11 @@ interface PaymentFormProps {
     onAddPayment: (payment: Payment) => void;
 }
 
-// ─── Vías de pago disponibles ─────────────────────────────────────────────────
+// ─── Métodos de pago (mismas imágenes que el CRUD de Monedas, components/monedas/metodos-pago-selector.tsx) ───
 
-const PAYMENT_VIAS = [
-    { id: 'zelle', name: 'Zelle' },
-    { id: 'cashapp', name: 'CashApp' },
-    { id: 'square', name: 'Square' },
-    { id: 'visa', name: 'Visa' },
-    { id: 'mastercard', name: 'MasterCard' },
-    { id: 'stripe', name: 'Stripe' },
-    { id: 'paypal', name: 'Paypal' },
-    { id: 'qvapay', name: 'QvaPay' },
-    { id: 'enzona', name: 'EnZona' },
-    { id: 'transfermovil', name: 'Transfermóvil' },
+const METODOS_PAGO: { id: 'efectivo' | 'transferencia'; name: string; imagen: string }[] = [
+    { id: 'efectivo', name: 'Efectivo', imagen: '/projects/metodos_pago/efectivo.webp' },
+    { id: 'transferencia', name: 'Transferencia', imagen: '/projects/metodos_pago/transferencia.webp' },
 ];
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -115,6 +123,8 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             name: m.nombre_moneda,
             symbol: m.simbolo_moneda,
             exchangeRate: m.tasa_cambio,
+            imagenUrl: m.imagen_url ?? null,
+            viasTransferencia: m.vias_transferencia ?? [],
         })),
         [monedas]);
 
@@ -127,15 +137,21 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
     // nunca mezclar <div> de encabezado como hermanos de ComboboxItem en la misma lista.
     const opcionesDestino = useMemo(() => {
         const cuentas = cuentasFiltradas.map((c) => ({
+            kind: 'cuenta' as const,
             value: `cuenta_${c.id}`,
             label: `🏦 ${c.nombre_cuenta}`,
             nombre: c.nombre_cuenta,
+            tipo: c.tipo,
+            banco: c.banco,
         }));
         const clientes = selectedCurrencyInfo?.code === 'USD'
             ? clientesFisicos.map((c) => ({
+                kind: 'cliente' as const,
                 value: `cliente_${c.id}`,
                 label: `👤 ${c.nombre_cliente}`,
                 nombre: c.nombre_cliente,
+                tipo: undefined,
+                banco: undefined,
             }))
             : [];
         return [...cuentas, ...clientes];
@@ -229,6 +245,9 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             amount: monto,
             cuenta_id: '',
             cliente_id: '',
+            // Las vías dependen de la moneda: una vía elegida para la moneda anterior puede no
+            // existir en esta (efectivo no lleva vía, así que no hay nada que limpiar ahí).
+            via: prev.method === 'transferencia' ? '' : prev.via,
         }));
         setDestinoSearch('');
         cargarCuentasFiltradas(monedaId, currentPayment.method);
@@ -327,10 +346,16 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                 <div className="space-y-2">
                     <Label>Método de pago</Label>
                     <Select value={currentPayment.method} onValueChange={handleMetodoChange}>
-                        <SelectTrigger><SelectValue placeholder="Seleccione método" /></SelectTrigger>
+                        <SelectTrigger className="h-14"><SelectValue placeholder="Seleccione método" /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="transferencia">Transferencia</SelectItem>
-                            <SelectItem value="efectivo">Efectivo</SelectItem>
+                            {METODOS_PAGO.map((metodo) => (
+                                <SelectItem key={metodo.id} value={metodo.id} className="py-2">
+                                    <span className="flex items-center gap-2">
+                                        <img src={metodo.imagen} alt="" aria-hidden="true" className="h-10 w-auto object-contain" />
+                                        {metodo.name}
+                                    </span>
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -339,11 +364,27 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                 <div className="space-y-2">
                     <Label>Moneda</Label>
                     <Select value={currentPayment.moneda_id} onValueChange={handleMonedaChange} disabled={!currentPayment.method}>
-                        <SelectTrigger><SelectValue placeholder="Seleccione moneda" /></SelectTrigger>
+                        <SelectTrigger className="h-14"><SelectValue placeholder="Seleccione moneda" /></SelectTrigger>
                         <SelectContent>
                             {currencies.map((c) => (
-                                <SelectItem key={c.id} value={c.id.toString()}>
-                                    {c.name} ({c.symbol}) — Tasa: {c.exchangeRate}
+                                <SelectItem key={c.id} value={c.id.toString()} className="py-2">
+                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                        {c.imagenUrl ? (
+                                            <img src={c.imagenUrl} alt="" aria-hidden="true" className="h-10 w-auto shrink-0 rounded object-contain" />
+                                        ) : (
+                                            <span className="bg-muted flex h-10 w-14 shrink-0 items-center justify-center rounded text-xs font-semibold">
+                                                {c.code}
+                                            </span>
+                                        )}
+                                        <span className="flex min-w-0 flex-col items-start leading-tight">
+                                            <span className="truncate font-medium">{c.name}</span>
+                                            <span className="text-muted-foreground text-xs">{c.symbol}</span>
+                                        </span>
+                                        <Badge className="ml-auto shrink-0 gap-1 border-sky-500/30 bg-sky-500/15 font-mono text-sky-700 tabular-nums dark:text-sky-300">
+                                            <ArrowLeftRight className="h-3 w-3" />
+                                            {c.exchangeRate}
+                                        </Badge>
+                                    </span>
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -361,6 +402,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                         disabled={!currentPayment.moneda_id}
                         min="0.0001"
                         step="0.0001"
+                        className="h-14"
                     />
                 </div>
 
@@ -375,7 +417,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                     >
                         <ComboboxInput
                             id="destino_pago"
-                            className="w-full"
+                            className="h-14 w-full"
                             placeholder="Buscar cuenta o cliente..."
                             showClear
                             disabled={!currentPayment.moneda_id}
@@ -387,8 +429,31 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                                 ) : (
                                     <>
                                         {opcionesDestinoFiltradas.map((opcion) => (
-                                            <ComboboxItem key={opcion.value} value={opcion.value}>
-                                                <span className="min-w-0 truncate" title={opcion.nombre}>{opcion.label}</span>
+                                            <ComboboxItem key={opcion.value} value={opcion.value} className="py-2">
+                                                {opcion.kind === 'cuenta' ? (
+                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                        {opcion.banco ? (
+                                                            <img
+                                                                src={opcion.banco.imagen_url}
+                                                                alt=""
+                                                                aria-hidden="true"
+                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                            />
+                                                        ) : opcion.tipo === 'efectivo' ? (
+                                                            <Wallet className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                        ) : (
+                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                        )}
+                                                        <span className="min-w-0 flex-1 truncate" title={opcion.nombre}>{opcion.nombre}</span>
+                                                        {opcion.tipo && (
+                                                            <Badge variant="outline" className="ml-auto shrink-0 text-[10px] capitalize">
+                                                                {opcion.tipo}
+                                                            </Badge>
+                                                        )}
+                                                    </span>
+                                                ) : (
+                                                    <span className="min-w-0 truncate" title={opcion.nombre}>{opcion.label}</span>
+                                                )}
                                             </ComboboxItem>
                                         ))}
                                         {opcionesDestinoFiltradas.length === 0 && (
@@ -401,18 +466,33 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                     </Combobox>
                 </div>
 
-                {/* Vía (solo transferencia) */}
+                {/* Vía (solo transferencia) — las que esta moneda admite, configuradas en Gestión de Monedas */}
                 {currentPayment.method === 'transferencia' && (
                     <div className="space-y-2">
                         <Label>Vía de pago</Label>
-                        <Select value={currentPayment.via} onValueChange={(v) => setCurrentPayment((prev) => ({ ...prev, via: v }))}>
-                            <SelectTrigger><SelectValue placeholder="Seleccione vía" /></SelectTrigger>
-                            <SelectContent>
-                                {PAYMENT_VIAS.map((via) => (
-                                    <SelectItem key={via.id} value={via.id}>{via.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        {selectedCurrencyInfo && selectedCurrencyInfo.viasTransferencia.length === 0 ? (
+                            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+                                {selectedCurrencyInfo.name} no tiene vías de transferencia configuradas.
+                            </p>
+                        ) : (
+                            <Select
+                                value={currentPayment.via}
+                                onValueChange={(v) => setCurrentPayment((prev) => ({ ...prev, via: v }))}
+                                disabled={!selectedCurrencyInfo}
+                            >
+                                <SelectTrigger className="h-14"><SelectValue placeholder="Seleccione vía" /></SelectTrigger>
+                                <SelectContent>
+                                    {(selectedCurrencyInfo?.viasTransferencia ?? []).map((via) => (
+                                        <SelectItem key={via.slug} value={via.slug} className="py-2">
+                                            <span className="flex items-center gap-2">
+                                                <ViaLogo slug={via.slug} nombre={via.nombre} imagenUrl={via.imagen_url} className="h-10" />
+                                                {via.nombre}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                 )}
 
@@ -424,6 +504,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                             value={currentPayment.referencia}
                             onChange={(e) => setCurrentPayment((prev) => ({ ...prev, referencia: e.target.value }))}
                             placeholder="Número de referencia"
+                            className="h-14"
                         />
                     </div>
                 )}
@@ -434,29 +515,39 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
                 <Label>Monto a Pagar</Label>
                 <div className="flex gap-2">
                     <div className="flex-1 space-y-2">
-                        <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={currentPayment.amount}
-                            onChange={(e) => setCurrentPayment((prev) => ({ ...prev, amount: e.target.value }))}
-                            placeholder="0.00"
-                            className="h-12 text-lg font-medium"
-                        />
+                        <InputGroup className="h-14 border-2 focus-within:border-primary">
+                            <InputGroupAddon className="text-muted-foreground text-xl font-bold">
+                                {selectedCurrencyInfo?.symbol ?? '$'}
+                            </InputGroupAddon>
+                            <InputGroupInput
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={currentPayment.amount}
+                                onChange={(e) => setCurrentPayment((prev) => ({ ...prev, amount: e.target.value }))}
+                                placeholder="0.00"
+                                className="text-xl font-bold tabular-nums"
+                            />
+                        </InputGroup>
                         {conversionCalculada && (
-                            <div className="rounded-lg bg-green-50 p-2 text-center">
-                                <p className="text-sm font-medium text-green-700">
-                                    {conversionCalculada.montoOriginal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                    {conversionCalculada.monedaSimbolo}{' '}={' '}
-                                    <span className="font-bold">
+                            <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5">
+                                <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                                    <span className="tabular-nums">
+                                        {conversionCalculada.montoOriginal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                        {conversionCalculada.monedaSimbolo}
+                                    </span>
+                                    <ArrowLeftRight className="h-4 w-4 shrink-0 text-emerald-500" />
+                                    <span className="text-base font-bold tabular-nums">
                                         {conversionCalculada.montoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                     </span>
-                                </p>
-                                <p className="mt-1 text-xs text-green-600">Tasa: {conversionCalculada.tasaCambio}</p>
+                                </div>
+                                <Badge className="shrink-0 gap-1 border-emerald-500/30 bg-emerald-500/15 font-mono text-emerald-700 tabular-nums dark:text-emerald-300">
+                                    Tasa {conversionCalculada.tasaCambio}
+                                </Badge>
                             </div>
                         )}
                     </div>
-                    <Button onClick={handleAddPayment} disabled={!canAdd} className="h-12 px-6">
+                    <Button onClick={handleAddPayment} disabled={!canAdd} className="h-14 px-6">
                         Agregar
                     </Button>
                 </div>

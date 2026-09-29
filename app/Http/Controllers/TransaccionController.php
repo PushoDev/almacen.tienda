@@ -35,14 +35,18 @@ class TransaccionController extends Controller
      */
     public function index()
     {
-        // Origen: vendedor solo ve sus cuentas asignadas personales; destino: cuentas asignadas a cualquier usuario
-        if (auth()->user()->role === 'vendedor') {
-            $cuentasOrigen = auth()->user()->cuentas()->where('tipo_titular', 'personal')->with('moneda')->get();
-            $cuentasDestino = Cuenta::with('moneda')->whereHas('users')->get();
-        } else {
-            $cuentasOrigen = Cuenta::with('moneda')->get();
-            $cuentasDestino = Cuenta::with('moneda')->get();
+        // Origen: vendedor solo ve sus cuentas asignadas personales (admin/moderador, todas sin
+        // filtrar por titular — cuentasPropias() ya les da Cuenta::query() completo);
+        // destino: cuentas asignadas a cualquier usuario.
+        $esVendedor = auth()->user()->role === 'vendedor';
+        $origenQuery = auth()->user()->cuentasPropias();
+        if ($esVendedor) {
+            $origenQuery->where('tipo_titular', 'personal');
         }
+        $cuentasOrigen = $origenQuery->with('moneda')->get();
+        $cuentasDestino = $esVendedor
+            ? Cuenta::with('moneda')->whereHas('users')->get()
+            : Cuenta::with('moneda')->get();
 
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();

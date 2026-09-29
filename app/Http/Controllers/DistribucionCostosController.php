@@ -88,12 +88,13 @@ class DistribucionCostosController extends Controller
             return $compra;
         });
 
-        // Vendedor solo ve sus cuentas asignadas personales; el resto de roles ve todas.
+        // Vendedor solo ve sus cuentas asignadas personales (admin/moderador, todas sin filtrar
+        // por titular — cuentasPropias() ya les da Cuenta::query() completo).
+        $cuentasQuery = auth()->user()->cuentasPropias();
         if (auth()->user()->role === 'vendedor') {
-            $cuentas = auth()->user()->cuentas()->where('tipo_titular', 'personal')->with('moneda')->get();
-        } else {
-            $cuentas = Cuenta::with('moneda')->get();
+            $cuentasQuery->where('tipo_titular', 'personal');
         }
+        $cuentas = $cuentasQuery->with('moneda')->get();
 
         $monedaCUP = Moneda::where('codigo_moneda', 'CUP')
             ->where('estado', true)

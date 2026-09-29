@@ -17,6 +17,27 @@ test('authenticated users can visit the dashboard', function () {
     $this->get('/dashboard')->assertOk();
 });
 
+test('el saldo general del vendedor en el dashboard solo cuenta sus cuentas de acceso completo', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true, 'principal' => true, 'tasa_cambio' => 1]);
+
+    $completa = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta completa', 'saldo_cuenta' => 100, 'tipo_cuenta' => 'permanentes',
+        'tipo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'estado' => 'activa',
+    ]);
+    $cobro = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta de cobro', 'saldo_cuenta' => 900, 'tipo_cuenta' => 'permanentes',
+        'tipo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'estado' => 'activa',
+    ]);
+    $vendedor->cuentas()->attach($completa->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $this->actingAs($vendedor)->get('/dashboard')->assertInertia(fn ($page) => $page
+        ->where('totalCapital', fn ($valor) => (float) $valor === 100.0)
+        ->has('montosPorMoneda', 1)
+        ->where('montosPorMoneda.0.monto', fn ($valor) => (float) $valor === 100.0));
+});
+
 test('el movimiento reconstruido de las cuentas cuenta la comisión en la moneda de la cuenta de donde salió', function () {
     $vendedor = User::factory()->vendedor()->create();
     $almacen = Almacen::factory()->puntoVenta()->create();

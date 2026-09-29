@@ -7,7 +7,7 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react'; // Agregamos usePage
+import { Head, Link, router, usePage } from '@inertiajs/react'; // Agregamos usePage
 import {
     ArrowLeft,
     Calendar,
@@ -86,28 +86,16 @@ export default function MonedaShow() {
         });
     };
 
-    const handleEstablecerPrincipal = async () => {
+    const handleEstablecerPrincipal = () => {
         setLoading(true);
-        try {
-            const response = await fetch(`/monedas/${moneda.id}/establecer-principal`, {
-                method: 'PATCH',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (response.ok) {
-                sileo.success({ title: 'Moneda principal', description: 'Se estableció correctamente como moneda principal' });
-                window.location.reload();
-            } else {
-                throw new Error('Error en la respuesta del servidor');
-            }
-        } catch (error) {
-            sileo.error({ title: 'Error al establecer', description: 'No se pudo establecer la moneda como principal' });
-        } finally {
-            setLoading(false);
-        }
+        router.patch(
+            route('monedas.establecer-principal', { moneda: moneda.id }),
+            {},
+            {
+                onError: () => sileo.error({ title: 'Error al establecer', description: 'No se pudo establecer la moneda como principal' }),
+                onFinish: () => setLoading(false),
+            },
+        );
     };
 
     return (

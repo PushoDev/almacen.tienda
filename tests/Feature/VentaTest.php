@@ -1957,6 +1957,25 @@ test('getCuentasParaGestor() solo devuelve al vendedor sus propias cuentas', fun
     expect($ids->all())->toBe([$cuentaAsignada->id]);
 });
 
+test('getCuentasParaGestor() manda el logo real del banco, para los selectores de Mensajería/Comisión/Gestor', function () {
+    // Regresión 2026-09-29: esos 3 selectores solo mostraban el nombre de la cuenta en texto
+    // plano — este endpoint nunca mandó el campo `banco`, a diferencia de getCuentasFiltradas()
+    // (POS) que sí lo manda desde antes.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaCup();
+    $cuenta->update(['imagen' => 'bandec']);
+
+    $response = $this->getJson(route('ventas.getCuentasParaGestor'));
+
+    $response->assertOk();
+    $fila = collect($response->json())->firstWhere('id', $cuenta->id);
+    expect($fila['banco'])->not->toBeNull();
+    expect($fila['banco']['slug'])->toBe('bandec');
+    expect($fila['banco']['imagen_url'])->toContain('bandec');
+});
+
 test('getProductosPorAlmacen() rechaza con 403 a un vendedor sin acceso al almacén', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);
@@ -2071,6 +2090,63 @@ test('getProductosPorAlmacen() resuelve la comisión de cada lote: la propia, la
         ->and((float) $comisiones[$ochoPropia->id])->toBe(8.0)
         ->and((float) $comisiones[$cincoPropia->id])->toBe(5.0); // la propia manda sobre la de otros
     expect(collect($productos[$sinComisiones->id]['lotes'])->pluck('comision')->map(fn ($c) => (float) $c)->all())->toBe([2.0, 2.0]); // ninguno: la del producto
+});
+
+// ==========================================================================
+// FICHAS HERMANAS AGRUPADAS EN EL POS (2026-09-28) — "Vender de esta ficha"
+// ==========================================================================
+
+/**
+ * Dos fichas del mismo producto físico (nombre/marca/modelo/capacidad/color idénticos, distinto
+ * costo — el caso típico de la duplicación de fichas por precio) con precio en el almacén dado.
+ *
+ * @return array{0: Producto, 1: Producto} la más antigua primero
+ */
+function fichasHermanasConPrecio(Almacen $almacen, float $costoA, float $precioA, float $costoB, float $precioB): array
+{
+    $atributos = ['nombre_producto' => 'VENTILADOR HERMANAS', 'marca_producto' => 'F6', 'modelo_producto' => 'RECARGABLE', 'capacidad_producto' => '20000 MAH', 'color_producto' => null];
+
+    $vieja = Producto::factory()->create(array_merge($atributos, ['precio_compra_producto' => $costoA]));
+    $vieja->created_at = now()->subDay();
+    $vieja->save();
+    LoteStock::create(['codigo' => 'LOTE-VIEJA', 'producto_id' => $vieja->id, 'almacen_id' => $almacen->id, 'cantidad' => 10, 'precio_costo' => $costoA]);
+    $vieja->almacenes()->attach($almacen->id, ['cantidad' => 10]);
+    DB::table('producto_vendedors')->insert(['producto_id' => $vieja->id, 'almacen_id' => $almacen->id, 'precio_venta' => $precioA, 'venta_ganancia' => $precioA - $costoA, 'created_at' => now(), 'updated_at' => now()]);
+
+    $nueva = Producto::factory()->create(array_merge($atributos, ['precio_compra_producto' => $costoB]));
+    LoteStock::create(['codigo' => 'LOTE-NUEVA', 'producto_id' => $nueva->id, 'almacen_id' => $almacen->id, 'cantidad' => 5, 'precio_costo' => $costoB]);
+    $nueva->almacenes()->attach($almacen->id, ['cantidad' => 5]);
+    DB::table('producto_vendedors')->insert(['producto_id' => $nueva->id, 'almacen_id' => $almacen->id, 'precio_venta' => $precioB, 'venta_ganancia' => $precioB - $costoB, 'created_at' => now(), 'updated_at' => now()]);
+
+    return [$vieja, $nueva];
+}
+
+test('getProductosPorAlmacen() agrupa fichas hermanas en una sola tarjeta con "opciones", la más antigua primero', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    [$vieja, $nueva] = fichasHermanasConPrecio($almacen, costoA: 30.09, precioA: 49, costoB: 37.34, precioB: 45);
+
+    $productos = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json();
+
+    expect($productos)->toHaveCount(1);
+    expect($productos[0]['id'])->toBe($vieja->id);
+    $opcionesIds = collect($productos[0]['opciones'])->pluck('id')->all();
+    expect($opcionesIds)->toBe([$vieja->id, $nueva->id]);
+    expect((float) $productos[0]['opciones'][0]['precio_venta'])->toBe(49.0)
+        ->and((float) $productos[0]['opciones'][1]['precio_venta'])->toBe(45.0);
+});
+
+test('getProductosPorAlmacen() no agrupa fichas de productos distintos', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    crearProductoConPrecio($almacen, 10, 20);
+    crearProductoConPrecio($almacen, 15, 25);
+
+    $productos = $this->getJson(route('ventas.getProductosPorAlmacen', $almacen->id))->assertOk()->json();
+
+    expect($productos)->toHaveCount(2);
+    expect($productos[0])->not->toHaveKey('opciones');
+    expect($productos[1])->not->toHaveKey('opciones');
 });
 
 test('vender con el lote elegido usa su precio propio como base y mantiene la comisión (el excedente no va al vendedor)', function () {
@@ -2848,4 +2924,136 @@ test('el POS envía el costo real del producto en el almacén a todos los roles'
     foreach ([User::factory()->admin()->create(), $moderador, $vendedor] as $usuario) {
         expect($this->actingAs($usuario)->getJson($ruta)->json('0.costo_real'))->toEqual(12.5);
     }
+});
+
+// ==========================================================================
+// VÍA DE PAGO — whitelist por moneda + logo en el detalle (2026-09-28)
+// ==========================================================================
+
+test('procesarVenta rechaza una vía que no pertenece a la moneda del pago', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaCup();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaCup);
+    $payload['pagos'] = [[
+        'metodo' => 'transferencia',
+        'moneda_id' => $monedaCup->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+        // 'zelle' es de ámbito internacional — CUP solo admite enzona/transfermovil por defecto.
+        'via' => 'zelle',
+    ]];
+
+    $this->postJson(route('ventas.procesar'), $payload);
+
+    expect(Venta::count())->toBe(0);
+});
+
+test('procesarVenta acepta una vía válida para la moneda y el detalle la muestra con su logo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'transferencia',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+        'via' => 'zelle',
+    ]];
+
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+
+    $venta = Venta::firstOrFail();
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page
+        ->where('venta.pagos.0.via', 'zelle')
+        ->where('venta.pagos.0.via_info.slug', 'zelle')
+        ->where('venta.pagos.0.via_info.nombre', 'Zelle'));
+});
+
+test('editarVentaPendiente rechaza una vía que no pertenece a la moneda del pago', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $venta = Venta::firstOrFail();
+
+    $response = $this->postJson(route('ventas.editar.pendiente', $venta), [
+        'pagos' => [[
+            'metodo' => 'transferencia',
+            'moneda_id' => $monedaUsd->id,
+            'monto' => 20,
+            'tasa_cambio' => 1,
+            'monto_equivalente' => 20,
+            'cuenta_id' => $cuenta->id,
+            // 'enzona' es de ámbito cuba — USD no la admite por defecto.
+            'via' => 'enzona',
+        ]],
+    ]);
+
+    $response->assertStatus(422);
+    $response->assertJson(['success' => false]);
+    expect($venta->fresh()->pagos()->count())->toBe(1);
+});
+
+test('ventas.show manda las vías de transferencia por moneda en monedasSistema, igual que el POS', function () {
+    // Regresión 2026-09-29: `monedasSistema` en show() no traía `vias_transferencia`, así que el
+    // formulario de "Editar Venta Pendiente" (Vendor/Show.tsx) no podía ofrecer ninguna vía real y
+    // bloqueaba agregar un pago nuevo por transferencia — el POS (index()) sí las traía.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $venta = Venta::firstOrFail();
+
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page
+        ->where('monedasSistema', function ($monedas) {
+            $usd = collect($monedas)->firstWhere('codigo', 'USD');
+
+            return $usd !== null
+                && array_key_exists('vias_transferencia', $usd)
+                && collect($usd['vias_transferencia'])->pluck('slug')->contains('zelle');
+        }));
 });

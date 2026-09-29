@@ -28,7 +28,14 @@ class ProductoCodigo extends Model
     }
 
     /**
-     * Genera el código de barras automáticamente (texto)
+     * Genera el código de barras automáticamente (texto). La parte fija (nombre+marca+modelo+
+     * capacidad) se recorta a 10 caracteres para dejar SIEMPRE al menos 4 dígitos al azar —
+     * antes, con una capacidad de 5+ dígitos (ej. "20000 MAH"), la parte fija llegaba a 14
+     * caracteres y no quedaba ningún dígito al azar: dos fichas del mismo producto (mismo
+     * nombre/marca/modelo/capacidad, el caso típico de la duplicación de fichas por precio,
+     * ver CompraController::store()) generaban el código IDÉNTICO siempre, no a veces. Esto ya
+     * había pasado en 5 productos reales antes de este fix (2026-09-28) — ver
+     * generarYGuardarDefault(), que además revisa que el código no exista todavía.
      */
     public static function generarCodigoBarras($producto)
     {
@@ -41,25 +48,13 @@ class ProductoCodigo extends Model
         $marca = str_pad($marca, 3, 'X');
         $modelo = str_pad($modelo, 3, 'X');
 
-        $parteFija = $nombre.$marca.$modelo.$capacidad;
+        $parteFija = substr($nombre.$marca.$modelo.$capacidad, 0, 10);
 
-        if (strlen($parteFija) > 14) {
-            $parteFija = substr($parteFija, 0, 14);
-        }
+        $digitosAleatorios = 14 - strlen($parteFija);
+        $min = (int) pow(10, $digitosAleatorios - 1);
+        $max = (int) pow(10, $digitosAleatorios) - 1;
 
-        $longitudFija = strlen($parteFija);
-        $digitosAleatoriosNecesarios = 14 - $longitudFija;
-
-        $numerosAleatorios = '';
-        if ($digitosAleatoriosNecesarios > 0) {
-            $min = pow(10, $digitosAleatoriosNecesarios - 1);
-            $max = pow(10, $digitosAleatoriosNecesarios) - 1;
-            $numerosAleatorios = rand($min, $max);
-        }
-
-        $codigo = $parteFija.$numerosAleatorios;
-
-        return substr($codigo, 0, 14);
+        return $parteFija.rand($min, $max);
     }
 
     /**
@@ -105,7 +100,12 @@ class ProductoCodigo extends Model
      */
     public static function generarYGuardarDefault(Producto $producto, int $cantidad = 0)
     {
-        $codigo_texto = self::generarCodigoBarras($producto);
+        // El sufijo al azar hace la colisión improbable, no imposible — se revisa contra la
+        // tabla y se reintenta hasta encontrar uno libre, así queda garantizado siempre.
+        do {
+            $codigo_texto = self::generarCodigoBarras($producto);
+        } while (self::where('codigo_barras', $codigo_texto)->exists());
+
         $imagen = null;
 
         try {

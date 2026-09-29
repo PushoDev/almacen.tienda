@@ -24,7 +24,9 @@ use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
+use App\Services\FichasHermanasService;
 use App\Services\LoteConsumoService;
+use App\Services\MetodosPagoService;
 use App\Services\PrecioLoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +39,8 @@ use Milon\Barcode\Facades\DNS2DFacade as DNS2D;
 
 class VentaController extends Controller
 {
+    public function __construct(private MetodosPagoService $metodosPago, private FichasHermanasService $fichasHermanas) {}
+
     // ========================================================================
     // MÉTODOS DE CARGA DE DATOS (API / JSON)
     // ========================================================================
@@ -163,6 +167,9 @@ class VentaController extends Controller
 
                 return [
                     'id' => $producto->id,
+                    // Solo para agrupar fichas hermanas más abajo — no llega al JSON final.
+                    '_clave_hermanas' => $this->fichasHermanas->clave($producto),
+                    '_created_at' => $producto->created_at,
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
                     'modelo_producto' => $producto->modelo_producto,
@@ -196,7 +203,30 @@ class VentaController extends Controller
                 ];
             });
 
-        return response()->json($productos->filter(fn ($p) => $p['tiene_precio'])->values());
+        $limpiar = fn (array $p) => collect($p)->except(['_clave_hermanas', '_created_at'])->all();
+
+        // Fichas hermanas con precio en este almacén (mismo producto, costo/precio distinto —
+        // ver FichasHermanasService) se agrupan en UNA sola tarjeta: la más antigua es la que se
+        // ve, con las demás en 'opciones' para el selector "Vender de esta ficha" del POS. Pedido
+        // del cliente 2026-09-28: antes salían como tarjetas sueltas, sin forma de saber que eran
+        // el mismo producto ni de elegir a propósito de cuál vender.
+        $agrupados = $productos->filter(fn ($p) => $p['tiene_precio'])
+            ->values()
+            ->groupBy('_clave_hermanas')
+            ->flatMap(function ($grupo) use ($limpiar) {
+                if ($grupo->count() < 2) {
+                    return [$limpiar($grupo->first())];
+                }
+
+                $ordenado = $grupo->sortBy('_created_at')->values();
+                $principal = $limpiar($ordenado->first());
+                $principal['opciones'] = $ordenado->map($limpiar)->values()->all();
+
+                return [$principal];
+            })
+            ->values();
+
+        return response()->json($agrupados);
     }
 
     /**
@@ -282,7 +312,7 @@ class VentaController extends Controller
                             ->where('tipo_moneda', $moneda->codigo_moneda);
                     });
             })
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo', 'imagen');
 
         // ✅ NUEVO: Filtrar por tipo de cuenta según método de pago
         if ($request->has('metodo_pago') && $request->metodo_pago) {
@@ -306,6 +336,10 @@ class VentaController extends Controller
                     'id' => $cuenta->id,
                     'nombre_cuenta' => $cuenta->nombre_cuenta,
                     'saldo_actual' => $cuenta->saldo_cuenta,
+                    'tipo' => $cuenta->tipo,
+                    // Logo real del banco/tarjeta (o insignia de efectivo) para identificar la cuenta
+                    // de un vistazo en "Destino del Pago" — mismo mecanismo que Cuentas/Index.tsx.
+                    'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                     'moneda' => $cuenta->moneda ? [
                         'id' => $cuenta->moneda->id,
                         'codigo' => $cuenta->moneda->codigo_moneda,
@@ -330,7 +364,7 @@ class VentaController extends Controller
         $user = Auth::user();
 
         $query = Cuenta::with('moneda')
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo', 'imagen');
 
         // No-admin: solo sus cuentas
         if (! in_array($user->role, ['admin', 'moderador'])) {
@@ -350,6 +384,10 @@ class VentaController extends Controller
                     'tasa_cambio' => (float) ($cuenta->moneda?->tasa_cambio ?? 1),
                 ],
                 'tipo' => $cuenta->tipo,
+                // Logo real del banco/tarjeta (o insignia de efectivo) — mismo mecanismo que
+                // getCuentasFiltradas(), para identificar la cuenta de un vistazo en los
+                // selectores de Mensajería/Comisión/Gestor, hoy solo con texto plano.
+                'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
             ];
         });
 
@@ -417,6 +455,11 @@ class VentaController extends Controller
 
         $monedas = Moneda::where('estado', true)->get()
             ->map(function ($moneda) {
+                // Vías de pago que esta moneda admite dentro de la transferencia (catálogo configurado
+                // en el CRUD de Monedas) — el POS solo debe ofrecer las que la moneda elegida admite.
+                $resumenMetodos = $this->metodosPago->resumenDeMoneda($moneda);
+                $viasTransferencia = collect($resumenMetodos)->firstWhere('slug', 'transferencia')['vias'] ?? [];
+
                 return [
                     'id' => (string) $moneda->id, // Convertir a string para consistencia
                     'codigo_moneda' => $moneda->codigo_moneda,
@@ -425,6 +468,8 @@ class VentaController extends Controller
                     'tasa_cambio' => (float) $moneda->tasa_cambio,
                     'principal' => (bool) $moneda->principal,
                     'estado' => (bool) $moneda->estado,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+                    'vias_transferencia' => $viasTransferencia,
                 ];
             });
 
@@ -589,6 +634,7 @@ class VentaController extends Controller
                     ] : null,
                     'monto' => $pago->monto,
                     'via' => $pago->via_pago,
+                    'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                     'tasa_cambio' => $pago->tasa_cambio_aplicada,
                     'monto_equivalente' => $pago->monto_equivalente,
                     // ✅ NUEVO: Información del destino
@@ -687,13 +733,22 @@ class VentaController extends Controller
             ] : null,
         ];
 
-        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(fn ($m) => [
-            'id' => $m->id,
-            'codigo' => $m->codigo_moneda,
-            'nombre' => $m->nombre_moneda,
-            'simbolo' => $m->simbolo_moneda,
-            'tasa' => (float) $m->tasa_cambio,
-        ])->values()->toArray();
+        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(function ($m) {
+            // Vías de pago que esta moneda admite dentro de la transferencia — mismo patrón que index()
+            // (el POS). Sin esto, el formulario de "Editar Venta Pendiente" no puede ofrecer ninguna vía
+            // real y bloquea agregar un pago nuevo por transferencia (ver ESTADO_DESARROLLO.md).
+            $resumenMetodos = $this->metodosPago->resumenDeMoneda($m);
+            $viasTransferencia = collect($resumenMetodos)->firstWhere('slug', 'transferencia')['vias'] ?? [];
+
+            return [
+                'id' => $m->id,
+                'codigo' => $m->codigo_moneda,
+                'nombre' => $m->nombre_moneda,
+                'simbolo' => $m->simbolo_moneda,
+                'tasa' => (float) $m->tasa_cambio,
+                'vias_transferencia' => $viasTransferencia,
+            ];
+        })->values()->toArray();
 
         return Inertia::render('Vendor/Show', [
             'venta' => $ventaData,
@@ -916,6 +971,11 @@ class VentaController extends Controller
             // No pueden tener ambos
             if (! empty($pago['cuenta_id']) && ! empty($pago['cliente_id'])) {
                 throw new \Exception('Un pago no puede tener cuenta y cliente al mismo tiempo.');
+            }
+
+            // La vía elegida debe estar habilitada para la moneda del pago (antes se aceptaba cualquier texto).
+            if (! empty($pago['via']) && ! empty($pago['moneda_id']) && ! $this->metodosPago->viaValidaParaMoneda($pago['via'], (int) $pago['moneda_id'])) {
+                throw new \Exception('La vía de pago seleccionada no está habilitada para esa moneda.');
             }
         }
 
@@ -1908,6 +1968,9 @@ class VentaController extends Controller
             if (! empty($pago['cuenta_id']) && ! empty($pago['cliente_id'])) {
                 return response()->json(['success' => false, 'message' => 'Un pago no puede tener cuenta y cliente al mismo tiempo.'], 422);
             }
+            if (! empty($pago['via']) && ! empty($pago['moneda_id']) && ! $this->metodosPago->viaValidaParaMoneda($pago['via'], (int) $pago['moneda_id'])) {
+                return response()->json(['success' => false, 'message' => 'La vía de pago seleccionada no está habilitada para esa moneda.'], 422);
+            }
         }
 
         $user = Auth::user();
@@ -2050,6 +2113,7 @@ class VentaController extends Controller
                 'monto' => $p->monto,
                 'monto_equivalente' => $p->monto_equivalente,
                 'via' => $p->via_pago,
+                'via_info' => $this->metodosPago->viaPorSlug($p->via_pago),
                 'tasa_cambio' => $p->tasa_cambio_aplicada,
                 'moneda' => $p->moneda ? [
                     'id' => $p->moneda->id,

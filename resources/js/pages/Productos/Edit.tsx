@@ -2,6 +2,7 @@ import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -178,6 +179,62 @@ export default function EditarProductosPage({
             },
             onError: () => {
                 sileo.error({ title: 'Error al actualizar', description: 'No se pudo corregir el precio de venta' });
+            },
+        });
+    };
+
+    // "Fusionar fichas en este almacén" (2026-09-28, pedido del cliente): a diferencia de
+    // "Limpiar duplicados" en /productos (solo informativo ahora), esto junta fichas hermanas
+    // con stock EN ESTE almacén — el servidor rechaza cualquiera que también tenga stock en otro.
+    const [fusionAlmacen, setFusionAlmacen] = useState<AlmacenItem | null>(null);
+    const fusionForm = useForm({
+        almacen_id: '',
+        productos_eliminar_ids: [] as number[],
+        precio_venta: '',
+        comision: '',
+    });
+
+    const hermanasEnAlmacen = (almacenId: number) => fichas_hermanas.filter((f) => f.almacenes.some((a) => a.id === almacenId));
+
+    // Almacenes donde SOLO viven fichas hermanas (esta ficha no tiene stock ahí) — se muestran
+    // igual, de solo lectura, para ver el panorama completo del producto sin importar por qué
+    // ID entraste. Sin acción de fusionar aquí (esta ficha no tiene nada que fusionar ahí).
+    const idsAlmacenesPropios = new Set(almacenes.map((a) => a.id));
+    const almacenesSoloHermanas = Array.from(
+        new Map(
+            fichas_hermanas.flatMap((f) => f.almacenes.filter((a) => !idsAlmacenesPropios.has(a.id))).map((a) => [a.id, a]),
+        ).values(),
+    );
+
+    const abrirFusionEnAlmacen = (almacen: AlmacenItem) => {
+        setFusionAlmacen(almacen);
+        fusionForm.clearErrors();
+        fusionForm.setData({
+            almacen_id: almacen.id.toString(),
+            // Todas marcadas por defecto — el admin desmarca las que no quiere juntar.
+            productos_eliminar_ids: hermanasEnAlmacen(almacen.id).map((f) => f.id),
+            precio_venta: '',
+            comision: '',
+        });
+    };
+
+    const alternarFichaFusion = (fichaId: number) => {
+        const actual = fusionForm.data.productos_eliminar_ids;
+        fusionForm.setData('productos_eliminar_ids', actual.includes(fichaId) ? actual.filter((id) => id !== fichaId) : [...actual, fichaId]);
+    };
+
+    const guardarFusionEnAlmacen = () => {
+        if (!fusionAlmacen || fusionForm.data.productos_eliminar_ids.length === 0) return;
+        fusionForm.post(route('productos.fusionar-en-almacen', { producto: producto.id }), {
+            preserveScroll: true,
+            onSuccess: () => {
+                sileo.success({ title: 'Fichas fusionadas', description: `En ${fusionAlmacen.nombre_almacen}` });
+                setFusionAlmacen(null);
+            },
+            onError: (errs) => {
+                if (!errs.precios_por_almacen) {
+                    sileo.error({ title: 'No se pudo fusionar', description: errs.productos_eliminar_ids || errs.almacen_id || 'Revisa el error' });
+                }
             },
         });
     };
@@ -622,7 +679,7 @@ export default function EditarProductosPage({
                                             </div>
                                         </div>
 
-                                        {almacen.lotes.length > 1 && (
+                                        {(almacen.lotes.length > 1 || hermanasEnAlmacen(almacen.id).length > 0) && (
                                             <div className="mt-3 space-y-1.5">
                                                 {almacen.lotes.map((lote) => (
                                                     <div
@@ -682,8 +739,92 @@ export default function EditarProductosPage({
                                                         </div>
                                                     </div>
                                                 ))}
+                                                {/* Fichas hermanas con stock aquí — misma fila que un lote, para que se vea igual de
+                                                    detallado aunque sea otra ficha (distinto costo, casi siempre por otra compra). */}
+                                                {hermanasEnAlmacen(almacen.id).map((hermana) => {
+                                                    const cantidadAqui = hermana.almacenes.find((a) => a.id === almacen.id)?.cantidad ?? 0;
+
+                                                    return (
+                                                        <div
+                                                            key={`hermana-${hermana.id}`}
+                                                            className="flex items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50/50 px-2 py-1.5 text-xs dark:border-amber-900 dark:bg-amber-950/20"
+                                                        >
+                                                            <span className="font-mono text-muted-foreground">
+                                                                {hermana.codigo_producto} <span className="text-amber-600">· otra ficha</span>
+                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge variant="outline" className="gap-1">
+                                                                    <Package size={10} />
+                                                                    {cantidadAqui} uds.
+                                                                </Badge>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                                >
+                                                                    <DollarSign size={10} />${hermana.precio_compra_producto}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {isPrivileged && hermanasEnAlmacen(almacen.id).length > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => abrirFusionEnAlmacen(almacen)}
+                                                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                                                    >
+                                                        <Layers size={13} />
+                                                        Fusionar {hermanasEnAlmacen(almacen.id).length} ficha
+                                                        {hermanasEnAlmacen(almacen.id).length === 1 ? '' : 's'} más en este almacén
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
+                                    </div>
+                                ))}
+                                {/* Almacenes donde esta ficha no tiene stock, pero una hermana sí — de solo
+                                    lectura, para ver el producto completo sin importar por cuál ID entraste. */}
+                                {almacenesSoloHermanas.map((almacenForaneo) => (
+                                    <div
+                                        key={`foraneo-${almacenForaneo.id}`}
+                                        className="rounded-lg border border-dashed bg-gray-50 p-4 opacity-90 dark:bg-gray-800"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900/30">
+                                                <Warehouse className="text-sky-600 dark:text-sky-400" size={16} />
+                                            </div>
+                                            <h4 className="text-sidebar-accent font-medium">{almacenForaneo.nombre_almacen}</h4>
+                                            <span className="text-xs text-muted-foreground">(otra ficha, no esta)</span>
+                                        </div>
+                                        <Separator className="my-3" />
+                                        <div className="space-y-1.5">
+                                            {hermanasEnAlmacen(almacenForaneo.id).map((hermana) => {
+                                                const cantidadAqui = hermana.almacenes.find((a) => a.id === almacenForaneo.id)?.cantidad ?? 0;
+
+                                                return (
+                                                    <div
+                                                        key={`hermana-${hermana.id}`}
+                                                        className="flex items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50/50 px-2 py-1.5 text-xs dark:border-amber-900 dark:bg-amber-950/20"
+                                                    >
+                                                        <span className="font-mono text-muted-foreground">
+                                                            {hermana.codigo_producto} <span className="text-amber-600">· otra ficha</span>
+                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="outline" className="gap-1">
+                                                                <Package size={10} />
+                                                                {cantidadAqui} uds.
+                                                            </Badge>
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                            >
+                                                                <DollarSign size={10} />${hermana.precio_compra_producto}
+                                                            </Badge>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -1020,6 +1161,99 @@ export default function EditarProductosPage({
                             </Button>
                             <Button type="button" disabled={precioVentaForm.processing} onClick={guardarPrecioVentaLote} className="bg-blue-600 hover:bg-blue-700">
                                 {precioVentaForm.processing ? 'Guardando...' : 'Guardar'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={fusionAlmacen !== null} onOpenChange={(open) => !open && setFusionAlmacen(null)}>
+                    <DialogContent className="sm:max-w-[480px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Layers className="text-amber-500" size={20} />
+                                Fusionar fichas en {fusionAlmacen?.nombre_almacen}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Las fichas marcadas se juntan en la que estás editando (#{producto.id}) — mismo producto, distinto costo de
+                                compra. Solo afecta a {fusionAlmacen?.nombre_almacen}: si una ficha también tiene stock en otro almacén, no
+                                aparece aquí. Ventas, compras, lotes e historial pasan a esta ficha; nada se borra.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-2 py-2">
+                            {fusionAlmacen &&
+                                hermanasEnAlmacen(fusionAlmacen.id).map((ficha) => {
+                                    const cantidadAqui = ficha.almacenes.find((a) => a.id === fusionAlmacen.id)?.cantidad ?? 0;
+                                    const marcada = fusionForm.data.productos_eliminar_ids.includes(ficha.id);
+
+                                    return (
+                                        <label
+                                            key={ficha.id}
+                                            className="flex cursor-pointer items-center justify-between gap-2 rounded-md border p-2.5 text-sm hover:bg-accent"
+                                        >
+                                            <div className="flex items-center gap-2.5">
+                                                <Checkbox checked={marcada} onCheckedChange={() => alternarFichaFusion(ficha.id)} />
+                                                <span>
+                                                    Ficha #{ficha.id} — <span className="font-mono">{ficha.codigo_producto}</span>
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <Badge variant="outline" className="gap-1">
+                                                    <Package size={10} />
+                                                    {cantidadAqui} uds.
+                                                </Badge>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                                >
+                                                    <DollarSign size={10} />${ficha.precio_compra_producto}
+                                                </Badge>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                            <InputError message={fusionForm.errors.productos_eliminar_ids} />
+                            <InputError message={fusionForm.errors.almacen_id} />
+
+                            {fusionForm.errors.precios_por_almacen && (
+                                <div className="mt-1 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                                    <p className="text-xs text-amber-800 dark:text-amber-300">{fusionForm.errors.precios_por_almacen}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <Label htmlFor="fusion-precio-venta">Precio de venta</Label>
+                                            <Input
+                                                id="fusion-precio-venta"
+                                                inputMode="decimal"
+                                                value={fusionForm.data.precio_venta}
+                                                onChange={(e) => fusionForm.setData('precio_venta', e.target.value)}
+                                                placeholder="0.00"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="fusion-comision">Comisión (opcional)</Label>
+                                            <Input
+                                                id="fusion-comision"
+                                                inputMode="decimal"
+                                                value={fusionForm.data.comision}
+                                                onChange={(e) => fusionForm.setData('comision', e.target.value)}
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setFusionAlmacen(null)}>
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={fusionForm.processing || fusionForm.data.productos_eliminar_ids.length === 0}
+                                onClick={guardarFusionEnAlmacen}
+                                className="bg-amber-600 hover:bg-amber-700"
+                            >
+                                {fusionForm.processing ? 'Fusionando...' : 'Fusionar'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

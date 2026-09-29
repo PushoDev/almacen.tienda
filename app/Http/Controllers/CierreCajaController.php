@@ -12,6 +12,7 @@ use App\Models\PagoVenta;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\CierreCajaNotification;
+use App\Services\MetodosPagoService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -23,6 +24,8 @@ use Inertia\Inertia;
 
 class CierreCajaController extends Controller
 {
+    public function __construct(private MetodosPagoService $metodosPago) {}
+
     /**
      * Listado de cierres.
      * Admin/Moderador ve todos, Vendedor ve los suyos.
@@ -1091,6 +1094,7 @@ class CierreCajaController extends Controller
                 'detalles' => $detallesProductos,
                 'moneda_codigo' => $pago->moneda ? $pago->moneda->codigo_moneda : 'USD',
                 'via_pago' => $pago->via_pago ?? null,
+                'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
                 'cliente_nombre' => $pago->cliente ? $pago->cliente->nombre_cliente : null,
                 'destino_nombre' => $destinoNombre,
@@ -1148,6 +1152,7 @@ class CierreCajaController extends Controller
                 'hora' => $pago->created_at->format('H:i'),
                 'tipo_pago' => $pago->tipo_pago,
                 'via_pago' => $pago->via_pago ?? null,
+                'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
                 'destino_nombre' => $destinoNombre,
                 'productos' => $detallesProductos,

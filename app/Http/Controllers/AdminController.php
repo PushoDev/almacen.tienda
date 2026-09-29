@@ -28,9 +28,10 @@ class AdminController extends Controller
 
         // Solo calcular si el usuario tiene cuentas asignadas
         if ($user) {
-            // Solo los vendedores ven sus cuentas asignadas, los admin y moderador ven todas
+            // Solo los vendedores ven sus cuentas asignadas (solo acceso completo, las
+            // de cobro no son "suyas"), los admin y moderador ven todas.
             if ($user->role === 'vendedor') {
-                $cuentasUsuario = $user->cuentas()->with('moneda')->get();
+                $cuentasUsuario = $user->cuentasCompletas()->with('moneda')->get();
             } else {
                 // Admin y moderador pueden ver todas las cuentas
                 $cuentasUsuario = Cuenta::with('moneda')->get();
