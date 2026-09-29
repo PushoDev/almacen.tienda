@@ -729,13 +729,22 @@ class VentaController extends Controller
             ] : null,
         ];
 
-        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(fn ($m) => [
-            'id' => $m->id,
-            'codigo' => $m->codigo_moneda,
-            'nombre' => $m->nombre_moneda,
-            'simbolo' => $m->simbolo_moneda,
-            'tasa' => (float) $m->tasa_cambio,
-        ])->values()->toArray();
+        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(function ($m) {
+            // Vías de pago que esta moneda admite dentro de la transferencia — mismo patrón que index()
+            // (el POS). Sin esto, el formulario de "Editar Venta Pendiente" no puede ofrecer ninguna vía
+            // real y bloquea agregar un pago nuevo por transferencia (ver ESTADO_DESARROLLO.md).
+            $resumenMetodos = $this->metodosPago->resumenDeMoneda($m);
+            $viasTransferencia = collect($resumenMetodos)->firstWhere('slug', 'transferencia')['vias'] ?? [];
+
+            return [
+                'id' => $m->id,
+                'codigo' => $m->codigo_moneda,
+                'nombre' => $m->nombre_moneda,
+                'simbolo' => $m->simbolo_moneda,
+                'tasa' => (float) $m->tasa_cambio,
+                'vias_transferencia' => $viasTransferencia,
+            ];
+        })->values()->toArray();
 
         return Inertia::render('Vendor/Show', [
             'venta' => $ventaData,
