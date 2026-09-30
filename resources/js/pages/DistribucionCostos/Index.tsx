@@ -21,7 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowRightLeft,
     Calendar,
@@ -40,7 +40,7 @@ import {
     User,
     X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { sileo } from '@/lib/sileo';
 
@@ -185,6 +185,24 @@ export default function DistribucionCostosIndex({
     movimientosPorRecibir,
     operacionesProrrateoMovimientos,
 }: Props) {
+    // Resultado del prorrateo (CambiarCostoManual.tsx) tras el redirect a esta página — antes se
+    // perdía: el formulario no mostraba nada al confirmar y esta página no leía ningún flash al
+    // montar (solo dentro de "Eliminar de la lista", una request distinta, que usa el flash
+    // 'success' genérico — por eso este resultado va en su propia clave namespaced). `ajuste`
+    // llega cuando el incremento no encontró unidades vivas donde caer (lote ya vendido, o
+    // fusionado sin redirigir) — ver AjusteValorInventario/aplicarIncrementoALotes().
+    const distribucionResultado = usePage().props.flash as { distribucion_resultado?: { mensaje: string; ajuste: number | null } | null } | undefined;
+    useEffect(() => {
+        const resultado = distribucionResultado?.distribucion_resultado;
+        if (!resultado) return;
+        if (resultado.ajuste) {
+            sileo.warning({ title: 'Prorrateo aplicado con ajuste de valor de inventario', description: resultado.mensaje });
+        } else {
+            sileo.success({ title: 'Prorrateo aplicado', description: resultado.mensaje });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [distribucionResultado?.distribucion_resultado]);
+
     // Cuentas elegibles para financiar cualquiera de los dos tipos de prorrateo (CUP o USD,
     // mezcladas está permitido) — mismo widget en ambas pestañas porque el motor de cálculo es
     // el mismo sin importar si el lote es de compras o de movimientos.

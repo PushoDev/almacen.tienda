@@ -61,6 +61,11 @@ class HandleInertiaRequests extends Middleware
                 'importacion_resultado' => fn () => $request->session()->get('importacion_resultado'),
                 'importacion_repetida' => fn () => $request->session()->get('importacion_repetida'),
                 'bloqueos_reversion' => fn () => $request->session()->get('bloqueos_reversion'),
+                // Distribución de Costos: mensaje de éxito del prorrateo automático + el monto
+                // (negativo) que no pudo aplicarse a ningún lote con stock vivo, si lo hubo — namespaced
+                // para no chocar con el 'success' genérico que también usa "Eliminar de la lista"
+                // sobre la misma página (DistribucionCostos/Index.tsx).
+                'distribucion_resultado' => fn () => $request->session()->get('distribucion_resultado'),
             ],
             'tasas' => fn () => Moneda::where('estado', true)
                 ->orderBy('principal', 'desc')

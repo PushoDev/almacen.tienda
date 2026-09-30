@@ -305,7 +305,7 @@ test('anular una venta de un lote que después se fusionó devuelve las unidades
         'tasa_cambio' => 1, 'monto_equivalente' => 150, 'cuenta_id' => crearCuentaUsd()->id,
     ]];
     $this->postJson(route('ventas.procesar'), $payload)->assertOk();
-    $resultante = app(FusionLotesService::class)->fusionar($producto->id, $almacen->id, [$loteA->id, $loteB->id], null, $admin);
+    $resultante = app(FusionLotesService::class)->fusionar($producto->id, $almacen->id, [$loteA->id, $loteB->id], null, $admin)['lote'];
     expect($resultante->cantidad_disponible)->toBe(45);
 
     $venta = Venta::where('almacen_id', $almacen->id)->sole();

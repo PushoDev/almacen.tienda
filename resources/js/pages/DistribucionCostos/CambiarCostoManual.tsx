@@ -176,7 +176,16 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
         }
 
         post(route('distribucion-costos.distribuir'), {
-            onSuccess: () => {},
+            // Un fallo de negocio (tasa sin definir, saldo insuficiente, etc.) no es un error de
+            // validación 422: el controlador hace redirect()->back()->with('error', ...), que vuelve
+            // AQUÍ mismo (no a distribucion-costos.index) como una visita "exitosa" para Inertia —
+            // antes este onSuccess no hacía nada y el aviso se perdía en silencio.
+            onSuccess: (page) => {
+                const flash = page.props.flash as { error?: string | null } | undefined;
+                if (flash?.error) {
+                    sileo.error({ title: 'No se pudo distribuir', description: flash.error });
+                }
+            },
             onError: (errors) => {
                 const firstError = Object.values(errors)[0];
                 sileo.error({ title: 'Error al distribuir', description: firstError || 'Revisa los datos e inténtalo de nuevo' });

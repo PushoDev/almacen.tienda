@@ -10,6 +10,7 @@ use App\Models\Movimiento;
 use App\Models\Producto;
 use App\Models\TipoMovimientoFinanciero;
 use App\Models\User;
+use App\Services\FusionLotesService;
 
 /**
  * ejecutarProrrateoAutomatico() registra un MovimientoFinanciero con tipo_movimiento_id=1
@@ -110,6 +111,74 @@ test('admin distribuye un lote de un movimiento: aplica la fórmula, actualiza e
     $this->assertDatabaseHas('cost_distribution_movimientos', [
         'cost_distribution_id' => $distribution->id,
         'movimiento_id' => $movimiento->id,
+    ]);
+});
+
+test('el prorrateo redirige el incremento al lote vigente cuando el suyo ya se fusionó antes de decidirse', function () {
+    asegurarTipoMovimientoFinancieroGasto();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $lote = crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+
+    // Mismo producto/almacén, mismo costo (para que el promedio ponderado de la fusión no meta
+    // su propio ajuste de redondeo y confunda el assert) — se fusiona con el del movimiento
+    // ANTES de decidir el prorrateo: exactamente el caso que antes dejaba la plata sin destino
+    // (idsConDescendientes()/movimiento_id nunca siguen fusionado_en_lote_id).
+    $otro = LoteStock::create(['codigo' => 'OTRO-LOTE', 'producto_id' => $producto->id, 'almacen_id' => $destino->id, 'cantidad' => 5, 'precio_costo' => 100]);
+    $resultante = app(FusionLotesService::class)->fusionar($producto->id, $destino->id, [$lote->id, $otro->id], null, $admin)['lote'];
+
+    $cuenta = crearCuentaUsdParaProrrateo(1000);
+
+    $this->post(route('distribucion-costos.distribuir'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Prorrateo tras fusión',
+    ])->assertRedirect(route('distribucion-costos.index'));
+
+    // incremento_unitario sigue siendo 5 (10 unidades del movimiento) — pero ahora sube el costo
+    // del lote VIGENTE (el fusionado, con las 15 unidades reales), no solo el original ya en 0.
+    $this->assertEquals(105.0, (float) $resultante->fresh()->precio_costo);
+    // Las 15 unidades del lote vigente cubren de sobra las 10 originales: no hay pérdida que auditar.
+    $this->assertDatabaseCount('ajustes_valor_inventario', 0);
+});
+
+test('el prorrateo audita una pérdida cuando el lote ya no tiene stock vivo al decidirse (vendido, sin fusión)', function () {
+    asegurarTipoMovimientoFinancieroGasto();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $lote = crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+    // Todo el lote ya se vendió antes de que alguien decidiera el prorrateo — no hay fusión de
+    // por medio, simplemente no queda ninguna unidad viva a la cual subirle el costo.
+    $lote->update(['cantidad_disponible' => 0]);
+
+    $cuenta = crearCuentaUsdParaProrrateo(1000);
+
+    $this->post(route('distribucion-costos.distribuir'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Prorrateo sin stock vivo',
+    ])->assertRedirect(route('distribucion-costos.index'));
+
+    $distribution = CostDistribution::first();
+    $this->assertDatabaseHas('ajustes_valor_inventario', [
+        'tipo' => 'prorrateo_sin_destino',
+        'producto_id' => $producto->id,
+        'almacen_id' => $destino->id,
+        'cost_distribution_id' => $distribution->id,
+        'monto' => '-50.00',
+        'user_id' => $admin->id,
     ]);
 });
 
