@@ -251,6 +251,7 @@ class Producto extends Model
         return $query->where('nombre_producto', 'LIKE', "%{$termino}%")
             ->orWhere('marca_producto', 'LIKE', "%{$termino}%")
             ->orWhere('modelo_producto', 'LIKE', "%{$termino}%")
+            ->orWhere('capacidad_producto', 'LIKE', "%{$termino}%")
             ->orWhere('codigo_producto', 'LIKE', "%{$termino}%")
             ->orWhereHas('codigos', function ($q) use ($termino) {
                 $q->where('codigo_barras', 'LIKE', "%{$termino}%");

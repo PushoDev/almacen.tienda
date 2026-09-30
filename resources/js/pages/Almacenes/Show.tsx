@@ -68,6 +68,7 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                     p.nombre_producto.toLowerCase().includes(term) ||
                     (p.marca || '').toLowerCase().includes(term) ||
                     (p.modelo || '').toLowerCase().includes(term) ||
+                    (p.capacidad || '').toLowerCase().includes(term) ||
                     (p.codigo || '').toLowerCase().includes(term) ||
                     (p.categoria || '').toLowerCase().includes(term),
             );

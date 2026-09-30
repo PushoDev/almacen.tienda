@@ -2157,8 +2157,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 Imprimir Reporte
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
-                            <AlertDialogHeader className="border-b bg-gradient-to-r from-sky-600 to-sky-700 px-8 py-6 text-white">
+                        <AlertDialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden p-0 sm:max-w-3xl">
+                            <AlertDialogHeader className="shrink-0 border-b bg-gradient-to-r from-sky-600 to-sky-700 px-8 py-6 text-white">
                                 <div className="flex items-center gap-4">
                                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                         <AppLogoIcon />
@@ -2171,6 +2171,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                 </div>
                             </AlertDialogHeader>
+                            <div className="flex-1 overflow-y-auto">
                             {monedasSistema.length > 0 && (
                                 <div className="px-4 pt-4 pb-2">
                                     <Alert className="border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950">
@@ -2221,7 +2222,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </Alert>
                                 </div>
                             )}
-                            <div className="max-h-[70vh] overflow-y-auto">
+                            <div>
                                 <div className="p-4 font-mono text-sm">
                                     <div className="mb-4 border-b pb-2 text-center">
                                         <h2 className="text-lg font-bold">{currentVenta.almacen.nombre}</h2>
@@ -2332,7 +2333,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                 </div>
                             </div>
-                            <AlertDialogFooter className="border-t p-4">
+                            </div>
+                            <AlertDialogFooter className="shrink-0 border-t p-4">
                                 <Button
                                     variant="secondary"
                                     onClick={() => {
