@@ -38,6 +38,7 @@ import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
 import {
     AlertTriangle,
     BadgeDollarSign,
@@ -358,25 +359,16 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         try {
             const responseData = await sileo.promise(
-                fetch(`/disponibles/${selectedProduct.id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: JSON.stringify({
+                axios
+                    .put(`/disponibles/${selectedProduct.id}`, {
                         precio_venta: parsedPrice,
                         almacen_id: selectedProduct.almacen_id,
                         comision: newComision !== '' ? parseFloat(newComision) : null,
+                    })
+                    .then((response) => response.data)
+                    .catch((error) => {
+                        throw new Error(error.response?.data?.message || error.response?.data?.error || 'Error al actualizar el precio');
                     }),
-                }).then(async (response) => {
-                    const data = await response.json();
-                    if (!response.ok) {
-                        throw new Error(data.message || data.error || 'Error al actualizar el precio');
-                    }
-                    return data;
-                }),
                 {
                     loading: { title: 'Actualizando precio...', description: selectedProduct.nombre_producto },
                     success: (data) => ({
@@ -478,27 +470,18 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         try {
             const responseData = await sileo.promise(
-                fetch('/disponibles/bulk-actualizar', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: JSON.stringify({
+                axios
+                    .put('/disponibles/bulk-actualizar', {
                         producto_id: bulkSelectedProduct.id,
                         almacen_ids: bulkSelectedAlmacenIds,
                         precio_venta: parsedPrice,
                         comision: bulkComision !== '' ? parseFloat(bulkComision) : null,
                         password_confirmacion: bulkPasswordInput,
+                    })
+                    .then((response) => response.data)
+                    .catch((error) => {
+                        throw new Error(error.response?.data?.message || error.response?.data?.error || 'Error al actualizar los precios');
                     }),
-                }).then(async (response) => {
-                    const data = await response.json();
-                    if (!response.ok) {
-                        throw new Error(data.message || data.error || 'Error al actualizar los precios');
-                    }
-                    return data;
-                }),
                 {
                     loading: { title: 'Actualizando precios...', description: bulkSelectedProduct.nombre_producto },
                     success: () => ({
@@ -580,34 +563,24 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         setGrupoError(null);
 
         try {
-            const response = await fetch(route('disponibles.precio-grupo'), {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                },
-                body: JSON.stringify({
-                    producto_id: grupoPrecio[0].id,
-                    almacen_id: grupoPrecio[0].almacen_id,
-                    precio_venta: precio,
-                    comision: grupoComision !== '' ? parseFloat(grupoComision) : null,
-                    incluir_con_precio_propio: grupoIncluirPropios,
-                }),
+            const response = await axios.put(route('disponibles.precio-grupo'), {
+                producto_id: grupoPrecio[0].id,
+                almacen_id: grupoPrecio[0].almacen_id,
+                precio_venta: precio,
+                comision: grupoComision !== '' ? parseFloat(grupoComision) : null,
+                incluir_con_precio_propio: grupoIncluirPropios,
             });
-            const data = await response.json().catch(() => ({}));
-
-            if (!response.ok) {
-                setGrupoError(mensajeDeError(data, 'No se pudo aplicar el precio del grupo'));
-                return;
-            }
+            const data = response.data;
 
             sileo.success({ title: data.message, description: `${grupoPrecio[0].nombre_producto} — ${formatCurrency(precio)}` });
             setGrupoPrecio(null);
             router.reload({ only: ['almacenes'] });
-        } catch {
-            setGrupoError('Error de conexión. Inténtalo nuevamente.');
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response) {
+                setGrupoError(mensajeDeError(error.response.data, 'No se pudo aplicar el precio del grupo'));
+            } else {
+                setGrupoError('Error de conexión. Inténtalo nuevamente.');
+            }
         } finally {
             setGrupoGuardando(false);
         }
@@ -744,18 +717,10 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         formData.append('_method', 'POST');
 
         try {
-            const response = await fetch(`/disponibles/almacen/${selectedAlmacenId}/importar`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: formData,
-            });
+            const response = await axios.post(`/disponibles/almacen/${selectedAlmacenId}/importar`, formData);
+            const data = response.data;
 
-            const data = await response.json();
-
-            if (response.ok && data.success) {
+            if (data.success) {
                 setImportResult({ actualizados: data.actualizados, omitidos: data.omitidos, errores: data.errores ?? [] });
                 setImportFile(null);
                 if (data.actualizados > 0) {
@@ -769,8 +734,18 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                 }
                 setImportResult({ actualizados: 0, omitidos: 0, errores: [errorMsg] });
             }
-        } catch {
-            setImportResult({ actualizados: 0, omitidos: 0, errores: ['Error de conexión al importar.'] });
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response) {
+                const data = error.response.data;
+                let errorMsg = data.error ?? data.message ?? 'Error desconocido';
+                if (data.errors) {
+                    const firstField = Object.values(data.errors as Record<string, string[]>)[0];
+                    if (firstField?.length) errorMsg = firstField[0];
+                }
+                setImportResult({ actualizados: 0, omitidos: 0, errores: [errorMsg] });
+            } else {
+                setImportResult({ actualizados: 0, omitidos: 0, errores: ['Error de conexión al importar.'] });
+            }
         } finally {
             setIsImporting(false);
         }
@@ -1004,20 +979,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         try {
             for (const loteId of ids) {
-                const response = await fetch(route('productos.lotes.precio-venta', { producto: producto.id, lote: loteId }), {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    },
-                    body: JSON.stringify({ precio_venta: precio }),
-                });
-
-                if (!response.ok) {
-                    const data = await response.json().catch(() => ({}));
-                    throw new Error(mensajeDeError(data, 'No se pudo actualizar el lote'));
+                try {
+                    await axios.put(route('productos.lotes.precio-venta', { producto: producto.id, lote: loteId }), { precio_venta: precio });
+                } catch (error) {
+                    if (axios.isAxiosError(error) && error.response) {
+                        throw new Error(mensajeDeError(error.response.data, 'No se pudo actualizar el lote'));
+                    }
+                    throw error;
                 }
             }
 
@@ -1064,20 +1032,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         try {
             for (const loteId of ids) {
-                const response = await fetch(route('productos.lotes.comision', { producto: producto.id, lote: loteId }), {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    },
-                    body: JSON.stringify({ comision }),
-                });
-
-                if (!response.ok) {
-                    const data = await response.json().catch(() => ({}));
-                    throw new Error(mensajeDeError(data, 'No se pudo actualizar la comisión del lote'));
+                try {
+                    await axios.put(route('productos.lotes.comision', { producto: producto.id, lote: loteId }), { comision });
+                } catch (error) {
+                    if (axios.isAxiosError(error) && error.response) {
+                        throw new Error(mensajeDeError(error.response.data, 'No se pudo actualizar la comisión del lote'));
+                    }
+                    throw error;
                 }
             }
 

@@ -38,6 +38,29 @@ test('el saldo general del vendedor en el dashboard solo cuenta sus cuentas de a
         ->where('montosPorMoneda.0.monto', fn ($valor) => (float) $valor === 100.0));
 });
 
+test('estados financieros del vendedor solo trae sus cuentas de acceso completo, no las de cobro', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true, 'principal' => true, 'tasa_cambio' => 1]);
+
+    $completa = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta completa', 'saldo_cuenta' => 100, 'tipo_cuenta' => 'permanentes',
+        'tipo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'estado' => 'activa',
+    ]);
+    $cobro = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta de cobro', 'saldo_cuenta' => 900, 'tipo_cuenta' => 'permanentes',
+        'tipo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'estado' => 'activa',
+    ]);
+    $vendedor->cuentas()->attach($completa->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->actingAs($vendedor)->getJson(route('dashboard.financial.states'));
+
+    $response->assertOk();
+    $cuentaIds = collect($response->json())->pluck('cuenta_id');
+    expect($cuentaIds)->toContain($completa->id)
+        ->not->toContain($cobro->id);
+});
+
 test('el movimiento reconstruido de las cuentas cuenta la comisión en la moneda de la cuenta de donde salió', function () {
     $vendedor = User::factory()->vendedor()->create();
     $almacen = Almacen::factory()->puntoVenta()->create();

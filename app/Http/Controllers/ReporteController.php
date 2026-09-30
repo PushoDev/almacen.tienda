@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Compra;
+use App\Models\Cuenta;
 use App\Models\HistorialPrecioCosto;
 use App\Models\Venta;
 use App\Services\CatalogoTarjetasService;
@@ -289,10 +290,12 @@ class ReporteController extends Controller
     {
         $usuarioId = $request->query('user_id');
         $currentUser = auth()->user();
+        $esVendedorViendoLoSuyo = false;
 
         // Si el usuario actual es vendedor, solo mostrar sus cuentas asignadas
         if ($currentUser && $currentUser->role === 'vendedor') {
             $usuarioId = $currentUser->id;
+            $esVendedorViendoLoSuyo = true;
         }
 
         $query = DB::table('cuentas')
@@ -322,6 +325,12 @@ class ReporteController extends Controller
 
         if ($usuarioId) {
             $query->where('users.id', $usuarioId);
+        }
+
+        // Un vendedor viendo su propio resumen no debe ver el saldo de las cuentas
+        // que solo tiene para cobrar (acceso 'cobro'), solo las suyas ('completo').
+        if ($esVendedorViendoLoSuyo) {
+            $query->where('user_cuentas.acceso', Cuenta::ACCESO_COMPLETO);
         }
 
         $data = $query->get();

@@ -89,15 +89,27 @@ const CLAUSULAS_GARANTIA = [
 export default function Imprimir({ venta, qrCode }: Props) {
     const codigo = venta.moneda_principal?.codigo || 'USD';
 
-    // La mitad de página está pensada para el caso normal de hasta 5 productos —
-    // con ese tope se ve cómoda y siempre sale del mismo tamaño. Si una venta
-    // puntual tiene más, se compacta un poco para seguir cabiendo en la misma
-    // media hoja en vez de desbordar a una hoja completa.
-    const esComoda = venta.items.length <= 5;
-    const tallaTicket = esComoda ? 'text-[10px]' : 'text-[9px]';
-    const tallaFactura = esComoda ? 'text-[10px]' : 'text-[9px]';
-    const tallaTablaFactura = esComoda ? 'text-[9px]' : 'text-[8px]';
-    const filaFactura = esComoda ? 'px-1 py-1' : 'px-1 py-0.5';
+    // Talla única "cómoda" — reemplaza al viejo modo "compacto" (2026-09-30): achicar la
+    // fuente para más de 5 productos no alcanzaba de verdad (una venta real de 25 productos
+    // medía 236.8mm, el doble del límite de media hoja de 148.5mm). Ahora el tope de 5 es un
+    // tope REAL: lo que exceda pasa a una página siguiente (ver paginasProductos abajo).
+    const tallaTicket = 'text-[10px]';
+    const tallaFactura = 'text-[10px]';
+    const tallaTablaFactura = 'text-[9px]';
+    const filaFactura = 'px-1 py-1';
+
+    // Verificado con mediciones reales (getBoundingClientRect, no solo visual): 5 productos en
+    // talla cómoda miden ~106mm de un presupuesto real de 128.5mm (148.5mm de media hoja menos
+    // 20mm de padding de impresión) — entran con margen de sobra. Lo que no entra en una tanda
+    // de 5 pasa a la página siguiente, cada una con su propia hoja A4 duplicada (cliente/tienda).
+    const PRODUCTOS_POR_PAGINA = 5;
+    const paginasProductos: ItemImprimir[][] = [];
+    for (let i = 0; i < venta.items.length; i += PRODUCTOS_POR_PAGINA) {
+        paginasProductos.push(venta.items.slice(i, i + PRODUCTOS_POR_PAGINA));
+    }
+    if (paginasProductos.length === 0) {
+        paginasProductos.push([]);
+    }
 
     const formatMonto = (monto: number) =>
         new Intl.NumberFormat('es-ES', { style: 'currency', currency: codigo, minimumFractionDigits: 2 }).format(monto);
@@ -115,8 +127,11 @@ export default function Imprimir({ venta, qrCode }: Props) {
 
     // Ticket + Factura se repiten dos veces en la misma hoja (una para el cliente, otra
     // para que se quede en el punto de venta como comprobante/garantía) — mismo contenido,
-    // sin variar por copia, así que se arma una sola vez acá y se reutiliza abajo.
-    const contenidoTicketFactura = (
+    // sin variar por copia, así que se arma una sola vez acá y se reutiliza abajo. Ahora
+    // recibe la tanda de productos de ESA página (ver paginasProductos) y si es la última:
+    // el Total/Pagado/Restante, el TOTAL de la tabla y la firma/QR solo van en la última
+    // página de productos — las anteriores muestran su tanda y un aviso de "continúa".
+    const renderTicketFactura = (items: ItemImprimir[], esUltimaPagina: boolean, numeroPagina: number, totalPaginas: number) => (
         <div className="flex divide-x divide-dashed divide-slate-400 print:divide-slate-500">
             {/* ── TICKET (angosto, resumen rápido) ── */}
             <div className={`relative w-[38%] shrink-0 p-3 font-mono leading-snug ${tallaTicket}`}>
@@ -130,6 +145,13 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     <p className="text-xs font-bold">{venta.almacen.nombre}</p>
                     {ubicacionAlmacen && <p className="text-slate-500">{ubicacionAlmacen}</p>}
                     <p className="mt-0.5">No. Factura: {venta.id}</p>
+                    {/* Solo con más de una página (venta con más de 5 productos) — identifica
+                        de cuál página suelta se trata si se separan físicamente. */}
+                    {totalPaginas > 1 && (
+                        <p>
+                            Página {numeroPagina} de {totalPaginas}
+                        </p>
+                    )}
                     <p>{formatFecha(venta.fecha)}</p>
                     <p>Vendedor: {venta.usuario.nombre}</p>
                     {/* Mayúscula a propósito (pedido explícito): evita que una escritura
@@ -157,7 +179,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             </tr>
                         </thead>
                         <tbody>
-                            {venta.items.map((item, index) => (
+                            {items.map((item, index) => (
                                 <tr key={index}>
                                     <td className="text-left">{item.producto.nombre}</td>
                                     <td className="text-center">{item.cantidad}</td>
@@ -169,23 +191,27 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </table>
                 </div>
 
-                <div>
-                    <div className="flex justify-between font-bold">
-                        <span>Total:</span>
-                        <span>{formatMonto(venta.total)}</span>
+                {esUltimaPagina ? (
+                    <div>
+                        <div className="flex justify-between font-bold">
+                            <span>Total:</span>
+                            <span>{formatMonto(venta.total)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Pagado:</span>
+                            <span>{formatMonto(venta.total_pagado)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Restante:</span>
+                            <span>{formatMonto(venta.restante)}</span>
+                        </div>
                     </div>
-                    <div className="flex justify-between">
-                        <span>Pagado:</span>
-                        <span>{formatMonto(venta.total_pagado)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>Restante:</span>
-                        <span>{formatMonto(venta.restante)}</span>
-                    </div>
-                </div>
+                ) : (
+                    <p className="text-center text-slate-400 italic">Continúa en la página siguiente...</p>
+                )}
             </div>
 
-            {/* ── FACTURA DE VENTA (formal, con la garantía en la Página 2) ──
+            {/* ── FACTURA DE VENTA (formal, con la garantía en la última página) ──
                 Header (mascota/título/almacén/fecha/no.factura) quitado (2026-08-28) — esa
                 identificación ya está completa en el Ticket de al lado, y sacarla de acá le
                 da todo ese margen a la tabla. La marca de agua SÍ se restauró (pedido
@@ -225,7 +251,7 @@ export default function Imprimir({ venta, qrCode }: Props) {
                             </tr>
                         </thead>
                         <tbody>
-                            {venta.items.map((item, index) => (
+                            {items.map((item, index) => (
                                 <tr key={index} className="border-b border-slate-200">
                                     <td className={`border-r border-slate-200 text-center ${filaFactura}`}>{item.cantidad}</td>
                                     <td className={`border-r border-slate-200 ${filaFactura}`}>
@@ -243,30 +269,34 @@ export default function Imprimir({ venta, qrCode }: Props) {
                                 </tr>
                             ))}
                         </tbody>
-                        <tfoot>
-                            <tr className="border-t border-slate-400">
-                                <td colSpan={6} className={`text-right font-bold ${filaFactura}`}>
-                                    TOTAL: {formatMonto(venta.total)}
-                                </td>
-                            </tr>
-                        </tfoot>
+                        {esUltimaPagina && (
+                            <tfoot>
+                                <tr className="border-t border-slate-400">
+                                    <td colSpan={6} className={`text-right font-bold ${filaFactura}`}>
+                                        TOTAL: {formatMonto(venta.total)}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        )}
                     </table>
 
-                    <div className="mt-24 flex items-end justify-around text-center">
-                        <div>
-                            <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA VENDEDOR</div>
+                    {esUltimaPagina && (
+                        <div className="mt-24 flex items-end justify-around text-center">
+                            <div>
+                                <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA VENDEDOR</div>
+                            </div>
+                            {/* QR movido acá (2026-08-28) — antes vivía en el header del Ticket,
+                                quedaba descentrado; en el medio de las firmas deja el header del
+                                Ticket volver a ser texto simple centrado. */}
+                            <div className="flex flex-col items-center gap-0.5">
+                                <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
+                                <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
+                            </div>
+                            <div>
+                                <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
+                            </div>
                         </div>
-                        {/* QR movido acá (2026-08-28) — antes vivía en el header del Ticket,
-                            quedaba descentrado; en el medio de las firmas deja el header del
-                            Ticket volver a ser texto simple centrado. */}
-                        <div className="flex flex-col items-center gap-0.5">
-                            <img src={qrCode} alt="Código QR de la venta" className="h-12 w-12" />
-                            <p className="text-center text-[6px] leading-none text-slate-500">Escaneá para verificar</p>
-                        </div>
-                        <div>
-                            <div className="w-32 border-t border-slate-500 pt-0.5">FIRMA CLIENTE</div>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -343,10 +373,17 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     </button>
                 </div>
 
-                {/* Hoja A4 completa — Ticket + Factura repetidos dos veces, una copia arriba
-                    y otra abajo, para que al cortar por la línea del medio salgan dos copias
-                    idénticas: una se la lleva el cliente, la otra se queda en el punto de venta
-                    como comprobante/garantía (pedido explícito del cliente 2026-09-05).
+                {/* Una hoja A4 por cada tanda de hasta 5 productos (paginasProductos) — Ticket +
+                    Factura repetidos dos veces, una copia arriba y otra abajo, para que al
+                    cortar por la línea del medio salgan dos copias idénticas: una se la lleva
+                    el cliente, la otra se queda en el punto de venta como comprobante/garantía
+                    (pedido explícito del cliente 2026-09-05). El Total/Pagado/Restante y la
+                    firma/QR solo van en la última página de productos (2026-09-30) — ver
+                    renderTicketFactura. Ya NO lleva el mt-[21mm] que tenía antes (pensado para
+                    centrar contenido en una media hoja que en ese momento quedaba en blanco,
+                    2026-08-28) — hoy las dos mitades siempre están llenas de contenido real, y
+                    ese margen le comía presupuesto real al tope de 5 productos (con él, 5
+                    productos apenas entraban con 1.4mm de sobra; sin él, sobran ~22mm).
                     Cada copia va con position:absolute + un offset fijo en mm desde el tope de
                     este contenedor — no en flujo normal apilado una debajo de la otra — así
                     ninguna depende de que la copia de arriba realmente termine midiendo 148.5mm
@@ -355,24 +392,35 @@ export default function Imprimir({ venta, qrCode }: Props) {
                     pantalla). Ancladas por posición y no por altura medida, la copia de abajo
                     siempre cae exactamente en la mitad física de la hoja, sin importar si la de
                     arriba se quedó corta. */}
-                <div className="print-sheet relative mx-auto min-h-[297mm] max-w-4xl rounded-md bg-white text-slate-900 shadow-lg print:rounded-none print:shadow-none">
-                    {/* Línea de corte física, a la mitad exacta de la hoja A4 — separa las dos
-                        copias idénticas de arriba y de abajo. */}
-                    <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
-                    <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
-                        ✂ línea de corte — cliente arriba, punto de venta abajo
-                    </span>
+                {paginasProductos.map((itemsPagina, indicePagina) => {
+                    const esUltimaPagina = indicePagina === paginasProductos.length - 1;
+                    const numeroPagina = indicePagina + 1;
+                    return (
+                        <div
+                            key={indicePagina}
+                            className={`print-sheet relative mx-auto min-h-[297mm] max-w-4xl rounded-md bg-white text-slate-900 shadow-lg print:rounded-none print:shadow-none ${
+                                indicePagina > 0 ? 'mt-8 print:mt-0 print:break-before-page' : ''
+                            }`}
+                        >
+                            {/* Línea de corte física, a la mitad exacta de la hoja A4 — separa las dos
+                                copias idénticas de arriba y de abajo. */}
+                            <div className="pointer-events-none absolute inset-x-0 top-[148.5mm] border-t-2 border-dashed border-red-500" />
+                            <span className="no-print pointer-events-none absolute top-[148.5mm] right-1 -translate-y-1/2 bg-white px-1 text-[7px] font-semibold text-red-500">
+                                ✂ línea de corte — cliente arriba, punto de venta abajo
+                            </span>
 
-                    {/* Copia 1 — para el cliente */}
-                    <div className="absolute inset-x-0 top-0 h-[148.5mm] print:p-[10mm]">
-                        <div className="mt-[21mm]">{contenidoTicketFactura}</div>
-                    </div>
+                            {/* Copia 1 — para el cliente */}
+                            <div className="absolute inset-x-0 top-0 h-[148.5mm] print:p-[10mm]">
+                                {renderTicketFactura(itemsPagina, esUltimaPagina, numeroPagina, paginasProductos.length)}
+                            </div>
 
-                    {/* Copia 2 — para el punto de venta */}
-                    <div className="absolute inset-x-0 top-[148.5mm] h-[148.5mm] print:p-[10mm]">
-                        <div className="mt-[21mm]">{contenidoTicketFactura}</div>
-                    </div>
-                </div>
+                            {/* Copia 2 — para el punto de venta */}
+                            <div className="absolute inset-x-0 top-[148.5mm] h-[148.5mm] print:p-[10mm]">
+                                {renderTicketFactura(itemsPagina, esUltimaPagina, numeroPagina, paginasProductos.length)}
+                            </div>
+                        </div>
+                    );
+                })}
 
                 {/* ── PÁGINA 2 — Reverso: garantía, también repetida dos veces (misma razón
                     que la Página 1: cada copia física — cliente arriba, punto de venta abajo —

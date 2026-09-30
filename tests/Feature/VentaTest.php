@@ -1957,6 +1957,26 @@ test('getCuentasParaGestor() solo devuelve al vendedor sus propias cuentas', fun
     expect($ids->all())->toBe([$cuentaAsignada->id]);
 });
 
+test('getCuentasParaGestor() no devuelve cuentas de acceso cobro al vendedor', function () {
+    // Regresión 2026-09-30: Mensajería/Comisión/Gestor operan DESDE la cuenta (mandan/reciben
+    // plata), no son un simple destino de cobro de venta — una cuenta de acceso `cobro` no debe
+    // aparecer acá, mismo criterio que cuentasUsables()/cuentasCompletas().
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $cuentaCompleta = crearCuentaCup();
+    $cuentaCobro = crearCuentaCup();
+    $vendedor->cuentas()->attach($cuentaCompleta->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cuentaCobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->getJson(route('ventas.getCuentasParaGestor'));
+
+    $response->assertOk();
+    $ids = collect($response->json())->pluck('id');
+    expect($ids->all())->toBe([$cuentaCompleta->id]);
+    expect($ids)->not->toContain($cuentaCobro->id);
+});
+
 test('getCuentasParaGestor() manda el logo real del banco, para los selectores de Mensajería/Comisión/Gestor', function () {
     // Regresión 2026-09-29: esos 3 selectores solo mostraban el nombre de la cuenta en texto
     // plano — este endpoint nunca mandó el campo `banco`, a diferencia de getCuentasFiltradas()

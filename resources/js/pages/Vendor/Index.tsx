@@ -342,6 +342,14 @@ export default function PuntoVentaOficial({
         setMensajeroMonto('');
     };
 
+    // Fichas hermanas (2026-09-28) viven solo dentro de `opciones[]` de la tarjeta principal — esta
+    // lista las aplana a todas (principal + hermanas) para poder encontrar cualquiera por id o código,
+    // sin importar cuál esté resuelta como "activa" en la tarjeta.
+    const todasLasFichas = useMemo(
+        () => productos.flatMap((producto) => ((producto.opciones?.length ?? 0) > 1 ? producto.opciones! : [producto])),
+        [productos],
+    );
+
     const productosFiltrados = useMemo(() => {
         if (!busqueda.trim()) return productos;
         const termino = busqueda.toLowerCase().trim();
@@ -349,6 +357,8 @@ export default function PuntoVentaOficial({
             (producto) =>
                 (producto.nombre_producto?.toLowerCase().includes(termino) ||
                     producto.marca_producto?.toLowerCase().includes(termino) ||
+                    producto.modelo_producto?.toLowerCase().includes(termino) ||
+                    producto.capacidad_producto?.toLowerCase().includes(termino) ||
                     producto.codigo_barras?.toLowerCase().includes(termino) ||
                     producto.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase().includes(termino)) ||
                     // El código escaneado puede ser de una ficha hermana (2026-09-28) — la tarjeta
@@ -705,7 +715,7 @@ export default function PuntoVentaOficial({
             return;
         }
 
-        for (const producto of productos) {
+        for (const producto of todasLasFichas) {
             const codigoExacto = (producto.codigos || []).find((codigo) => codigo.codigo_barras.toLowerCase() === termino);
             if (codigoExacto) {
                 agregarAlCarrito(producto, codigoExacto.id);
@@ -714,7 +724,7 @@ export default function PuntoVentaOficial({
             }
         }
 
-        const productoPrincipal = productos.find((producto) => (producto.codigo_barras || '').toLowerCase() === termino);
+        const productoPrincipal = todasLasFichas.find((producto) => (producto.codigo_barras || '').toLowerCase() === termino);
         if (productoPrincipal) {
             agregarAlCarrito(productoPrincipal);
             setBusqueda('');
@@ -732,7 +742,7 @@ export default function PuntoVentaOficial({
             return;
         }
         for (const item of carrito) {
-            const producto = productos.find((p) => p.id === item.producto.id);
+            const producto = todasLasFichas.find((p) => p.id === item.producto.id);
             if (!producto || producto.stock_disponible < item.cantidad) {
                 sileo.error({ title: 'Stock insuficiente', description: item.producto.nombre_producto });
                 return;
