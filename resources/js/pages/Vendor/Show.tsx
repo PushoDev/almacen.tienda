@@ -1,6 +1,6 @@
 import AppLogoIcon from '@/components/app-logo-icon';
 import HeadingSmall from '@/components/heading-small';
-import PaymentForm, { type Moneda as MonedaForm, type Payment as PaymentEdit } from '@/components/ventas/PaymentForm';
+import PaymentForm, { type Moneda as MonedaForm, type Payment as PaymentEdit, type ViaPagoMoneda } from '@/components/ventas/PaymentForm';
 import PaymentList from '@/components/ventas/PaymentList';
 import { ViaLogo } from '@/components/monedas/via-logo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -31,7 +31,7 @@ import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { Switch } from '@/components/ui/switch';
@@ -57,13 +57,13 @@ import {
     Hash,
     IdCard,
     ListOrdered,
+    type LucideIcon,
     MapPin,
     MessageSquare,
     Package,
     Percent,
     Phone,
     Printer,
-    Send,
     ShoppingBag,
     ShoppingCart,
     Store,
@@ -75,7 +75,7 @@ import {
     Wallet,
     XCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 
 // ─────────────────────────────────────────────
@@ -148,6 +148,8 @@ interface Cuenta {
     };
     tipo: string;
     tipo_moneda: string;
+    /** Logo real del banco/tarjeta (null si la cuenta no tiene imagen asignada) — mismo mecanismo que "Destino del Pago" en el POS. */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
 }
 
 interface Pago {
@@ -195,6 +197,8 @@ interface MonedaParaReporte {
     nombre: string;
     simbolo: string | null;
     tasa: number;
+    /** Vías de transferencia que esta moneda admite (catálogo del CRUD de Monedas) — para el PaymentForm del modal "Editar Venta Pendiente". */
+    vias_transferencia?: ViaPagoMoneda[];
 }
 
 interface Destinatario {
@@ -333,6 +337,139 @@ const FORM_VACIO = {
 };
 
 // ─────────────────────────────────────────────
+// Widgets de resumen (Total, Comisión, Ganancia…) — tinte de color + ícono en círculo,
+// mismo criterio de contraste claro/oscuro que KpiCard (Logistica/layout/ResumenPorAlmacen.tsx).
+// Clases completas y literales a propósito: Tailwind no genera las que arma por interpolación.
+// ─────────────────────────────────────────────
+const WIDGET_COLORES = {
+    emerald: {
+        caja: 'border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-900/20',
+        icono: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
+        valor: 'text-emerald-700 dark:text-emerald-300',
+    },
+    red: {
+        caja: 'border-red-500/20 bg-red-50/50 dark:bg-red-900/20',
+        icono: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400',
+        valor: 'text-red-700 dark:text-red-300',
+    },
+    orange: {
+        caja: 'border-orange-500/20 bg-orange-50/50 dark:bg-orange-900/20',
+        icono: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400',
+        valor: 'text-orange-700 dark:text-orange-300',
+    },
+    indigo: {
+        caja: 'border-indigo-500/20 bg-indigo-50/50 dark:bg-indigo-900/20',
+        icono: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400',
+        valor: 'text-indigo-700 dark:text-indigo-300',
+    },
+    blue: {
+        caja: 'border-blue-500/20 bg-blue-50/50 dark:bg-blue-900/20',
+        icono: 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400',
+        valor: 'text-blue-700 dark:text-blue-300',
+    },
+    purple: {
+        caja: 'border-purple-500/20 bg-purple-50/50 dark:bg-purple-900/20',
+        icono: 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-400',
+        valor: 'text-purple-700 dark:text-purple-300',
+    },
+    sky: {
+        caja: 'border-sky-500/20 bg-sky-50/50 dark:bg-sky-900/20',
+        icono: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400',
+        valor: 'text-sky-700 dark:text-sky-300',
+    },
+    slate: {
+        caja: 'border-slate-500/20 bg-slate-50/50 dark:bg-slate-900/20',
+        icono: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+        valor: 'text-slate-700 dark:text-slate-300',
+    },
+    violet: {
+        caja: 'border-violet-500/20 bg-violet-50/50 dark:bg-violet-900/20',
+        icono: 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+        valor: 'text-violet-700 dark:text-violet-300',
+    },
+    amber: {
+        caja: 'border-amber-500/20 bg-amber-50/50 dark:bg-amber-900/20',
+        icono: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400',
+        valor: 'text-amber-700 dark:text-amber-300',
+    },
+    muted: {
+        caja: 'border-border bg-muted/40',
+        icono: 'bg-muted text-muted-foreground',
+        valor: 'text-foreground',
+    },
+} as const;
+
+function WidgetVenta({
+    icon: Icon,
+    color,
+    label,
+    value,
+    sublabel,
+    // 'default' para cifras cortas (montos, tasas); 'compact' para texto más largo (fecha,
+    // nombre de almacén/vendedor) — el mismo tamaño/peso que antes se usaba en esas cards.
+    size = 'default',
+}: {
+    icon: LucideIcon;
+    color: keyof typeof WIDGET_COLORES;
+    label: string;
+    value: ReactNode;
+    sublabel?: ReactNode;
+    size?: 'default' | 'compact';
+}) {
+    const estilos = WIDGET_COLORES[color];
+
+    return (
+        <div className={`flex items-center gap-3 rounded-xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${estilos.caja}`}>
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${estilos.icono}`}>
+                <Icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="text-muted-foreground text-xs font-medium">{label}</p>
+                <p className={size === 'compact' ? `text-sm font-medium ${estilos.valor}` : `text-xl font-bold tabular-nums ${estilos.valor}`}>
+                    {value}
+                </p>
+                {sublabel && <p className="text-muted-foreground mt-0.5 text-xs">{sublabel}</p>}
+            </div>
+        </div>
+    );
+}
+
+/** Fila de "Resumen Financiero": ícono en círculo + etiqueta + valor como badge de color (misma
+ * paleta que WidgetVenta) — reemplaza el texto plano de color suelto por algo con más jerarquía
+ * visual, con un realce sutil al pasar el mouse. */
+function FilaResumen({
+    icon: Icon,
+    color,
+    label,
+    value,
+    indent = false,
+}: {
+    icon: LucideIcon;
+    color: keyof typeof WIDGET_COLORES;
+    label: string;
+    value: ReactNode;
+    indent?: boolean;
+}) {
+    const estilos = WIDGET_COLORES[color];
+
+    return (
+        <div
+            className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/50 ${indent ? 'ml-6' : ''}`}
+        >
+            <span className="text-muted-foreground flex min-w-0 items-center gap-2 text-sm">
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${estilos.icono}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                </span>
+                <span className="truncate">{label}</span>
+            </span>
+            <Badge variant="outline" className={`shrink-0 gap-1 font-semibold ${estilos.caja} ${estilos.valor}`}>
+                {value}
+            </Badge>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
 export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Props) {
@@ -430,6 +567,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [tasaAplicadaGestor, setTasaAplicadaGestor] = useState('');
     const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
     const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
+    // Búsqueda de los 3 Combobox de cuenta (Gestor/Mensajería/Comisión) — cada uno con su propio
+    // texto, no comparten estado aunque se parezcan.
+    const [gestorCuentaSearch, setGestorCuentaSearch] = useState('');
 
     // ── Distribución (mensajero + comisión) ──
     const [showCambiarAComisionPV, setShowCambiarAComisionPV] = useState(false);
@@ -437,10 +577,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [mensajeroFormMontoCUP, setMensajeroFormMontoCUP] = useState('');
     const [mensajeroFormTasa, setMensajeroFormTasa] = useState('');
     const [mensajeroFormCuentaId, setMensajeroFormCuentaId] = useState('');
+    const [mensajeroCuentaSearch, setMensajeroCuentaSearch] = useState('');
     const [cuentasMensajero, setCuentasMensajero] = useState<Cuenta[]>([]);
     const [showComisionForm, setShowComisionForm] = useState(false);
     const [comisionFormCuentaId, setComisionFormCuentaId] = useState('');
     const [comisionFormTasa, setComisionFormTasa] = useState('');
+    const [comisionCuentaSearch, setComisionCuentaSearch] = useState('');
     const [cuentasComision, setCuentasComision] = useState<Cuenta[]>([]);
     const [guardandoDistribucion, setGuardandoDistribucion] = useState(false);
     const [monedaGestorSeleccionada, setMonedaGestorSeleccionada] = useState<MonedaParaReporte | null>(null);
@@ -1284,116 +1426,98 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 {/* ── Widgets vendedor: Total + Comisión PV + Comisión Gestor ── */}
                 {userRole === 'vendedor' && (
                     <div className={`grid gap-4 ${[currentVenta.gestor, currentVenta.mensajero].filter(Boolean).length === 2 ? 'grid-cols-4' : [currentVenta.gestor, currentVenta.mensajero].filter(Boolean).length === 1 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <ShoppingBag size={24} className="mx-auto mb-2 text-blue-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Total de la Venta</p>
-                            <p className="text-2xl font-bold text-blue-600">
-                                {formatCurrency(currentVenta.total, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                        </div>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <Store size={24} className="mx-auto mb-2 text-orange-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Comisión P.V.</p>
-                            <p className="text-2xl font-bold text-orange-600">
-                                {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                            {comisionMontoCuenta ? (
-                                <p className="mt-1 text-xs font-semibold text-orange-500">
-                                    = {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
-                                </p>
-                            ) : (
-                                <p className="text-muted-foreground mt-1 text-xs">Punto de venta</p>
-                            )}
-                        </div>
+                        <WidgetVenta
+                            icon={ShoppingBag}
+                            color="blue"
+                            label="Total de la Venta"
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.total)}`}
+                        />
+                        <WidgetVenta
+                            icon={Store}
+                            color="orange"
+                            label="Comisión P.V."
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.total_comision)}`}
+                            sublabel={
+                                comisionMontoCuenta
+                                    ? `= ${Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${comisionMoneda}`
+                                    : 'Punto de venta'
+                            }
+                        />
                         {currentVenta.gestor && (
-                            <div className="bg-card rounded-xl border p-4 text-center">
-                                <DollarSign size={24} className="mx-auto mb-2 text-purple-500" />
-                                <p className="text-muted-foreground mb-1 text-sm">Comisión Gestor</p>
-                                <p className="text-2xl font-bold text-purple-600">
-                                    {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                                    {currentVenta.gestor.moneda?.codigo || ''}
-                                </p>
-                                {currentVenta.gestor.monto_usd !== undefined && (
-                                    <p className="text-muted-foreground mt-1 text-xs">
-                                        ≈ {formatCurrency(currentVenta.gestor.monto_usd, 'USD')}
-                                    </p>
-                                )}
-                            </div>
+                            <WidgetVenta
+                                icon={DollarSign}
+                                color="purple"
+                                label="Comisión Gestor"
+                                value={`${Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currentVenta.gestor.moneda?.codigo || ''}`}
+                                sublabel={
+                                    currentVenta.gestor.monto_usd !== undefined
+                                        ? `≈ $${formatMonto(currentVenta.gestor.monto_usd)}`
+                                        : undefined
+                                }
+                            />
                         )}
-                        {currentVenta.mensajero && (
-                            <div className="bg-card rounded-xl border p-4 text-center">
-                                <Truck size={24} className="mx-auto mb-2 text-sky-500" />
-                                <p className="text-muted-foreground mb-1 text-sm">Mensajería</p>
-                                {(() => {
-                                    const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
-                                    return <>
-                                        <p className="text-2xl font-bold text-sky-600">{usd}</p>
-                                        {cup && <p className="text-sm text-sky-500">= {cup}</p>}
-                                    </>;
-                                })()}
-                                <p className="text-muted-foreground mt-1 text-xs capitalize">
-                                    {currentVenta.mensajero.tipo === 'propio' ? 'Vehículo propio' : 'Mensajero externo'}
-                                </p>
-                            </div>
-                        )}
+                        {currentVenta.mensajero && (() => {
+                            const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
+                            const tipoLabel = currentVenta.mensajero.tipo === 'propio' ? 'Vehículo propio' : 'Mensajero externo';
+                            return (
+                                <WidgetVenta
+                                    icon={Truck}
+                                    color="sky"
+                                    label="Mensajería"
+                                    value={usd}
+                                    sublabel={cup ? `= ${cup} · ${tipoLabel}` : tipoLabel}
+                                />
+                            );
+                        })()}
                     </div>
                 )}
 
                 {/* ── Widgets admin/moderador: 6 widgets en 2 filas de 3 ── */}
                 {(userRole === 'admin' || userRole === 'moderador') && (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <DollarSign size={24} className="mx-auto mb-2 text-green-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Operacional</p>
-                            <p className="text-2xl font-bold text-green-600">
-                                {formatCurrency(currentVenta.total_ganancia, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                        </div>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <Store size={24} className="mx-auto mb-2 text-orange-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Comisión Vendedor</p>
-                            <p className="text-2xl font-bold text-orange-600">
-                                {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                            {comisionMontoCuenta ? (
-                                <p className="mt-1 text-xs font-semibold text-orange-500">
-                                    = {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
-                                </p>
-                            ) : currentVenta.gestor ? (
-                                <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
-                            ) : null}
-                        </div>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <DollarSign
-                                size={24}
-                                className={`mx-auto mb-2 ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-500' : 'text-red-500'}`}
-                            />
-                            <p className="text-muted-foreground mb-1 text-sm">Ganancia/Pérdida Cambiaria</p>
-                            <p className={`text-2xl font-bold ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {formatCurrency(currentVenta.ganancia_perdida_cambiaria, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                        </div>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <TrendingUp size={24} className="mx-auto mb-2 text-indigo-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Agencia</p>
-                            <p className="text-2xl font-bold text-indigo-600">
-                                {formatCurrency(currentVenta.ganancia_agencia, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                        </div>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <DollarSign size={24} className="mx-auto mb-2 text-blue-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Real Total</p>
-                            <p className="text-2xl font-bold text-blue-600">
-                                {formatCurrency(currentVenta.ganancia_real_total, monedaPrincipal?.codigo || 'USD')}
-                            </p>
-                        </div>
-                        <div className="bg-card rounded-xl border p-4 text-center">
-                            <DollarSign size={24} className="mx-auto mb-2 text-purple-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Tasa Cambio Principal</p>
-                            <p className="text-2xl font-bold text-purple-600">
-                                1 {monedaPrincipal?.codigo || 'USD'} = {Number(currentVenta.tasa_cambio_principal)?.toFixed(2) || '0.00'}
-                            </p>
-                        </div>
+                        <WidgetVenta
+                            icon={Wallet}
+                            color="emerald"
+                            label="Ganancia Operacional"
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.total_ganancia)}`}
+                        />
+                        <WidgetVenta
+                            icon={Store}
+                            color="orange"
+                            label="Comisión Vendedor"
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.total_comision)}`}
+                            sublabel={
+                                comisionMontoCuenta
+                                    ? `= ${Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${comisionMoneda}`
+                                    : currentVenta.gestor
+                                        ? 'Absorbida por gestor'
+                                        : undefined
+                            }
+                        />
+                        <WidgetVenta
+                            icon={ArrowRightLeft}
+                            color={currentVenta.ganancia_perdida_cambiaria >= 0 ? 'emerald' : 'red'}
+                            label="Ganancia/Pérdida Cambiaria"
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.ganancia_perdida_cambiaria)}`}
+                        />
+                        <WidgetVenta
+                            icon={TrendingUp}
+                            color="indigo"
+                            label="Ganancia Agencia"
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.ganancia_agencia)}`}
+                        />
+                        <WidgetVenta
+                            icon={Banknote}
+                            color="blue"
+                            label="Ganancia Real Total"
+                            value={`${simboloMonedaPrincipal} ${formatMonto(currentVenta.ganancia_real_total)}`}
+                        />
+                        <WidgetVenta
+                            icon={Percent}
+                            color="purple"
+                            label="Tasa Cambio Principal"
+                            value={`1 ${monedaPrincipal?.codigo || 'USD'} = ${Number(currentVenta.tasa_cambio_principal)?.toFixed(2) || '0.00'}`}
+                        />
                     </div>
                 )}
 
@@ -1552,7 +1676,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         <AlertDialogTrigger asChild>
                             <span className="hidden" />
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="flex max-h-[92vh] max-w-2xl flex-col">
+                        <AlertDialogContent className="flex max-h-[92vh] !max-w-[800px] flex-col">
                             <AlertDialogHeader className="shrink-0">
                                 <AlertDialogTitle className="flex items-center gap-2">
                                     <Users size={20} />
@@ -1587,7 +1711,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         <DollarSign className="h-4 w-4" />
                                         Gestor
                                         {esVentaGestor && !gestorCuentaId && (
-                                            <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 text-xs">
+                                            <Badge className="ml-1 h-5 w-5 border-amber-300 bg-amber-500 p-0 text-xs text-white dark:border-amber-700">
                                                 !
                                             </Badge>
                                         )}
@@ -1602,9 +1726,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 <ScrollProgress className="min-h-0 flex-1">
                                     {/* Tab: Receptor */}
                                     <TabsContent value="receptor" className="mt-4">
-                                        <div ref={resolveDestinatarioDialogContainer} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div ref={resolveDestinatarioDialogContainer} className="space-y-4">
+                                        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 space-y-4 dark:border-blue-800 dark:bg-blue-900/20">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide dark:text-blue-300">
+                                                <User className="h-3.5 w-3.5" /> Datos del receptor
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                             <div className="space-y-2">
-                                                <Label htmlFor="nombre">Nombre *</Label>
+                                                <Label htmlFor="nombre" className="flex items-center gap-1.5">
+                                                    <User className="h-3.5 w-3.5" /> Nombre *
+                                                </Label>
                                                 <Combobox
                                                     items={destinatarioSugerencias}
                                                     itemToStringLabel={(d: DestinatarioSugerido) => d.nombre}
@@ -1646,7 +1777,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </Combobox>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="apellidos">Apellidos *</Label>
+                                                <Label htmlFor="apellidos" className="flex items-center gap-1.5">
+                                                    <UserCheck className="h-3.5 w-3.5" /> Apellidos *
+                                                </Label>
                                                 <Input
                                                     id="apellidos"
                                                     value={formDestinatario.apellidos}
@@ -1655,7 +1788,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
+                                                <Label htmlFor="carnet_identidad" className="flex items-center gap-1.5">
+                                                    <IdCard className="h-3.5 w-3.5" /> Carnet de Identidad *
+                                                </Label>
                                                 <Combobox
                                                     items={destinatarioSugerencias}
                                                     itemToStringLabel={(d: DestinatarioSugerido) => d.carnet_identidad ?? ''}
@@ -1695,7 +1830,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </Combobox>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="telefono_contacto">Teléfono Contacto *</Label>
+                                                <Label htmlFor="telefono_contacto" className="flex items-center gap-1.5">
+                                                    <Phone className="h-3.5 w-3.5" /> Teléfono Contacto *
+                                                </Label>
                                                 <Input
                                                     id="telefono_contacto"
                                                     value={formDestinatario.telefono_contacto}
@@ -1703,8 +1840,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     placeholder="53 0000 0000"
                                                 />
                                             </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-4 space-y-4 dark:border-violet-800 dark:bg-violet-900/20">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 uppercase tracking-wide dark:text-violet-300">
+                                                <MapPin className="h-3.5 w-3.5" /> Entrega
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                             <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
+                                                <Label htmlFor="direccion_residencia" className="flex items-center gap-1.5">
+                                                    <MapPin className="h-3.5 w-3.5" /> Dirección de Residencia
+                                                </Label>
                                                 <Textarea
                                                     id="direccion_residencia"
                                                     value={formDestinatario.direccion_residencia}
@@ -1714,7 +1861,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                                <Label htmlFor="parentesco_cliente" className="flex items-center gap-1.5">
+                                                    <Users className="h-3.5 w-3.5" /> Parentesco con Cliente
+                                                </Label>
                                                 <Input
                                                     id="parentesco_cliente"
                                                     value={formDestinatario.parentesco_cliente}
@@ -1722,16 +1871,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     placeholder="Ej: Familiar, Amigo, etc."
                                                 />
                                             </div>
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="observaciones">Observaciones</Label>
-                                                <Textarea
-                                                    id="observaciones"
-                                                    value={formDestinatario.observaciones}
-                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, observaciones: e.target.value }))}
-                                                    placeholder="Observaciones adicionales"
-                                                    rows={2}
-                                                />
                                             </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="observaciones" className="flex items-center gap-1.5">
+                                                <MessageSquare className="h-3.5 w-3.5" /> Observaciones
+                                            </Label>
+                                            <Textarea
+                                                id="observaciones"
+                                                value={formDestinatario.observaciones}
+                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, observaciones: e.target.value }))}
+                                                placeholder="Observaciones adicionales"
+                                                rows={2}
+                                            />
+                                        </div>
                                         </div>
                                     </TabsContent>
 
@@ -1753,6 +1907,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             setEsVentaGestor(checked);
                                                             if (!checked) limpiarEstadosGestor();
                                                         }}
+                                                        className="data-[state=checked]:bg-emerald-600"
                                                     />
                                                 </div>
                                             </div>
@@ -1762,7 +1917,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     {/* Badges de todas las monedas del sistema */}
                                                     {monedasSistema.length > 0 && (
                                                         <div className="space-y-2">
-                                                            <Label>Moneda del Gestor</Label>
+                                                            <Label className="flex items-center gap-1.5">
+                                                                <Coins className="h-4 w-4" /> Moneda del Gestor
+                                                            </Label>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {monedasSistema.map((m) => (
                                                                     <button
@@ -1776,8 +1933,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                             const montoCalculado = currentVenta.total_comision * m.tasa;
                                                                             setGestorMonto(montoCalculado.toFixed(2));
                                                                         }}
-                                                                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
-                                                                            ? 'bg-primary text-primary-foreground border-primary'
+                                                                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
+                                                                            ? 'bg-emerald-600 text-white border-emerald-600'
                                                                             : 'bg-background text-foreground hover:bg-muted'
                                                                             }`}
                                                                     >
@@ -1789,7 +1946,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     )}
                                                     {/* Tasa aplicada — editable */}
                                                     <div className="space-y-2">
-                                                        <Label>Tasa Aplicada del Gestor</Label>
+                                                        <Label className="flex items-center gap-1.5">
+                                                            <Percent className="h-4 w-4" /> Tasa Aplicada del Gestor
+                                                        </Label>
                                                         <Input
                                                             type="number"
                                                             step="0.0001"
@@ -1805,39 +1964,67 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                 }
                                                             }}
                                                             placeholder="Ej: 500"
+                                                            className="h-11"
                                                         />
                                                     </div>
-                                                    <div className="grid gap-4 md:grid-cols-2">
-                                                        <div className="space-y-2">
+                                                    <div className="grid gap-4 md:grid-cols-3">
+                                                        <div className="space-y-2 md:col-span-2">
                                                             <Label>Cuenta del Gestor</Label>
-                                                            <Select
-                                                                value={gestorCuentaId}
+                                                            <Combobox
+                                                                value={gestorCuentaId || null}
                                                                 onValueChange={(val) => {
-                                                                    setGestorCuentaId(val);
+                                                                    setGestorCuentaId(val ?? '');
                                                                     setCuentaGestorSeleccionada(cuentasGestor.find((c) => String(c.id) === val) || null);
                                                                 }}
+                                                                onInputValueChange={setGestorCuentaSearch}
+                                                                itemToStringLabel={(id: string) => cuentasGestor.find((c) => String(c.id) === id)?.nombre_cuenta ?? ''}
                                                             >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Seleccione cuenta..." />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {(monedaGestorSeleccionada
-                                                                        ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
-                                                                        : cuentasGestor
-                                                                    ).map((cuenta) => (
-                                                                        <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
-                                                                            {' · '}
-                                                                            <span className={cuenta.saldo_actual <= 0 ? 'text-red-500' : 'text-green-600'}>
-                                                                                Saldo: {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                                            </span>
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
+                                                                <ComboboxInput className="h-12" placeholder="Buscar cuenta..." showClear />
+                                                                <ComboboxContent container={destinatarioDialogContainer}>
+                                                                    <ComboboxEmpty>Sin coincidencias</ComboboxEmpty>
+                                                                    <ComboboxList>
+                                                                        {(monedaGestorSeleccionada
+                                                                            ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
+                                                                            : cuentasGestor
+                                                                        )
+                                                                            .filter((c) => !gestorCuentaSearch || c.nombre_cuenta.toLowerCase().includes(gestorCuentaSearch.toLowerCase()))
+                                                                            .map((cuenta) => (
+                                                                                <ComboboxItem key={cuenta.id} value={String(cuenta.id)} className="py-2">
+                                                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                                                        {cuenta.banco ? (
+                                                                                            <img
+                                                                                                src={cuenta.banco.imagen_url}
+                                                                                                alt=""
+                                                                                                aria-hidden="true"
+                                                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                                                        )}
+                                                                                        <span className="min-w-0 flex-1 truncate">
+                                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                                        </span>
+                                                                                        <Badge
+                                                                                            variant="outline"
+                                                                                            className={`shrink-0 font-semibold ${
+                                                                                                cuenta.saldo_actual > 0
+                                                                                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                                                    : 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                                            }`}
+                                                                                        >
+                                                                                            {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                                        </Badge>
+                                                                                    </span>
+                                                                                </ComboboxItem>
+                                                                            ))}
+                                                                    </ComboboxList>
+                                                                </ComboboxContent>
+                                                            </Combobox>
                                                         </div>
                                                         <div className="space-y-2">
-                                                            <Label>Monto de Comisión</Label>
+                                                            <Label className="flex items-center gap-1.5">
+                                                                <DollarSign className="h-4 w-4" /> Monto de Comisión
+                                                            </Label>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-muted-foreground shrink-0 text-sm font-medium">
                                                                     {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || 'USD'}
@@ -1848,6 +2035,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                     value={gestorMonto}
                                                                     onChange={(e) => setGestorMonto(e.target.value)}
                                                                     placeholder="0.00"
+                                                                    className="h-11"
                                                                 />
                                                             </div>
                                                         </div>
@@ -1893,12 +2081,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                         );
                                                     })()}
                                                     <div className="space-y-2">
-                                                        <Label>Comentario</Label>
+                                                        <Label className="flex items-center gap-1.5">
+                                                            <MessageSquare className="h-4 w-4" /> Comentario
+                                                        </Label>
                                                         <Textarea
                                                             placeholder="Ej: Gestor externo, acuerdo 50/50..."
                                                             value={gestorComentario}
                                                             onChange={(e) => setGestorComentario(e.target.value)}
-                                                            rows={2}
+                                                            rows={3}
                                                             className="resize-none"
                                                         />
                                                     </div>
@@ -1915,7 +2105,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </AlertDialogCancel>
                                 <Button
                                     onClick={handleGuardarDestinatario}
-                                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                                    className="bg-blue-700 hover:bg-blue-800 disabled:opacity-50"
                                     disabled={
                                         isSavingDestinatario ||
                                         !formDestinatario.nombre?.trim() ||
@@ -1967,8 +2157,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 Imprimir Reporte
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
-                            <AlertDialogHeader className="border-b bg-gradient-to-r from-sky-600 to-sky-700 px-8 py-6 text-white">
+                        <AlertDialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden p-0 sm:max-w-3xl">
+                            <AlertDialogHeader className="shrink-0 border-b bg-gradient-to-r from-sky-600 to-sky-700 px-8 py-6 text-white">
                                 <div className="flex items-center gap-4">
                                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                         <AppLogoIcon />
@@ -1981,6 +2171,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                 </div>
                             </AlertDialogHeader>
+                            <div className="flex-1 overflow-y-auto">
                             {monedasSistema.length > 0 && (
                                 <div className="px-4 pt-4 pb-2">
                                     <Alert className="border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950">
@@ -2031,7 +2222,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </Alert>
                                 </div>
                             )}
-                            <div className="max-h-[70vh] overflow-y-auto">
+                            <div>
                                 <div className="p-4 font-mono text-sm">
                                     <div className="mb-4 border-b pb-2 text-center">
                                         <h2 className="text-lg font-bold">{currentVenta.almacen.nombre}</h2>
@@ -2119,11 +2310,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <Clock className="h-3 w-3" /> Restante:
                                             </span>
                                             <span
-                                                className={`font-semibold ${
-                                                    currentVenta.restante > 0
+                                                className={`font-semibold ${currentVenta.restante > 0
                                                         ? 'text-amber-600 dark:text-amber-400'
                                                         : 'text-emerald-600 dark:text-emerald-400'
-                                                }`}
+                                                    }`}
                                             >
                                                 {formatCurrency(convertirMontoReporte(currentVenta.restante), codigoReporte)}
                                             </span>
@@ -2143,7 +2333,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                 </div>
                             </div>
-                            <AlertDialogFooter className="border-t p-4">
+                            </div>
+                            <AlertDialogFooter className="shrink-0 border-t p-4">
                                 <Button
                                     variant="secondary"
                                     onClick={() => {
@@ -2505,19 +2696,34 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
                                 )}
                             </div>
+                        </CardContent>
+                    </Card>
+                )}
 
-                            {/* ── Mensajero ── */}
-                            <div className="mb-4 border-t pt-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="flex items-center gap-2 text-sm font-semibold">
-                                        <Truck className="h-4 w-4 text-sky-600" />
-                                        Mensajería
-                                        {currentVenta.mensajero && (
-                                            <Badge variant="outline" className="text-sky-600 text-xs">
-                                                {currentVenta.mensajero.tipo === 'propio' ? 'Propio' : 'Externo'}
-                                            </Badge>
-                                        )}
-                                    </h4>
+                {/* ── Cards: Mensajería y Comisión, lado a lado para no ocupar tanto alto ── */}
+                {isVentaPendiente && (
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Truck className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Mensajería</CardTitle>
+                                    <CardDescription className="text-xs text-sky-100">Entrega a domicilio, si aplica</CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-5">
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                    {currentVenta.mensajero && (
+                                        <Badge variant="outline" className="text-sky-600 text-xs">
+                                            {currentVenta.mensajero.tipo === 'propio' ? 'Propio' : 'Externo'}
+                                        </Badge>
+                                    )}
+                                </h4>
                                     {currentVenta.mensajero && (
                                         <Button size="sm" variant="outline" onClick={() => {
                                             setShowMensajeroForm(!showMensajeroForm);
@@ -2554,20 +2760,27 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             const tasa = monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
                                             const refCUP = Number(m.monto) * tasa;
                                             return (
-                                                <div className="rounded-md bg-muted px-3 py-2 text-xs">
-                                                    <span className="text-muted-foreground">Cobrado al cliente: </span>
-                                                    <span className="font-semibold">
+                                                <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/50 px-3 py-2">
+                                                    <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                        <span className="bg-background flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                                                            <Wallet className="h-3.5 w-3.5" />
+                                                        </span>
+                                                        Cobrado al cliente
+                                                    </span>
+                                                    <Badge variant="outline" className="font-semibold">
                                                         {refCUP > 0
                                                             ? `${refCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
                                                             : formatCurrency(m.monto ?? 0, 'USD')}
-                                                    </span>
+                                                    </Badge>
                                                 </div>
                                             );
                                         })()}
 
                                         {/* Tasa de cambio para procesar el pago — editable, independiente de la tasa del sistema */}
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Tasa de cambio para el pago (CUP/USD)</Label>
+                                            <Label className="flex items-center gap-1.5 text-xs">
+                                                <Percent className="h-3.5 w-3.5" /> Tasa de cambio para el pago (CUP/USD)
+                                            </Label>
                                             <Input
                                                 type="number"
                                                 min="0.0001"
@@ -2583,7 +2796,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     }
                                                 }}
                                                 placeholder="Ej: 380.00"
-                                                className="h-8 text-sm"
+                                                className="h-11"
                                             />
                                             <p className="text-xs text-muted-foreground">
                                                 Recalcula el monto CUP de abajo. Se sugiere con la tasa del sistema, pero puedes ajustarla al momento de pagar.
@@ -2592,7 +2805,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                                         {/* Monto final al mensajero — editable (permite ajuste manual adicional) */}
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Monto final al mensajero (CUP)</Label>
+                                            <Label className="flex items-center gap-1.5 text-xs">
+                                                <DollarSign className="h-3.5 w-3.5" /> Monto final al mensajero (CUP)
+                                            </Label>
                                             <Input
                                                 type="number"
                                                 min="0.01"
@@ -2600,7 +2815,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 value={mensajeroFormMontoCUP}
                                                 onChange={e => setMensajeroFormMontoCUP(e.target.value)}
                                                 placeholder="Ej: 10000.00"
-                                                className="h-8 text-sm"
+                                                className="h-11"
                                             />
                                             {mensajeroFormMontoCUP && parseFloat(mensajeroFormMontoCUP) > 0 && (
                                                 <p className="text-xs font-medium text-sky-600">
@@ -2610,18 +2825,52 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </div>
 
                                         {/* EXTERNO: cuenta de donde sale el pago */}
-                                        <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">🛵 Cuenta de donde sale el pago</p>
-                                            <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
-                                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {cuentasMensajero.map(c => (
-                                                        <SelectItem key={c.id} value={String(c.id)}>
-                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                        <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3 space-y-2 dark:border-orange-800 dark:bg-orange-900/20">
+                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 uppercase tracking-wide dark:text-orange-300">
+                                                <Truck className="h-3.5 w-3.5" /> Cuenta de donde sale el pago
+                                            </p>
+                                            <Combobox
+                                                value={mensajeroFormCuentaId || null}
+                                                onValueChange={(val) => setMensajeroFormCuentaId(val ?? '')}
+                                                onInputValueChange={setMensajeroCuentaSearch}
+                                                itemToStringLabel={(id: string) => cuentasMensajero.find((c) => String(c.id) === id)?.nombre_cuenta ?? ''}
+                                            >
+                                                <ComboboxInput className="h-11" placeholder="Buscar cuenta CUP..." showClear />
+                                                <ComboboxContent>
+                                                    <ComboboxEmpty>Sin coincidencias</ComboboxEmpty>
+                                                    <ComboboxList>
+                                                        {cuentasMensajero
+                                                            .filter((c) => !mensajeroCuentaSearch || c.nombre_cuenta.toLowerCase().includes(mensajeroCuentaSearch.toLowerCase()))
+                                                            .map((c) => (
+                                                                <ComboboxItem key={c.id} value={String(c.id)} className="py-2">
+                                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                                        {c.banco ? (
+                                                                            <img
+                                                                                src={c.banco.imagen_url}
+                                                                                alt=""
+                                                                                aria-hidden="true"
+                                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                                            />
+                                                                        ) : (
+                                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                                        )}
+                                                                        <span className="min-w-0 flex-1 truncate">{c.nombre_cuenta}</span>
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={`shrink-0 font-semibold ${
+                                                                                (c.saldo_actual ?? 0) > 0
+                                                                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                                    : 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                            }`}
+                                                                        >
+                                                                            {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                                        </Badge>
+                                                                    </span>
+                                                                </ComboboxItem>
+                                                            ))}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
                                             {mensajeroFormCuentaId && (() => {
                                                 const montoCUP = parseFloat(mensajeroFormMontoCUP);
                                                 const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
@@ -2649,18 +2898,25 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </div>
                                     </div>
                                 )}
+                        </CardContent>
+                    </Card>
+
+                    {/* ── Card: Comisión ── */}
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Store className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Comisión</CardTitle>
+                                    <CardDescription className="text-xs text-amber-100">
+                                        {formatCurrency(currentVenta.total_comision, 'USD')} a distribuir — punto de venta o gestor
+                                    </CardDescription>
+                                </div>
                             </div>
-
-                            {/* ── Comisión: vendedor O gestor (XOR) ── */}
-                            <div className="border-t pt-4">
-                                <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                                    <Store className="h-4 w-4 text-amber-600" />
-                                    Comisión
-                                    <span className="text-xs font-normal text-muted-foreground">
-                                        {formatCurrency(currentVenta.total_comision, 'USD')}
-                                    </span>
-                                </h4>
-
+                        </CardHeader>
+                        <CardContent className="pt-5">
                                 {/* Selector XOR */}
                                 <div className="flex gap-2 mb-3">
                                     <Button
@@ -2774,50 +3030,100 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                                         {showComisionForm && (
                                             <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                                {/* Comisión USD fija de la venta */}
-                                                <div className="rounded-md bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950">
-                                                    <span className="text-muted-foreground">Comisión a distribuir: </span>
-                                                    <span className="font-bold text-amber-700">{formatCurrency(currentVenta.total_comision, 'USD')}</span>
+                                                {/* Comisión a distribuir */}
+                                                <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/20">
+                                                    <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
+                                                            <DollarSign className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                                        </span>
+                                                        Comisión a distribuir
+                                                    </span>
+                                                    <Badge variant="outline" className="border-amber-300 bg-amber-100 font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                                        {formatCurrency(currentVenta.total_comision, 'USD')}
+                                                    </Badge>
                                                 </div>
                                                 {/* Tasa y CUP en vivo: solo con una cuenta CUP (una cuenta USD no convierte) */}
                                                 {!comisionEsUsd && (
                                                     <div className="space-y-1">
-                                                        <Label className="text-xs">Tasa CUP/USD</Label>
+                                                        <Label className="flex items-center gap-1.5 text-xs">
+                                                            <Percent className="h-3.5 w-3.5" /> Tasa CUP/USD
+                                                        </Label>
                                                         <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
                                                             onChange={e => setComisionFormTasa(e.target.value)}
-                                                            className="h-8 text-sm" />
+                                                            className="h-11" />
                                                     </div>
                                                 )}
                                                 {!comisionEsUsd && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
-                                                    <div className="rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-950">
-                                                        <span className="text-muted-foreground">Equivale a: </span>
-                                                        <span className="font-bold text-sky-700">
-                                                            {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    <div className="flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50/50 px-3 py-2 dark:border-sky-800 dark:bg-sky-900/20">
+                                                        <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900/40">
+                                                                <ArrowRightLeft className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                                                            </span>
+                                                            Equivale a
                                                         </span>
+                                                        <Badge variant="outline" className="border-sky-300 bg-sky-100 font-semibold text-sky-800 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                                                            {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </Badge>
                                                     </div>
                                                 )}
                                                 {/* ORIGEN: de donde sale */}
-                                                <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                                    <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
-                                                    <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
-                                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP o USD efectivo..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {/* Agrupadas con su cantidad: con decenas de cuentas CUP, las USD quedaban enterradas al final de una lista larga */}
-                                                            {[
-                                                                { titulo: 'USD en efectivo', cuentas: cuentasComision.filter(c => c.moneda?.codigo === 'USD') },
-                                                                { titulo: 'CUP', cuentas: cuentasComision.filter(c => c.moneda?.codigo !== 'USD') },
-                                                            ].filter(g => g.cuentas.length > 0).map(g => (
-                                                                <SelectGroup key={g.titulo}>
-                                                                    <SelectLabel>{g.titulo} ({g.cuentas.length})</SelectLabel>
-                                                                    {g.cuentas.map(c => (
-                                                                        <SelectItem key={c.id} value={String(c.id)}>
-                                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectGroup>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3 space-y-2 dark:border-orange-800 dark:bg-orange-900/20">
+                                                    <p className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 uppercase tracking-wide dark:text-orange-300">
+                                                        <Wallet className="h-3.5 w-3.5" /> Origen (de dónde sale)
+                                                    </p>
+                                                    <Combobox
+                                                        value={comisionFormCuentaId || null}
+                                                        onValueChange={(val) => setComisionFormCuentaId(val ?? '')}
+                                                        onInputValueChange={setComisionCuentaSearch}
+                                                        itemToStringLabel={(id: string) => cuentasComision.find((c) => String(c.id) === id)?.nombre_cuenta ?? ''}
+                                                    >
+                                                        <ComboboxInput className="h-11" placeholder="Buscar cuenta CUP o USD efectivo..." showClear />
+                                                        <ComboboxContent>
+                                                            <ComboboxEmpty>Sin coincidencias</ComboboxEmpty>
+                                                            <ComboboxList>
+                                                                {/* Agrupadas con su cantidad: con decenas de cuentas CUP, las USD quedaban enterradas al final de una lista larga */}
+                                                                {[
+                                                                    { titulo: 'USD en efectivo', cuentas: cuentasComision.filter(c => c.moneda?.codigo === 'USD') },
+                                                                    { titulo: 'CUP', cuentas: cuentasComision.filter(c => c.moneda?.codigo !== 'USD') },
+                                                                ].filter(g => g.cuentas.length > 0).map(g => (
+                                                                    <div key={g.titulo}>
+                                                                        <p className="text-muted-foreground px-2 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wide">
+                                                                            {g.titulo} ({g.cuentas.length})
+                                                                        </p>
+                                                                        {g.cuentas
+                                                                            .filter((c) => !comisionCuentaSearch || c.nombre_cuenta.toLowerCase().includes(comisionCuentaSearch.toLowerCase()))
+                                                                            .map((c) => (
+                                                                                <ComboboxItem key={c.id} value={String(c.id)} className="py-2">
+                                                                                    <span className="flex w-full min-w-0 items-center gap-2">
+                                                                                        {c.banco ? (
+                                                                                            <img
+                                                                                                src={c.banco.imagen_url}
+                                                                                                alt=""
+                                                                                                aria-hidden="true"
+                                                                                                className="h-8 w-auto shrink-0 object-contain"
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <CreditCard className="text-muted-foreground h-6 w-6 shrink-0" strokeWidth={1.5} />
+                                                                                        )}
+                                                                                        <span className="min-w-0 flex-1 truncate">{c.nombre_cuenta}</span>
+                                                                                        <Badge
+                                                                                            variant="outline"
+                                                                                            className={`shrink-0 font-semibold ${
+                                                                                                (c.saldo_actual ?? 0) > 0
+                                                                                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                                                                    : 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                                                            }`}
+                                                                                        >
+                                                                                            {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {c.moneda?.codigo}
+                                                                                        </Badge>
+                                                                                    </span>
+                                                                                </ComboboxItem>
+                                                                            ))}
+                                                                    </div>
+                                                                ))}
+                                                            </ComboboxList>
+                                                        </ComboboxContent>
+                                                    </Combobox>
                                                     {comisionFormCuentaId && (comisionEsUsd || (comisionFormTasa && parseFloat(comisionFormTasa) > 0)) && (() => {
                                                         const necesario = comisionEsUsd ? currentVenta.total_comision : currentVenta.total_comision * parseFloat(comisionFormTasa);
                                                         const moneda = comisionEsUsd ? 'USD' : 'CUP';
@@ -2833,16 +3139,28 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </div>
 
                                                 {/* DESTINO: a donde va */}
-                                                <div className="rounded-md border border-dashed border-amber-300 p-2 space-y-1">
-                                                    <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">→ Destino (a donde va)</p>
-                                                    <p className="text-xs text-amber-700">
-                                                        Comisión del vendedor <strong>{currentVenta.usuario?.nombre}</strong>
-                                                        {comisionEsUsd
-                                                            ? ` — ${Number(currentVenta.total_comision).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD`
-                                                            : comisionFormTasa && parseFloat(comisionFormTasa) > 0
-                                                                ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                                : ''}
+                                                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2 dark:border-amber-800 dark:bg-amber-900/20">
+                                                    <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 uppercase tracking-wide dark:text-amber-300">
+                                                        <User className="h-3.5 w-3.5" /> Destino (a dónde va)
                                                     </p>
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <span className="flex min-w-0 items-center gap-2 text-sm">
+                                                            <span className="bg-background flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
+                                                                <User className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                                            </span>
+                                                            <span className="min-w-0 truncate">
+                                                                Comisión del vendedor{' '}
+                                                                <strong>{currentVenta.usuario?.nombre}</strong>
+                                                            </span>
+                                                        </span>
+                                                        <Badge className="shrink-0 border-amber-300 bg-amber-100 font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                                            {comisionEsUsd
+                                                                ? `${Number(currentVenta.total_comision).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD`
+                                                                : comisionFormTasa && parseFloat(comisionFormTasa) > 0
+                                                                    ? `${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                                    : '—'}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
                                                 <div className="flex justify-end gap-2">
                                                     {currentVenta.comision_pago?.cuenta && (
@@ -2859,9 +3177,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         )}
                                     </div>
                                 )}
-                            </div>
                         </CardContent>
                     </Card>
+                    </div>
                 )}
 
                 {/* ── Cards: Destinatario, Comisión PV, Gestor y Mensajero ── */}
@@ -3161,79 +3479,46 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Info general de la venta ── */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <div className="bg-card rounded-lg border-l-4 border-slate-400 p-4 shadow-sm dark:border-slate-600">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                                <Calendar className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                            </div>
-                            <h3 className="text-sm font-semibold">Fecha y Hora</h3>
-                        </div>
-                        <p className="mt-2 text-sm">{formatDate(currentVenta.fecha)}</p>
-                    </div>
-                    <div className="bg-card rounded-lg border-l-4 border-violet-400 p-4 shadow-sm dark:border-violet-600">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40">
-                                <Store className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                            </div>
-                            <h3 className="text-sm font-semibold">Almacén</h3>
-                        </div>
-                        <p className="mt-2 text-sm">{currentVenta.almacen.nombre}</p>
-                    </div>
-                    <div
-                        className={`bg-card rounded-lg border-l-4 p-4 shadow-sm ${currentVenta.cliente
-                            ? 'border-blue-400 dark:border-blue-600'
-                            : currentVenta.destinatario
-                                ? 'border-amber-400 dark:border-amber-600'
-                                : 'border-muted'
-                            }`}
-                    >
-                        <div className="flex items-center gap-2">
-                            <div
-                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${currentVenta.cliente
-                                    ? 'bg-blue-100 dark:bg-blue-900/40'
-                                    : currentVenta.destinatario
-                                        ? 'bg-amber-100 dark:bg-amber-900/40'
-                                        : 'bg-muted'
-                                    }`}
-                            >
-                                <User
-                                    className={`h-4 w-4 ${currentVenta.cliente
-                                        ? 'text-blue-600 dark:text-blue-400'
-                                        : currentVenta.destinatario
-                                            ? 'text-amber-600 dark:text-amber-400'
-                                            : 'text-muted-foreground'
-                                        }`}
-                                />
-                            </div>
-                            <h3 className="text-sm font-semibold">Cliente</h3>
-                        </div>
-                        {currentVenta.cliente ? (
-                            <p className="mt-2 text-sm">{currentVenta.cliente.nombre}</p>
-                        ) : currentVenta.destinatario ? (
-                            <div className="mt-2">
-                                <p className="text-sm">
-                                    {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
-                                </p>
-                                <p className="text-muted-foreground text-xs">(Receptor de la venta)</p>
-                            </div>
-                        ) : (
-                            <p className="mt-2 text-sm">Cliente no especificado</p>
-                        )}
-                    </div>
-                    <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
-                                <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            </div>
-                            <h3 className="text-sm font-semibold">Vendedor</h3>
-                        </div>
-                        <p className="mt-2 text-sm">
-                            {currentVenta.usuario.nombre} ({currentVenta.usuario.rol})
-                        </p>
-                        {currentVenta.atendido_por && currentVenta.atendido_por !== currentVenta.usuario.nombre && (
-                            <p className="text-muted-foreground mt-1 text-xs">Atendido por: {currentVenta.atendido_por}</p>
-                        )}
-                    </div>
+                    <WidgetVenta
+                        icon={Calendar}
+                        color="slate"
+                        label="Fecha y Hora"
+                        value={formatDate(currentVenta.fecha)}
+                        size="compact"
+                    />
+                    <WidgetVenta
+                        icon={Store}
+                        color="violet"
+                        label="Almacén"
+                        value={currentVenta.almacen.nombre}
+                        size="compact"
+                    />
+                    <WidgetVenta
+                        icon={User}
+                        color={currentVenta.cliente ? 'blue' : currentVenta.destinatario ? 'amber' : 'muted'}
+                        label="Cliente"
+                        size="compact"
+                        value={
+                            currentVenta.cliente
+                                ? currentVenta.cliente.nombre
+                                : currentVenta.destinatario
+                                    ? `${currentVenta.destinatario.nombre} ${currentVenta.destinatario.apellidos}`
+                                    : 'Cliente no especificado'
+                        }
+                        sublabel={currentVenta.destinatario && !currentVenta.cliente ? '(Receptor de la venta)' : undefined}
+                    />
+                    <WidgetVenta
+                        icon={UserCheck}
+                        color="emerald"
+                        label="Vendedor"
+                        size="compact"
+                        value={`${currentVenta.usuario.nombre} (${currentVenta.usuario.rol})`}
+                        sublabel={
+                            currentVenta.atendido_por && currentVenta.atendido_por !== currentVenta.usuario.nombre
+                                ? `Atendido por: ${currentVenta.atendido_por}`
+                                : undefined
+                        }
+                    />
                 </div>
 
                 {/* ── Tabla de productos ── */}
@@ -3377,7 +3662,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-4 pt-5">
+                        <CardContent className="space-y-8 pt-8">
                             {currentVenta.pagos.length > 0 ? (
                                 currentVenta.pagos.map((pago, index) => {
                                     const simboloMonedaPago = getCurrencySymbol(pago.moneda);
@@ -3387,138 +3672,159 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     const nombreDestino = esCliente
                                         ? pago.cliente_destino!.nombre
                                         : (pago.cuenta?.nombre ?? 'Sin destino especificado');
+                                    // 'efectivo' (esmeralda) y 'tarjeta' (azul) ya existen en SpotlightCard para este mismo
+                                    // contraste — el anillo animado reemplaza el `border` plano, no se combinan los dos.
+                                    const bgPago = esEfectivo ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : 'bg-blue-50/50 dark:bg-blue-900/20';
 
                                     return (
-                                        <div key={index} className="bg-card overflow-hidden rounded-2xl border shadow-sm transition-all hover:shadow-md">
-                                            {/* Header — logo real de la cuenta destino (banco/insignia de efectivo), ícono
-                                                de cliente, o un fondo genérico según el método de pago */}
-                                            <div
-                                                className={`relative flex h-20 items-center justify-center overflow-hidden bg-gradient-to-br ${
-                                                    esEfectivo ? 'from-emerald-600 to-emerald-800' : 'from-blue-600 to-blue-800'
-                                                }`}
-                                            >
-                                                {!esCliente && pago.cuenta?.banco ? (
-                                                    <img
-                                                        src={pago.cuenta.banco.imagen_url}
-                                                        alt={pago.cuenta.banco.nombre}
-                                                        className="h-full w-full object-cover"
-                                                    />
-                                                ) : esCliente ? (
-                                                    <User className="h-9 w-9 text-white/30" />
-                                                ) : (
-                                                    <CreditCard className="h-9 w-9 text-white/30" />
-                                                )}
+                                        <SpotlightCard
+                                            key={index}
+                                            estado={esEfectivo ? 'efectivo' : 'tarjeta'}
+                                            className={`relative rounded-2xl p-4 pt-16 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${bgPago}`}
+                                        >
+                                            {/* Efecto bleed (igual que cuentas-panel.tsx de Empleados, docs/patron-mascota-bleed.md
+                                                Variante A): el logo real de la cuenta sobresale por la esquina superior derecha —
+                                                por eso esta card NO lleva overflow-hidden. Sin logo de banco, o si el destino es un
+                                                cliente, queda un ícono en su lugar, sin sobresalir. Debajo del logo, a la derecha,
+                                                va el nombre — antes quedaba huérfano abajo a la izquierda, lejos de a quién pertenece. */}
+                                            {!esCliente && pago.cuenta?.banco ? (
+                                                <img
+                                                    src={pago.cuenta.banco.imagen_url}
+                                                    alt={pago.cuenta.banco.nombre}
+                                                    className="pointer-events-none absolute -top-8 right-3 z-20 h-24 w-auto max-w-44 object-contain object-right drop-shadow-xl select-none"
+                                                />
+                                            ) : esCliente ? (
+                                                <span className="absolute -top-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-pink-100 shadow dark:bg-pink-950/40">
+                                                    <User className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+                                                </span>
+                                            ) : (
+                                                <span className="bg-muted absolute -top-3 right-3 flex h-10 w-10 items-center justify-center rounded-full shadow">
+                                                    <CreditCard className="text-muted-foreground h-5 w-5" />
+                                                </span>
+                                            )}
 
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="absolute top-2 right-2 gap-1 border-0 bg-black/40 text-white backdrop-blur-sm capitalize"
-                                                >
-                                                    {esEfectivo ? <Banknote className="h-3 w-3" /> : <Send className="h-3 w-3" />}
-                                                    {pago.metodo}
-                                                </Badge>
-                                            </div>
+                                            {/* Método de pago, mismo efecto bleed por la esquina superior izquierda — el .webp
+                                                (efectivo.webp/transferencia.webp, mismo que el POS) SÍ es transparente (confirmado:
+                                                canal alfa real, no fondo blanco de por sí — lo que parecía fondo era el visor de
+                                                imágenes de Chrome), así que va directo, sin caja ni recuadro propio. Ya trae el
+                                                nombre dibujado adentro, no hace falta repetirlo en texto. */}
+                                            <img
+                                                src={esEfectivo ? '/projects/metodos_pago/efectivo.webp' : '/projects/metodos_pago/transferencia.webp'}
+                                                alt={pago.metodo}
+                                                className="pointer-events-none absolute -top-5 left-2 z-20 h-16 w-auto max-w-36 object-contain drop-shadow-xl select-none"
+                                            />
 
                                             {/* Cuerpo */}
-                                            <div className="space-y-3 p-4">
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <div className="flex min-w-0 items-center gap-1.5">
-                                                        {!esCliente && pago.cuenta?.banco ? (
-                                                            <img
-                                                                src={pago.cuenta.banco.imagen_url}
-                                                                alt=""
-                                                                className="h-5 w-7 shrink-0 rounded object-cover"
-                                                            />
-                                                        ) : esCliente ? (
-                                                            <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-pink-100 dark:bg-pink-950/30">
-                                                                <User className="h-3 w-3 text-pink-600 dark:text-pink-400" />
-                                                            </span>
-                                                        ) : (
-                                                            <span className="bg-muted flex h-5 w-7 shrink-0 items-center justify-center rounded">
-                                                                <CreditCard className="text-muted-foreground h-3 w-3" />
-                                                            </span>
-                                                        )}
+                                            <div className="mt-3 space-y-3">
+                                                {/* Monto (izquierda) y Nombre del destino (derecha) en la MISMA fila — antes iban uno
+                                                    debajo del otro y, como el nombre está alineado a la derecha, dejaba un hueco vacío
+                                                    a la izquierda mientras el monto esperaba turno más abajo. */}
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex flex-col items-start gap-1.5">
                                                         <Badge
                                                             variant="outline"
-                                                            className="w-fit min-w-0 gap-1 border-slate-200 bg-slate-50 font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300"
+                                                            className="w-fit gap-1 border-amber-200 bg-amber-50 px-2.5 py-1 text-base font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
                                                         >
-                                                            <span className="truncate">{nombreDestino}</span>
+                                                            <Wallet className="h-3.5 w-3.5" />
+                                                            {simboloMonedaPago} {formatMonto(pago.monto)}
+                                                        </Badge>
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="w-fit gap-1 border-teal-200 bg-teal-50 text-sm text-teal-700 dark:border-teal-800 dark:bg-teal-950/20 dark:text-teal-300"
+                                                        >
+                                                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                                                            Equiv. {simboloMonedaPrincipal} {formatMonto(pago.monto_equivalente)}
                                                         </Badge>
                                                     </div>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={
-                                                            esCliente
-                                                                ? 'shrink-0 gap-1 border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/20 dark:text-pink-300'
-                                                                : 'shrink-0 gap-1 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
-                                                        }
-                                                    >
-                                                        {esCliente ? <User className="h-3 w-3" /> : <Store className="h-3 w-3" />}
-                                                        {esCliente ? 'Cliente' : (pago.cuenta?.moneda?.nombre ?? simboloMonedaCuenta)}
-                                                    </Badge>
+                                                    <div className="min-w-0 text-right">
+                                                        <h3 className="text-xl leading-tight font-bold break-words text-foreground" title={nombreDestino}>
+                                                            {nombreDestino}
+                                                        </h3>
+                                                        <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1.5">
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={
+                                                                    esCliente
+                                                                        ? 'shrink-0 gap-1 border-pink-200 bg-pink-50 text-sm text-pink-700 dark:border-pink-800 dark:bg-pink-950/20 dark:text-pink-300'
+                                                                        : 'shrink-0 gap-1 border-slate-200 bg-slate-50 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300'
+                                                                }
+                                                            >
+                                                                {esCliente ? <User className="h-3.5 w-3.5" /> : <Store className="h-3.5 w-3.5" />}
+                                                                {esCliente ? 'Cliente' : (pago.cuenta?.moneda?.nombre ?? simboloMonedaCuenta)}
+                                                            </Badge>
+                                                        </div>
+                                                        {/* Vía de pago, compacta, junto a los datos de la cuenta — antes era un bloque
+                                                            centrado grande al final de la card, hacía la card demasiado alta. */}
+                                                        {pago.via && (
+                                                            <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                                                                <span className="text-muted-foreground text-xs font-medium">Vía de pago:</span>
+                                                                {pago.via_info?.imagen_url ? (
+                                                                    <ViaLogo
+                                                                        slug={pago.via_info.slug}
+                                                                        nombre={pago.via_info.nombre}
+                                                                        imagenUrl={pago.via_info.imagen_url}
+                                                                        className="h-6"
+                                                                    />
+                                                                ) : (
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="inline-flex items-center gap-1 border-violet-200 bg-violet-50 text-sm text-violet-700 capitalize dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300"
+                                                                    >
+                                                                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                                                                        {pago.via_info?.nombre ?? pago.via}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
 
-                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                {/* Moneda + las 2 tasas, debajo del monto — cada una en su propia línea (no en fila)
+                                                    para no competir en ancho con las demás badges: la de esta operación (guardada en
+                                                    el pago, puede quedar vieja si la tasa del sistema cambió después) y la del sistema
+                                                    hoy, para comparar de un vistazo. */}
+                                                <div className="flex flex-col items-start gap-1.5">
                                                     <Badge
                                                         variant="outline"
-                                                        className="w-fit gap-1 border-amber-200 bg-amber-50 px-2.5 py-1 text-base font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                                                        className="inline-flex items-center gap-1 border-indigo-200 bg-indigo-50 text-sm text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300"
                                                     >
-                                                        <Wallet className="h-3.5 w-3.5" />
-                                                        {simboloMonedaPago} {formatMonto(pago.monto)}
-                                                    </Badge>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="w-fit gap-1 border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800 dark:bg-teal-950/20 dark:text-teal-300"
-                                                    >
-                                                        <ArrowRightLeft className="h-3 w-3" />
-                                                        Equiv. {simboloMonedaPrincipal} {formatMonto(pago.monto_equivalente)}
-                                                    </Badge>
-                                                </div>
-
-                                                <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="inline-flex items-center gap-1 border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300"
-                                                    >
-                                                        <Coins className="h-3 w-3" />
+                                                        <Coins className="h-3.5 w-3.5" />
                                                         {pago.moneda?.nombre || 'No especificada'}
                                                     </Badge>
                                                     <Badge
                                                         variant="outline"
-                                                        className="inline-flex items-center gap-1 border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300"
+                                                        className="inline-flex items-center gap-1 border-slate-200 bg-slate-50 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300"
                                                     >
-                                                        <Percent className="h-3 w-3" />
-                                                        Tasa {pago.tasa_cambio}
+                                                        <Percent className="h-3.5 w-3.5" />
+                                                        Tasa de la Operación ${pago.tasa_cambio}
                                                     </Badge>
-                                                    {pago.via && (
+                                                    {(() => {
+                                                        const tasaSistema = monedasSistema.find((m) => m.id === pago.moneda?.id)?.tasa;
+                                                        return tasaSistema !== undefined ? (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="inline-flex items-center gap-1 border-cyan-200 bg-cyan-50 text-sm text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300"
+                                                            >
+                                                                <Percent className="h-3.5 w-3.5" />
+                                                                Tasa del Sistema ${tasaSistema}
+                                                            </Badge>
+                                                        ) : null;
+                                                    })()}
+                                                </div>
+
+                                                {pago.referencia && (
+                                                    <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
                                                         <Badge
                                                             variant="outline"
-                                                            className="inline-flex items-center gap-1 border-violet-200 bg-violet-50 text-violet-700 capitalize dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300"
+                                                            className="inline-flex items-center gap-1 border-amber-200 bg-amber-50 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
                                                         >
-                                                            {pago.via_info ? (
-                                                                <ViaLogo
-                                                                    slug={pago.via_info.slug}
-                                                                    nombre={pago.via_info.nombre}
-                                                                    imagenUrl={pago.via_info.imagen_url}
-                                                                    className="h-3.5"
-                                                                />
-                                                            ) : (
-                                                                <ArrowRightLeft className="h-3 w-3" />
-                                                            )}
-                                                            {pago.via_info?.nombre ?? pago.via}
-                                                        </Badge>
-                                                    )}
-                                                    {pago.referencia && (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="inline-flex items-center gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
-                                                        >
-                                                            <Hash className="h-3 w-3" />
+                                                            <Hash className="h-3.5 w-3.5" />
                                                             {pago.referencia}
                                                         </Badge>
-                                                    )}
-                                                </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
+                                        </SpotlightCard>
                                     );
                                 })
                             ) : (
@@ -3543,101 +3849,110 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             </div>
                         </CardHeader>
                         <CardContent className="pt-5">
-                            <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Total de la Venta:</span>
-                                    <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Total Pagado:</span>
-                                    <span className="font-semibold text-green-600">
-                                        {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
-                                    </span>
-                                </div>
-                                <Separator />
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Restante por Pagar:</span>
-                                    <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                        {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
-                                    </span>
-                                </div>
+                            <div className="space-y-1">
+                                <FilaResumen
+                                    icon={ShoppingCart}
+                                    color="slate"
+                                    label="Total de la Venta"
+                                    value={formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
+                                />
+                                <FilaResumen
+                                    icon={CheckCircle}
+                                    color="emerald"
+                                    label="Total Pagado"
+                                    value={formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
+                                />
+                                <Separator className="my-2" />
+                                <FilaResumen
+                                    icon={currentVenta.restante > 0 ? Clock : CheckCircle}
+                                    color={currentVenta.restante > 0 ? 'orange' : 'emerald'}
+                                    label="Restante por Pagar"
+                                    value={formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
+                                />
                                 {/* Ganancia Operacional — solo admin/moderador */}
                                 {userRole !== 'vendedor' && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Ganancia Operacional:</span>
-                                        <span className="font-semibold text-green-600">
-                                            {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
+                                    <FilaResumen
+                                        icon={TrendingUp}
+                                        color="emerald"
+                                        label="Ganancia Operacional"
+                                        value={formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                    />
                                 )}
                                 {currentVenta.total_comision > 0 && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Comisión P.V.:</span>
-                                        <span className="font-semibold text-orange-600">
-                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
+                                    <FilaResumen
+                                        icon={Store}
+                                        color="orange"
+                                        label="Comisión P.V."
+                                        value={formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                    />
                                 )}
                                 {comisionMontoCuenta && (
-                                    <div className="flex justify-between pl-4 text-sm">
-                                        <span className="text-muted-foreground">→ Pago vendedor ({comisionMoneda}):</span>
-                                        <span className="font-semibold text-orange-500">
-                                            {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
-                                        </span>
-                                    </div>
+                                    <FilaResumen
+                                        icon={ArrowRightLeft}
+                                        color="orange"
+                                        indent
+                                        label={`Pago vendedor (${comisionMoneda})`}
+                                        value={`${Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${comisionMoneda}`}
+                                    />
                                 )}
                                 {/* Comisión Gestor — visible para todos si existe */}
                                 {currentVenta.gestor && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Comisión Gestor:</span>
-                                        <span className="font-semibold text-purple-600">
-                                            {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                            {currentVenta.gestor.moneda?.codigo || ''}
-                                        </span>
-                                    </div>
+                                    <FilaResumen
+                                        icon={Users}
+                                        color="purple"
+                                        label="Comisión Gestor"
+                                        value={`${Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${currentVenta.gestor.moneda?.codigo || ''}`}
+                                    />
                                 )}
                                 {/* Ganancia Agencia — solo admin/moderador */}
                                 {userRole !== 'vendedor' && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Ganancia Agencia:</span>
-                                        <span className="font-semibold text-indigo-600">
-                                            {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
+                                    <FilaResumen
+                                        icon={TrendingUp}
+                                        color="indigo"
+                                        label="Ganancia Agencia"
+                                        value={formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
+                                    />
                                 )}
                                 {/* Ganancia/Pérdida Cambiaria y Real — solo admin/moderador */}
                                 {userRole !== 'vendedor' && isVentaCompletada && (
                                     <>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
-                                            <span
-                                                className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'}`}
-                                            >
-                                                {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Ganancia Real Total:</span>
-                                            <span className="font-semibold text-green-600">
-                                                {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
-                                            </span>
-                                        </div>
+                                        <FilaResumen
+                                            icon={ArrowRightLeft}
+                                            color={currentVenta.ganancia_perdida_cambiaria < 0 ? 'red' : 'emerald'}
+                                            label="Ganancia/Pérdida Cambiaria"
+                                            value={formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                        />
+                                        <FilaResumen
+                                            icon={Banknote}
+                                            color="emerald"
+                                            label="Ganancia Real Total"
+                                            value={formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                        />
                                     </>
                                 )}
-                                <Separator />
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Estado:</span>
-                                    <span className={`font-semibold ${estadoConfig.textColor}`}>{estadoConfig.text}</span>
+                                <Separator className="my-2" />
+                                <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5">
+                                    <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${estadoConfig.color}`} />
+                                        Estado
+                                    </span>
+                                    <Badge variant="outline" className={`gap-1 font-semibold ${estadoConfig.textColor}`}>
+                                        {estadoConfig.text}
+                                    </Badge>
                                 </div>
-                                <Separator />
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Moneda Principal:</span>
-                                    <span className="font-semibold">{monedaPrincipal?.nombre || 'No especificada'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Tasa Cambio Principal:</span>
-                                    <span className="font-semibold">{currentVenta.tasa_cambio_principal}</span>
-                                </div>
+                                <Separator className="my-2" />
+                                <FilaResumen
+                                    icon={Coins}
+                                    color="slate"
+                                    label="Moneda Principal"
+                                    value={monedaPrincipal?.nombre || 'No especificada'}
+                                />
+                                <FilaResumen
+                                    icon={Percent}
+                                    color="slate"
+                                    label="Tasa Cambio Principal"
+                                    value={String(currentVenta.tasa_cambio_principal)}
+                                />
                             </div>
 
                             {isVentaPendiente && (
@@ -3713,162 +4028,163 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 </div>
 
             </div>
-                {/* ── Modal Editar Venta Pendiente ── */}
-                <Dialog
-                    open={isEditModalOpen}
-                    onOpenChange={(open) => { if (!isSavingEdit) setIsEditModalOpen(open); }}
-                >
-                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                                <Edit className="h-5 w-5 text-blue-600" />
-                                Editar Venta Pendiente #{currentVenta.id}
-                            </DialogTitle>
-                            <DialogDescription>
-                                Ajusta los precios de los productos y/o los métodos de pago. Los pagos actuales serán reemplazados por los nuevos.
-                            </DialogDescription>
-                        </DialogHeader>
+            {/* ── Modal Editar Venta Pendiente ── */}
+            <Dialog
+                open={isEditModalOpen}
+                onOpenChange={(open) => { if (!isSavingEdit) setIsEditModalOpen(open); }}
+            >
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Edit className="h-5 w-5 text-blue-600" />
+                            Editar Venta Pendiente #{currentVenta.id}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Ajusta los precios de los productos y/o los métodos de pago. Los pagos actuales serán reemplazados por los nuevos.
+                        </DialogDescription>
+                    </DialogHeader>
 
-                        <div className="space-y-6 py-2">
-                            {/* ── Precios ── */}
-                            <div className="space-y-3">
-                                <h4 className="flex items-center gap-2 font-medium">
-                                    <Package className="h-4 w-4 text-gray-500" />
-                                    Precios por Producto
-                                </h4>
-                                <div className="space-y-2">
-                                    {currentVenta.items.map((item) => {
-                                        const key = item.id ?? item.producto.id;
-                                        const pvOrig = Number(item.precio_venta);
-                                        const comisionOrig = Number(item.comision_unitaria);
-                                        const precioBase = Number(item.precio_base ?? item.precio_venta);
-                                        const precioActual = parseFloat(editPrecios[key] ?? pvOrig.toString());
+                    <div className="space-y-6 py-2">
+                        {/* ── Precios ── */}
+                        <div className="space-y-3">
+                            <h4 className="flex items-center gap-2 font-medium">
+                                <Package className="h-4 w-4 text-gray-500" />
+                                Precios por Producto
+                            </h4>
+                            <div className="space-y-2">
+                                {currentVenta.items.map((item) => {
+                                    const key = item.id ?? item.producto.id;
+                                    const pvOrig = Number(item.precio_venta);
+                                    const comisionOrig = Number(item.comision_unitaria);
+                                    const precioBase = Number(item.precio_base ?? item.precio_venta);
+                                    const precioActual = parseFloat(editPrecios[key] ?? pvOrig.toString());
 
-                                        // Derivar comisión base desde precio_base y comision_unitaria original
-                                        const comisionBase = pvOrig >= precioBase
-                                            ? comisionOrig - (pvOrig - precioBase)
-                                            : comisionOrig + (precioBase - pvOrig);
+                                    // Derivar comisión base desde precio_base y comision_unitaria original
+                                    const comisionBase = pvOrig >= precioBase
+                                        ? comisionOrig - (pvOrig - precioBase)
+                                        : comisionOrig + (precioBase - pvOrig);
 
-                                        // Recalcular comisión con el precio que está editando
-                                        const nuevaComision = !isNaN(precioActual)
-                                            ? precioActual >= precioBase
-                                                ? comisionBase + (precioActual - precioBase)
-                                                : Math.max(0, comisionBase - (precioBase - precioActual))
-                                            : comisionOrig;
+                                    // Recalcular comisión con el precio que está editando
+                                    const nuevaComision = !isNaN(precioActual)
+                                        ? precioActual >= precioBase
+                                            ? comisionBase + (precioActual - precioBase)
+                                            : Math.max(0, comisionBase - (precioBase - precioActual))
+                                        : comisionOrig;
 
-                                        const markupExtra = !isNaN(precioActual) && precioActual > precioBase
-                                            ? precioActual - precioBase
-                                            : 0;
+                                    const markupExtra = !isNaN(precioActual) && precioActual > precioBase
+                                        ? precioActual - precioBase
+                                        : 0;
 
-                                        return (
-                                            <div key={key} className="bg-secondary/30 rounded-lg border p-3">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex-1">
-                                                        <p className="text-sm font-medium">{item.producto.nombre}</p>
-                                                        <p className="text-muted-foreground text-xs">
-                                                            {item.producto.marca} · Cant: {item.cantidad} · Base: ${precioBase.toFixed(2)}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-muted-foreground text-xs">$</span>
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            step="0.01"
-                                                            className="w-24 text-right text-sm"
-                                                            value={editPrecios[key] ?? pvOrig.toString()}
-                                                            onChange={(e) =>
-                                                                setEditPrecios((prev) => ({ ...prev, [key]: e.target.value }))
-                                                            }
-                                                        />
-                                                    </div>
+                                    return (
+                                        <div key={key} className="bg-secondary/30 rounded-lg border p-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-medium">{item.producto.nombre}</p>
+                                                    <p className="text-muted-foreground text-xs">
+                                                        {item.producto.marca} · Cant: {item.cantidad} · Base: ${precioBase.toFixed(2)}
+                                                    </p>
                                                 </div>
-                                                {/* Comisión estimada con el precio actual */}
-                                                <div className="mt-2 flex items-center justify-between border-t pt-1.5 text-xs">
-                                                    <span className="text-amber-600">
-                                                        Comisión estimada × {item.cantidad}:
-                                                    </span>
-                                                    <span className="font-semibold text-amber-700">
-                                                        ${(nuevaComision * item.cantidad).toFixed(2)}
-                                                        {markupExtra > 0 && (
-                                                            <span className="text-green-600 ml-1">
-                                                                (base ${(comisionBase * item.cantidad).toFixed(2)} + markup ${(markupExtra * item.cantidad).toFixed(2)})
-                                                            </span>
-                                                        )}
-                                                    </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-muted-foreground text-xs">$</span>
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        className="w-24 text-right text-sm"
+                                                        value={editPrecios[key] ?? pvOrig.toString()}
+                                                        onChange={(e) =>
+                                                            setEditPrecios((prev) => ({ ...prev, [key]: e.target.value }))
+                                                        }
+                                                    />
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            {/* Comisión estimada con el precio actual */}
+                                            <div className="mt-2 flex items-center justify-between border-t pt-1.5 text-xs">
+                                                <span className="text-amber-600">
+                                                    Comisión estimada × {item.cantidad}:
+                                                </span>
+                                                <span className="font-semibold text-amber-700">
+                                                    ${(nuevaComision * item.cantidad).toFixed(2)}
+                                                    {markupExtra > 0 && (
+                                                        <span className="text-green-600 ml-1">
+                                                            (base ${(comisionBase * item.cantidad).toFixed(2)} + markup ${(markupExtra * item.cantidad).toFixed(2)})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
+                        </div>
 
-                            <Separator />
+                        <Separator />
 
-                            {/* ── Pagos actuales ── */}
-                            <PaymentList
-                                payments={editPayments}
-                                total={currentVenta.items.reduce((sum, item) => {
+                        {/* ── Pagos actuales ── */}
+                        <PaymentList
+                            payments={editPayments}
+                            total={currentVenta.items.reduce((sum, item) => {
+                                const key = item.id ?? item.producto.id;
+                                const pvFb = Number(item.precio_venta);
+                                const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
+                                return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
+                            }, 0)}
+                            onRemovePayment={(id) => setEditPayments((prev) => prev.filter((p) => p.id !== id))}
+                        />
+
+                        <Separator />
+
+                        {/* ── Formulario de nuevo pago ── */}
+                        <PaymentForm
+                            monedas={monedasSistema.map((m): MonedaForm => ({
+                                id: m.id,
+                                codigo_moneda: m.codigo,
+                                nombre_moneda: m.nombre,
+                                simbolo_moneda: m.simbolo ?? '',
+                                tasa_cambio: m.tasa,
+                                vias_transferencia: m.vias_transferencia ?? [],
+                            }))}
+                            clientesFisicos={clientesFisicosEdit}
+                            remainingInUsd={Math.max(
+                                0,
+                                currentVenta.items.reduce((sum, item) => {
                                     const key = item.id ?? item.producto.id;
                                     const pvFb = Number(item.precio_venta);
                                     const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
                                     return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
-                                }, 0)}
-                                onRemovePayment={(id) => setEditPayments((prev) => prev.filter((p) => p.id !== id))}
-                            />
+                                }, 0) - editPayments.reduce((s, p) => s + p.amountInUsd, 0),
+                            )}
+                            onAddPayment={(payment) => setEditPayments((prev) => [...prev, payment])}
+                        />
+                    </div>
 
-                            <Separator />
-
-                            {/* ── Formulario de nuevo pago ── */}
-                            <PaymentForm
-                                monedas={monedasSistema.map((m): MonedaForm => ({
-                                    id: m.id,
-                                    codigo_moneda: m.codigo,
-                                    nombre_moneda: m.nombre,
-                                    simbolo_moneda: m.simbolo ?? '',
-                                    tasa_cambio: m.tasa,
-                                }))}
-                                clientesFisicos={clientesFisicosEdit}
-                                remainingInUsd={Math.max(
-                                    0,
-                                    currentVenta.items.reduce((sum, item) => {
-                                        const key = item.id ?? item.producto.id;
-                                        const pvFb = Number(item.precio_venta);
-                                        const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
-                                        return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
-                                    }, 0) - editPayments.reduce((s, p) => s + p.amountInUsd, 0),
-                                )}
-                                onAddPayment={(payment) => setEditPayments((prev) => [...prev, payment])}
-                            />
-                        </div>
-
-                        <DialogFooter className="gap-2 pt-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setIsEditModalOpen(false)}
-                                disabled={isSavingEdit}
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                onClick={handleGuardarEdicion}
-                                disabled={isSavingEdit || editPayments.length === 0}
-                                className="bg-blue-600 hover:bg-blue-700"
-                            >
-                                {isSavingEdit ? (
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                        Guardando...
-                                    </div>
-                                ) : (
-                                    'Guardar Cambios'
-                                )}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-                {/* ── Scroll Progress ── */}
-                <ScrollProgress />
+                    <DialogFooter className="gap-2 pt-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsEditModalOpen(false)}
+                            disabled={isSavingEdit}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleGuardarEdicion}
+                            disabled={isSavingEdit || editPayments.length === 0}
+                            className="bg-blue-600 hover:bg-blue-700"
+                        >
+                            {isSavingEdit ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                    Guardando...
+                                </div>
+                            ) : (
+                                'Guardar Cambios'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            {/* ── Scroll Progress ── */}
+            <ScrollProgress />
         </AppLayout>
     );
 }

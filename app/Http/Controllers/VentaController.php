@@ -357,35 +357,35 @@ class VentaController extends Controller
     }
 
     /**
-     * Cargar Cuentas accesibles para gestores en ventas.
+     * Cargar Cuentas accesibles para Mensajería/Comisión/Gestor en el POS: mismo criterio que
+     * `cuentasUsables()` (admin/moderador: todas; vendedor: solo las de acceso completo) — estos
+     * selectores operan DESDE la cuenta (mandan/reciben plata de comisión o mensajería), no son un
+     * simple destino de cobro de venta, así que una cuenta de acceso `cobro` no corresponde acá
+     * (decisión del cliente 2026-09-30, cerrando el hueco que dejaba abierto `cuentasPropias()`).
      */
     public function getCuentasParaGestor(Request $request)
     {
-        $user = Auth::user();
-
-        $query = Cuenta::with('moneda')
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
-
-        // No-admin: solo sus cuentas
-        if (! in_array($user->role, ['admin', 'moderador'])) {
-            $query->whereHas('users', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
+        $cuentas = Auth::user()->cuentasUsables()
+            ->with('moneda')
+            ->select('cuentas.id', 'cuentas.nombre_cuenta', 'cuentas.tipo_moneda', 'cuentas.moneda_id', 'cuentas.saldo_cuenta', 'cuentas.tipo', 'cuentas.imagen')
+            ->get()
+            ->map(function ($cuenta) {
+                return [
+                    'id' => $cuenta->id,
+                    'nombre_cuenta' => $cuenta->nombre_cuenta,
+                    'saldo_actual' => $cuenta->saldo_cuenta,
+                    'moneda' => [
+                        'codigo' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                        'simbolo' => $cuenta->moneda?->simbolo_moneda ?? $cuenta->tipo_moneda,
+                        'tasa_cambio' => (float) ($cuenta->moneda?->tasa_cambio ?? 1),
+                    ],
+                    'tipo' => $cuenta->tipo,
+                    // Logo real del banco/tarjeta (o insignia de efectivo) — mismo mecanismo que
+                    // getCuentasFiltradas(), para identificar la cuenta de un vistazo en los
+                    // selectores de Mensajería/Comisión/Gestor, hoy solo con texto plano.
+                    'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
+                ];
             });
-        }
-
-        $cuentas = $query->get()->map(function ($cuenta) {
-            return [
-                'id' => $cuenta->id,
-                'nombre_cuenta' => $cuenta->nombre_cuenta,
-                'saldo_actual' => $cuenta->saldo_cuenta,
-                'moneda' => [
-                    'codigo' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
-                    'simbolo' => $cuenta->moneda?->simbolo_moneda ?? $cuenta->tipo_moneda,
-                    'tasa_cambio' => (float) ($cuenta->moneda?->tasa_cambio ?? 1),
-                ],
-                'tipo' => $cuenta->tipo,
-            ];
-        });
 
         return response()->json($cuentas);
     }
@@ -729,13 +729,22 @@ class VentaController extends Controller
             ] : null,
         ];
 
-        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(fn ($m) => [
-            'id' => $m->id,
-            'codigo' => $m->codigo_moneda,
-            'nombre' => $m->nombre_moneda,
-            'simbolo' => $m->simbolo_moneda,
-            'tasa' => (float) $m->tasa_cambio,
-        ])->values()->toArray();
+        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(function ($m) {
+            // Vías de pago que esta moneda admite dentro de la transferencia — mismo patrón que index()
+            // (el POS). Sin esto, el formulario de "Editar Venta Pendiente" no puede ofrecer ninguna vía
+            // real y bloquea agregar un pago nuevo por transferencia (ver ESTADO_DESARROLLO.md).
+            $resumenMetodos = $this->metodosPago->resumenDeMoneda($m);
+            $viasTransferencia = collect($resumenMetodos)->firstWhere('slug', 'transferencia')['vias'] ?? [];
+
+            return [
+                'id' => $m->id,
+                'codigo' => $m->codigo_moneda,
+                'nombre' => $m->nombre_moneda,
+                'simbolo' => $m->simbolo_moneda,
+                'tasa' => (float) $m->tasa_cambio,
+                'vias_transferencia' => $viasTransferencia,
+            ];
+        })->values()->toArray();
 
         return Inertia::render('Vendor/Show', [
             'venta' => $ventaData,

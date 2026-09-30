@@ -1957,6 +1957,45 @@ test('getCuentasParaGestor() solo devuelve al vendedor sus propias cuentas', fun
     expect($ids->all())->toBe([$cuentaAsignada->id]);
 });
 
+test('getCuentasParaGestor() no devuelve cuentas de acceso cobro al vendedor', function () {
+    // Regresión 2026-09-30: Mensajería/Comisión/Gestor operan DESDE la cuenta (mandan/reciben
+    // plata), no son un simple destino de cobro de venta — una cuenta de acceso `cobro` no debe
+    // aparecer acá, mismo criterio que cuentasUsables()/cuentasCompletas().
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $cuentaCompleta = crearCuentaCup();
+    $cuentaCobro = crearCuentaCup();
+    $vendedor->cuentas()->attach($cuentaCompleta->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cuentaCobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->getJson(route('ventas.getCuentasParaGestor'));
+
+    $response->assertOk();
+    $ids = collect($response->json())->pluck('id');
+    expect($ids->all())->toBe([$cuentaCompleta->id]);
+    expect($ids)->not->toContain($cuentaCobro->id);
+});
+
+test('getCuentasParaGestor() manda el logo real del banco, para los selectores de Mensajería/Comisión/Gestor', function () {
+    // Regresión 2026-09-29: esos 3 selectores solo mostraban el nombre de la cuenta en texto
+    // plano — este endpoint nunca mandó el campo `banco`, a diferencia de getCuentasFiltradas()
+    // (POS) que sí lo manda desde antes.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaCup();
+    $cuenta->update(['imagen' => 'bandec']);
+
+    $response = $this->getJson(route('ventas.getCuentasParaGestor'));
+
+    $response->assertOk();
+    $fila = collect($response->json())->firstWhere('id', $cuenta->id);
+    expect($fila['banco'])->not->toBeNull();
+    expect($fila['banco']['slug'])->toBe('bandec');
+    expect($fila['banco']['imagen_url'])->toContain('bandec');
+});
+
 test('getProductosPorAlmacen() rechaza con 403 a un vendedor sin acceso al almacén', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);
@@ -3003,4 +3042,38 @@ test('editarVentaPendiente rechaza una vía que no pertenece a la moneda del pag
     $response->assertStatus(422);
     $response->assertJson(['success' => false]);
     expect($venta->fresh()->pagos()->count())->toBe(1);
+});
+
+test('ventas.show manda las vías de transferencia por moneda en monedasSistema, igual que el POS', function () {
+    // Regresión 2026-09-29: `monedasSistema` en show() no traía `vias_transferencia`, así que el
+    // formulario de "Editar Venta Pendiente" (Vendor/Show.tsx) no podía ofrecer ninguna vía real y
+    // bloqueaba agregar un pago nuevo por transferencia — el POS (index()) sí las traía.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $venta = Venta::firstOrFail();
+
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page
+        ->where('monedasSistema', function ($monedas) {
+            $usd = collect($monedas)->firstWhere('codigo', 'USD');
+
+            return $usd !== null
+                && array_key_exists('vias_transferencia', $usd)
+                && collect($usd['vias_transferencia'])->pluck('slug')->contains('zelle');
+        }));
 });
