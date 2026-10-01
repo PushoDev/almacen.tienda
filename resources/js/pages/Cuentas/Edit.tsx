@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { OPCIONES_AMBITO, OPCIONES_TITULAR, OpcionesEnTarjeta } from '@/components/cuentas/opciones-en-tarjeta';
 import { TipoCuentaLogo, type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { SelectorBancoTarjeta, type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { SelectorImagenEfectivo } from '@/components/SelectorImagenEfectivo';
@@ -8,12 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { Banknote, CreditCard, Eye, EyeOff, Landmark, ShieldAlert } from 'lucide-react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { ArrowLeft, CreditCard, Eye, EyeOff, Info, Landmark, Save, ShieldAlert, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -38,6 +43,7 @@ interface MonedaOption {
     nombre_completo: string;
     codigo_moneda: string;
     simbolo_moneda: string;
+    imagen_url: string | null;
 }
 
 interface CuentaEditProps {
@@ -52,6 +58,7 @@ interface CuentaEditProps {
     notas_cuenta: string;
     imagen: string | null;
     tipo_banco: string | null;
+    ambito: string | null;
     moneda: {
         id: number;
         nombre_moneda: string;
@@ -82,12 +89,15 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
         tipo: cuenta.tipo as 'tarjeta' | 'efectivo',
         saldo_cuenta: cuenta.saldo_cuenta ?? 0,
         moneda_id: cuenta.moneda_id.toString(),
-        tipo_cuenta: cuenta.tipo_cuenta as 'permanentes' | 'temporales',
+        // Único valor válido desde que 'temporales' se unificó en 'permanentes' (migración
+        // 2026-07-28) — ya no hay nada que elegir, se manda fijo.
+        tipo_cuenta: 'permanentes',
         tipo_titular: cuenta.tipo_titular || '',
         estado: cuenta.estado as 'activa' | 'inactiva',
         notas_cuenta: cuenta.notas_cuenta || '',
         imagen: cuenta.imagen,
         tipo_banco: cuenta.tipo_banco || '',
+        ambito: cuenta.ambito || '',
         security_password: '',
         motivo_ajuste_saldo: '',
     });
@@ -99,6 +109,13 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
         const todos = [...catalogoTarjetas.interna, ...catalogoTarjetas.externa, ...catalogoTarjetas.efectivo];
         return todos.find((b) => b.slug === data.imagen) ?? null;
     }, [catalogoTarjetas, data.imagen]);
+
+    // Logo de cada banco del select "Tipo de Banco", tomado del mismo catálogo de tarjetas.
+    const logoDeBanco = useMemo(() => {
+        const mapa = new Map<string, string>();
+        [...catalogoTarjetas.interna, ...catalogoTarjetas.externa].forEach((b) => mapa.set(b.slug, b.imagen_url));
+        return mapa;
+    }, [catalogoTarjetas]);
 
     const [showSecurityPassword, setShowSecurityPassword] = useState(false);
     const [isSaldoDialogOpen, setIsSaldoDialogOpen] = useState(false);
@@ -142,6 +159,8 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
         enviarActualizacion();
     };
 
+    const ambitoActual = OPCIONES_AMBITO.find((opcion) => opcion.valor === cuenta.ambito);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Editar Cuenta" />
@@ -175,17 +194,47 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
                     )}
                 </div>
 
-                {/* Formulario de Edición */}
-                <Card>
-                    <CardContent className="p-6">
-                        <form onSubmit={submit} className="space-y-6">
-                            {/* Contenedor de dos columnas horizontales */}
-                            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                                {/* Columna 1 */}
-                                <div className="space-y-4">
-                                    {/* Campo Nombre de la Cuenta */}
+                {/* Navegación — debajo del banner de página, nunca dentro (docs/header-structure.md). */}
+                <div className="flex items-center gap-2">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Link href={route('cuentas.index')}>
+                                <Button variant="outline" className="flex items-center gap-2">
+                                    <ArrowLeft size={16} />
+                                    Volver
+                                </Button>
+                            </Link>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Volver al listado de cuentas</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    {/* Formulario de Edición */}
+                    <Card className="overflow-hidden border-l-4 border-indigo-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md lg:col-span-2">
+                        <CardHeader className="border-b bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Wallet className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Datos de la Cuenta</CardTitle>
+                                    <CardDescription className="text-indigo-100">
+                                        Actualiza los campos necesarios y guarda los cambios
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={submit} className="space-y-6">
+                                {/* Nombre y Moneda */}
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="nombre_cuenta">Nombre de la Cuenta *</Label>
+                                        <Label htmlFor="nombre_cuenta">
+                                            Nombre de la Cuenta <span className="text-red-500">*</span>
+                                        </Label>
                                         <Input
                                             id="nombre_cuenta"
                                             value={data.nombre_cuenta}
@@ -196,39 +245,73 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
                                         <InputError message={errors.nombre_cuenta} />
                                     </div>
 
-                                    {/* Campo Tipo de Activo */}
                                     <div className="space-y-2">
-                                        <Label htmlFor="tipo">Tipo de Activo *</Label>
-                                        <Select
-                                            value={data.tipo}
-                                            onValueChange={(value: 'tarjeta' | 'efectivo') => {
-                                                setData('tipo', value);
-                                                // El catálogo de imagen es distinto por tipo (banco vs. moneda) — una
-                                                // imagen elegida para el tipo anterior no aplica al nuevo.
-                                                setData('imagen', null);
-                                                // tipo_banco tampoco aplica a efectivo (hace función de caja, no es un banco).
-                                                setData('tipo_banco', '');
-                                            }}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Seleccione el tipo de activo" />
+                                        <Label htmlFor="moneda_id">
+                                            Moneda <span className="text-red-500">*</span>
+                                        </Label>
+                                        <Select value={data.moneda_id} onValueChange={(value) => setData('moneda_id', value)}>
+                                            <SelectTrigger id="moneda_id">
+                                                <SelectValue placeholder="Seleccione una moneda" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {tiposCuenta.map((tipo) => (
-                                                    <SelectItem key={tipo.slug} value={tipo.slug}>
+                                                {monedas.map((moneda) => (
+                                                    <SelectItem key={moneda.id} value={moneda.id.toString()}>
                                                         <span className="flex items-center gap-2">
-                                                            <TipoCuentaLogo tipo={tipo} className="h-6" />
-                                                            {tipo.nombre}
+                                                            {moneda.imagen_url && (
+                                                                <img
+                                                                    src={moneda.imagen_url}
+                                                                    alt=""
+                                                                    aria-hidden="true"
+                                                                    className="h-5 w-auto object-contain"
+                                                                />
+                                                            )}
+                                                            {moneda.nombre_completo}
                                                         </span>
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        <InputError message={errors.tipo} />
+                                        <InputError message={errors.moneda_id} />
                                     </div>
+                                </div>
 
-                                    {/* Campo Banco / Diseño de tarjeta — solo aplica cuando tipo=tarjeta */}
-                                    {data.tipo === 'tarjeta' && (
+                                {/* Tipo de Activo — Tipo de Cuenta ya no se elige: todas las cuentas son
+                                    'permanentes' desde que 'temporales' se unificó (migración 2026-07-28). */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="tipo">
+                                        Tipo de Activo <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Select
+                                        value={data.tipo}
+                                        onValueChange={(value: 'tarjeta' | 'efectivo') => {
+                                            setData('tipo', value);
+                                            // El catálogo de imagen es distinto por tipo (banco vs. moneda) — una
+                                            // imagen elegida para el tipo anterior no aplica al nuevo.
+                                            setData('imagen', null);
+                                            // tipo_banco tampoco aplica a efectivo (hace función de caja, no es un banco).
+                                            setData('tipo_banco', '');
+                                        }}
+                                    >
+                                        <SelectTrigger id="tipo">
+                                            <SelectValue placeholder="Seleccione el tipo de activo" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {tiposCuenta.map((tipo) => (
+                                                <SelectItem key={tipo.slug} value={tipo.slug}>
+                                                    <span className="flex items-center gap-2">
+                                                        <TipoCuentaLogo tipo={tipo} className="h-6" />
+                                                        {tipo.nombre}
+                                                    </span>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={errors.tipo} />
+                                </div>
+
+                                {/* Banco / Diseño y Tipo de Banco — solo aplican cuando tipo=tarjeta */}
+                                {data.tipo === 'tarjeta' && (
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                         <div className="space-y-2">
                                             <Label>Banco / Diseño de tarjeta</Label>
                                             <SelectorBancoTarjeta
@@ -238,45 +321,84 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
                                             />
                                             <InputError message={errors.imagen} />
                                         </div>
-                                    )}
 
-                                    {/* Campo Tipo de Banco — clasificación para uso futuro (restringir vendedores
-                                        por banco en Ventas), independiente del diseño elegido arriba. No aplica a
-                                        efectivo (hace función de caja, no es un banco). Las opciones vienen del
-                                        mismo catálogo de bancos/tarjetas, así que crecen solas al agregar uno nuevo. */}
-                                    {data.tipo === 'tarjeta' && (
+                                        {/* Tipo de Banco — clasificación independiente del diseño elegido al lado. No
+                                            aplica a efectivo (hace función de caja, no es un banco). Las opciones vienen
+                                            del mismo catálogo de bancos/tarjetas, así que crecen solas. */}
                                         <div className="space-y-2">
                                             <Label htmlFor="tipo_banco">Tipo de Banco</Label>
                                             <Select value={data.tipo_banco} onValueChange={(value) => setData('tipo_banco', value)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger id="tipo_banco">
                                                     <SelectValue placeholder="Seleccione el banco" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {bancos.map((banco) => (
                                                         <SelectItem key={banco.slug} value={banco.slug}>
-                                                            {banco.nombre}
+                                                            <span className="flex items-center gap-2">
+                                                                {logoDeBanco.get(banco.slug) && (
+                                                                    <img
+                                                                        src={logoDeBanco.get(banco.slug)}
+                                                                        alt=""
+                                                                        aria-hidden="true"
+                                                                        className="h-5 w-8 rounded-sm object-cover"
+                                                                    />
+                                                                )}
+                                                                {banco.nombre}
+                                                            </span>
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
                                             <InputError message={errors.tipo_banco} />
                                         </div>
-                                    )}
+                                    </div>
+                                )}
 
-                                    {/* Campo Insignia de Moneda — solo aplica cuando tipo=efectivo */}
-                                    {data.tipo === 'efectivo' && (
-                                        <div className="space-y-2">
-                                            <Label>Insignia de Moneda</Label>
-                                            <SelectorImagenEfectivo
-                                                catalogo={catalogoTarjetas.efectivo}
-                                                value={data.imagen}
-                                                onChange={(slug) => setData('imagen', slug)}
-                                            />
-                                            <InputError message={errors.imagen} />
-                                        </div>
-                                    )}
+                                {/* Insignia de Moneda — solo aplica cuando tipo=efectivo */}
+                                {data.tipo === 'efectivo' && (
+                                    <div className="space-y-2">
+                                        <Label>Insignia de Moneda</Label>
+                                        <SelectorImagenEfectivo
+                                            catalogo={catalogoTarjetas.efectivo}
+                                            value={data.imagen}
+                                            onChange={(slug) => setData('imagen', slug)}
+                                        />
+                                        <InputError message={errors.imagen} />
+                                    </div>
+                                )}
 
-                                    {/* Campo Saldo de la Cuenta */}
+                                {/* Ámbito — nacional o internacional, para tarjeta y efectivo. Opcional. */}
+                                <div className="space-y-3">
+                                    <div className="space-y-1">
+                                        <Label>Ámbito</Label>
+                                        <p className="text-muted-foreground text-sm">
+                                            Dónde está el dinero de esta cuenta. Si no eliges ninguno, queda sin clasificar.
+                                        </p>
+                                    </div>
+                                    <OpcionesEnTarjeta
+                                        opciones={OPCIONES_AMBITO}
+                                        valor={data.ambito}
+                                        onChange={(valor) => setData('ambito', valor)}
+                                    />
+                                    <InputError message={errors.ambito} />
+                                </div>
+
+                                {/* Tipo Titular */}
+                                <div className="space-y-3">
+                                    <div className="space-y-1">
+                                        <Label>Tipo Titular</Label>
+                                        <p className="text-muted-foreground text-sm">A nombre de quién está la cuenta.</p>
+                                    </div>
+                                    <OpcionesEnTarjeta
+                                        opciones={OPCIONES_TITULAR}
+                                        valor={data.tipo_titular}
+                                        onChange={(valor) => setData('tipo_titular', valor)}
+                                    />
+                                    <InputError message={errors.tipo_titular} />
+                                </div>
+
+                                {/* Saldo y Estado */}
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div className="space-y-2">
                                         <Label htmlFor="saldo_cuenta">Saldo Actual</Label>
                                         <Input
@@ -290,7 +412,7 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
                                             disabled={!isAdmin}
                                         />
                                         <InputError message={errors.saldo_cuenta} />
-                                        <p className="text-muted-foreground text-xs">
+                                        <p className="text-muted-foreground text-sm">
                                             {isAdmin
                                                 ? saldoCambio
                                                     ? 'Se le pedirá confirmar con su contraseña y un motivo al guardar.'
@@ -298,148 +420,125 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
                                                 : 'El saldo no se puede modificar directamente.'}
                                         </p>
                                     </div>
+
+                                    <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
+                                        <div className="space-y-0.5">
+                                            <Label htmlFor="estado" className="text-base">
+                                                Estado
+                                            </Label>
+                                            <p className="text-muted-foreground text-sm">
+                                                {data.estado === 'activa' ? 'Cuenta activa' : 'Cuenta inactiva'}
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            id="estado"
+                                            checked={data.estado === 'activa'}
+                                            onCheckedChange={(activa) => setData('estado', activa ? 'activa' : 'inactiva')}
+                                        />
+                                    </div>
+                                </div>
+                                <InputError message={errors.estado} />
+
+                                {/* Notas Adicionales */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="notas_cuenta">Notas Adicionales</Label>
+                                    <Textarea
+                                        id="notas_cuenta"
+                                        value={data.notas_cuenta}
+                                        onChange={(e) => setData('notas_cuenta', e.target.value)}
+                                        placeholder="Notas adicionales sobre la cuenta..."
+                                        className="min-h-[100px] w-full"
+                                    />
+                                    <InputError message={errors.notas_cuenta} />
                                 </div>
 
-                                {/* Columna 2 */}
-                                <div className="space-y-4">
-                                    {/* Campo Moneda */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="moneda_id">Moneda *</Label>
-                                        <Select value={data.moneda_id} onValueChange={(value) => setData('moneda_id', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Seleccione una moneda" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {monedas.map((moneda) => (
-                                                    <SelectItem key={moneda.id} value={moneda.id.toString()}>
-                                                        {moneda.nombre_completo}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError message={errors.moneda_id} />
-                                    </div>
+                                {/* Botones de acción */}
+                                <div className="flex gap-3 pt-4">
+                                    <Button type="button" variant="outline" asChild>
+                                        <Link href={route('cuentas.index')}>Cancelar</Link>
+                                    </Button>
+                                    <Button type="submit" disabled={processing}>
+                                        <Save className="mr-2 h-4 w-4" />
+                                        {processing ? 'Actualizando...' : 'Actualizar Cuenta'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
 
-                                    {/* Campo Tipo de Cuenta */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="tipo_cuenta">Tipo de Cuenta *</Label>
-                                        <Select
-                                            value={data.tipo_cuenta}
-                                            onValueChange={(value: 'permanentes' | 'temporales') => setData('tipo_cuenta', value)}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Seleccione un tipo de cuenta" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="permanentes">Permanente</SelectItem>
-                                                <SelectItem value="temporales">Temporal</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError message={errors.tipo_cuenta} />
-                                    </div>
-
-                                    {/* Campo Tipo Titular */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="tipo_titular">Tipo Titular</Label>
-                                        <Select
-                                            value={data.tipo_titular}
-                                            onValueChange={(value) => setData('tipo_titular', value)}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Seleccione tipo" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="externa">Externa</SelectItem>
-                                                <SelectItem value="personal">Personal</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError message={errors.tipo_titular} />
-                                    </div>
-
-                                    {/* Campo Estado */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="estado">Estado *</Label>
-                                        <Select value={data.estado} onValueChange={(value: 'activa' | 'inactiva') => setData('estado', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Seleccione el estado" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="activa">Activa</SelectItem>
-                                                <SelectItem value="inactiva">Inactiva</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <InputError message={errors.estado} />
-                                    </div>
+                    {/* Panel de Información */}
+                    <Card className="overflow-hidden border-l-4 border-indigo-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                        <CardHeader className="border-b bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Info className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Información de la Cuenta</CardTitle>
+                                    <CardDescription className="text-indigo-100">Datos guardados actualmente</CardDescription>
                                 </div>
                             </div>
-
-                            {/* Campo Notas Adicionales - Ancho completo */}
+                        </CardHeader>
+                        <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="notas_cuenta">Notas Adicionales</Label>
-                                <Textarea
-                                    id="notas_cuenta"
-                                    value={data.notas_cuenta}
-                                    onChange={(e) => setData('notas_cuenta', e.target.value)}
-                                    placeholder="Notas adicionales sobre la cuenta..."
-                                    className="min-h-[100px] w-full"
-                                />
-                                <InputError message={errors.notas_cuenta} />
+                                <h4 className="font-medium">ID de la Cuenta</h4>
+                                <p className="font-mono text-sm">#{cuenta.id}</p>
                             </div>
 
-                            {/* Información de la Cuenta */}
-                            <Card className="bg-muted/50">
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-sm">Información de la Cuenta</CardTitle>
-                                    <CardDescription>Detalles actuales de la cuenta</CardDescription>
-                                </CardHeader>
-                                <CardContent className="text-muted-foreground text-sm">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <span className="font-medium">ID:</span> {cuenta.id}
-                                        </div>
-                                        <div>
-                                            <span className="font-medium">Moneda Actual:</span> {cuenta.moneda?.nombre_moneda} (
-                                            {cuenta.moneda?.codigo_moneda})
-                                        </div>
-                                        <div>
-                                            <span className="font-medium">Saldo Actual:</span> {cuenta.moneda?.simbolo_moneda || '$'}{' '}
-                                            {cuenta.saldo_cuenta?.toFixed(2)}
-                                        </div>
-                                        <div>
-                                            <span className="font-medium">Tipo Actual:</span> {cuenta.tipo}
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <div className="space-y-2">
+                                <h4 className="font-medium">Saldo Actual</h4>
+                                <p className={cn('text-2xl font-bold', (cuenta.saldo_cuenta ?? 0) < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                                    {cuenta.moneda?.simbolo_moneda || '$'} {cuenta.saldo_cuenta?.toFixed(2)}
+                                </p>
+                            </div>
 
-                            {/* Botones de Acción - Centrados */}
-                            <div className="flex justify-center gap-4 pt-6">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => window.history.back()}
-                                    disabled={processing}
-                                    className="min-w-[120px]"
-                                >
-                                    Cancelar
-                                </Button>
-                                <Button type="submit" disabled={processing} className="min-w-[120px]">
-                                    {processing ? (
-                                        <>
-                                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                            Actualizando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Banknote className="mr-2 h-4 w-4" />
-                                            Actualizar
-                                        </>
+                            <div className="space-y-2">
+                                <h4 className="font-medium">Moneda</h4>
+                                <p className="text-sm">
+                                    {cuenta.moneda?.nombre_moneda} ({cuenta.moneda?.codigo_moneda})
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h4 className="font-medium">Tipo de Activo</h4>
+                                <p className="text-sm capitalize">{cuenta.tipo}</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h4 className="font-medium">Ámbito</h4>
+                                {ambitoActual ? (
+                                    <span
+                                        className={cn(
+                                            'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                            ambitoActual.valor === 'nacional'
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                                : 'bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
+                                        )}
+                                    >
+                                        <ambitoActual.icono className="h-3 w-3" />
+                                        {ambitoActual.nombre}
+                                    </span>
+                                ) : (
+                                    <p className="text-muted-foreground text-sm italic">Sin clasificar</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <h4 className="font-medium">Estado Actual</h4>
+                                <span
+                                    className={cn(
+                                        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                        cuenta.estado === 'activa'
+                                            ? 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300'
+                                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
                                     )}
-                                </Button>
+                                >
+                                    {cuenta.estado === 'activa' ? 'Activa' : 'Inactiva'}
+                                </span>
                             </div>
-                        </form>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                </div>
 
                 {/* Confirmación con contraseña antes de aplicar el ajuste de saldo (mismo patrón que Productos/Vendor/Index.tsx) */}
                 <Dialog
@@ -528,6 +627,7 @@ export default function EditarCuentasPage({ cuenta, monedas, catalogoTarjetas, b
                     </DialogContent>
                 </Dialog>
             </div>
+            <ScrollProgress />
             <Toaster position="top-center" />
         </AppLayout>
     );

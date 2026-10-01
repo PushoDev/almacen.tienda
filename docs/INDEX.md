@@ -3,7 +3,7 @@
 > **ERP multi-almacén** · POS · Logística · Lotes y costos · Finanzas multi-moneda
 > Laravel 12 · React 19 · Inertia v2 · Tailwind v4 · TypeScript 5.9
 
-> **Última actualización de este índice: 2026-09-30.** Sesión del día: cerrado el hueco de "pérdida al saldo de inventario" tras fusionar lotes y prorratear después — backend (redirección + auditoría) más frontend (avisos y confirmación bloqueante solo para la pérdida real) — y confirmado que el paso 4 del pendiente de Empleados (`cuentasPropias()`) sigue abierto (ver la fila de "Última sesión" abajo). Si agregas o mueves un documento, actualiza la sección que corresponda.
+> **Última actualización de este índice: 2026-10-01.** Sesión del día: campo nuevo `cuentas.ambito` (nacional / internacional) en Cuentas, sin tocar el Cierre — ver historial en [ESTADO_DESARROLLO.md](ESTADO_DESARROLLO.md). Sesión anterior (2026-09-30): Sesión del día: cerrado el hueco de "pérdida al saldo de inventario" tras fusionar lotes y prorratear después — backend (redirección + auditoría) más frontend (avisos y confirmación bloqueante solo para la pérdida real) — y confirmado que el paso 4 del pendiente de Empleados (`cuentasPropias()`) sigue abierto (ver la fila de "Última sesión" abajo). Si agregas o mueves un documento, actualiza la sección que corresponda.
 
 ---
 
@@ -43,7 +43,7 @@ La lista completa, con contexto, está en `ESTADO_DESARROLLO.md` → "🎯 Lista
 | Modelos | 54 (`AjusteValorInventario` nuevo, 2026-09-30) |
 | Controladores | 46 (34 en la raíz incluyendo `Controller.php` base + 12 en subdirectorios: 1 Api, 8 Auth, 2 Settings, 1 Reportes — `Reportes\RastreoOperacionesController`) |
 | Rutas | Cargadas desde `routes/web.php`, que incluye `routes/{acciones,crud,empleados,shop}/*.php` (`routes/vendor/vendedor.php` no se carga) |
-| Migraciones | 159 |
+| Migraciones | 160 |
 | Páginas frontend | 121 archivos `.tsx` en `resources/js/pages` (16 vistas de reportes en `Reportes/Report/`) |
 | Middlewares | 9 archivos. Alias en uso: `admin` (admin+moderador), `admin.only`, `requiere.turno`, `check.cuenta.permission`. `moderator` y `vendor` están registrados pero ninguna ruta los usa (el rol se comprueba dentro de los controladores); `CheckAlmacenPermission` no está registrada |
 | Notificaciones | 11, todas síncronas (ninguna implementa `ShouldQueue`) |

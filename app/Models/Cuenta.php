@@ -15,6 +15,10 @@ class Cuenta extends Model
 
     public const ACCESO_COBRO = 'cobro';
 
+    public const AMBITO_NACIONAL = 'nacional';
+
+    public const AMBITO_INTERNACIONAL = 'internacional';
+
     protected $primaryKey = 'id';
 
     protected $table = 'cuentas';
@@ -31,6 +35,7 @@ class Cuenta extends Model
         'tipo_titular',
         'imagen',
         'tipo_banco',
+        'ambito',
     ];
 
     protected $casts = [
