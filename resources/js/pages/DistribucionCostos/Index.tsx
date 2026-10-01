@@ -200,7 +200,6 @@ export default function DistribucionCostosIndex({
         } else {
             sileo.success({ title: 'Prorrateo aplicado', description: resultado.mensaje });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [distribucionResultado?.distribucion_resultado]);
 
     // Cuentas elegibles para financiar cualquiera de los dos tipos de prorrateo (CUP o USD,

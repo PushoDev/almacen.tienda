@@ -182,6 +182,87 @@ test('el prorrateo audita una pérdida cuando el lote ya no tiene stock vivo al 
     ]);
 });
 
+test('previsualizar un prorrateo con pérdida real avisa el monto exacto y no persiste nada', function () {
+    asegurarTipoMovimientoFinancieroGasto();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    $lote = crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+    $lote->update(['cantidad_disponible' => 0]);
+
+    $cuenta = crearCuentaUsdParaProrrateo(1000);
+
+    $response = $this->postJson(route('distribucion-costos.previsualizar'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Vista previa sin stock vivo',
+    ]);
+
+    $response->assertOk();
+    expect((float) $response->json('ajuste'))->toBe(-50.0)
+        ->and($response->json('mensaje'))->toContain('Aviso:');
+
+    // La previsualización corre el cálculo real dentro de una transacción que siempre revierte:
+    // nada de esto debe quedar en la base de datos.
+    $this->assertDatabaseCount('ajustes_valor_inventario', 0);
+    $this->assertDatabaseCount('cost_distributions', 0);
+    $this->assertEquals(100.0, (float) $lote->fresh()->precio_costo);
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => null]);
+    $this->assertEquals(1000.0, (float) $cuenta->fresh()->saldo_cuenta);
+});
+
+test('previsualizar un prorrateo sin pérdida no avisa nada y tampoco persiste', function () {
+    asegurarTipoMovimientoFinancieroGasto();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+    $cuenta = crearCuentaUsdParaProrrateo(1000);
+
+    $response = $this->postJson(route('distribucion-costos.previsualizar'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Vista previa normal',
+    ]);
+
+    $response->assertOk()->assertJsonPath('ajuste', null);
+    $this->assertDatabaseCount('cost_distributions', 0);
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => null]);
+});
+
+test('previsualizar con saldo insuficiente devuelve el error como JSON, no como redirect', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+    $cuenta = crearCuentaUsdParaProrrateo(10); // saldo menor al monto pedido
+
+    $response = $this->postJson(route('distribucion-costos.previsualizar'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Vista previa con saldo insuficiente',
+    ]);
+
+    $response->assertStatus(422);
+    expect($response->json('error'))->toContain('insuficiente');
+    $this->assertDatabaseCount('cost_distributions', 0);
+});
+
 test('lote de varios movimientos reparte proporcionalmente: mismo % de aumento para cada producto', function () {
     asegurarTipoMovimientoFinancieroGasto();
     $admin = User::factory()->admin()->create();
