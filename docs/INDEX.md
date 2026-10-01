@@ -3,7 +3,7 @@
 > **ERP multi-almacén** · POS · Logística · Lotes y costos · Finanzas multi-moneda
 > Laravel 12 · React 19 · Inertia v2 · Tailwind v4 · TypeScript 5.9
 
-> **Última actualización de este índice: 2026-10-01.** Sesión del día: campo nuevo `cuentas.ambito` (nacional / internacional) en Cuentas, sin tocar el Cierre — ver historial en [ESTADO_DESARROLLO.md](ESTADO_DESARROLLO.md). Sesión anterior (2026-09-30): Sesión del día: cerrado el hueco de "pérdida al saldo de inventario" tras fusionar lotes y prorratear después — backend (redirección + auditoría) más frontend (avisos y confirmación bloqueante solo para la pérdida real) — y confirmado que el paso 4 del pendiente de Empleados (`cuentasPropias()`) sigue abierto (ver la fila de "Última sesión" abajo). Si agregas o mueves un documento, actualiza la sección que corresponda.
+> **Última actualización de este índice: 2026-10-01.** Sesión del día (más reciente primero): nuevo `docs/patron-selector-visual-con-imagen.md` (3 variantes de selector con logo/ícono — Dialog+grilla, tarjetas con ícono, badges con imagen — tras encontrar 3 implementaciones distintas del mismo problema sin documentar); `monedas.tasa_comision` (precarga la tasa al retirar comisión de Punto de Venta/Gestor en `Vendor/Show.tsx`, independiente de `tasa_cambio`); campo nuevo `cuentas.ambito` (nacional / internacional) en Cuentas, sin tocar el Cierre — ver historial en [ESTADO_DESARROLLO.md](ESTADO_DESARROLLO.md). Sesión anterior (2026-09-30): Sesión del día: cerrado el hueco de "pérdida al saldo de inventario" tras fusionar lotes y prorratear después — backend (redirección + auditoría) más frontend (avisos y confirmación bloqueante solo para la pérdida real) — y confirmado que el paso 4 del pendiente de Empleados (`cuentasPropias()`) sigue abierto (ver la fila de "Última sesión" abajo). Si agregas o mueves un documento, actualiza la sección que corresponda.
 
 ---
 
@@ -177,6 +177,7 @@ La lista completa, con contexto, está en `ESTADO_DESARROLLO.md` → "🎯 Lista
 | [patron-card-header-degradado.md](patron-card-header-degradado.md) | Receta del `CardHeader` con degradado (`pt-0`, `overflow-hidden`) |
 | [patron-dialog-formulario-grande.md](patron-dialog-formulario-grande.md) | Diálogo grande de dos paneles y variantes de una columna |
 | [patron-mascota-bleed.md](patron-mascota-bleed.md) | Cómo usar la mascota decorativa (variante que sobresale y marca de agua) |
+| [patron-selector-visual-con-imagen.md](patron-selector-visual-con-imagen.md) | **Leer antes de construir cualquier selector con logo/ícono**: 3 variantes (Dialog+grilla, tarjetas con ícono, badges con imagen) y cuándo usar cada una |
 | [pendiente-combobox-reemplazo.md](pendiente-combobox-reemplazo.md) | Combobox vs Dialog (foco) y dónde falta reemplazar `<Select>` |
 | [arreglos-pendientes/migracion-toasts-sileo-2026-08-14.md](arreglos-pendientes/migracion-toasts-sileo-2026-08-14.md) | Migración de `sonner` a `sileo` (completa) |
 | [nativephp-offline-design-consistency.md](nativephp-offline-design-consistency.md) | **Leer antes de tocar UI en la versión offline (NativePHP)**: mismo sistema de diseño que la web |

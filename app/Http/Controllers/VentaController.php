@@ -701,6 +701,8 @@ class VentaController extends Controller
                     'id' => $venta->mensajeroCuenta->id,
                     'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
                     'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                    'imagen_url' => CatalogoTarjetasService::porSlug($venta->mensajeroCuenta->imagen)['imagen_url'] ?? null,
+                    'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($venta->mensajeroCuenta->moneda?->imagen)['imagen_url'] ?? null,
                 ] : null,
                 'cuenta_origen' => $venta->mensajeroOrigenCuenta ? [
                     'id' => $venta->mensajeroOrigenCuenta->id,
@@ -716,6 +718,7 @@ class VentaController extends Controller
                 'cuenta_id' => $venta->gestor_cuenta_id,
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
+                'cuenta_imagen_url' => CatalogoTarjetasService::porSlug($venta->gestorCuenta?->imagen)['imagen_url'] ?? null,
                 'saldo_disponible' => (float) ($venta->gestorCuenta?->saldo_cuenta ?? 0),
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
                 'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
@@ -724,6 +727,7 @@ class VentaController extends Controller
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
                     'nombre' => $venta->gestorCuenta->moneda->nombre_moneda,
                     'tasa_cambio' => (float) $venta->gestorCuenta->moneda->tasa_cambio,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($venta->gestorCuenta->moneda->imagen)['imagen_url'] ?? null,
                 ] : null,
                 'tipo_cuenta' => $venta->gestorCuenta?->tipo,
             ] : null,
@@ -742,6 +746,12 @@ class VentaController extends Controller
                 'nombre' => $m->nombre_moneda,
                 'simbolo' => $m->simbolo_moneda,
                 'tasa' => (float) $m->tasa_cambio,
+                // Punto de partida para precargar la tasa al retirar comisión de Punto de Venta/Gestor
+                // (independiente de 'tasa', la de cambio general) — null = sin configurar en Monedas.
+                'tasa_comision' => $m->tasa_comision !== null ? (float) $m->tasa_comision : null,
+                // Insignia de la moneda (CatalogoTarjetasService::monedaImagenPorSlug) — para el badge de
+                // moneda del selector de Gestor.
+                'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($m->imagen)['imagen_url'] ?? null,
                 'vias_transferencia' => $viasTransferencia,
             ];
         })->values()->toArray();
@@ -1519,6 +1529,11 @@ class VentaController extends Controller
                 'nombre' => $cuenta->nombre_cuenta,
                 'moneda' => $moneda,
                 'saldo_disponible' => (float) ($cuenta->saldo_cuenta ?? 0),
+                // Logo del banco/insignia de la cuenta y de su moneda — mismo mecanismo que
+                // CuentaController::index() (CatalogoTarjetasService), para mostrarlos junto al
+                // nombre en vez de solo texto plano.
+                'imagen_url' => CatalogoTarjetasService::porSlug($cuenta->imagen)['imagen_url'] ?? null,
+                'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($cuenta->moneda?->imagen)['imagen_url'] ?? null,
             ] : null,
         ];
     }
@@ -2248,6 +2263,8 @@ class VentaController extends Controller
                     'id' => $venta->mensajeroCuenta->id,
                     'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
                     'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                    'imagen_url' => CatalogoTarjetasService::porSlug($venta->mensajeroCuenta->imagen)['imagen_url'] ?? null,
+                    'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($venta->mensajeroCuenta->moneda?->imagen)['imagen_url'] ?? null,
                 ] : null,
                 'cuenta_origen' => $venta->mensajeroOrigenCuenta ? [
                     'id' => $venta->mensajeroOrigenCuenta->id,
