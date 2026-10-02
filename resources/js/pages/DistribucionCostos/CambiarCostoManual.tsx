@@ -1,3 +1,14 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { mensajeDeError, postJson } from '@/components/fusion-fichas-dialog';
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +32,8 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { ArrowRightLeft, CheckCircle2, DollarSign, Package, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CheckCircle2, DollarSign, Package, Wallet, X } from 'lucide-react';
+import { useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
@@ -89,6 +101,14 @@ interface Props {
 export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, productos, cuentas, tasaCambioActual }: Props) {
     const loteIds = tipo === 'movimientos' ? (movimientoIds ?? []) : (compraIds ?? []);
     const etiquetaLote = tipo === 'movimientos' ? 'Movimiento' : 'Compra';
+
+    // Antes de aplicar de verdad: si el prorrateo va a dejar plata sin unidades vivas donde caer
+    // (pérdida real auditada en ajustes_valor_inventario, tipo `prorrateo_sin_destino`), se le
+    // pide confirmación explícita al usuario. El redondeo de fusionar lotes sigue siendo
+    // informativo-después (ver Productos/Vendor/Index.tsx) — acá la diferencia es que la pérdida
+    // puede ser un monto real, no solo centavos de redondeo.
+    const [previsualizando, setPrevisualizando] = useState(false);
+    const [confirmandoPerdida, setConfirmandoPerdida] = useState<{ ajuste: number; mensaje: string } | null>(null);
 
     const { data, setData, post, processing, errors } = useForm({
         // El backend exige uno u otro, nunca ambos (min:1 en el que sí venga) — el que no
@@ -163,7 +183,26 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
         return { producto, costoActual, cantidad, totalLinea, peso, monto, adicionalUnidad, nuevoCosto, porcentajeAumento };
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const enviarDistribucion = () => {
+        post(route('distribucion-costos.distribuir'), {
+            // Un fallo de negocio (tasa sin definir, saldo insuficiente, etc.) no es un error de
+            // validación 422: el controlador hace redirect()->back()->with('error', ...), que vuelve
+            // AQUÍ mismo (no a distribucion-costos.index) como una visita "exitosa" para Inertia —
+            // antes este onSuccess no hacía nada y el aviso se perdía en silencio.
+            onSuccess: (page) => {
+                const flash = page.props.flash as { error?: string | null } | undefined;
+                if (flash?.error) {
+                    sileo.error({ title: 'No se pudo distribuir', description: flash.error });
+                }
+            },
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                sileo.error({ title: 'Error al distribuir', description: firstError || 'Revisa los datos e inténtalo de nuevo' });
+            },
+        });
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (data.cuentas.length === 0) {
@@ -175,13 +214,29 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
             return;
         }
 
-        post(route('distribucion-costos.distribuir'), {
-            onSuccess: () => {},
-            onError: (errors) => {
-                const firstError = Object.values(errors)[0];
-                sileo.error({ title: 'Error al distribuir', description: firstError || 'Revisa los datos e inténtalo de nuevo' });
-            },
-        });
+        // Antes de aplicar: previsualiza (misma validación y mismo cálculo, dentro de una
+        // transacción que siempre revierte) — si detecta una pérdida real por prorrateo sin
+        // destino, pide confirmación antes de mandar la petición que sí aplica de verdad.
+        setPrevisualizando(true);
+        try {
+            const { ok, data: preview } = await postJson(route('distribucion-costos.previsualizar'), data);
+
+            if (!ok) {
+                sileo.error({ title: 'No se pudo distribuir', description: mensajeDeError(preview, 'Revisa los datos e inténtalo de nuevo') });
+                return;
+            }
+
+            if (preview.ajuste !== null && preview.ajuste !== undefined) {
+                setConfirmandoPerdida({ ajuste: preview.ajuste as number, mensaje: preview.mensaje as string });
+                return;
+            }
+
+            enviarDistribucion();
+        } catch {
+            sileo.error({ title: 'Error de conexión', description: 'No se pudo previsualizar la distribución' });
+        } finally {
+            setPrevisualizando(false);
+        }
     };
 
     // ✅ PERMITIR ESCRITURA LIBRE EN TASA DE CAMBIO - SIN FORMATEO AUTOMÁTICO
@@ -196,7 +251,7 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
         return isNaN(num) ? '0.00' : num.toFixed(2);
     };
 
-    const isButtonDisabled = processing || data.cuentas.length === 0 || totalUsdToDistribute <= 0;
+    const isButtonDisabled = processing || previsualizando || data.cuentas.length === 0 || totalUsdToDistribute <= 0;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -552,13 +607,48 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
                                     disabled={isButtonDisabled}
                                     className={`flex-1 ${!isButtonDisabled ? 'cursor-pointer transition-colors hover:bg-blue-600' : 'cursor-not-allowed opacity-50'}`}
                                 >
-                                    {processing ? 'Procesando...' : 'Confirmar Distribución de Costos'}
+                                    {processing ? 'Procesando...' : previsualizando ? 'Verificando...' : 'Confirmar Distribución de Costos'}
                                 </Button>
                             </div>
                         </CardContent>
                     </Card>
                 </form>
             </div>
+
+            {/* Pérdida real detectada en la previsualización (prorrateo sin unidades vivas donde
+                caer) — a diferencia del redondeo al fusionar lotes (informativo-después), acá se
+                pide confirmación explícita antes de aplicar de verdad. */}
+            <AlertDialog open={confirmandoPerdida !== null} onOpenChange={(open) => !open && setConfirmandoPerdida(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+                            <AlertTriangle className="h-5 w-5" />
+                            Este prorrateo va a generar una pérdida
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2">
+                            <span className="block">{confirmandoPerdida?.mensaje}</span>
+                            <span className="block font-medium text-amber-700 dark:text-amber-400">
+                                Quedará auditado como ajuste de valor de inventario por{' '}
+                                {confirmandoPerdida ? formatCurrency(Math.abs(confirmandoPerdida.ajuste)) : ''}. ¿Confirmas que quieres aplicar la
+                                distribución de todas formas?
+                            </span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setConfirmandoPerdida(null)}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-amber-600 hover:bg-amber-700"
+                            onClick={() => {
+                                setConfirmandoPerdida(null);
+                                enviarDistribucion();
+                            }}
+                        >
+                            Sí, aplicar de todas formas
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <Toaster position="top-center" />
         </AppLayout>
     );

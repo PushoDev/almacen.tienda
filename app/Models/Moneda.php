@@ -16,12 +16,14 @@ class Moneda extends Model
         'simbolo_moneda',
         'imagen',
         'tasa_cambio',
+        'tasa_comision',
         'estado',
         'principal',
     ];
 
     protected $casts = [
         'tasa_cambio' => 'decimal:2',
+        'tasa_comision' => 'decimal:2',
         'estado' => 'boolean',
         'principal' => 'boolean',
     ];

@@ -15,6 +15,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('distribucion-costos/distribuir', [DistribucionCostosController::class, 'distribuirCostosManual'])
         ->name('distribucion-costos.distribuir');
 
+    // Corre el mismo cálculo que "distribuir" dentro de una transacción que SIEMPRE se revierte —
+    // sirve para avisarle al usuario ANTES de aplicar si el prorrateo va a dejar plata sin
+    // unidades vivas donde caer (pérdida real, ver DistribucionCostosController::respuestaError()).
+    Route::post('distribucion-costos/previsualizar', [DistribucionCostosController::class, 'previsualizarProrrateo'])
+        ->name('distribucion-costos.previsualizar');
+
     // Omitir prorrateo de uno o varios movimientos en lote (housekeeping, sin cálculo) —
     // admin/moderador-only, chequeado inline en el controller.
     Route::post('distribucion-costos/movimientos/omitir', [DistribucionCostosController::class, 'omitirProrrateo'])

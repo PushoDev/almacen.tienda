@@ -56,6 +56,7 @@ import {
     FileText,
     Hash,
     IdCard,
+    Landmark,
     ListOrdered,
     type LucideIcon,
     MapPin,
@@ -197,6 +198,10 @@ interface MonedaParaReporte {
     nombre: string;
     simbolo: string | null;
     tasa: number;
+    /** Punto de partida para precargar la tasa al retirar comisión de Punto de Venta/Gestor (independiente de `tasa`, la de cambio general); null = sin configurar en Monedas. */
+    tasa_comision: number | null;
+    /** Insignia de la moneda (CatalogoTarjetasService::monedaImagenPorSlug) — null si no tiene asignada. */
+    imagen_url: string | null;
     /** Vías de transferencia que esta moneda admite (catálogo del CRUD de Monedas) — para el PaymentForm del modal "Editar Venta Pendiente". */
     vias_transferencia?: ViaPagoMoneda[];
 }
@@ -256,6 +261,8 @@ interface Venta {
         cuenta_id?: number;
         comentario?: string;
         cuenta_nombre?: string;
+        /** Logo del banco/insignia de la cuenta del gestor (CatalogoTarjetasService). */
+        cuenta_imagen_url?: string | null;
         saldo_disponible?: number;
         tasa_aplicada?: number;
         tasa_aplicada_gestor?: number;
@@ -264,6 +271,7 @@ interface Venta {
             simbolo: string;
             nombre: string;
             tasa_cambio: number;
+            imagen_url?: string | null;
         };
     } | null;
     es_venta_especial: boolean;
@@ -285,7 +293,7 @@ interface Venta {
         tasa?: number | null;
         monto_cup?: number | null;
         monto_final_cup?: number | null;
-        cuenta?: { id: number; nombre: string; moneda?: string } | null;
+        cuenta?: { id: number; nombre: string; moneda?: string; imagen_url?: string | null; moneda_imagen_url?: string | null } | null;
         cuenta_origen?: { id: number; nombre: string } | null;
     } | null;
     comision_pago: {
@@ -298,6 +306,9 @@ interface Venta {
             nombre: string;
             moneda?: string;
             saldo_disponible: number;
+            /** Logo del banco/insignia de la cuenta y de su moneda (CatalogoTarjetasService). */
+            imagen_url?: string | null;
+            moneda_imagen_url?: string | null;
         } | null;
     } | null;
 }
@@ -468,6 +479,17 @@ function FilaResumen({
         </div>
     );
 }
+
+// Color por moneda para el selector "Moneda del Gestor" — clases completas a propósito
+// (Tailwind no detecta clases armadas por partes). Códigos conocidos con color propio; el resto
+// cae en el índigo del módulo.
+const COLORES_MONEDA: Record<string, { activo: string; anillo: string }> = {
+    USD: { activo: 'border-emerald-600 bg-emerald-600', anillo: 'ring-emerald-400/50' },
+    CUP: { activo: 'border-sky-600 bg-sky-600', anillo: 'ring-sky-400/50' },
+    EUR: { activo: 'border-violet-600 bg-violet-600', anillo: 'ring-violet-400/50' },
+    MLC: { activo: 'border-amber-600 bg-amber-600', anillo: 'ring-amber-400/50' },
+};
+const colorMonedaPorDefecto = { activo: 'border-indigo-600 bg-indigo-600', anillo: 'ring-indigo-400/50' };
 
 // ─────────────────────────────────────────────
 // Componente principal
@@ -643,10 +665,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // Pre-llenar form comisión al abrirlo
     useEffect(() => {
         if (!showComisionForm) return;
-        const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
+        const monedaCup = monedasSistema.find(m => m.codigo === 'CUP');
+        // Tasa de Comisión configurada en Monedas (si existe), respaldada en la tasa de cambio
+        // general — mismo criterio que Mensajería/Gestor antes de que existiera el campo nuevo.
+        const tasaCUPDefecto = monedaCup?.tasa_comision ?? monedaCup?.tasa ?? 0;
         const tasaGuardada = currentVenta.comision_pago?.tasa;
         setComisionFormCuentaId(String(currentVenta.comision_pago?.cuenta?.id ?? ''));
-        setComisionFormTasa(tasaGuardada ? String(tasaGuardada) : (tasaCUPSistema > 0 ? String(tasaCUPSistema) : ''));
+        setComisionFormTasa(tasaGuardada ? String(tasaGuardada) : (tasaCUPDefecto > 0 ? String(tasaCUPDefecto) : ''));
     }, [showComisionForm]);
 
     // Auto-abrir AlertDialog si el vendedor aún no vio el veredicto del admin
@@ -1920,27 +1945,48 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             <Label className="flex items-center gap-1.5">
                                                                 <Coins className="h-4 w-4" /> Moneda del Gestor
                                                             </Label>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {monedasSistema.map((m) => (
-                                                                    <button
-                                                                        key={m.id}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setMonedaGestorSeleccionada(m);
-                                                                            setTasaAplicadaGestor(String(m.tasa));
-                                                                            setGestorCuentaId('');
-                                                                            setCuentaGestorSeleccionada(null);
-                                                                            const montoCalculado = currentVenta.total_comision * m.tasa;
-                                                                            setGestorMonto(montoCalculado.toFixed(2));
-                                                                        }}
-                                                                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
-                                                                            ? 'bg-emerald-600 text-white border-emerald-600'
-                                                                            : 'bg-background text-foreground hover:bg-muted'
-                                                                            }`}
-                                                                    >
-                                                                        {m.codigo} · {m.tasa}
-                                                                    </button>
-                                                                ))}
+                                                            <div className="flex flex-wrap gap-3">
+                                                                {monedasSistema.map((m) => {
+                                                                    const activa = monedaGestorSeleccionada?.id === m.id;
+                                                                    const color = COLORES_MONEDA[m.codigo] ?? colorMonedaPorDefecto;
+
+                                                                    return (
+                                                                        <button
+                                                                            key={m.id}
+                                                                            type="button"
+                                                                            aria-label={`${m.nombre} (${m.codigo}), tasa ${m.tasa_comision ?? m.tasa}`}
+                                                                            onClick={() => {
+                                                                                // Tasa de Comisión configurada en Monedas (si existe) — si no, se respalda en la
+                                                                                // tasa de cambio general, igual que antes de que existiera el campo nuevo.
+                                                                                const tasaDefecto = m.tasa_comision ?? m.tasa;
+                                                                                setMonedaGestorSeleccionada(m);
+                                                                                setTasaAplicadaGestor(String(tasaDefecto));
+                                                                                setGestorCuentaId('');
+                                                                                setCuentaGestorSeleccionada(null);
+                                                                                const montoCalculado = currentVenta.total_comision * tasaDefecto;
+                                                                                setGestorMonto(montoCalculado.toFixed(2));
+                                                                            }}
+                                                                            className={`flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 shadow-sm transition-all ${activa
+                                                                                ? `${color.activo} text-white shadow-md ring-4 ${color.anillo}`
+                                                                                : 'border-input bg-background text-foreground hover:bg-muted hover:shadow-md'
+                                                                                }`}
+                                                                        >
+                                                                            {m.imagen_url ? (
+                                                                                <img
+                                                                                    src={m.imagen_url}
+                                                                                    alt=""
+                                                                                    aria-hidden="true"
+                                                                                    className={`h-11 w-auto shrink-0 object-contain drop-shadow-sm ${activa ? '' : 'rounded-md'}`}
+                                                                                />
+                                                                            ) : (
+                                                                                <Coins className={`h-8 w-8 shrink-0 ${activa ? 'text-white' : 'text-muted-foreground'}`} />
+                                                                            )}
+                                                                            {/* La imagen ya identifica la moneda (código redundante quitado a pedido del
+                                                                                cliente) — la tasa es el dato que importa acá, con jerarquía de H2. */}
+                                                                            <span className="text-2xl font-bold">{m.tasa_comision ?? m.tasa}</span>
+                                                                        </button>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}
@@ -2420,7 +2466,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             de <strong>{currentVenta.gestor.cuenta_nombre}</strong> (gestor)
                                                         </li>
                                                     )}
-                                                    {comisionMontoCuenta && currentVenta.comision_pago.cuenta && (
+                                                    {comisionMontoCuenta != null && currentVenta.comision_pago.cuenta && (
                                                         <li>
                                                             Debitará{' '}
                                                             <strong>
@@ -2991,7 +3037,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <span className="font-bold text-amber-700">
                                                     {formatCurrency(currentVenta.total_comision, 'USD')}
                                                 </span>
-                                                {comisionMontoCuenta && (
+                                                {comisionMontoCuenta != null && (
                                                     <span className="ml-1 text-amber-600">
                                                         = {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                                     </span>
@@ -3182,33 +3228,56 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     </div>
                 )}
 
-                {/* ── Cards: Destinatario, Comisión PV, Gestor y Mensajero ── */}
-                {(currentVenta.destinatario || currentVenta.gestor || currentVenta.mensajero || currentVenta.comision_pago) && (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {/* ── Cards: Destinatario, Comisión PV, Gestor y Mensajero — una sola fila, sin hueco
+                    sobrante cuando hay menos de 4 (grid-cols según cuántas card hay de verdad). ── */}
+                {(currentVenta.destinatario || currentVenta.gestor || currentVenta.mensajero || currentVenta.comision_pago) && (() => {
+                    const cantidadCards = [currentVenta.destinatario, currentVenta.comision_pago, currentVenta.gestor, currentVenta.mensajero].filter(
+                        Boolean,
+                    ).length;
+                    const colsPorCantidad: Record<number, string> = {
+                        1: 'lg:grid-cols-1',
+                        2: 'lg:grid-cols-2',
+                        3: 'lg:grid-cols-3',
+                        4: 'lg:grid-cols-4',
+                    };
+                    // Insignias USD/CUP del catálogo de Monedas, para los montos en estas 4 cards.
+                    const imgUsd = monedasSistema.find((m) => m.codigo === 'USD')?.imagen_url;
+                    const imgCup = monedasSistema.find((m) => m.codigo === 'CUP')?.imagen_url;
+
+                    return (
+                    <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${colsPorCantidad[cantidadCards]}`}>
                         {/* Card Destinatario */}
                         {currentVenta.destinatario && (
-                            <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
-                                <div className="mb-4 flex items-center justify-between">
-                                    <h3 className="flex items-center gap-2 text-base font-semibold">
-                                        <Users className="h-5 w-5 text-green-600" />
-                                        <span className="text-foreground">✅ Receptor Registrado</span>
-                                    </h3>
-                                    {isVentaPendiente && (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
-                                                setIsEditingDestinatario(true);
-                                                setActiveTab('receptor');
-                                                setIsDestinatarioDialogOpen(true);
-                                            }}
-                                        >
-                                            <Edit size={14} />
-                                            <span className="ml-1">Editar</span>
-                                        </Button>
-                                    )}
-                                </div>
-                                <div className="space-y-3">
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl">
+                                <CardHeader className="bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                <Users className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-base font-semibold text-white">✅ Receptor Registrado</CardTitle>
+                                                <CardDescription className="text-xs text-violet-100">Datos de entrega</CardDescription>
+                                            </div>
+                                        </div>
+                                        {isVentaPendiente && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="border-white/30 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30 hover:text-white"
+                                                onClick={() => {
+                                                    setIsEditingDestinatario(true);
+                                                    setActiveTab('receptor');
+                                                    setIsDestinatarioDialogOpen(true);
+                                                }}
+                                            >
+                                                <Edit size={14} />
+                                                <span className="ml-1">Editar</span>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-3 pt-5">
                                     <div className="flex items-start gap-2">
                                         <User className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
                                         <div className="flex-1">
@@ -3263,21 +3332,29 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             </div>
                                         </div>
                                     )}
-                                </div>
-                            </div>
+                                </CardContent>
+                            </Card>
                         )}
 
                         {/* Card Comisión Vendedor */}
                         {currentVenta.comision_pago && (
-                            <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
-                                <div className="mb-4 flex items-center gap-2">
-                                    <Store className="h-5 w-5 text-orange-600" />
-                                    <h3 className="text-foreground text-base font-semibold">💰 Comisión Punto de Venta</h3>
-                                </div>
-                                <div className="space-y-3">
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl">
+                                <CardHeader className="bg-gradient-to-r from-orange-600 to-orange-700 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Store className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-base font-semibold text-white">💰 Comisión Punto de Venta</CardTitle>
+                                            <CardDescription className="text-xs text-orange-100">Retiro de comisión del vendedor</CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-3 pt-5">
                                     <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground text-xs font-medium">Monto en USD:</span>
-                                        <Badge variant="outline">
+                                        <Badge variant="outline" className="gap-1.5">
+                                            {imgUsd && <img src={imgUsd} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />}
                                             {formatCurrency(currentVenta.total_comision, 'USD')}
                                         </Badge>
                                     </div>
@@ -3289,23 +3366,34 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             </span>
                                         </div>
                                     )}
-                                    {comisionMontoCuenta && (
+                                    {comisionMontoCuenta != null && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">Monto en {comisionMoneda}:</span>
-                                            <Badge variant="secondary">
+                                            <Badge variant="secondary" className="gap-1.5">
+                                                {currentVenta.comision_pago.cuenta?.moneda_imagen_url && (
+                                                    <img src={currentVenta.comision_pago.cuenta.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />
+                                                )}
                                                 {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                             </Badge>
                                         </div>
                                     )}
                                     {currentVenta.comision_pago.cuenta && (
                                         <div className="flex items-center justify-between">
-                                            <span className="text-muted-foreground text-xs font-medium">
-                                                {currentVenta.estado === 'completada' ? 'Cuenta debitada:' : 'Cuenta a debitar:'}
-                                            </span>
-                                            <span className="text-sm font-medium">{currentVenta.comision_pago.cuenta.nombre}</span>
+                                            <div className="flex items-center gap-2">
+                                                <Landmark className="h-4 w-4 text-orange-600" />
+                                                <span className="text-muted-foreground text-xs font-medium">
+                                                    {currentVenta.estado === 'completada' ? 'Cuenta debitada:' : 'Cuenta a debitar:'}
+                                                </span>
+                                            </div>
+                                            <Badge variant="outline" className="gap-1.5 font-medium">
+                                                {currentVenta.comision_pago.cuenta.imagen_url && (
+                                                    <img src={currentVenta.comision_pago.cuenta.imagen_url} alt="" aria-hidden="true" className="h-4 w-6 shrink-0 object-contain" />
+                                                )}
+                                                {currentVenta.comision_pago.cuenta.nombre}
+                                            </Badge>
                                         </div>
                                     )}
-                                    {isVentaPendiente && currentVenta.comision_pago.cuenta?.saldo_disponible !== undefined && comisionMontoCuenta && (
+                                    {isVentaPendiente && currentVenta.comision_pago.cuenta?.saldo_disponible !== undefined && comisionMontoCuenta != null && (
                                         <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${currentVenta.comision_pago.cuenta.saldo_disponible >= comisionMontoCuenta
                                             ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
                                             : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
@@ -3319,23 +3407,30 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             </span>
                                         </div>
                                     )}
-                                </div>
-                            </div>
+                                </CardContent>
+                            </Card>
                         )}
 
                         {/* Card Gestor */}
                         {currentVenta.gestor && (
-                            <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
-                                <div className="mb-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <DollarSign className="h-5 w-5 text-blue-600" />
-                                        <h3 className="text-foreground text-base font-semibold">💼 Gestor - Comisión</h3>
-                                    </div>
-                                    {isVentaPendiente && (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => {
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl">
+                                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                <DollarSign className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-base font-semibold text-white">💼 Gestor - Comisión</CardTitle>
+                                                <CardDescription className="text-xs text-blue-100">Comisión asignada a un tercero</CardDescription>
+                                            </div>
+                                        </div>
+                                        {isVentaPendiente && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="border-white/30 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30 hover:text-white"
+                                                onClick={() => {
                                                 setIsEditingDestinatario(true);
                                                 setActiveTab('gestor');
                                                 setIsDestinatarioDialogOpen(true);
@@ -3344,16 +3439,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <Edit size={14} />
                                             <span className="ml-1">Editar</span>
                                         </Button>
-                                    )}
-                                </div>
-                                <div className="space-y-3">
+                                        )}
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-3 pt-5">
                                     {/* Monto descontado en moneda local */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <TrendingUp className="h-4 w-4 text-green-600" />
                                             <span className="text-muted-foreground text-xs font-medium">Descontado:</span>
                                         </div>
-                                        <Badge variant="outline">
+                                        <Badge variant="outline" className="gap-1.5">
+                                            {currentVenta.gestor.moneda?.imagen_url && (
+                                                <img src={currentVenta.gestor.moneda.imagen_url} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />
+                                            )}
                                             {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
                                             {currentVenta.gestor.moneda?.codigo || ''}
                                         </Badge>
@@ -3365,7 +3464,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <DollarSign className="h-4 w-4 text-blue-600" />
                                                 <span className="text-muted-foreground text-xs font-medium">Equivalente USD:</span>
                                             </div>
-                                            <Badge variant="secondary" className="font-bold">
+                                            <Badge variant="secondary" className="gap-1.5 font-bold">
+                                                {imgUsd && <img src={imgUsd} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />}
                                                 {Number(currentVenta.gestor.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                             </Badge>
                                         </div>
@@ -3376,7 +3476,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <CreditCard className="h-4 w-4 text-blue-600" />
                                                 <span className="text-muted-foreground text-xs font-medium">Cuenta:</span>
                                             </div>
-                                            <span className="text-sm font-medium">{currentVenta.gestor.cuenta_nombre}</span>
+                                            <Badge variant="outline" className="gap-1.5 font-medium">
+                                                {currentVenta.gestor.cuenta_imagen_url && (
+                                                    <img src={currentVenta.gestor.cuenta_imagen_url} alt="" aria-hidden="true" className="h-4 w-6 shrink-0 object-contain" />
+                                                )}
+                                                {currentVenta.gestor.cuenta_nombre}
+                                            </Badge>
                                         </div>
                                     )}
                                     {/* Saldo disponible de la cuenta del gestor */}
@@ -3418,31 +3523,44 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             </div>
                                         </div>
                                     )}
-                                </div>
-                            </div>
+                                </CardContent>
+                            </Card>
                         )}
 
                         {/* Card Mensajero */}
                         {currentVenta.mensajero && (
-                            <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
-                                <div className="mb-4 flex items-center gap-2">
-                                    <Truck className="h-5 w-5 text-sky-600" />
-                                    <h3 className="text-foreground text-base font-semibold">
-                                        {currentVenta.mensajero.tipo === 'propio' ? '🚗 Mensajería — Vehículo Propio' : '🛵 Mensajería — Externo'}
-                                    </h3>
-                                </div>
-                                <div className="space-y-3">
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl">
+                                <CardHeader className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Truck className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-base font-semibold text-white">
+                                                {currentVenta.mensajero.tipo === 'propio' ? '🚗 Vehículo Propio' : '🛵 Mensajería Externa'}
+                                            </CardTitle>
+                                            <CardDescription className="text-xs text-cyan-100">Entrega a domicilio</CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-3 pt-5">
                                     {(() => {
                                         const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
                                         return <>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-muted-foreground text-xs font-medium">USD:</span>
-                                                <Badge variant="outline">{usd}</Badge>
+                                                <Badge variant="outline" className="gap-1.5">
+                                                    {imgUsd && <img src={imgUsd} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />}
+                                                    {usd}
+                                                </Badge>
                                             </div>
                                             {cup && (
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-muted-foreground text-xs font-medium">CUP:</span>
-                                                    <Badge variant="outline">{cup}</Badge>
+                                                    <Badge variant="outline" className="gap-1.5">
+                                                        {imgCup && <img src={imgCup} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />}
+                                                        {cup}
+                                                    </Badge>
                                                 </div>
                                             )}
                                         </>;
@@ -3453,29 +3571,39 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <span className="text-sm font-medium">1 USD = {currentVenta.mensajero.tasa} CUP</span>
                                         </div>
                                     )}
-                                    {currentVenta.mensajero.monto_cup && (
+                                    {currentVenta.mensajero.monto_cup != null && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">
                                                 {currentVenta.mensajero.tipo === 'propio' ? 'Acreditado en cuenta:' : 'Pagado al mensajero:'}
                                             </span>
-                                            <Badge variant="secondary" className="font-bold">
+                                            <Badge variant="secondary" className="gap-1.5 font-bold">
+                                                {imgCup && <img src={imgCup} alt="" aria-hidden="true" className="h-4 w-auto object-contain" />}
                                                 {Number(currentVenta.mensajero.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
                                             </Badge>
                                         </div>
                                     )}
                                     {currentVenta.mensajero.cuenta && (
                                         <div className="flex items-center justify-between">
-                                            <span className="text-muted-foreground text-xs font-medium">
-                                                {currentVenta.mensajero.tipo === 'propio' ? 'Cuenta acreditada:' : 'Cuenta debitada:'}
-                                            </span>
-                                            <span className="text-sm font-medium">{currentVenta.mensajero.cuenta.nombre}</span>
+                                            <div className="flex items-center gap-2">
+                                                <Landmark className="h-4 w-4 text-cyan-600" />
+                                                <span className="text-muted-foreground text-xs font-medium">
+                                                    {currentVenta.mensajero.tipo === 'propio' ? 'Cuenta acreditada:' : 'Cuenta debitada:'}
+                                                </span>
+                                            </div>
+                                            <Badge variant="outline" className="gap-1.5 font-medium">
+                                                {currentVenta.mensajero.cuenta.imagen_url && (
+                                                    <img src={currentVenta.mensajero.cuenta.imagen_url} alt="" aria-hidden="true" className="h-4 w-6 shrink-0 object-contain" />
+                                                )}
+                                                {currentVenta.mensajero.cuenta.nombre}
+                                            </Badge>
                                         </div>
                                     )}
-                                </div>
-                            </div>
+                                </CardContent>
+                            </Card>
                         )}
                     </div>
-                )}
+                    );
+                })()}
 
                 {/* ── Info general de la venta ── */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -3886,7 +4014,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         value={formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
                                     />
                                 )}
-                                {comisionMontoCuenta && (
+                                {comisionMontoCuenta != null && (
                                     <FilaResumen
                                         icon={ArrowRightLeft}
                                         color="orange"

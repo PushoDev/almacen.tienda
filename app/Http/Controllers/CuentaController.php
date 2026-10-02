@@ -14,6 +14,7 @@ use App\Services\DetalleOperacionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
@@ -149,6 +150,7 @@ class CuentaController extends Controller
                     'imagen' => $cuenta->imagen,
                     'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                     'tipo_banco' => $cuenta->tipo_banco,
+                    'ambito' => $cuenta->ambito,
                     'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
                 ];
@@ -167,17 +169,7 @@ class CuentaController extends Controller
     public function create()
     {
         return Inertia::render('Cuentas/Create', [
-            'monedas' => Moneda::where('estado', true)
-                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda')
-                ->get()
-                ->map(function ($moneda) {
-                    return [
-                        'id' => $moneda->id,
-                        'nombre_completo' => $moneda->nombre_moneda.' ('.$moneda->codigo_moneda.')',
-                        'codigo_moneda' => $moneda->codigo_moneda,
-                        'simbolo_moneda' => $moneda->simbolo_moneda,
-                    ];
-                }),
+            'monedas' => $this->monedasParaSelect(),
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
             'bancos' => CatalogoTarjetasService::bancos(),
             'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
@@ -205,6 +197,8 @@ class CuentaController extends Controller
             // Clasificación de banco para uso futuro (restringir vendedores por banco en
             // Ventas) — independiente de `imagen`, no aplica a cuentas tipo=efectivo (caja).
             'tipo_banco' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::bancoSlugsValidos())],
+            // Nacional o internacional — aplica a tarjeta y efectivo; vacío = sin clasificar.
+            'ambito' => ['nullable', 'in:'.Cuenta::AMBITO_NACIONAL.','.Cuenta::AMBITO_INTERNACIONAL],
         ]);
 
         Cuenta::create([
@@ -218,6 +212,7 @@ class CuentaController extends Controller
             'notas_cuenta' => $validated['notas_cuenta'] ?? null,
             'imagen' => $validated['imagen'] ?? null,
             'tipo_banco' => $validated['tipo_banco'] ?? null,
+            'ambito' => $validated['ambito'] ?? null,
         ]);
 
         // Redirigimos al usuario a la lista de cuentas
@@ -262,6 +257,7 @@ class CuentaController extends Controller
                 'imagen' => $cuenta->imagen,
                 'banco' => CatalogoTarjetasService::porSlug($cuenta->imagen),
                 'tipo_banco' => $cuenta->tipo_banco,
+                'ambito' => $cuenta->ambito,
                 'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
             ],
@@ -752,22 +748,33 @@ class CuentaController extends Controller
                 'notas_cuenta' => $cuenta->notas_cuenta,
                 'imagen' => $cuenta->imagen,
                 'tipo_banco' => $cuenta->tipo_banco,
+                'ambito' => $cuenta->ambito,
             ],
-            'monedas' => Moneda::where('estado', true)
-                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda')
-                ->get()
-                ->map(function ($moneda) {
-                    return [
-                        'id' => $moneda->id,
-                        'nombre_completo' => $moneda->nombre_moneda.' ('.$moneda->codigo_moneda.')',
-                        'codigo_moneda' => $moneda->codigo_moneda,
-                        'simbolo_moneda' => $moneda->simbolo_moneda,
-                    ];
-                }),
+            'monedas' => $this->monedasParaSelect(),
             'catalogoTarjetas' => CatalogoTarjetasService::agrupado(),
             'bancos' => CatalogoTarjetasService::bancos(),
             'tiposCuenta' => CatalogoTarjetasService::tiposDeCuenta(),
         ]);
+    }
+
+    /**
+     * Monedas activas para el select de Moneda en Crear/Editar Cuenta, con la insignia de cada
+     * una (monedas.imagen) para mostrar su logo.
+     *
+     * @return Collection<int, array{id: int, nombre_completo: string, codigo_moneda: string, simbolo_moneda: string, imagen_url: string|null}>
+     */
+    private function monedasParaSelect(): Collection
+    {
+        return Moneda::where('estado', true)
+            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'imagen')
+            ->get()
+            ->map(fn (Moneda $moneda) => [
+                'id' => $moneda->id,
+                'nombre_completo' => $moneda->nombre_moneda.' ('.$moneda->codigo_moneda.')',
+                'codigo_moneda' => $moneda->codigo_moneda,
+                'simbolo_moneda' => $moneda->simbolo_moneda,
+                'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
+            ]);
     }
 
     /**
@@ -808,6 +815,7 @@ class CuentaController extends Controller
             'motivo_ajuste_saldo' => [$saldoCambio ? 'required' : 'nullable', 'string', 'max:500'],
             'imagen' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::slugsValidos())],
             'tipo_banco' => ['nullable', 'string', 'in:'.implode(',', CatalogoTarjetasService::bancoSlugsValidos())],
+            'ambito' => ['nullable', 'in:'.Cuenta::AMBITO_NACIONAL.','.Cuenta::AMBITO_INTERNACIONAL],
         ]);
 
         $saldoAnterior = $cuenta->saldo_cuenta;
@@ -823,6 +831,7 @@ class CuentaController extends Controller
             'notas_cuenta' => $validated['notas_cuenta'] ?? $cuenta->notas_cuenta,
             'imagen' => $validated['imagen'] ?? null,
             'tipo_banco' => $validated['tipo_banco'] ?? null,
+            'ambito' => $validated['ambito'] ?? null,
         ]);
 
         if ($saldoCambio) {

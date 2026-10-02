@@ -683,17 +683,25 @@ class ProductoController extends Controller
             'precio_venta' => 'nullable|numeric|min:0.01',
         ]);
 
-        $lote = $fusionLotes->fusionar(
+        $resultado = $fusionLotes->fusionar(
             $producto->id,
             (int) $validated['almacen_id'],
             array_map('intval', $validated['lote_ids']),
             isset($validated['precio_venta']) ? (float) $validated['precio_venta'] : null,
             $request->user(),
         );
+        $lote = $resultado['lote'];
+        $ajuste = $resultado['ajuste'];
+
+        $mensaje = "Lotes fusionados en {$lote->codigo}: {$lote->cantidad_disponible} unidades a costo ".number_format((float) $lote->precio_costo, 2).'.';
+        if ($ajuste !== null) {
+            $mensaje .= ' Ajuste de redondeo del costo promedio: '.($ajuste >= 0 ? '+' : '').number_format($ajuste, 2).' USD (auditado en ajustes de valor de inventario).';
+        }
 
         return response()->json([
             'success' => true,
-            'message' => "Lotes fusionados en {$lote->codigo}: {$lote->cantidad_disponible} unidades a costo ".number_format((float) $lote->precio_costo, 2).'.',
+            'message' => $mensaje,
+            'ajuste' => $ajuste,
             'lote' => [
                 'id' => $lote->id,
                 'codigo' => $lote->codigo,

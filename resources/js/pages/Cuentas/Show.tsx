@@ -14,9 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import {
@@ -33,6 +35,7 @@ import {
     DollarSign,
     Edit3,
     FileText,
+    Globe,
     Handshake,
     History,
     Landmark,
@@ -46,7 +49,6 @@ import {
     TrendingUp,
     Truck,
     User,
-    Wallet,
     X,
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -66,6 +68,7 @@ interface CuentaShowProps {
     moneda_id: number;
     tipo_cuenta: string;
     tipo_titular?: string | null;
+    ambito?: string | null;
     estado: string;
     notas_cuenta: string;
     imagen: string | null;
@@ -167,12 +170,24 @@ const getFuenteColorClase = (monto: number) =>
         ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
         : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300';
 
+// Header degradado de cada tabla de historial — mismos colores que Proveedores/Show.tsx para el
+// mismo concepto (Compras ámbar, Transacciones violeta, Operaciones Múltiples sky). Clases
+// completas a propósito: Tailwind no detecta clases armadas por partes.
+const COLORES_HISTORIAL = {
+    amber: { header: 'from-amber-600 to-amber-700', descripcion: 'text-amber-100' },
+    orange: { header: 'from-orange-600 to-orange-700', descripcion: 'text-orange-100' },
+    sky: { header: 'from-sky-600 to-sky-700', descripcion: 'text-sky-100' },
+    emerald: { header: 'from-emerald-600 to-emerald-700', descripcion: 'text-emerald-100' },
+    violet: { header: 'from-violet-600 to-violet-700', descripcion: 'text-violet-100' },
+} as const;
+
 // ─── Componente: TablaHistorial (reutilizado por las 4 Cards) ───────────────
 
 const TablaHistorial = ({
     titulo,
     descripcion,
     Icono: IconoCard,
+    color,
     historial,
     emptyTexto,
     filtroKey,
@@ -182,6 +197,7 @@ const TablaHistorial = ({
     titulo: string;
     descripcion: string;
     Icono: LucideIcon;
+    color: keyof typeof COLORES_HISTORIAL;
     historial: HistorialPaginado;
     emptyTexto: string;
     filtroKey: 'transacciones' | 'ventas' | 'compras' | 'ajustes' | 'remesas';
@@ -231,20 +247,29 @@ const TablaHistorial = ({
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <IconoCard className="h-5 w-5" />
-                    {titulo}
-                    {historial.total > 0 && (
-                        <Badge variant="secondary" className="h-5 min-w-[20px] px-1.5 text-[11px]">
-                            {historial.total}
-                        </Badge>
-                    )}
-                </CardTitle>
-                <CardDescription>{descripcion}</CardDescription>
+        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+            <CardHeader className={cn('bg-gradient-to-r px-6 py-5 text-white', COLORES_HISTORIAL[color].header)}>
+                <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                        <IconoCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-white">
+                            {titulo}
+                            {historial.total > 0 && (
+                                <Badge
+                                    variant="outline"
+                                    className="h-5 min-w-[20px] border-white/30 bg-white/20 px-1.5 text-[11px] text-white backdrop-blur-sm"
+                                >
+                                    {historial.total}
+                                </Badge>
+                            )}
+                        </CardTitle>
+                        <CardDescription className={COLORES_HISTORIAL[color].descripcion}>{descripcion}</CardDescription>
+                    </div>
+                </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-5">
                 {/* Filtros */}
                 <div className="mb-4 flex flex-wrap items-end gap-3">
                     <div className="relative min-w-[180px] flex-1">
@@ -504,10 +529,26 @@ export default function ShowCuentasPage({
     const saldo = cuenta.saldo_cuenta ?? 0;
     const estadoFinanciero =
         saldo > 0
-            ? { texto: 'Con Fondo', color: 'green', icon: ArrowDownCircle }
+            ? {
+                  texto: 'Con Fondo',
+                  icon: ArrowDownCircle,
+                  textClass: 'text-emerald-600',
+                  badgeClass:
+                      'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300',
+              }
             : saldo < 0
-              ? { texto: 'En Deuda', color: 'red', icon: TrendingDown }
-              : { texto: 'Neutro', color: 'gray', icon: CheckCircle };
+              ? {
+                    texto: 'En Deuda',
+                    icon: TrendingDown,
+                    textClass: 'text-red-600',
+                    badgeClass: 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300',
+                }
+              : {
+                    texto: 'Neutro',
+                    icon: CheckCircle,
+                    textClass: 'text-gray-600 dark:text-gray-300',
+                    badgeClass: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300',
+                };
     const EstadoIcon = estadoFinanciero.icon;
 
     const totalOperaciones =
@@ -582,209 +623,227 @@ export default function ShowCuentasPage({
                         </Tooltip>
                     </div>
 
-                    {/* Info de la Cuenta + Estado Financiero */}
-                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    {/* Info de la Cuenta + Estado Financiero — mismo esquema que Proveedores/Show.tsx */}
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                         {/* Datos básicos */}
-                        <Card className="lg:col-span-1">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Landmark className="h-5 w-5" />
-                                    Información de la Cuenta
-                                </CardTitle>
-                                <CardDescription>Datos básicos y configuración</CardDescription>
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg lg:col-span-2">
+                            <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                                <div className="flex flex-1 items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Landmark className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">Información de la Cuenta</CardTitle>
+                                            <CardDescription className="text-indigo-100">Datos básicos y configuración</CardDescription>
+                                        </div>
+                                    </div>
+                                    <Badge variant="outline" className="border-white/30 bg-white/20 text-white backdrop-blur-sm">
+                                        <Calendar className="mr-1 h-3 w-3" />
+                                        Creada el {formatearFecha(cuenta.created_at)}
+                                    </Badge>
+                                </div>
                             </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Tag className="text-muted-foreground h-4 w-4" />
-                                        <span className="text-sm font-medium">Tipo de Activo:</span>
+                            <CardContent className="space-y-4 pt-5">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div className="flex items-center gap-3">
+                                        <Tag className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-medium">Tipo de Activo</p>
+                                            <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                                                {tipoDeCuenta && <TipoCuentaLogo tipo={tipoDeCuenta} className="h-6" />}
+                                                <span className="capitalize">{tipoDeCuenta?.nombre ?? cuenta.tipo}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        {tipoDeCuenta && <TipoCuentaLogo tipo={tipoDeCuenta} className="h-8" />}
-                                        <span className="text-sm font-medium capitalize">{tipoDeCuenta?.nombre ?? cuenta.tipo}</span>
+                                    <div className="flex items-center gap-3">
+                                        {cuenta.tipo === 'efectivo' ? (
+                                            <Banknote className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        ) : (
+                                            <CreditCard className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        )}
+                                        <div>
+                                            <p className="text-sm font-medium">{cuenta.tipo === 'efectivo' ? 'Insignia' : 'Banco'}</p>
+                                            {cuenta.banco ? (
+                                                <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                                                    <img src={cuenta.banco.imagen_url} alt="" className="h-4 w-6 object-contain" />
+                                                    {cuenta.banco.nombre}
+                                                </span>
+                                            ) : (
+                                                <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                    Sin asignar
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Coins className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-medium">Moneda</p>
+                                            <p className="text-muted-foreground text-sm">
+                                                {cuenta.moneda?.nombre_moneda} ({cuenta.moneda?.codigo_moneda})
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Globe className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-medium">Ámbito</p>
+                                            {cuenta.ambito ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className={cn(
+                                                        'mt-0.5',
+                                                        cuenta.ambito === 'nacional'
+                                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
+                                                            : 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300',
+                                                    )}
+                                                >
+                                                    {cuenta.ambito === 'nacional' ? 'Nacional' : 'Internacional'}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                    Sin clasificar
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <User className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-medium">Tipo Titular</p>
+                                            {cuenta.tipo_titular ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className={cn(
+                                                        'mt-0.5',
+                                                        cuenta.tipo_titular === 'externa'
+                                                            ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
+                                                            : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300',
+                                                    )}
+                                                >
+                                                    {cuenta.tipo_titular === 'externa' ? 'Externa' : 'Personal'}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                    Sin asignar
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <CheckCircle className="text-muted-foreground h-4 w-4 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-medium">Estado</p>
+                                            <div className="mt-0.5 flex flex-wrap gap-1.5">
+                                                <Badge
+                                                    className={
+                                                        cuenta.estado === 'activa'
+                                                            ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300'
+                                                            : 'bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300'
+                                                    }
+                                                >
+                                                    {cuenta.estado === 'activa' ? 'Activa' : 'Inactiva'}
+                                                </Badge>
+                                                <Badge
+                                                    variant="outline"
+                                                    className={cuenta.tipo_cuenta === 'permanentes' ? 'text-emerald-500' : 'text-amber-500'}
+                                                >
+                                                    {cuenta.tipo_cuenta === 'permanentes' ? 'Permanente' : 'Temporal'}
+                                                </Badge>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                {cuenta.tipo === 'tarjeta' && (
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <CreditCard className="text-muted-foreground h-4 w-4" />
-                                            <span className="text-sm font-medium">Banco:</span>
-                                        </div>
-                                        {cuenta.banco ? (
-                                            <span className="flex items-center gap-1.5 text-sm font-medium">
-                                                <img src={cuenta.banco.imagen_url} alt="" className="h-4 w-6 object-contain" />
-                                                {cuenta.banco.nombre}
-                                            </span>
+                                <Separator />
+                                <div className="flex items-start gap-3">
+                                    <FileText className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-medium">Notas</p>
+                                        {cuenta.notas_cuenta ? (
+                                            <p className="text-muted-foreground text-sm">{cuenta.notas_cuenta}</p>
                                         ) : (
-                                            <span className="text-muted-foreground text-sm">Sin asignar</span>
+                                            <Badge variant="outline" className="text-muted-foreground mt-0.5 font-normal">
+                                                Sin notas adicionales
+                                            </Badge>
                                         )}
                                     </div>
-                                )}
-                                {cuenta.tipo === 'efectivo' && (
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Banknote className="text-muted-foreground h-4 w-4" />
-                                            <span className="text-sm font-medium">Insignia:</span>
-                                        </div>
-                                        {cuenta.banco ? (
-                                            <span className="flex items-center gap-1.5 text-sm font-medium">
-                                                <img src={cuenta.banco.imagen_url} alt="" className="h-4 w-8 object-contain" />
-                                                {cuenta.banco.nombre}
-                                            </span>
-                                        ) : (
-                                            <span className="text-muted-foreground text-sm">Sin asignar</span>
-                                        )}
-                                    </div>
-                                )}
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Coins className="text-muted-foreground h-4 w-4" />
-                                        <span className="text-sm font-medium">Moneda:</span>
-                                    </div>
-                                    <span className="text-sm font-semibold">
-                                        {cuenta.moneda?.nombre_moneda} ({cuenta.moneda?.codigo_moneda})
-                                    </span>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Landmark className="text-muted-foreground h-4 w-4" />
-                                        <span className="text-sm font-medium">Tipo de Cuenta:</span>
-                                    </div>
-                                    <Badge variant="outline" className={cuenta.tipo_cuenta === 'permanentes' ? 'text-emerald-500' : 'text-amber-500'}>
-                                        {cuenta.tipo_cuenta === 'permanentes' ? 'Permanente' : 'Temporal'}
-                                    </Badge>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <User className="text-muted-foreground h-4 w-4" />
-                                        <span className="text-sm font-medium">Tipo Titular:</span>
-                                    </div>
-                                    {cuenta.tipo_titular ? (
-                                        <Badge
-                                            variant="outline"
-                                            className={
-                                                cuenta.tipo_titular === 'externa'
-                                                    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
-                                                    : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300'
-                                            }
-                                        >
-                                            {cuenta.tipo_titular === 'externa' ? 'Externa' : 'Personal'}
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-muted-foreground text-xs italic">Sin asignar</span>
-                                    )}
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <CheckCircle className="text-muted-foreground h-4 w-4" />
-                                        <span className="text-sm font-medium">Estado:</span>
-                                    </div>
-                                    <Badge
-                                        className={
-                                            cuenta.estado === 'activa'
-                                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300'
-                                                : 'bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300'
-                                        }
-                                    >
-                                        {cuenta.estado === 'activa' ? 'Activa' : 'Inactiva'}
-                                    </Badge>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="text-muted-foreground h-4 w-4" />
-                                        <span className="text-sm font-medium">Creada:</span>
-                                    </div>
-                                    <span className="text-muted-foreground text-xs">{formatearFecha(cuenta.created_at)}</span>
-                                </div>
-                                {cuenta.notas_cuenta && (
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <FileText className="text-muted-foreground h-4 w-4" />
-                                            <span className="text-sm font-medium">Notas:</span>
-                                        </div>
-                                        <span className="text-muted-foreground max-w-[150px] text-right text-xs">{cuenta.notas_cuenta}</span>
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
 
-                        {/* Estado Financiero — mini-cards */}
-                        <Card className="lg:col-span-2">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <DollarSign className="h-5 w-5" />
-                                    Estado Financiero
-                                </CardTitle>
-                                <CardDescription>Resumen del saldo y las operaciones de esta cuenta</CardDescription>
+                        {/* Estado Financiero */}
+                        <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <DollarSign className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Estado Financiero</CardTitle>
+                                        <CardDescription className="text-teal-100">Saldo y operaciones de esta cuenta</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-                                    {/* Saldo Actual */}
-                                    <Card
-                                        className={`border-l-4 ${
-                                            estadoFinanciero.color === 'red'
-                                                ? 'border-l-red-500'
-                                                : estadoFinanciero.color === 'green'
-                                                  ? 'border-l-green-500'
-                                                  : 'border-l-gray-400'
-                                        }`}
-                                    >
-                                        <CardContent className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                <EstadoIcon
-                                                    className={`h-4 w-4 ${
-                                                        estadoFinanciero.color === 'red'
-                                                            ? 'text-red-500'
-                                                            : estadoFinanciero.color === 'green'
-                                                              ? 'text-green-500'
-                                                              : 'text-gray-400'
-                                                    }`}
-                                                />
-                                                <span className="text-xs font-medium">Saldo Actual</span>
+                            <CardContent className="space-y-4 pt-5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">Saldo Actual</span>
+                                    <Badge variant="outline" className={cn('flex items-center gap-1 font-normal', estadoFinanciero.badgeClass)}>
+                                        <EstadoIcon className="h-3 w-3" />
+                                        {estadoFinanciero.texto}
+                                    </Badge>
+                                </div>
+                                <div className={cn('text-2xl font-bold', estadoFinanciero.textClass)}>
+                                    {formatearMoneda(saldo, cuenta.moneda?.simbolo_moneda || '$')}
+                                </div>
+                                <Separator />
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="flex items-center gap-2">
+                                            <History className="text-muted-foreground h-3.5 w-3.5" />
+                                            Operaciones:
+                                        </span>
+                                        <span className="font-medium">{totalOperaciones}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="flex items-center gap-2">
+                                            <Receipt className="text-muted-foreground h-3.5 w-3.5" />
+                                            Ventas:
+                                        </span>
+                                        <span className="font-medium">{historialVentas.total}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="flex items-center gap-2">
+                                            <ArrowRightLeft className="text-muted-foreground h-3.5 w-3.5" />
+                                            Transacciones:
+                                        </span>
+                                        <span className="font-medium">{historialTransacciones.total}</span>
+                                    </div>
+                                    {puedeEditar && (
+                                        <>
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="flex items-center gap-2">
+                                                    <ShoppingCart className="text-muted-foreground h-3.5 w-3.5" />
+                                                    Compras:
+                                                </span>
+                                                <span className="font-medium">{historialCompras.total}</span>
                                             </div>
-                                            <div
-                                                className={`mt-2 text-xl font-bold ${
-                                                    estadoFinanciero.color === 'red'
-                                                        ? 'text-red-600'
-                                                        : estadoFinanciero.color === 'green'
-                                                          ? 'text-green-600'
-                                                          : 'text-gray-600'
-                                                }`}
-                                            >
-                                                {formatearMoneda(saldo, cuenta.moneda?.simbolo_moneda || '$')}
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="flex items-center gap-2">
+                                                    <Edit3 className="text-muted-foreground h-3.5 w-3.5" />
+                                                    Ajustes de saldo:
+                                                </span>
+                                                <span className="font-medium">{historialAjustes.total}</span>
                                             </div>
-                                            <p className="text-muted-foreground mt-1 text-xs">{estadoFinanciero.texto}</p>
-                                        </CardContent>
-                                    </Card>
-
-                                    {/* Operaciones registradas */}
-                                    <Card className="border-l-4 border-l-blue-500">
-                                        <CardContent className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                <History className="h-4 w-4 text-blue-500" />
-                                                <span className="text-xs font-medium">Operaciones</span>
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="flex items-center gap-2">
+                                                    <Send className="text-muted-foreground h-3.5 w-3.5" />
+                                                    Operaciones Múltiples:
+                                                </span>
+                                                <span className="font-medium">{historialRemesas.total}</span>
                                             </div>
-                                            <div className="mt-2 text-xl font-bold text-blue-600">{totalOperaciones}</div>
-                                            <p className="text-muted-foreground mt-1 text-xs">
-                                                {historialVentas.total} ventas · {historialTransacciones.total} transacciones
-                                                {puedeEditar ? ` · ${historialCompras.total} compras · ${historialAjustes.total} ajustes` : ''}
-                                            </p>
-                                        </CardContent>
-                                    </Card>
-
-                                    {/* Titularidad */}
-                                    <Card className="border-l-4 border-l-violet-500">
-                                        <CardContent className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                <Wallet className="h-4 w-4 text-violet-500" />
-                                                <span className="text-xs font-medium">Titularidad</span>
-                                            </div>
-                                            <div className="mt-2 text-xl font-bold text-violet-600 capitalize">
-                                                {cuenta.tipo_titular || 'Sin asignar'}
-                                            </div>
-                                            <p className="text-muted-foreground mt-1 text-xs">Tipo de titular de la cuenta</p>
-                                        </CardContent>
-                                    </Card>
+                                        </>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -796,6 +855,7 @@ export default function ShowCuentasPage({
                             titulo="Compras"
                             descripcion="Pagos de compra realizados desde esta cuenta"
                             Icono={ShoppingCart}
+                            color="amber"
                             historial={historialCompras}
                             emptyTexto="Los pagos de compra hechos desde esta cuenta aparecerán aquí"
                             filtroKey="compras"
@@ -808,6 +868,7 @@ export default function ShowCuentasPage({
                             titulo="Ajustes de Saldo"
                             descripcion="Correcciones manuales del saldo hechas desde Editar Cuenta"
                             Icono={Edit3}
+                            color="orange"
                             historial={historialAjustes}
                             emptyTexto="Los ajustes manuales de saldo de esta cuenta aparecerán aquí"
                             filtroKey="ajustes"
@@ -820,6 +881,7 @@ export default function ShowCuentasPage({
                             titulo="Operaciones Múltiples"
                             descripcion="Operaciones Múltiples donde esta cuenta participó como entrada, salida o mensajero"
                             Icono={Send}
+                            color="sky"
                             historial={historialRemesas}
                             emptyTexto="Las Operaciones Múltiples que involucren esta cuenta aparecerán aquí"
                             filtroKey="remesas"
@@ -831,6 +893,7 @@ export default function ShowCuentasPage({
                         titulo="Ventas"
                         descripcion="Pagos de venta recibidos y comisiones (vendedor, gestor, mensajería) pagadas desde esta cuenta"
                         Icono={Receipt}
+                        color="emerald"
                         historial={historialVentas}
                         emptyTexto="Los pagos y comisiones de venta que afecten esta cuenta aparecerán aquí"
                         filtroKey="ventas"
@@ -852,6 +915,7 @@ export default function ShowCuentasPage({
                         titulo="Transacciones"
                         descripcion="Gastos, ingresos y transferencias registrados directamente sobre esta cuenta"
                         Icono={ArrowRightLeft}
+                        color="violet"
                         historial={historialTransacciones}
                         emptyTexto="Los gastos, ingresos y transferencias de esta cuenta aparecerán aquí"
                         filtroKey="transacciones"

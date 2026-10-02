@@ -67,11 +67,16 @@ class MonedaController extends Controller
             // cuentas.imagen.
             'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
+            // Punto de partida (editable a mano) para la tasa al retirar comisión de Punto de
+            // Venta/Gestor en Vendor/Show.tsx — independiente de tasa_cambio. Opcional: sin
+            // configurar, esos campos siguen naciendo vacíos como hoy.
+            'tasa_comision' => 'nullable|numeric|min:0.000001',
             'estado' => 'boolean',
             'principal' => 'boolean',
         ] + $this->metodosPago->reglas(), [
             'nombre_moneda.unique' => 'El nombre de moneda ya existe.',
             'tasa_cambio.min' => 'La tasa de cambio debe ser mayor a 0.',
+            'tasa_comision.min' => 'La tasa de comisión debe ser mayor a 0.',
             'metodos_pago.required' => 'Elige al menos un método de pago.',
             'metodos_pago.min' => 'Elige al menos un método de pago.',
         ]);
@@ -96,6 +101,7 @@ class MonedaController extends Controller
                     'simbolo_moneda' => $request->simbolo_moneda,
                     'imagen' => $request->imagen ?: null,
                     'tasa_cambio' => $request->tasa_cambio,
+                    'tasa_comision' => $request->tasa_comision ?: null,
                     'estado' => $request->estado ?? true,
                     'principal' => $request->principal ?? false,
                 ]);
@@ -156,11 +162,13 @@ class MonedaController extends Controller
             'simbolo_moneda' => 'required|string|max:10',
             'imagen' => 'nullable|string|in:'.implode(',', CatalogoTarjetasService::monedaImagenSlugsValidos()),
             'tasa_cambio' => 'required|numeric|min:0.000001',
+            'tasa_comision' => 'nullable|numeric|min:0.000001',
             'estado' => 'boolean',
             'principal' => 'boolean',
         ] + $this->metodosPago->reglas(), [
             'nombre_moneda.unique' => 'El nombre de moneda ya existe.',
             'tasa_cambio.min' => 'La tasa de cambio debe ser mayor a 0.',
+            'tasa_comision.min' => 'La tasa de comisión debe ser mayor a 0.',
             'metodos_pago.required' => 'Elige al menos un método de pago.',
             'metodos_pago.min' => 'Elige al menos un método de pago.',
         ]);
@@ -210,6 +218,7 @@ class MonedaController extends Controller
                         'simbolo_moneda' => $request->simbolo_moneda,
                         'imagen' => $request->imagen ?: null,
                         'tasa_cambio' => $request->tasa_cambio,
+                        'tasa_comision' => $request->tasa_comision ?: null,
                         'estado' => $request->estado,
                         'principal' => $request->principal,
                     ]);
@@ -241,6 +250,7 @@ class MonedaController extends Controller
                         'simbolo_moneda' => $request->simbolo_moneda,
                         'imagen' => $request->imagen ?: null,
                         'tasa_cambio' => $request->tasa_cambio,
+                        'tasa_comision' => $request->tasa_comision ?: null,
                         'estado' => $request->estado,
                         'principal' => $request->principal,
                     ]);

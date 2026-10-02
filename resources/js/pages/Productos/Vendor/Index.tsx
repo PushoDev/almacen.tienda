@@ -104,7 +104,8 @@ interface LoteDisponible {
 
 interface ResultadoFusionMasiva {
     message: string;
-    fusionados: { producto_id: number; nombre_producto: string; codigo: string; cantidad: number; costo: number }[];
+    // ajuste: diferencia de redondeo del costo promedio ponderado auditada en ajustes_valor_inventario (null = sin diferencia).
+    fusionados: { producto_id: number; nombre_producto: string; codigo: string; cantidad: number; costo: number; ajuste: number | null }[];
     fallidos: { producto_id: number; nombre_producto: string; motivo: string }[];
 }
 
@@ -1103,7 +1104,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                 return;
             }
 
-            sileo.success({ title: 'Lotes fusionados', description: data.message as string });
+            // ajuste !== null: el costo promedio ponderado dejó una diferencia de redondeo, ya auditada
+            // en ajustes_valor_inventario — el backend ya la incluye en data.message, solo cambia el color del aviso.
+            if (data.ajuste !== null && data.ajuste !== undefined) {
+                sileo.warning({ title: 'Lotes fusionados con ajuste de redondeo', description: data.message as string });
+            } else {
+                sileo.success({ title: 'Lotes fusionados', description: data.message as string });
+            }
             setLotesSeleccionados((prev) => ({ ...prev, [claveLotes(loteFusion.producto)]: [] }));
             setLoteFusion(null);
             router.reload({ only: ['almacenes'] });
@@ -2793,6 +2800,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             <p key={f.producto_id}>
                                                 {f.nombre_producto}: <span className="font-mono text-xs">{f.codigo}</span> — {f.cantidad} u. a{' '}
                                                 {formatCurrency(f.costo)}
+                                                {f.ajuste !== null && (
+                                                    <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">
+                                                        (ajuste de redondeo: {f.ajuste >= 0 ? '+' : ''}
+                                                        {formatCurrency(f.ajuste)})
+                                                    </span>
+                                                )}
                                             </p>
                                         ))}
                                     </div>

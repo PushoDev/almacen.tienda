@@ -64,6 +64,7 @@ export default function MonedaCreate() {
         simbolo_moneda: '',
         imagen: null as string | null,
         tasa_cambio: '' as number | '',
+        tasa_comision: '' as number | '',
         estado: true,
         principal: false,
         metodos_pago: catalogoMetodosPago.metodos.map((metodo) => metodo.slug),
@@ -247,6 +248,28 @@ export default function MonedaCreate() {
                                     />
                                     {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}
                                     <p className="text-muted-foreground text-sm">Tasa respecto a la moneda principal</p>
+                                </div>
+
+                                {/* Tasa de Comisión — opcional, independiente de la Tasa de Cambio. Punto de
+                                    partida al retirar comisión de Punto de Venta/Gestor (Vendor/Show.tsx);
+                                    siempre editable a mano en ese momento. */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="tasa_comision">Tasa de Comisión</Label>
+                                    <Input
+                                        id="tasa_comision"
+                                        type="number"
+                                        step="0.000001"
+                                        min="0.000001"
+                                        placeholder="Sin configurar"
+                                        value={data.tasa_comision}
+                                        onChange={(e) => setData('tasa_comision', parseFloat(e.target.value) || '')}
+                                        className={errors?.tasa_comision ? 'border-red-500' : ''}
+                                    />
+                                    {errors?.tasa_comision && <p className="text-sm text-red-500">{errors.tasa_comision}</p>}
+                                    <p className="text-muted-foreground text-sm">
+                                        Precarga la tasa al retirar comisión de Punto de Venta y Gestor. Si se deja vacío, ese campo se sigue
+                                        llenando a mano.
+                                    </p>
                                 </div>
 
                                 {/* Métodos de pago que admite la moneda y, en transferencia, sus vías */}

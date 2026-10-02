@@ -181,9 +181,7 @@ export default function EstadosFinancieros({ userRole }: { userRole: 'admin' | '
                                                             className={
                                                                 estado.tipo_cuenta === 'permanentes'
                                                                     ? 'border-blue-300 text-blue-800 dark:text-blue-300'
-                                                                    : estado.tipo_cuenta === 'temporales'
-                                                                      ? 'border-green-300 text-green-800 dark:text-green-300'
-                                                                      : 'border-red-300 text-red-800 dark:text-red-300'
+                                                                    : 'border-red-300 text-red-800 dark:text-red-300'
                                                             }
                                                         >
                                                             {estado.tipo_cuenta}

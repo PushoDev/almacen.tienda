@@ -99,6 +99,100 @@ test('update() cambia la insignia asignada a una moneda existente', function () 
 });
 
 // ==========================================================================
+// TASA DE COMISIÓN — punto de partida (editable) al retirar comisión de
+// Punto de Venta/Gestor en Vendor/Show.tsx, independiente de tasa_cambio.
+// ==========================================================================
+
+test('store() guarda la tasa de comisión cuando se manda, y null si se omite', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $this->post(route('monedas.store'), [
+        'codigo_moneda' => 'CUP',
+        'nombre_moneda' => 'Peso Cubano Con Comision '.uniqid(),
+        'simbolo_moneda' => 'CUP',
+        'tasa_cambio' => 380,
+        'tasa_comision' => 395,
+        ...datosDePagoDeMoneda(),
+        'estado' => true,
+        'principal' => false,
+    ])->assertRedirect(route('monedas.index'));
+
+    $this->post(route('monedas.store'), [
+        'codigo_moneda' => 'EUR',
+        'nombre_moneda' => 'Euro Sin Comision '.uniqid(),
+        'simbolo_moneda' => 'EUR',
+        'tasa_cambio' => 1.1,
+        ...datosDePagoDeMoneda(),
+        'estado' => true,
+        'principal' => false,
+    ])->assertRedirect(route('monedas.index'));
+
+    $this->assertDatabaseHas('monedas', ['codigo_moneda' => 'CUP', 'tasa_comision' => 395]);
+    $this->assertDatabaseHas('monedas', ['codigo_moneda' => 'EUR', 'tasa_comision' => null]);
+});
+
+test('store() rechaza una tasa de comisión en cero o negativa', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $response = $this->post(route('monedas.store'), [
+        'codigo_moneda' => 'CUP',
+        'nombre_moneda' => 'Peso Cubano Tasa Invalida '.uniqid(),
+        'simbolo_moneda' => 'CUP',
+        'tasa_cambio' => 380,
+        'tasa_comision' => 0,
+        ...datosDePagoDeMoneda(),
+        'estado' => true,
+        'principal' => false,
+    ]);
+
+    $response->assertSessionHasErrors('tasa_comision');
+});
+
+test('update() cambia la tasa de comisión de una moneda existente, independiente de tasa_cambio', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 380, 'tasa_comision' => null]);
+
+    $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => $moneda->nombre_moneda,
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 380,
+        'tasa_comision' => 400,
+        ...datosDePagoDeMoneda(),
+        'estado' => true,
+        'principal' => false,
+    ])->assertRedirect(route('monedas.index'));
+
+    $this->assertDatabaseHas('monedas', ['id' => $moneda->id, 'tasa_cambio' => 380, 'tasa_comision' => 400]);
+});
+
+test('update() limpia la tasa de comisión a null cuando el formulario la manda vacía', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 380, 'tasa_comision' => 395]);
+
+    // Mismo string vacío que envía el <Input> de Monedas/Edit.tsx al borrarlo — el middleware
+    // ConvertEmptyStringsToNull (stack web por defecto) lo normaliza antes de llegar a la validación.
+    $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => $moneda->nombre_moneda,
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 380,
+        'tasa_comision' => '',
+        ...datosDePagoDeMoneda(),
+        'estado' => true,
+        'principal' => false,
+    ])->assertRedirect(route('monedas.index'));
+
+    $this->assertDatabaseHas('monedas', ['id' => $moneda->id, 'tasa_comision' => null]);
+});
+
+// ==========================================================================
 // HISTORIAL DE CAMBIO DE TASA — impacto financiero (sin cobertura hasta ahora)
 // ==========================================================================
 
@@ -400,15 +494,18 @@ test('cada método y cada vía con imagen apunta a un archivo que existe (EnZona
     }
 });
 
-test('Western Union, MoneyGram y Google Pay están en el catálogo sin imagen y sin asignar a ninguna moneda, listas para cuando tengan logo', function () {
-    // La migración no las asigna a ninguna moneda existente (se activan por moneda en su edición); las
-    // monedas NUEVAS sí las reciben con las demás vías internacionales (ver el test de valores por defecto).
+test('Western Union, MoneyGram y Google Pay ya tienen logo (archivo por slug, sin fila `imagen`) y siguen sin asignar a ninguna moneda', function () {
+    // Logos agregados 2026-10-01 (googlepay.webp, moneygram.webp; westernunion.webp ya existía desde el
+    // 2026-09-29) directo a public/projects/metodos_pago/{slug}.webp, sin tocar la columna `imagen` — el
+    // mecanismo de auto-detección de ViaPago::imagenUrl() los toma solo. La migración no las asigna a
+    // ninguna moneda existente (se activan por moneda en su edición, pendiente del cliente); las monedas
+    // NUEVAS sí las reciben con las demás vías internacionales (ver el test de valores por defecto).
     $pendientes = ViaPago::whereIn('slug', ['westernunion', 'moneygram', 'googlepay'])->get();
 
     expect($pendientes)->toHaveCount(3);
     foreach ($pendientes as $via) {
         expect($via->imagen)->toBeNull()
-            ->and($via->imagenUrl())->toBeNull() // el CRUD muestra un ícono
+            ->and($via->imagenUrl())->toEndWith("projects/metodos_pago/{$via->slug}.webp")
             ->and($via->monedas()->count())->toBe(0);
     }
 });

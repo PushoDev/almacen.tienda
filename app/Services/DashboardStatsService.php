@@ -549,7 +549,7 @@ class DashboardStatsService
         foreach ($monedas as $moneda) {
             $saldo = DB::table('cuentas')
                 ->where('moneda_id', $moneda->id)
-                ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+                ->where('tipo_cuenta', 'permanentes')
                 ->sum('saldo_cuenta');
 
             $balances[] = [
