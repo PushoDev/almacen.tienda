@@ -28,20 +28,26 @@ class FusionLotesService
     /**
      * @param  array<int, int>  $loteIds
      * @param  float|null  $precioVenta  precio propio del lote resultante; null = hereda el del producto en el almacén
+     * @param  float|null  $costoForzado  2026-10-02: cuando el admin elige actualizar el costo de VARIOS almacenes
+     *                                    a la vez (ver `FusionProductosService::actualizarCostoEnAlmacenes()`), el
+     *                                    costo resultante no es el promedio local de ESTOS lotes sino el promedio
+     *                                    combinado de todos los almacenes elegidos — se fuerza ese valor en vez de
+     *                                    calcularlo acá. null (el caso normal, de siempre) = promedio ponderado de
+     *                                    estos lotes nomás, sin cambios de comportamiento.
      * @return array{lote: LoteStock, ajuste: float|null} `ajuste` = diferencia de redondeo del costo promedio ponderado ya auditada en ajustes_valor_inventario (null = sin diferencia)
      *
      * @throws ValidationException
      */
-    public function fusionar(int $productoId, int $almacenId, array $loteIds, ?float $precioVenta, User $user): array
+    public function fusionar(int $productoId, int $almacenId, array $loteIds, ?float $precioVenta, User $user, ?float $costoForzado = null): array
     {
-        return DB::transaction(function () use ($productoId, $almacenId, $loteIds, $precioVenta, $user) {
+        return DB::transaction(function () use ($productoId, $almacenId, $loteIds, $precioVenta, $user, $costoForzado) {
             $lotes = LoteStock::whereIn('id', $loteIds)->lockForUpdate()->orderBy('created_at')->orderBy('id')->get();
 
             $this->validar($lotes, $loteIds, $productoId, $almacenId);
 
             $cantidadTotal = (int) $lotes->sum('cantidad_disponible');
             $valorTotal = $lotes->sum(fn (LoteStock $lote) => $lote->cantidad_disponible * (float) $lote->precio_costo);
-            $costoResultante = round($valorTotal / $cantidadTotal, 2);
+            $costoResultante = $costoForzado !== null ? round($costoForzado, 2) : round($valorTotal / $cantidadTotal, 2);
 
             $resultante = LoteStock::create([
                 'codigo' => LoteStock::generarCodigoFusion($productoId, $almacenId),

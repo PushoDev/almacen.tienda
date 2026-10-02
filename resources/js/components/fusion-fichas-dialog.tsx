@@ -89,11 +89,15 @@ export function FusionFichasDialog({
     open,
     onOpenChange,
     onCompletado,
+    onFusionCompletada,
 }: {
     grupo: GrupoDuplicado | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onCompletado: () => void;
+    /** Se dispara solo tras una fusión real (no un "solo normalizar"), con el id de la ficha
+     *  conservada — el padre lo usa para abrir ActualizarCostoAlmacenesDialog como paso obligatorio. */
+    onFusionCompletada?: (productoId: number) => void;
 }) {
     const [conservarId, setConservarId] = useState<number | null>(null);
     const [valoresCanonicos, setValoresCanonicos] = useState<Record<string, string>>({});
@@ -182,6 +186,15 @@ export function FusionFichasDialog({
 
             sileo.success({ title: soloNormalizar ? 'Valores normalizados' : 'Fichas fusionadas', description: data.message as string });
             onOpenChange(false);
+
+            // Tras una fusión real (no un "solo normalizar"): paso obligatorio aparte para que
+            // el admin decida en qué almacenes aplicar el nuevo costo combinado — ver
+            // components/actualizar-costo-almacenes-dialog.tsx. Nunca automático.
+            const resultado = data.resultado as { producto_id?: number } | undefined;
+            if (!soloNormalizar && resultado?.producto_id) {
+                onFusionCompletada?.(resultado.producto_id);
+            }
+
             onCompletado();
         } catch {
             setError('Error de conexión. Inténtalo nuevamente.');

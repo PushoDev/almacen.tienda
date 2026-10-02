@@ -1165,6 +1165,67 @@ class ProductoController extends Controller
     }
 
     /**
+     * Edición en lote (solo admin, ver middleware 'admin.only' en la ruta): aplica los mismos
+     * valores de identidad a varios productos EXISTENTES a la vez. Aparte de
+     * normalizarDuplicados()/fusionarDuplicados(): no depende de que FichasHermanasService ya
+     * los haya agrupado como "hermanos" (eso exige coincidencia exacta de la clave normalizada,
+     * ver FichasHermanasService::clave()) — el admin elige la selección a mano, para corregir a
+     * tiempo un tipeo (ej. "635W" vs "635 W") antes de que termine generando una ficha duplicada
+     * de verdad, como pasó con la Compra #14 (ver docs/ESTADO_DESARROLLO.md, 2026-10-02). No toca
+     * stock ni fusiona nada: los productos seleccionados siguen siendo fichas separadas después,
+     * solo con los campos corregidos — si con eso pasan a coincidir, "Limpiar duplicados" los va
+     * a agrupar solo.
+     */
+    public function editarEnLote(Request $request)
+    {
+        $validated = $request->validate([
+            'productos_ids' => 'required|array|min:2',
+            'productos_ids.*' => 'exists:productos,id',
+            'nombre_producto' => 'nullable|string|max:255',
+            'marca_producto' => 'nullable|string|max:255',
+            'modelo_producto' => 'nullable|string|max:255',
+            'capacidad_producto' => 'nullable|string|max:255',
+            'color_producto' => 'nullable|string|max:255',
+            'categoria_id' => 'nullable|exists:categorias,id',
+        ]);
+
+        // Campo vacío/ausente = "no tocar" (mismo criterio que normalizarDuplicados), no "vaciar
+        // el campo" — para vaciar un campo puntual se sigue usando Productos/Edit.tsx uno por uno.
+        $actualizar = collect($validated)
+            ->except('productos_ids')
+            ->filter(fn ($valor) => $valor !== null && $valor !== '')
+            ->all();
+
+        // El <Input> del frontend solo MUESTRA mayúscula con CSS (text-transform) — el valor que
+        // llega acá puede venir en cualquier case. Sin esto, la ficha se guarda tal cual se tipeó
+        // y la tabla termina mostrando minúsculas aunque en el diálogo se viera en mayúscula.
+        foreach (['nombre_producto', 'marca_producto', 'modelo_producto', 'capacidad_producto', 'color_producto'] as $campo) {
+            if (isset($actualizar[$campo])) {
+                $actualizar[$campo] = mb_strtoupper($actualizar[$campo]);
+            }
+        }
+
+        if (empty($actualizar)) {
+            return response()->json(['success' => false, 'message' => 'No hay campos para actualizar'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $afectados = Producto::whereIn('id', $validated['productos_ids'])->update($actualizar);
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => $afectados.' producto'.($afectados === 1 ? '' : 's').' actualizado'.($afectados === 1 ? '' : 's').' correctamente.',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json(['success' => false, 'message' => 'Error al actualizar: '.$e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Normalizar + fusionar fichas hermanas en una sola. Reasigna ventas, compras, lotes,
      * movimientos e historiales a la ficha conservada (ver FusionProductosService) — nunca los
      * borra. Donde las fichas tienen precios de venta distintos, `precios_por_almacen` indica
@@ -1201,6 +1262,43 @@ class ProductoController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Fusión completada. Producto conservado: ID '.$resultado['producto_id'].' — '.$resultado['cantidad_total'].' unidades totales. Ventas, compras, lotes y movimientos de las fichas fusionadas pasaron a esta ficha.',
+            'resultado' => $resultado,
+        ]);
+    }
+
+    /**
+     * Almacenes con stock de este producto, para el selector de "¿en qué almacenes aplicar el
+     * nuevo costo?" — ver FusionProductosService::almacenesConStock().
+     */
+    public function almacenesConStock(Producto $producto, FusionProductosService $fusion)
+    {
+        return response()->json(['almacenes' => $fusion->almacenesConStock($producto->id)]);
+    }
+
+    /**
+     * Actualiza el costo de los almacenes elegidos a un solo promedio ponderado combinado —
+     * pedido explícito del cliente 2026-10-02 (ver FusionProductosService::actualizarCostoEnAlmacenes()).
+     * Paso disponible tanto suelto desde Productos/Edit.tsx como obligatorio al terminar una
+     * fusión en "Limpiar duplicados" (ActualizarCostoAlmacenesDialog, los dos reusan esto).
+     */
+    public function actualizarCostoEnAlmacenes(Request $request, Producto $producto, FusionProductosService $fusion)
+    {
+        $validated = $request->validate([
+            'almacen_ids' => 'required|array|min:1',
+            'almacen_ids.*' => 'integer|distinct|exists:almacens,id',
+        ]);
+
+        try {
+            $resultado = $fusion->actualizarCostoEnAlmacenes($producto, array_map('intval', $validated['almacen_ids']), $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->first()[0] ?? 'No se pudo actualizar'], 422);
+        }
+
+        $almacenesTexto = collect($resultado['almacenes'])->pluck('nombre_almacen')->implode(', ');
+
+        return response()->json([
+            'success' => true,
+            'message' => "Costo actualizado a {$resultado['costo']} en: {$almacenesTexto} ({$resultado['cantidad_total']} unidades en total).",
             'resultado' => $resultado,
         ]);
     }
