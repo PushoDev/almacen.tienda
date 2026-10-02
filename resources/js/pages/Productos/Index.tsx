@@ -13,8 +13,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EditarEnLoteDialog, type ProductoSeleccionado } from '@/components/editar-en-lote-dialog';
 import { FusionFichasDialog, type GrupoDuplicado } from '@/components/fusion-fichas-dialog';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
@@ -37,6 +41,7 @@ import {
     Filter,
     GitMerge,
     History,
+    ListChecks,
     Package,
     Package2,
     RefreshCw,
@@ -44,8 +49,9 @@ import {
     Trash2,
     Upload,
     Wallet,
+    X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
@@ -337,6 +343,8 @@ export default function ProductosPage({
     total_importe_global = 0,
     resumen_stock_bajo,
 }: ProductosPageProps) {
+    const isAdmin = usePage().props.auth?.user?.role === 'admin';
+
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
     const [selectedCategoria, setSelectedCategoria] = useState(filters.categoria_id || '');
@@ -353,8 +361,16 @@ export default function ProductosPage({
     const [duplicados, setDuplicados] = useState<GrupoDuplicado[]>([]);
     const [loadingDuplicados, setLoadingDuplicados] = useState(false);
     const [gruposExpandidos, setGruposExpandidos] = useState<Record<number, boolean>>({});
+    const [busquedaDuplicados, setBusquedaDuplicados] = useState('');
     // Modal 2 (normalización + fusión) — ver components/fusion-fichas-dialog.tsx
     const [grupoActivo, setGrupoActivo] = useState<GrupoDuplicado | null>(null);
+
+    // Edición en lote (solo admin) — aparte de Limpiar duplicados, ver
+    // components/editar-en-lote-dialog.tsx. Flujo: botón activa el modo selección (aparecen los
+    // checkboxes) -> el admin selecciona 2+ filas -> mismo botón abre el diálogo.
+    const [modoSeleccionLote, setModoSeleccionLote] = useState(false);
+    const [seleccionLote, setSeleccionLote] = useState<number[]>([]);
+    const [showEditarLoteDialog, setShowEditarLoteDialog] = useState(false);
     const [showFusionModal, setShowFusionModal] = useState(false);
 
     // Calcular estadísticas
@@ -508,6 +524,7 @@ export default function ProductosPage({
     const cargarDuplicados = async () => {
         setLoadingDuplicados(true);
         setShowDuplicadosModal(true);
+        setBusquedaDuplicados('');
         try {
             const response = await fetch(route('productos.duplicados'), {
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -531,9 +548,60 @@ export default function ProductosPage({
         setShowFusionModal(true);
     };
 
+    // Botón de "Editar en lote": 1er click activa el modo selección (aparecen los checkboxes),
+    // 2do click (con 2+ elegidos) abre el diálogo de edición.
+    const alternarModoSeleccionLote = () => {
+        if (!modoSeleccionLote) {
+            setModoSeleccionLote(true);
+            setSeleccionLote([]);
+
+            return;
+        }
+
+        if (seleccionLote.length < 2) {
+            sileo.error({ title: 'Selecciona al menos 2 productos', description: 'Tocá las casillas de la lista para elegirlos.' });
+
+            return;
+        }
+
+        setShowEditarLoteDialog(true);
+    };
+
+    const cancelarSeleccionLote = () => {
+        setModoSeleccionLote(false);
+        setSeleccionLote([]);
+    };
+
+    const alternarSeleccionProducto = (id: number) => {
+        setSeleccionLote((prev) => (prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]));
+    };
+
+    const productosSeleccionadosData: ProductoSeleccionado[] = productosData
+        .filter((p) => seleccionLote.includes(p.id))
+        .map((p) => ({
+            id: p.id,
+            nombre_producto: p.nombre_producto,
+            marca_producto: p.marca_producto,
+            modelo_producto: p.modelo_producto,
+            capacidad_producto: p.capacidad_producto,
+            color_producto: p.color_producto,
+            categoria: p.categoria,
+            categoria_id: p.categoria_id,
+        }));
+
     const toggleGrupo = (index: number) => {
         setGruposExpandidos(prev => ({ ...prev, [index]: !prev[index] }));
     };
+
+    // Grupos que coinciden con la búsqueda, conservando el índice original (usado por
+    // gruposExpandidos/toggleGrupo) — filtrar directo sobre `duplicados` correría los índices.
+    const gruposFiltrados = useMemo(() => {
+        const termino = busquedaDuplicados.trim().toLowerCase();
+
+        return duplicados
+            .map((grupo, index) => ({ grupo, index }))
+            .filter(({ grupo }) => !termino || (grupo.clave ?? '').toLowerCase().includes(termino));
+    }, [duplicados, busquedaDuplicados]);
 
     // Aplicar filtros
     const aplicarFiltros = useCallback(() => {
@@ -664,15 +732,18 @@ export default function ProductosPage({
                 <Card>
                     <CardContent className="p-4">
                         <div className="flex flex-wrap items-end gap-3 pr-12">
-                    {/* Buscador */}
+                    {/* Buscador — admite varios términos a la vez ("panel longi 635"), capacidad
+                        tolerante a espacios ("635w" encuentra "635 W") y código de barras exacto
+                        (ver Producto::scopeBuscar()). <Input> del proyecto, no un <input> suelto:
+                        así hereda el mayúscula automático que ya tienen todos los demás campos. */}
                     <div className="relative min-w-64 flex-[2]">
                         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
-                        <input
+                        <Input
                             type="text"
                             placeholder="Buscar productos por nombre, código, marca o modelo..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-lg border px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:outline-none"
+                            className="py-2.5 pl-10 text-sm"
                         />
                     </div>
 
@@ -859,6 +930,41 @@ export default function ProductosPage({
                             <TooltipContent>Limpiar duplicados</TooltipContent>
                         </Tooltip>
                     )}
+
+                    {isAdmin && (
+                        <>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant={modoSeleccionLote ? 'default' : 'outline'}
+                                        size="sm"
+                                        className={`h-8 cursor-pointer gap-1.5 ${modoSeleccionLote ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                                        onClick={alternarModoSeleccionLote}
+                                    >
+                                        <ListChecks size={16} />
+                                        {modoSeleccionLote
+                                            ? `Editar ${seleccionLote.length} seleccionado${seleccionLote.length === 1 ? '' : 's'}`
+                                            : 'Editar en lote'}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {modoSeleccionLote
+                                        ? 'Elegí 2 o más productos en la lista y volvé a tocar este botón'
+                                        : 'Corregir un dato (marca, capacidad, etc.) en varios productos a la vez — solo admin'}
+                                </TooltipContent>
+                            </Tooltip>
+                            {modoSeleccionLote && (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer" onClick={cancelarSeleccionLote}>
+                                            <X size={16} />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Cancelar selección</TooltipContent>
+                                </Tooltip>
+                            )}
+                        </>
+                    )}
                         </div>
                     </CardContent>
                 </Card>
@@ -883,6 +989,7 @@ export default function ProductosPage({
                             <Table>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                {modoSeleccionLote && <TableHead className="w-10"></TableHead>}
                                 <TableHead className="w-[180px] cursor-pointer whitespace-nowrap" onClick={() => handleSort('nombre_producto')}>
                                     Nombre {sort.field === 'nombre_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
                                 </TableHead>
@@ -920,6 +1027,15 @@ export default function ProductosPage({
                                         key={producto.id}
                                         className={isStockBajo ? 'border-l-4 border-red-500 bg-red-100 dark:bg-red-950/50' : ''}
                                     >
+                                        {modoSeleccionLote && (
+                                            <TableCell className="w-10">
+                                                <Checkbox
+                                                    checked={seleccionLote.includes(producto.id)}
+                                                    onCheckedChange={() => alternarSeleccionProducto(producto.id)}
+                                                    aria-label={`Seleccionar ${producto.nombre_producto}`}
+                                                />
+                                            </TableCell>
+                                        )}
                                         <TableCell className="max-w-[180px]">
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
@@ -1088,7 +1204,7 @@ export default function ProductosPage({
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={8} className="bg-sidebar-accent font-semibold">
+                                <TableCell colSpan={modoSeleccionLote ? 9 : 8} className="bg-sidebar-accent font-semibold">
                                     Total General
                                     {canViewSensitiveData && (
                                         <span className="ml-2 font-bold text-green-600 dark:text-green-400">
@@ -1143,113 +1259,141 @@ export default function ProductosPage({
                 <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} onImport={handleImport} almacenes={almacenes} />
                 <ResultadoImportacionDialog resultado={resultadoImportacion} onClose={() => setResultadoImportacion(null)} />
 
-                {/* Modal 1 - Exploración de duplicados */}
-                {showDuplicadosModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                        <div className="animate-dialog-bounce mx-4 w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-                            <div className="mb-4 flex items-center justify-between">
-                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧹 Limpiar productos duplicados</h2>
-                                <Button variant="ghost" size="sm" className="cursor-pointer" onClick={() => setShowDuplicadosModal(false)}>✕</Button>
+                {/* Modal 1 - Exploración de duplicados. Dialog real (ver docs/patron-dialog-formulario-grande.md,
+                    Variante A: header fijo con degradado, solo el body scrollea) — reemplaza el <div
+                    fixed inset-0> hecho a mano que tenía antes (mismo anti-patrón que Proveedores/Show.tsx,
+                    ya documentado ahí como "lo que NO hay que copiar"). Ámbar: mismo color que "Fichas
+                    hermanas" en Productos/Show.tsx y el ícono/botones de FusionFichasDialog. */}
+                <Dialog open={showDuplicadosModal} onOpenChange={setShowDuplicadosModal}>
+                    <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl [&>button]:text-white [&>button]:opacity-80 [&>button:hover]:bg-white/10 [&>button:hover]:opacity-100">
+                        <DialogHeader className="flex shrink-0 flex-col items-start gap-4 border-b bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <GitMerge className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <DialogTitle className="text-white">Limpiar productos duplicados</DialogTitle>
+                                    <DialogDescription className="text-amber-100">
+                                        {loadingDuplicados
+                                            ? 'Analizando el catálogo…'
+                                            : `${duplicados.length} grupo${duplicados.length === 1 ? '' : 's'} encontrado${duplicados.length === 1 ? '' : 's'}`}
+                                    </DialogDescription>
+                                </div>
                             </div>
+                            {duplicados.length > 0 && (
+                                <div className="relative w-full sm:w-[340px]">
+                                    <Search className="absolute top-1/2 left-3.5 h-5 w-5 -translate-y-1/2 text-white/70" />
+                                    <Input
+                                        type="text"
+                                        placeholder="Buscar producto…"
+                                        value={busquedaDuplicados}
+                                        onChange={(e) => setBusquedaDuplicados(e.target.value)}
+                                        className="h-11 border-white/30 bg-white/20 pl-11 text-base text-white placeholder:text-white/70 backdrop-blur-sm"
+                                    />
+                                </div>
+                            )}
+                        </DialogHeader>
 
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
                             {loadingDuplicados ? (
                                 <div className="flex items-center justify-center py-12">
-                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
-                                    <span className="ml-3 text-gray-600">Analizando productos...</span>
+                                    <div className="border-muted h-6 w-6 animate-spin rounded-full border-2 border-t-amber-600"></div>
+                                    <span className="text-muted-foreground ml-3">Analizando productos...</span>
                                 </div>
                             ) : duplicados.length === 0 ? (
-                                <div className="py-12 text-center text-gray-500">
-                                    <Package size={48} className="mx-auto mb-3 text-green-400" />
+                                <div className="text-muted-foreground py-12 text-center">
+                                    <Package size={48} className="mx-auto mb-3 text-green-500/70" />
                                     <p className="text-lg font-semibold text-green-600">No hay productos duplicados</p>
                                     <p className="mt-1 text-sm">Todos los productos están correctamente organizados.</p>
                                 </div>
+                            ) : gruposFiltrados.length === 0 ? (
+                                <div className="text-muted-foreground py-12 text-center">
+                                    <Search size={40} className="mx-auto mb-3 opacity-40" />
+                                    <p>Ningún grupo coincide con &quot;{busquedaDuplicados}&quot;.</p>
+                                </div>
                             ) : (
-                                <>
-                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                                        Se encontraron <strong>{duplicados.length}</strong> grupos de productos duplicados.
-                                        Expande cada grupo para ver los detalles.
-                                    </p>
+                                <div className="space-y-2">
+                                    {gruposFiltrados.map(({ grupo, index }) => {
+                                        const estaExpandido = gruposExpandidos[index] ?? false;
 
-                                    <div className="max-h-96 space-y-2 overflow-y-auto">
-                                        {duplicados.map((grupo, index) => {
-                                            const estaExpandido = gruposExpandidos[index] ?? false;
+                                        return (
+                                            <div key={index} className="rounded-lg border">
+                                                <button
+                                                    className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left"
+                                                    onClick={() => toggleGrupo(index)}
+                                                >
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-foreground text-sm font-medium">{estaExpandido ? '▼' : '▶'}</span>
+                                                        <span className="text-foreground font-medium">{grupo.clave || 'Producto'}</span>
+                                                        <Badge variant="outline">{grupo.productos?.length || 0} productos</Badge>
+                                                        <Badge variant="secondary" className="text-xs">{grupo.cantidad_total} unds</Badge>
+                                                        {grupo.conflictos_precio.length > 0 && (
+                                                            <Badge variant="outline" className="border-amber-500/50 text-xs text-amber-700 dark:text-amber-400">
+                                                                {grupo.conflictos_precio.length} almacén(es) con precios distintos
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-sm font-bold text-green-600">${grupo.precio_promedio?.toFixed(2)}</span>
+                                                </button>
 
-                                            return (
-                                                <div key={index} className="rounded-lg border border-gray-200 dark:border-gray-700">
-                                                    <button
-                                                        className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                                                        onClick={() => toggleGrupo(index)}
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">{estaExpandido ? '▼' : '▶'}</span>
-                                                            <span className="font-medium text-gray-900 dark:text-white">{grupo.clave || 'Producto'}</span>
-                                                            <Badge variant="outline" className="ml-2">{grupo.productos?.length || 0} productos</Badge>
-                                                            <Badge variant="secondary" className="text-xs">{grupo.cantidad_total} unds</Badge>
-                                                            {grupo.conflictos_precio.length > 0 && (
-                                                                <Badge variant="outline" className="border-amber-500/50 text-xs text-amber-700 dark:text-amber-400">
-                                                                    {grupo.conflictos_precio.length} almacén(es) con precios distintos
-                                                                </Badge>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-sm font-bold text-green-600">${grupo.precio_promedio?.toFixed(2)}</span>
-                                                    </button>
-
-                                                    {estaExpandido && (
-                                                        <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
-                                                            {grupo.productos.map((prod) => (
-                                                                <div key={prod.id} className="mb-2 flex items-center justify-between rounded bg-gray-50 px-3 py-2 dark:bg-gray-700/30">
-                                                                    <div className="text-sm">
-                                                                        <span className="font-mono text-xs text-gray-500">ID {prod.id}</span>
-                                                                        <span className="ml-2 font-medium">${prod.precio_compra?.toFixed(2)}</span>
-                                                                        <span className="ml-2 text-gray-500">— {prod.cantidad_total} unds</span>
-                                                                        {prod.categoria && <Badge variant="outline" className="ml-2 text-[10px]">{prod.categoria}</Badge>}
-                                                                        {prod.codigo && <span className="ml-2 font-mono text-[10px] text-gray-400">{prod.codigo}</span>}
-                                                                    </div>
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {prod.almacenes.map((a) => (
-                                                                            <Badge key={a.id} variant="secondary" className="text-[10px]">
-                                                                                {a.nombre}: {a.cantidad}
-                                                                            </Badge>
-                                                                        ))}
-                                                                    </div>
+                                                {estaExpandido && (
+                                                    <div className="border-t px-4 py-3">
+                                                        {grupo.productos.map((prod) => (
+                                                            <div key={prod.id} className="bg-muted/40 mb-2 flex items-center justify-between rounded px-3 py-2">
+                                                                <div className="text-sm">
+                                                                    <span className="text-muted-foreground font-mono text-xs">ID {prod.id}</span>
+                                                                    <span className="ml-2 font-medium">${prod.precio_compra?.toFixed(2)}</span>
+                                                                    <span className="text-muted-foreground ml-2">— {prod.cantidad_total} unds</span>
+                                                                    {prod.categoria && <Badge variant="outline" className="ml-2 text-[10px]">{prod.categoria}</Badge>}
+                                                                    {prod.codigo && <span className="text-muted-foreground ml-2 font-mono text-[10px]">{prod.codigo}</span>}
                                                                 </div>
-                                                            ))}
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {prod.almacenes.map((a) => (
+                                                                        <Badge key={a.id} variant="secondary" className="text-[10px]">
+                                                                            {a.nombre}: {a.cantidad}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        ))}
 
-                                                            {(grupo.campos_variables?.length || 0) > 0 && (
-                                                                <div className="mb-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
-                                                                    ⚠️ Campos que varían: {grupo.campos_variables.map((cv) =>
+                                                        {(grupo.campos_variables?.length || 0) > 0 && (
+                                                            <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                                                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                                                <span>
+                                                                    Campos que varían: {grupo.campos_variables.map((cv) =>
                                                                         `${cv.campo === 'categoria_id' ? 'categoría' : 'capacidad'} (${cv.valores.join(', ')})`
                                                                     ).join(' | ')}
-                                                                </div>
-                                                            )}
-
-                                                            <div className="mt-2 flex justify-end">
-                                                                <Button
-                                                                    size="sm"
-                                                                    className="cursor-pointer gap-1 bg-amber-600 text-xs hover:bg-amber-700"
-                                                                    onClick={() => abrirFusion(grupo)}
-                                                                >
-                                                                    <GitMerge size={12} />
-                                                                    Normalizar y Fusionar
-                                                                </Button>
+                                                                </span>
                                                             </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </>
-                            )}
+                                                        )}
 
-                            <div className="mt-4 flex justify-end">
-                                <Button variant="outline" className="cursor-pointer" onClick={() => setShowDuplicadosModal(false)}>
-                                    Cerrar
-                                </Button>
-                            </div>
+                                                        <div className="mt-2 flex justify-end">
+                                                            <Button
+                                                                size="sm"
+                                                                className="cursor-pointer gap-1 bg-amber-600 text-xs hover:bg-amber-700"
+                                                                onClick={() => abrirFusion(grupo)}
+                                                            >
+                                                                <GitMerge size={12} />
+                                                                Normalizar y Fusionar
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
-                    </div>
-                )}
+
+                        <DialogFooter className="shrink-0 border-t px-6 py-4 sm:justify-end">
+                            <Button variant="outline" className="cursor-pointer" onClick={() => setShowDuplicadosModal(false)}>
+                                Cerrar
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 {/* Modal 2 - Normalización + Fusión */}
                 <FusionFichasDialog
@@ -1258,6 +1402,18 @@ export default function ProductosPage({
                     onOpenChange={setShowFusionModal}
                     onCompletado={() => {
                         cargarDuplicados();
+                        router.reload();
+                    }}
+                />
+
+                {/* Edición en lote (solo admin) — aparte de Limpiar duplicados */}
+                <EditarEnLoteDialog
+                    productos={productosSeleccionadosData}
+                    open={showEditarLoteDialog}
+                    onOpenChange={setShowEditarLoteDialog}
+                    categorias={categorias}
+                    onCompletado={() => {
+                        cancelarSeleccionLote();
                         router.reload();
                     }}
                 />

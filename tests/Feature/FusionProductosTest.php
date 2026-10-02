@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Almacen;
+use App\Models\Categoria;
 use App\Models\Compra;
 use App\Models\LoteStock;
 use App\Models\Movimiento;
@@ -306,4 +307,114 @@ test('un vendedor no puede fusionar-en-almacen', function () {
 
     $response->assertForbidden();
     $this->assertModelExists($eliminar);
+});
+
+// ===========================================================================
+// editarEnLote() — edición masiva de productos EXISTENTES, solo admin. No fusiona ni toca
+// stock: a diferencia de normalizarDuplicados()/fusionarDuplicados(), no depende de que
+// FichasHermanasService ya haya agrupado las fichas (sirve justo para el caso en que NO las
+// agrupó, por un tipeo como "635W" vs "635 W").
+// ===========================================================================
+
+test('un admin corrige la capacidad de varios productos a la vez sin fusionarlos', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $a = fichaVentilador(['capacidad_producto' => '20000MAH']);
+    $b = fichaVentilador(['capacidad_producto' => '20000 Mah']);
+
+    $response = $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id, $b->id],
+        'capacidad_producto' => '20000 MAH',
+    ]);
+
+    $response->assertOk()->assertJson(['success' => true]);
+    expect($a->fresh()->capacidad_producto)->toBe('20000 MAH');
+    expect($b->fresh()->capacidad_producto)->toBe('20000 MAH');
+    // Siguen siendo 2 fichas separadas — editar en lote no fusiona.
+    $this->assertModelExists($a);
+    $this->assertModelExists($b);
+});
+
+test('editar en lote guarda los campos de texto en mayúscula aunque se manden en minúscula', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $a = fichaVentilador(['marca_producto' => 'acme']);
+    $b = fichaVentilador(['marca_producto' => 'Acme Corp']);
+
+    $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id, $b->id],
+        'marca_producto' => 'acme corp',
+    ])->assertOk();
+
+    expect($a->fresh()->marca_producto)->toBe('ACME CORP');
+    expect($b->fresh()->marca_producto)->toBe('ACME CORP');
+});
+
+test('editar en lote solo toca los campos enviados, deja el resto intacto', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $categoriaOriginal = Categoria::factory()->create();
+    $a = fichaVentilador(['marca_producto' => 'ACME', 'categoria_id' => $categoriaOriginal->id]);
+    $b = fichaVentilador(['marca_producto' => 'acme corp', 'categoria_id' => $categoriaOriginal->id]);
+
+    $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id, $b->id],
+        'marca_producto' => 'ACME',
+    ])->assertOk();
+
+    expect($a->fresh()->marca_producto)->toBe('ACME');
+    expect($b->fresh()->marca_producto)->toBe('ACME');
+    // categoria_id no se mandó: queda igual que antes en ambas.
+    expect($b->fresh()->categoria_id)->toBe($categoriaOriginal->id);
+});
+
+test('editar en lote rechaza una selección de un solo producto', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $a = fichaVentilador();
+
+    $response = $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id],
+        'capacidad_producto' => '20000 MAH',
+    ]);
+
+    $response->assertStatus(422)->assertJsonValidationErrors('productos_ids');
+});
+
+test('editar en lote rechaza el payload sin ningún campo para actualizar', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $a = fichaVentilador();
+    $b = fichaVentilador();
+
+    $response = $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id, $b->id],
+    ]);
+
+    $response->assertStatus(422)->assertJson(['success' => false]);
+});
+
+test('un moderador no puede editar productos en lote (a diferencia de normalizar/fusionar duplicados)', function () {
+    $this->actingAs(User::factory()->moderador()->create());
+    $a = fichaVentilador(['capacidad_producto' => '20000MAH']);
+    $b = fichaVentilador(['capacidad_producto' => '20000MAH']);
+
+    $response = $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id, $b->id],
+        'capacidad_producto' => '20000 MAH',
+    ]);
+
+    $response->assertForbidden();
+    expect($a->fresh()->capacidad_producto)->toBe('20000MAH');
+});
+
+test('un vendedor no puede editar productos en lote', function () {
+    $this->actingAs(User::factory()->vendedor()->create());
+    $a = fichaVentilador();
+    $b = fichaVentilador();
+
+    $response = $this->postJson(route('productos.editar-en-lote'), [
+        'productos_ids' => [$a->id, $b->id],
+        'capacidad_producto' => '20000 MAH',
+    ]);
+
+    $response->assertForbidden();
 });

@@ -55,6 +55,13 @@ Route::middleware(['auth', 'verified'])->group(
             ->middleware('admin')
             ->name('productos.lotes.fusionar');
 
+        // Editar en lote varios productos a la vez (solo admin, a diferencia de 'admin' arriba
+        // que también deja pasar moderador) — pedido del cliente 2026-10-02 tras el caso de
+        // Compra #14 (ficha "635W" duplicando "635 W" por un tipeo sin corregir a tiempo).
+        Route::post('/listado-productos/editar-en-lote', [ProductoController::class, 'editarEnLote'])
+            ->middleware('admin.only')
+            ->name('productos.editar-en-lote');
+
         // Override opcional de precio de venta por lote puntual ("Opción A", ver Edit.tsx/Show.tsx)
         Route::put('/listado-productos/{producto}/lotes/{lote}/precio-venta', [ProductoController::class, 'actualizarPrecioVentaLote'])
             ->name('productos.lotes.precio-venta');

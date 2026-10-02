@@ -244,18 +244,47 @@ class Producto extends Model
     }
 
     /**
-     * Scope para buscar productos por partes del nombre, marca o modelo
+     * Scope para buscar productos por partes del nombre, marca, modelo, capacidad o código.
+     * 3 mejoras sobre el LIKE simple de antes (pedido del cliente 2026-10-02):
+     * - Varios términos a la vez: "panel longi 635" encuentra el producto aunque las palabras
+     *   no estén juntas ni en ese orden — AND entre palabras, OR entre campos por palabra.
+     * - Capacidad tolerante a espacios: "635w" también encuentra "635 W" (comparación sin
+     *   espacios de los dos lados) — el mismo tipeo que duplicó la ficha de la Compra #14 (ver
+     *   docs/ESTADO_DESARROLLO.md, 2026-10-02).
+     * - Código de barras EXACTO: si el término completo coincide con un código real (ej. un
+     *   scanner lo pegó entero), salta directo a esa ficha sola, sin mezclar con texto libre.
      */
     public function scopeBuscar($query, $termino)
     {
-        return $query->where('nombre_producto', 'LIKE', "%{$termino}%")
-            ->orWhere('marca_producto', 'LIKE', "%{$termino}%")
-            ->orWhere('modelo_producto', 'LIKE', "%{$termino}%")
-            ->orWhere('capacidad_producto', 'LIKE', "%{$termino}%")
-            ->orWhere('codigo_producto', 'LIKE', "%{$termino}%")
-            ->orWhereHas('codigos', function ($q) use ($termino) {
-                $q->where('codigo_barras', 'LIKE', "%{$termino}%");
-            });
+        $termino = trim((string) $termino);
+
+        if ($termino === '') {
+            return $query;
+        }
+
+        $codigoExacto = DB::table('producto_codigos')->where('codigo_barras', $termino)->value('producto_id');
+        if ($codigoExacto) {
+            return $query->where('id', $codigoExacto);
+        }
+
+        $palabras = preg_split('/\s+/', $termino, -1, PREG_SPLIT_NO_EMPTY);
+
+        return $query->where(function ($q) use ($palabras) {
+            foreach ($palabras as $palabra) {
+                $sinEspacios = str_replace(' ', '', $palabra);
+
+                $q->where(function ($sub) use ($palabra, $sinEspacios) {
+                    $sub->where('nombre_producto', 'LIKE', "%{$palabra}%")
+                        ->orWhere('marca_producto', 'LIKE', "%{$palabra}%")
+                        ->orWhere('modelo_producto', 'LIKE', "%{$palabra}%")
+                        ->orWhereRaw('REPLACE(capacidad_producto, \' \', \'\') LIKE ?', ["%{$sinEspacios}%"])
+                        ->orWhere('codigo_producto', 'LIKE', "%{$palabra}%")
+                        ->orWhereHas('codigos', function ($qc) use ($palabra) {
+                            $qc->where('codigo_barras', 'LIKE', "%{$palabra}%");
+                        });
+                });
+            }
+        });
     }
 
     /**
