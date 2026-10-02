@@ -16,6 +16,7 @@ import {
     Coins,
     DollarSign,
     Edit,
+    HandCoins,
     Hash,
     Info,
     Settings,
@@ -37,6 +38,7 @@ interface Moneda {
     imagen: string | null;
     imagen_url: string | null;
     tasa_cambio: number;
+    tasa_comision: number | null;
     metodos_pago_resumen: MetodoResumen[];
     estado: boolean;
     principal: boolean;
@@ -269,6 +271,36 @@ export default function MonedaShow() {
 
                                 <div className="space-y-2">
                                     <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                                        <HandCoins className="h-4 w-4" />
+                                        Tasa de Comisión
+                                    </div>
+                                    {moneda.tasa_comision !== null ? (
+                                        <>
+                                            <p className="text-primary text-2xl font-bold">{formatNumber(moneda.tasa_comision)}</p>
+                                            <p className="text-muted-foreground text-sm">
+                                                Tasa usada al retirar comisión de Punto de Venta y Gestor
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Badge
+                                                variant="outline"
+                                                className="border-slate-300 bg-slate-100 font-normal text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
+                                            >
+                                                Sin configurar
+                                            </Badge>
+                                            <p className="text-muted-foreground text-sm">
+                                                Sin configurar: al retirar comisión se usa la Tasa de Cambio ({formatNumber(moneda.tasa_cambio)})
+                                                como punto de partida
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
+
+                                <Separator />
+
+                                <div className="space-y-2">
+                                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
                                         <Star className="h-4 w-4" />
                                         Tipo de Moneda
                                     </div>
@@ -374,6 +406,20 @@ export default function MonedaShow() {
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm">Tasa de Cambio</span>
                                     <span className="text-sm font-medium">{formatNumber(moneda.tasa_cambio)}</span>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm">Tasa de Comisión</span>
+                                    {moneda.tasa_comision !== null ? (
+                                        <span className="text-sm font-medium">{formatNumber(moneda.tasa_comision)}</span>
+                                    ) : (
+                                        <Badge
+                                            variant="outline"
+                                            className="border-slate-300 bg-slate-100 font-normal text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300"
+                                        >
+                                            Usa tasa cambio
+                                        </Badge>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>

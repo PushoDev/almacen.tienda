@@ -8,34 +8,23 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MetodosPagoResumen, type MetodoResumen } from '@/components/monedas/metodos-pago-resumen';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { MonedaCard, type MonedaCardData } from '@/components/MonedaCard';
+import { type MetodoResumen } from '@/components/monedas/metodos-pago-resumen';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Coins, Edit, Eye, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react'; // Importamos useEffect
+import { Coins, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
-interface Moneda {
-    id: number;
-    codigo_moneda: string;
-    nombre_moneda: string;
-    simbolo_moneda: string;
+interface Moneda extends MonedaCardData {
     imagen: string | null;
-    imagen_url: string | null;
-    tasa_cambio: number;
     metodos_pago_resumen: MetodoResumen[];
-    estado: boolean;
-    principal: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -65,6 +54,8 @@ export default function MonedasIndex() {
     const { monedas, success, error } = props;
 
     const [loadingStates, setLoadingStates] = useState<{ [key: number]: string }>({});
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [monedaSeleccionada, setMonedaSeleccionada] = useState<Moneda | null>(null);
 
     // Mostrar notificaciones si hay mensajes
     useEffect(() => {
@@ -89,8 +80,19 @@ export default function MonedasIndex() {
         );
     };
 
-    const handleDelete = (monedaId: number) => {
-        router.delete(route('monedas.destroy', { moneda: monedaId }), {
+    const handleDeleteClick = (moneda: MonedaCardData) => {
+        setMonedaSeleccionada(moneda as Moneda);
+        setDeleteConfirmOpen(true);
+    };
+
+    const confirmDelete = () => {
+        if (!monedaSeleccionada) return;
+
+        router.delete(route('monedas.destroy', { moneda: monedaSeleccionada.id }), {
+            onSuccess: () => {
+                setDeleteConfirmOpen(false);
+                setMonedaSeleccionada(null);
+            },
             onError: () => sileo.error({ title: 'Error al eliminar', description: 'No se pudo eliminar la moneda' }),
         });
     };
@@ -118,16 +120,22 @@ export default function MonedasIndex() {
                 </div>
 
                 {/* Listado de Monedas — mismo patrón de degradado que Monedas/Edit.tsx
-                    (docs/patron-card-header-degradado.md), violeta para todo el módulo. */}
-                <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                    (docs/patron-card-header-degradado.md), violeta para todo el módulo.
+                    Grilla de cards (en vez de tabla) siguiendo el mismo patrón que
+                    Cuentas/Index.tsx + CuentaCard.tsx: el catálogo de monedas ya tiene
+                    varios campos (tasas, métodos de pago, estado, principal) y es corto,
+                    así que no necesita paginación como Cuentas. */}
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
                         <div className="flex items-center gap-3">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                 <Coins className="h-5 w-5" />
                             </div>
                             <div>
                                 <CardTitle className="text-white">Lista de Monedas</CardTitle>
-                                <CardDescription className="text-violet-100">Gestiona todas las monedas disponibles en el sistema</CardDescription>
+                                <CardDescription className="text-violet-100">
+                                    {monedas.length} moneda{monedas.length !== 1 ? 's' : ''} en el sistema
+                                </CardDescription>
                             </div>
                         </div>
                         <Button asChild className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
@@ -137,189 +145,50 @@ export default function MonedasIndex() {
                             </Link>
                         </Button>
                     </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent text-white">
-                                    <TableHead className="text-white">Código</TableHead>
-                                    <TableHead className="text-white">Nombre</TableHead>
-                                    <TableHead className="text-white">Símbolo</TableHead>
-                                    <TableHead className="text-white">Tasa Cambio</TableHead>
-                                    <TableHead className="text-white">Métodos de pago</TableHead>
-                                    <TableHead className="text-white">Estado</TableHead>
-                                    <TableHead className="text-white">Principal</TableHead>
-                                    <TableHead className="text-right text-white">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {monedas.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
-                                            No hay monedas registradas
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    monedas.map((moneda) => (
-                                        <TableRow key={moneda.id}>
-                                            <TableCell className="font-mono font-bold">
-                                                <div className="flex items-center gap-2">
-                                                    {moneda.imagen_url ? (
-                                                        <img
-                                                            src={moneda.imagen_url}
-                                                            alt=""
-                                                            aria-hidden="true"
-                                                            className="h-6 w-9 rounded object-cover"
-                                                        />
-                                                    ) : (
-                                                        <Coins className="text-muted-foreground h-5 w-5" />
-                                                    )}
-                                                    {moneda.codigo_moneda}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="font-medium">{moneda.nombre_moneda}</TableCell>
-                                            <TableCell>{moneda.simbolo_moneda}</TableCell>
-                                            {/* 2 decimales para tasa */}
-                                            <TableCell>{formatNumber(moneda.tasa_cambio, 2)}</TableCell>
-                                            <TableCell>
-                                                <MetodosPagoResumen metodos={moneda.metodos_pago_resumen} compacto />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                    variant={moneda.estado ? 'default' : 'secondary'}
-                                                    className={moneda.estado ? 'bg-green-100 text-green-800 hover:bg-green-200' : ''}
-                                                >
-                                                    {moneda.estado ? 'Activa' : 'Inactiva'}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                {moneda.principal && (
-                                                    <Badge variant="default" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
-                                                        <Star className="mr-1 h-3 w-3" />
-                                                        Principal
-                                                    </Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <TooltipProvider>
-                                                        {/* Ver Detalles */}
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button variant="outline" size="sm" asChild>
-                                                                    <Link href={`/monedas/${moneda.id}`}>
-                                                                        <Eye className="h-4 w-4" />
-                                                                    </Link>
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>Ver detalles</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-
-                                                        {/* Editar */}
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button variant="outline" size="sm" asChild>
-                                                                    <Link href={`/monedas/${moneda.id}/edit`}>
-                                                                        <Edit className="h-4 w-4" />
-                                                                    </Link>
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>Editar moneda</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-
-                                                        {/* Establecer como Principal */}
-                                                        {!moneda.principal && moneda.estado && (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        onClick={() => handleAction(moneda.id, 'establecer-principal')}
-                                                                        disabled={loadingStates[moneda.id] === 'establecer-principal'}
-                                                                    >
-                                                                        {loadingStates[moneda.id] === 'establecer-principal' ? (
-                                                                            <RefreshCw className="h-4 w-4 animate-spin" />
-                                                                        ) : (
-                                                                            <Star className="h-4 w-4" />
-                                                                        )}
-                                                                    </Button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    <p>Establecer como principal</p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        )}
-
-                                                        {/* Cambiar Estado */}
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() => handleAction(moneda.id, 'cambiar-estado')}
-                                                                    disabled={loadingStates[moneda.id] === 'cambiar-estado' || moneda.principal}
-                                                                >
-                                                                    {loadingStates[moneda.id] === 'cambiar-estado' ? (
-                                                                        <RefreshCw className="h-4 w-4 animate-spin" />
-                                                                    ) : (
-                                                                        <RefreshCw className="h-4 w-4" />
-                                                                    )}
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>{moneda.estado ? 'Desactivar' : 'Activar'} moneda</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-
-                                                        {/* Eliminar */}
-                                                        {!moneda.principal && (
-                                                            <AlertDialog>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <AlertDialogTrigger asChild>
-                                                                            <Button variant="destructive" size="sm">
-                                                                                <Trash2 className="h-4 w-4" />
-                                                                            </Button>
-                                                                        </AlertDialogTrigger>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent>
-                                                                        <p>Eliminar moneda</p>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader>
-                                                                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                                                        <AlertDialogDescription>
-                                                                            Esta acción eliminará la moneda "{moneda.nombre_moneda}" (
-                                                                            {moneda.codigo_moneda}). Esta acción no se puede deshacer.
-                                                                        </AlertDialogDescription>
-                                                                    </AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                        <AlertDialogAction
-                                                                            onClick={() => handleDelete(moneda.id)}
-                                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                                        >
-                                                                            Eliminar
-                                                                        </AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
-                                                        )}
-                                                    </TooltipProvider>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                    <CardContent className="pt-5">
+                        {monedas.length === 0 ? (
+                            <div className="text-muted-foreground flex flex-col items-center gap-2 py-12 text-center">
+                                <Coins size={32} className="opacity-40" />
+                                <p>No hay monedas registradas</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {monedas.map((moneda) => (
+                                    <MonedaCard
+                                        key={moneda.id}
+                                        moneda={moneda}
+                                        loadingAction={loadingStates[moneda.id] ?? ''}
+                                        onCambiarEstado={() => handleAction(moneda.id, 'cambiar-estado')}
+                                        onEstablecerPrincipal={() => handleAction(moneda.id, 'establecer-principal')}
+                                        onDeleteClick={handleDeleteClick}
+                                        formatNumber={formatNumber}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
+
+            {/* ── Dialog: Confirmar eliminación ─────────────────────────── */}
+            <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta acción eliminará la moneda "{monedaSeleccionada?.nombre_moneda}" ({monedaSeleccionada?.codigo_moneda}). Esta
+                            acción no se puede deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setMonedaSeleccionada(null)}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Eliminar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <ScrollProgress />
             <Toaster position="top-center" />
         </AppLayout>
