@@ -10,10 +10,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
+import { ActualizarCostoAlmacenesDialog } from '@/components/actualizar-costo-almacenes-dialog';
 import AppLayout from '@/layouts/app-layout';
 import { sileo } from '@/lib/sileo';
 import { CategoriasProps, FichaHermanaProps, LoteStockProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowRightLeft,
@@ -238,6 +239,13 @@ export default function EditarProductosPage({
             },
         });
     };
+
+    // "Actualizar costo por almacén" (2026-10-02, pedido del cliente): el admin elige a mano en
+    // qué almacenes aplicar un costo combinado — ver components/actualizar-costo-almacenes-dialog.tsx.
+    // Reemplaza lo que había antes acá (un botón por almacén, solo servía si ya tenía 2+ lotes):
+    // ahora es un único selector que deja elegir CUALQUIER combinación de almacenes, incluso uno
+    // con un solo lote.
+    const [showActualizarCosto, setShowActualizarCosto] = useState(false);
 
     const doPost = () => {
         post(route('productos.update', { producto: producto.id }), {
@@ -583,7 +591,7 @@ export default function EditarProductosPage({
                 {/* Costo y Precio por Almacén */}
                 {tieneAlmacenes && (
                     <Card className="overflow-hidden border-0 pt-0 shadow-lg">
-                        <CardHeader className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                        <CardHeader className="flex-row items-center justify-between space-y-0 bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
                             <div className="flex items-center gap-3">
                                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                     <Warehouse className="h-5 w-5" />
@@ -595,6 +603,17 @@ export default function EditarProductosPage({
                                     </CardDescription>
                                 </div>
                             </div>
+                            {isPrivileged && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => setShowActualizarCosto(true)}
+                                    className="gap-1.5 border-white/30 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
+                                >
+                                    <Layers size={14} />
+                                    Actualizar costo por almacén
+                                </Button>
+                            )}
                         </CardHeader>
                         <CardContent className="pt-6">
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1258,6 +1277,13 @@ export default function EditarProductosPage({
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+
+                <ActualizarCostoAlmacenesDialog
+                    productoId={producto.id}
+                    open={showActualizarCosto}
+                    onOpenChange={setShowActualizarCosto}
+                    onCompletado={() => router.reload()}
+                />
 
                 <Toaster position="top-center" />
             </div>

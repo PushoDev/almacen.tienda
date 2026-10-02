@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\HistorialPrecioCosto;
+use App\Models\LoteStock;
 use App\Models\PrecioHistorial;
 use App\Models\Producto;
 use App\Models\User;
@@ -39,7 +41,11 @@ class FusionProductosService
         'costo_historials' => 'product_id',
     ];
 
-    public function __construct(private FichasHermanasService $fichasHermanas) {}
+    public function __construct(
+        private FichasHermanasService $fichasHermanas,
+        private ValorInventarioService $valorInventario,
+        private FusionLotesService $fusionLotes
+    ) {}
 
     /**
      * Almacenes donde las fichas tienen precios de venta distintos entre sí (precio o comisión)
@@ -155,14 +161,207 @@ class FusionProductosService
             $conservar->refresh();
             $this->fusionarPrecios($conservar, $eliminarIds, $todas, $preciosPorAlmacen, $user);
 
+            $cantidadTotal = (int) DB::table('almacen_producto')->where('producto_id', $conservar->id)->sum('cantidad');
+            $this->actualizarCostoGlobal($conservar, $user, $cantidadTotal);
+
             Producto::whereIn('id', $eliminarIds)->get()->each->delete();
 
             return [
                 'producto_id' => $conservar->id,
                 'fichas_fusionadas' => count($eliminarIds),
-                'cantidad_total' => (int) DB::table('almacen_producto')->where('producto_id', $conservar->id)->sum('cantidad'),
+                'cantidad_total' => $cantidadTotal,
                 'registros_reasignados' => $reasignados,
+                // Para el paso obligatorio del frontend ("¿en qué almacenes aplicar el nuevo
+                // costo?", ver actualizarCostoEnAlmacenes()) — todos los almacenes donde la
+                // ficha conservada tiene stock, con los que tienen lotes a costo distinto ya
+                // marcados como sugeridos (el admin puede marcar cualquier otro igual).
+                'almacenes' => $this->almacenesConStock($conservar->id),
             ];
+        });
+    }
+
+    /**
+     * Recalcula el costo global de la ficha (promedio ponderado real de TODOS sus lotes, ya con
+     * los de las fichas fusionadas) y lo guarda en `precio_compra_producto` — hasta este fix esa
+     * columna se quedaba con el valor que tenía la ficha conservada ANTES de fusionar, aunque
+     * `Productos/Index` ya mostrara el promedio correcto (lo recalcula en vivo desde
+     * `lotes_stock`, nunca lee esta columna; `Show.tsx`/`Edit.tsx` sí la leen tal cual, ver
+     * `ProductoController::show()`/`edit()` — ahí es donde se veía el costo viejo). Pedido
+     * del cliente 2026-10-02, tras encontrarlo en la fusión real de PANEL SOLAR LONGI BIFACIAL.
+     *
+     * Deja constancia en `historial_precio_costos` (misma tabla, mismos campos y mismo criterio
+     * de `es_perdida` que usa `ProductoController::update()` para una corrección manual con
+     * `almacen_id` null = cambio global de la ficha) para que el cambio quede visible en el
+     * reporte "Historial de Precio de Costo" — el admin puede ver qué pasó con el producto.
+     */
+    private function actualizarCostoGlobal(
+        Producto $conservar,
+        User $user,
+        int $cantidadTotal,
+        string $motivo = 'Fusión de fichas duplicadas — costo recalculado como promedio ponderado tras unir el stock.'
+    ): void {
+        $costoAnterior = (float) $conservar->precio_compra_producto;
+        $costoNuevo = $this->valorInventario->costosPonderadosPorProducto([$conservar->id])[$conservar->id] ?? $costoAnterior;
+
+        if (abs($costoNuevo - $costoAnterior) < 0.005) {
+            return;
+        }
+
+        $conservar->update(['precio_compra_producto' => $costoNuevo]);
+
+        $diferencia = $costoNuevo - $costoAnterior;
+        $impactoFinanciero = $diferencia * $cantidadTotal;
+
+        HistorialPrecioCosto::create([
+            'producto_id' => $conservar->id,
+            'almacen_id' => null,
+            'user_id' => $user->id,
+            'precio_anterior' => $costoAnterior,
+            'precio_nuevo' => $costoNuevo,
+            'diferencia' => $diferencia,
+            'stock_momento' => $cantidadTotal,
+            'impacto_financiero' => $impactoFinanciero,
+            'es_perdida' => $impactoFinanciero < 0,
+            'motivo' => $motivo,
+        ]);
+    }
+
+    /**
+     * Todos los almacenes donde el producto tiene stock disponible, con su cantidad, costo
+     * promedio ponderado real y cuántos lotes distintos tiene ahí — para el selector del
+     * frontend ("¿en qué almacenes aplicar el nuevo costo?"). `sugerido` marca los que ya
+     * tienen 2+ lotes a costo distinto (normalmente porque ahí coincidía stock de fichas recién
+     * fusionadas), para que el frontend los preseleccione — el admin puede marcar cualquier
+     * otro igual, sugerido no es una restricción.
+     *
+     * @return array<int, array{almacen_id: int, nombre_almacen: string, cantidad: int, costo: float, lotes: int, sugerido: bool}>
+     */
+    public function almacenesConStock(int $productoId): array
+    {
+        return DB::table('lotes_stock')
+            ->join('almacens', 'almacens.id', '=', 'lotes_stock.almacen_id')
+            ->where('lotes_stock.producto_id', $productoId)
+            ->where('lotes_stock.cantidad_disponible', '>', 0)
+            ->selectRaw(
+                'lotes_stock.almacen_id, almacens.nombre_almacen, '.
+                'SUM(lotes_stock.cantidad_disponible) as cantidad, '.
+                'SUM(lotes_stock.cantidad_disponible * lotes_stock.precio_costo) as valor, '.
+                'COUNT(*) as lotes, COUNT(DISTINCT lotes_stock.precio_costo) as costos_distintos'
+            )
+            ->groupBy('lotes_stock.almacen_id', 'almacens.nombre_almacen')
+            ->orderBy('almacens.nombre_almacen')
+            ->get()
+            ->map(fn ($fila) => [
+                'almacen_id' => (int) $fila->almacen_id,
+                'nombre_almacen' => $fila->nombre_almacen,
+                'cantidad' => (int) $fila->cantidad,
+                'costo' => round($fila->valor / $fila->cantidad, 2),
+                // Valor crudo (sin redondear) — el frontend lo usa para el preview del costo
+                // combinado; sumar cantidad*costo ya redondeado por almacén arrastra un error de
+                // hasta 1 centavo frente al cálculo real que hace actualizarCostoEnAlmacenes().
+                'valor' => (float) $fila->valor,
+                'lotes' => (int) $fila->lotes,
+                'sugerido' => (int) $fila->lotes > 1 && (int) $fila->costos_distintos > 1,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Actualiza el costo de TODOS los lotes en los almacenes seleccionados a UN SOLO promedio
+     * ponderado — calculado combinando el stock/valor de esos almacenes JUNTOS, no uno por
+     * almacén por separado (pedido explícito del cliente 2026-10-02: si selecciona Quivican
+     * junto con Bejucal, el número sale de ambos combinados, y Quivican también cambia aunque
+     * tenga un solo lote sin nada que fusionar). Nunca automático — el admin elige los
+     * almacenes a mano, siempre con un paso de confirmación antes (ver
+     * `components/actualizar-costo-almacenes-dialog.tsx`).
+     *
+     * Por almacén: 2+ lotes → se fusionan en uno con `FusionLotesService` (costo forzado al
+     * combinado, auditado en `lote_fusions`); 1 solo lote → se corrige directo y se audita en
+     * `historial_precio_costos` (mismo criterio que la corrección manual de
+     * `ProductoController::update()`).
+     *
+     * @param  array<int, int>  $almacenIds
+     * @return array{costo: float, cantidad_total: int, almacenes: array<int, array{almacen_id: int, nombre_almacen: string, accion: string}>}
+     *
+     * @throws ValidationException si algún almacén no tiene stock de este producto
+     */
+    public function actualizarCostoEnAlmacenes(Producto $producto, array $almacenIds, User $user): array
+    {
+        return DB::transaction(function () use ($producto, $almacenIds, $user) {
+            $lotes = LoteStock::where('producto_id', $producto->id)
+                ->whereIn('almacen_id', $almacenIds)
+                ->where('cantidad_disponible', '>', 0)
+                ->with('almacen:id,nombre_almacen')
+                ->lockForUpdate()
+                ->get();
+
+            $almacenesSinStock = array_diff($almacenIds, $lotes->pluck('almacen_id')->unique()->all());
+            if ($almacenesSinStock !== []) {
+                throw ValidationException::withMessages([
+                    'almacen_ids' => 'Almacén(es) #'.implode(', #', $almacenesSinStock).' no tienen stock de este producto.',
+                ]);
+            }
+
+            $cantidadTotal = (int) $lotes->sum('cantidad_disponible');
+            $valorTotal = $lotes->sum(fn (LoteStock $lote) => $lote->cantidad_disponible * (float) $lote->precio_costo);
+            $costoCombinado = round($valorTotal / $cantidadTotal, 2);
+
+            $resultado = [];
+            foreach ($lotes->groupBy('almacen_id') as $almacenId => $lotesDelAlmacen) {
+                $nombreAlmacen = $lotesDelAlmacen->first()->almacen->nombre_almacen ?? "Almacén #{$almacenId}";
+
+                if ($lotesDelAlmacen->count() > 1) {
+                    $this->fusionLotes->fusionar(
+                        $producto->id,
+                        (int) $almacenId,
+                        $lotesDelAlmacen->pluck('id')->all(),
+                        null,
+                        $user,
+                        $costoCombinado,
+                    );
+                    $resultado[] = ['almacen_id' => (int) $almacenId, 'nombre_almacen' => $nombreAlmacen, 'accion' => 'fusionado'];
+
+                    continue;
+                }
+
+                $lote = $lotesDelAlmacen->first();
+                $costoAnterior = (float) $lote->precio_costo;
+
+                if (abs($costoCombinado - $costoAnterior) >= 0.005) {
+                    $lote->update(['precio_costo' => $costoCombinado]);
+
+                    $diferencia = $costoCombinado - $costoAnterior;
+                    $impactoFinanciero = $diferencia * $lote->cantidad_disponible;
+
+                    HistorialPrecioCosto::create([
+                        'producto_id' => $producto->id,
+                        'almacen_id' => $almacenId,
+                        'user_id' => $user->id,
+                        'precio_anterior' => $costoAnterior,
+                        'precio_nuevo' => $costoCombinado,
+                        'diferencia' => $diferencia,
+                        'stock_momento' => $lote->cantidad_disponible,
+                        'impacto_financiero' => $impactoFinanciero,
+                        'es_perdida' => $impactoFinanciero < 0,
+                        'motivo' => 'Costo actualizado al promedio combinado de los almacenes elegidos (sin fusión: este almacén solo tenía 1 lote).',
+                    ]);
+                }
+                $resultado[] = ['almacen_id' => (int) $almacenId, 'nombre_almacen' => $nombreAlmacen, 'accion' => 'corregido'];
+            }
+
+            // El costo global de la ficha puede haber cambiado (algún lote tocado puede no
+            // haber sido parte del cálculo original) — se recalcula con el mismo criterio que
+            // la fusión de fichas, mismo historial.
+            $cantidadTotalFicha = (int) DB::table('almacen_producto')->where('producto_id', $producto->id)->sum('cantidad');
+            $this->actualizarCostoGlobal(
+                $producto,
+                $user,
+                $cantidadTotalFicha,
+                'Costo actualizado al promedio combinado de los almacenes elegidos por el admin.'
+            );
+
+            return ['costo' => $costoCombinado, 'cantidad_total' => $cantidadTotal, 'almacenes' => $resultado];
         });
     }
 

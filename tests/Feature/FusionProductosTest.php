@@ -3,6 +3,7 @@
 use App\Models\Almacen;
 use App\Models\Categoria;
 use App\Models\Compra;
+use App\Models\HistorialPrecioCosto;
 use App\Models\LoteStock;
 use App\Models\Movimiento;
 use App\Models\PrecioHistorial;
@@ -95,6 +96,201 @@ test('fusionar reasigna ventas, compras, lotes, movimientos y códigos en vez de
         ->and((float) $loteEliminado->fresh()->precio_costo)->toBe(37.0)
         ->and($conservar->fresh()->costoEnAlmacen($almacen->id))->toBe(32.33);
     $this->assertDatabaseHas('almacen_producto', ['producto_id' => $conservar->id, 'almacen_id' => $almacen->id, 'cantidad' => 15]);
+});
+
+test('fusionar recalcula el costo global ponderado en la ficha conservada y lo registra en el historial de precio de costo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->create();
+    // La ficha que va a quedar ("conservar") tiene más stock que la eliminada — mismo criterio
+    // que preselecciona FusionFichasDialog en el frontend.
+    $conservar = fichaVentilador(['precio_compra_producto' => 118.82]);
+    $eliminar = fichaVentilador(['precio_compra_producto' => 231.45]);
+    stockConLote($conservar, $almacen, 360, 118.82);
+    stockConLote($eliminar, $almacen, 28, 231.45);
+
+    $response = $this->postJson(route('productos.fusionar'), [
+        'producto_conservar_id' => $conservar->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ]);
+
+    $response->assertOk();
+    // (360*118.82 + 28*231.45) / 388 = 126.95 — el mismo caso real de PANEL SOLAR LONGI BIFACIAL.
+    expect((float) $conservar->fresh()->precio_compra_producto)->toBe(126.95);
+
+    $historial = HistorialPrecioCosto::where('producto_id', $conservar->id)->where('almacen_id', null)->first();
+    expect($historial)->not->toBeNull()
+        ->and((float) $historial->precio_anterior)->toBe(118.82)
+        ->and((float) $historial->precio_nuevo)->toBe(126.95)
+        ->and($historial->stock_momento)->toBe(388)
+        ->and($historial->user_id)->toBe($admin->id)
+        ->and($historial->es_perdida)->toBeFalse(); // el costo subió, no es pérdida de valor
+});
+
+test('fusionar informa todos los almacenes con stock y marca como sugeridos los que quedaron con lotes a costo distinto, sin tocarlos', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $bejucal = Almacen::factory()->create();
+    $quivican = Almacen::factory()->create();
+    $conservar = fichaVentilador(['precio_compra_producto' => 118.82]);
+    $eliminar = fichaVentilador(['precio_compra_producto' => 231.45]);
+    // Bejucal: coincide stock de las 2 fichas a costo distinto — sugerido.
+    stockConLote($conservar, $bejucal, 360, 118.82);
+    stockConLote($eliminar, $bejucal, 18, 231.45);
+    // Quivican: solo la ficha eliminada tenía stock ahí — pasa a la conservada con 1 solo lote,
+    // aparece en la lista (el admin puede elegirlo igual) pero no viene sugerido.
+    stockConLote($eliminar, $quivican, 4, 231.45);
+
+    $response = $this->postJson(route('productos.fusionar'), [
+        'producto_conservar_id' => $conservar->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ]);
+
+    $response->assertOk()->assertJsonCount(2, 'resultado.almacenes');
+    $almacenes = collect($response->json('resultado.almacenes'))->keyBy('almacen_id');
+    expect($almacenes[$bejucal->id]['sugerido'])->toBeTrue()
+        ->and($almacenes[$bejucal->id]['lotes'])->toBe(2)
+        ->and($almacenes[$quivican->id]['sugerido'])->toBeFalse()
+        ->and($almacenes[$quivican->id]['lotes'])->toBe(1);
+
+    // No se tocó ningún lote — la unificación la dispara el admin aparte, nunca automática.
+    expect(LoteStock::where('producto_id', $conservar->id)->where('almacen_id', $bejucal->id)->count())->toBe(2);
+});
+
+test('fusionar no marca como sugerido un almacén con 2 lotes si ya tienen el mismo costo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $conservar = fichaVentilador(['precio_compra_producto' => 30]);
+    $eliminar = fichaVentilador(['precio_compra_producto' => 30]);
+    stockConLote($conservar, $almacen, 10, 30);
+    stockConLote($eliminar, $almacen, 5, 30);
+
+    $response = $this->postJson(route('productos.fusionar'), [
+        'producto_conservar_id' => $conservar->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ]);
+
+    $response->assertOk()->assertJsonPath('resultado.almacenes.0.sugerido', false);
+});
+
+test('fusionar no crea historial de costo si el promedio ponderado no cambia', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $almacen = Almacen::factory()->create();
+    $conservar = fichaVentilador(['precio_compra_producto' => 30]);
+    $eliminar = fichaVentilador(['precio_compra_producto' => 30]);
+    stockConLote($conservar, $almacen, 10, 30);
+    stockConLote($eliminar, $almacen, 5, 30);
+
+    $this->postJson(route('productos.fusionar'), [
+        'producto_conservar_id' => $conservar->id,
+        'productos_eliminar_ids' => [$eliminar->id],
+    ])->assertOk();
+
+    expect((float) $conservar->fresh()->precio_compra_producto)->toBe(30.0);
+    expect(HistorialPrecioCosto::where('producto_id', $conservar->id)->count())->toBe(0);
+});
+
+// ===========================================================================
+// actualizarCostoEnAlmacenes() — el admin elige a mano en qué almacenes aplicar un costo
+// combinado. Caso real: PANEL SOLAR LONGI BIFACIAL (Bejucal 378 unds mezcladas + Quivican 4
+// unds sin mezclar, ambos elegidos juntos).
+// ===========================================================================
+
+test('actualizarCostoEnAlmacenes combina el stock de los almacenes elegidos en un solo promedio y lo aplica a ambos', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $bejucal = Almacen::factory()->create();
+    $quivican = Almacen::factory()->create();
+    $producto = fichaVentilador(['precio_compra_producto' => 118.82]);
+    // Bejucal: 2 lotes del MISMO producto a costo distinto (lo que ya se fusiona con
+    // FusionLotesService) — stockConLote() no sirve para el segundo (codigo repetido).
+    $loteA = stockConLote($producto, $bejucal, 360, 118.82);
+    $loteB = LoteStock::create(['codigo' => 'LOTE-BEJUCAL-B', 'producto_id' => $producto->id, 'almacen_id' => $bejucal->id, 'cantidad' => 18, 'cantidad_disponible' => 18, 'precio_costo' => 231.45]);
+    $producto->almacenes()->updateExistingPivot($bejucal->id, ['cantidad' => 378]);
+    // Quivican: 1 solo lote — nada que fusionar, pero igual debe cambiar si se elige.
+    $loteQuivican = stockConLote($producto, $quivican, 4, 231.45);
+
+    $response = $this->postJson(route('productos.actualizar-costo-almacenes', $producto), [
+        'almacen_ids' => [$bejucal->id, $quivican->id],
+    ]);
+
+    $response->assertOk();
+    // (360*118.82 + 18*231.45 + 4*231.45) / 382 = 125.31 — combinado de los 2 almacenes juntos
+    // (distinto del 126.95 que daría Bejucal+eliminada sola, acá es con Quivican también).
+    $response->assertJsonPath('resultado.costo', 125.31);
+
+    // Bejucal: los 2 lotes viejos quedan en 0, fusionados en uno nuevo a 125.31 (no el local 124.18).
+    expect($loteA->fresh()->cantidad_disponible)->toBe(0)
+        ->and($loteB->fresh()->cantidad_disponible)->toBe(0);
+    $loteFusionado = LoteStock::where('producto_id', $producto->id)->where('almacen_id', $bejucal->id)->where('cantidad_disponible', '>', 0)->first();
+    expect((float) $loteFusionado->precio_costo)->toBe(125.31)
+        ->and($loteFusionado->cantidad_disponible)->toBe(378);
+
+    // Quivican: el único lote se corrige directo al mismo costo combinado, sin fusionarse con nada.
+    expect((float) $loteQuivican->fresh()->precio_costo)->toBe(125.31);
+
+    $historialQuivican = HistorialPrecioCosto::where('producto_id', $producto->id)->where('almacen_id', $quivican->id)->first();
+    expect($historialQuivican)->not->toBeNull()
+        ->and((float) $historialQuivican->precio_anterior)->toBe(231.45)
+        ->and((float) $historialQuivican->precio_nuevo)->toBe(125.31)
+        ->and($historialQuivican->user_id)->toBe($admin->id);
+
+    // El costo global de la ficha también queda al día.
+    expect((float) $producto->fresh()->precio_compra_producto)->toBe(125.31);
+});
+
+test('actualizarCostoEnAlmacenes solo toca los almacenes elegidos, no los demás', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $bejucal = Almacen::factory()->create();
+    $laSalud = Almacen::factory()->create();
+    $producto = fichaVentilador(['precio_compra_producto' => 100]);
+    stockConLote($producto, $bejucal, 10, 100);
+    $loteLaSalud = stockConLote($producto, $laSalud, 5, 50);
+
+    $this->postJson(route('productos.actualizar-costo-almacenes', $producto), [
+        'almacen_ids' => [$bejucal->id],
+    ])->assertOk();
+
+    // La Salud no se eligió — sigue con su costo original.
+    expect((float) $loteLaSalud->fresh()->precio_costo)->toBe(50.0);
+    expect(HistorialPrecioCosto::where('producto_id', $producto->id)->where('almacen_id', $laSalud->id)->count())->toBe(0);
+});
+
+test('actualizarCostoEnAlmacenes rechaza un almacén donde el producto no tiene stock', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $conStock = Almacen::factory()->create();
+    $sinStock = Almacen::factory()->create();
+    $producto = fichaVentilador();
+    stockConLote($producto, $conStock, 10, 30);
+
+    $response = $this->postJson(route('productos.actualizar-costo-almacenes', $producto), [
+        'almacen_ids' => [$conStock->id, $sinStock->id],
+    ]);
+
+    $response->assertStatus(422)->assertJson(['success' => false]);
+});
+
+test('un moderador puede usar actualizarCostoEnAlmacenes (misma familia que fusionar lotes)', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+    $almacen = Almacen::factory()->create();
+    $producto = fichaVentilador(['precio_compra_producto' => 30]);
+    stockConLote($producto, $almacen, 10, 30);
+
+    $this->postJson(route('productos.actualizar-costo-almacenes', $producto), [
+        'almacen_ids' => [$almacen->id],
+    ])->assertOk();
+});
+
+test('un vendedor no puede usar actualizarCostoEnAlmacenes', function () {
+    $this->actingAs(User::factory()->vendedor()->create());
+    $almacen = Almacen::factory()->create();
+    $producto = fichaVentilador();
+    stockConLote($producto, $almacen, 10, 30);
+
+    $this->postJson(route('productos.actualizar-costo-almacenes', $producto), [
+        'almacen_ids' => [$almacen->id],
+    ])->assertForbidden();
 });
 
 test('un código de barras repetido se unifica y la venta que lo usaba apunta al que queda', function () {

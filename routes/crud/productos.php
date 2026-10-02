@@ -20,6 +20,11 @@ Route::middleware(['auth', 'verified'])->group(
             // almacenes sin relación entre sí.
             Route::post('/listado-productos/{producto}/fusionar-en-almacen', [ProductoController::class, 'fusionarEnAlmacen'])->name('productos.fusionar-en-almacen');
 
+            // "¿En qué almacenes aplicar el nuevo costo?" (2026-10-02, pedido del cliente): paso
+            // suelto desde Edit.tsx o disparado al terminar una fusión en Limpiar duplicados.
+            Route::get('/listado-productos/{producto}/almacenes-con-stock', [ProductoController::class, 'almacenesConStock'])->name('productos.almacenes-con-stock');
+            Route::post('/listado-productos/{producto}/actualizar-costo-almacenes', [ProductoController::class, 'actualizarCostoEnAlmacenes'])->name('productos.actualizar-costo-almacenes');
+
             // Historial de importaciones de Excel: listado, detalle fila por fila y vista previa de "deshacer".
             Route::get('/importaciones-productos', [ImportacionProductoController::class, 'index'])->name('importaciones-productos.index');
             Route::get('/importaciones-productos/{importacion}', [ImportacionProductoController::class, 'show'])->name('importaciones-productos.show');

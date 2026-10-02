@@ -1267,6 +1267,43 @@ class ProductoController extends Controller
     }
 
     /**
+     * Almacenes con stock de este producto, para el selector de "¿en qué almacenes aplicar el
+     * nuevo costo?" — ver FusionProductosService::almacenesConStock().
+     */
+    public function almacenesConStock(Producto $producto, FusionProductosService $fusion)
+    {
+        return response()->json(['almacenes' => $fusion->almacenesConStock($producto->id)]);
+    }
+
+    /**
+     * Actualiza el costo de los almacenes elegidos a un solo promedio ponderado combinado —
+     * pedido explícito del cliente 2026-10-02 (ver FusionProductosService::actualizarCostoEnAlmacenes()).
+     * Paso disponible tanto suelto desde Productos/Edit.tsx como obligatorio al terminar una
+     * fusión en "Limpiar duplicados" (ActualizarCostoAlmacenesDialog, los dos reusan esto).
+     */
+    public function actualizarCostoEnAlmacenes(Request $request, Producto $producto, FusionProductosService $fusion)
+    {
+        $validated = $request->validate([
+            'almacen_ids' => 'required|array|min:1',
+            'almacen_ids.*' => 'integer|distinct|exists:almacens,id',
+        ]);
+
+        try {
+            $resultado = $fusion->actualizarCostoEnAlmacenes($producto, array_map('intval', $validated['almacen_ids']), $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->first()[0] ?? 'No se pudo actualizar'], 422);
+        }
+
+        $almacenesTexto = collect($resultado['almacenes'])->pluck('nombre_almacen')->implode(', ');
+
+        return response()->json([
+            'success' => true,
+            'message' => "Costo actualizado a {$resultado['costo']} en: {$almacenesTexto} ({$resultado['cantidad_total']} unidades en total).",
+            'resultado' => $resultado,
+        ]);
+    }
+
+    /**
      * Fusiona fichas hermanas dentro de UN SOLO almacén, desde el lápiz de "Fusionar fichas en
      * este almacén" de Productos/Edit.tsx. A diferencia de fusionarDuplicados() (el buscador
      * global de /productos), rechaza cualquier ficha a eliminar que también tenga stock en otro

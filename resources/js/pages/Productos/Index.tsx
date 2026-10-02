@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EditarEnLoteDialog, type ProductoSeleccionado } from '@/components/editar-en-lote-dialog';
 import { FusionFichasDialog, type GrupoDuplicado } from '@/components/fusion-fichas-dialog';
+import { ActualizarCostoAlmacenesDialog } from '@/components/actualizar-costo-almacenes-dialog';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -372,6 +373,10 @@ export default function ProductosPage({
     const [seleccionLote, setSeleccionLote] = useState<number[]>([]);
     const [showEditarLoteDialog, setShowEditarLoteDialog] = useState(false);
     const [showFusionModal, setShowFusionModal] = useState(false);
+
+    // "¿En qué almacenes aplicar el nuevo costo?" — paso obligatorio tras una fusión real (ver
+    // ActualizarCostoAlmacenesDialog); costoAlmacenesProductoId es la ficha recién fusionada.
+    const [costoAlmacenesProductoId, setCostoAlmacenesProductoId] = useState<number | null>(null);
 
     // Calcular estadísticas
     const productosData = productos.data || [];
@@ -1404,6 +1409,15 @@ export default function ProductosPage({
                         cargarDuplicados();
                         router.reload();
                     }}
+                    onFusionCompletada={(productoId) => setCostoAlmacenesProductoId(productoId)}
+                />
+
+                <ActualizarCostoAlmacenesDialog
+                    productoId={costoAlmacenesProductoId}
+                    open={costoAlmacenesProductoId !== null}
+                    onOpenChange={(open) => !open && setCostoAlmacenesProductoId(null)}
+                    onCompletado={() => router.reload()}
+                    contexto="fusion"
                 />
 
                 {/* Edición en lote (solo admin) — aparte de Limpiar duplicados */}
