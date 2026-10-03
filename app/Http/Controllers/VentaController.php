@@ -324,18 +324,26 @@ class VentaController extends Controller
         }
 
         // Filtrar por usuario si no es admin
-        if (! in_array($user->role, ['admin', 'moderador'])) {
+        $esVendedor = ! in_array($user->role, ['admin', 'moderador']);
+        if ($esVendedor) {
             $query->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
         }
 
+        // Un vendedor puede cobrar igual en una cuenta `completo` o `cobro` (esta sí es su función),
+        // pero el saldo solo lo puede VER en las de acceso `completo` — en las de `cobro` se oculta
+        // (antes viajaba igual en el JSON aunque PaymentForm.tsx nunca lo pintara en pantalla).
+        $idsConSaldoVisible = $esVendedor ? $user->cuentasCompletas()->pluck('cuentas.id') : null;
+
         $cuentas = $query->get()
-            ->map(function ($cuenta) {
+            ->map(function ($cuenta) use ($idsConSaldoVisible) {
+                $puedeVerSaldo = $idsConSaldoVisible === null || $idsConSaldoVisible->contains($cuenta->id);
+
                 return [
                     'id' => $cuenta->id,
                     'nombre_cuenta' => $cuenta->nombre_cuenta,
-                    'saldo_actual' => $cuenta->saldo_cuenta,
+                    'saldo_actual' => $puedeVerSaldo ? $cuenta->saldo_cuenta : null,
                     'tipo' => $cuenta->tipo,
                     // Logo real del banco/tarjeta (o insignia de efectivo) para identificar la cuenta
                     // de un vistazo en "Destino del Pago" — mismo mecanismo que Cuentas/Index.tsx.
@@ -683,6 +691,7 @@ class VentaController extends Controller
             'es_venta_especial' => (bool) $venta->es_venta_especial,
             'nota_venta_especial' => $venta->nota_venta_especial,
             'tipo_venta_especial' => $venta->tipo_venta_especial,
+            'es_venta_sin_comision' => (bool) $venta->es_venta_sin_comision,
             'puede_decidir_solicitud_especial' => $this->puedeDecidirEstaSolicitud($venta),
             'decision_notificada' => (bool) $venta->decision_notificada,
             'mensajero' => $venta->mensajero_monto > 0 ? [
@@ -933,6 +942,10 @@ class VentaController extends Controller
             // VENTA ESPECIAL
             'es_venta_especial' => 'nullable|boolean',
             'nota_venta_especial' => 'nullable|string|max:500|required_if:es_venta_especial,true',
+            // VENTA SIN COMISIÓN: decisión manual del vendedor/empleado por orden directa del dueño
+            // (por ejemplo, por teléfono) — nadie gana comisión por esta venta, queda íntegra para
+            // la agencia. El mensajero no se ve afectado.
+            'es_venta_sin_comision' => 'nullable|boolean',
             // MENSAJERO
             'mensajero_monto' => 'nullable|numeric|min:0.01',
             // 'propio' (vehículo propio) no está implementado — ver el bloque comentado
@@ -1024,6 +1037,7 @@ class VentaController extends Controller
             $costo_total_productos = 0;
             $esGestor = $validatedData['es_venta_gestor'] ?? false;
             $esEspecial = (bool) ($validatedData['es_venta_especial'] ?? false);
+            $esSinComision = (bool) ($validatedData['es_venta_sin_comision'] ?? false);
 
             // Pre-cargar precios del almacén para todos los productos del carrito
             $productIds = collect($validatedData['items'])->pluck('producto_id')->unique()->toArray();
@@ -1179,6 +1193,8 @@ class VentaController extends Controller
                 // CAMPOS VENTA ESPECIAL
                 'es_venta_especial' => $esEspecial,
                 'nota_venta_especial' => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                // VENTA SIN COMISIÓN: independiente de especial/gestor, puede combinarse con cualquiera
+                'es_venta_sin_comision' => $esSinComision,
                 'tipo_venta_especial' => $esEspecial ? ($hayLineaBajoCosto ? 'bajo_costo' : 'descuento') : null,
                 'decision_notificada' => false,
                 // MENSAJERO
@@ -1214,7 +1230,7 @@ class VentaController extends Controller
                 $baseComision = (! $esEspecial && $productoVendedor) ? $referencia['comision'] : 0;
 
                 // Calcular comisión según el precio aplicado
-                if ($esEspecial || $esGestor) {
+                if ($esEspecial || $esGestor || $esSinComision) {
                     $comisionUnitaria = 0;
                 } elseif ((float) $item['precio_venta'] >= $precioBase) {
                     // Igual o por encima del precio base: comisión base + markup extra
@@ -1381,6 +1397,14 @@ class VentaController extends Controller
 
         // Validar datos del gestor si está activado
         if ($request->boolean('es_venta_gestor')) {
+            // Una venta "sin comisión" (de la agencia) no puede convertirse en Gestor desde acá —
+            // el switch dice que nadie gana comisión, incluido un gestor con su propio gestor_monto.
+            if ($venta->es_venta_sin_comision) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Esta venta es de la agencia (sin comisión) y no puede tener Gestor.',
+                ], 422);
+            }
             if (empty($validated['gestor_cuenta_id'])) {
                 return response()->json([
                     'success' => false,
@@ -1897,6 +1921,7 @@ class VentaController extends Controller
                     'es_venta_especial' => (bool) $venta->es_venta_especial,
                     'nota_venta_especial' => $venta->nota_venta_especial,
                     'tipo_venta_especial' => $venta->tipo_venta_especial,
+                    'es_venta_sin_comision' => (bool) $venta->es_venta_sin_comision,
                     'puede_decidir_solicitud_especial' => $this->puedeDecidirEstaSolicitud($venta),
                     // MENSAJERO
                     'mensajero' => $venta->mensajero_monto > 0 ? [
@@ -2049,9 +2074,9 @@ class VentaController extends Controller
 
                         // Recalcular comisión
                         $precioBase = $precioBaseLinea ?? $nuevoPrecio;
-                        $baseComision = (! $venta->es_venta_especial && $comisionBaseLinea !== null) ? $comisionBaseLinea : 0;
+                        $baseComision = (! $venta->es_venta_especial && ! $venta->es_venta_sin_comision && $comisionBaseLinea !== null) ? $comisionBaseLinea : 0;
 
-                        if ($venta->es_venta_especial) {
+                        if ($venta->es_venta_especial || $venta->es_venta_sin_comision) {
                             $comisionUnitaria = 0;
                         } elseif ($nuevoPrecio >= $precioBase) {
                             $comisionUnitaria = $baseComision + ($nuevoPrecio - $precioBase);
@@ -2183,6 +2208,12 @@ class VentaController extends Controller
         $limpiarMensajero = $validated['limpiar_mensajero'] ?? false;
         $limpiarComision = $validated['limpiar_comision'] ?? false;
         $limpiarGestor = $validated['limpiar_gestor'] ?? false;
+
+        // Una venta "sin comisión" (de la agencia) no tiene nada que configurar acá — total_comision
+        // ya es 0, así que asignarle una cuenta no mueve dinero, pero es semánticamente incorrecto.
+        if (! $limpiarComision && ! empty($validated['comision_cuenta_id']) && $venta->es_venta_sin_comision) {
+            return response()->json(['success' => false, 'message' => 'Esta venta es de la agencia (sin comisión); no hay nada que distribuir.'], 422);
+        }
 
         // La comisión del vendedor sale de una cuenta CUP, o de una cuenta USD en efectivo que el vendedor de la venta pueda
         // usar. En una cuenta USD no hay conversión: la tasa es siempre 1 y se debita `total_comision` en USD.

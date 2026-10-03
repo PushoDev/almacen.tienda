@@ -204,6 +204,13 @@ export default function PuntoVentaOficial({
     const [tieneMensajero, setTieneMensajero] = useState<boolean>(false);
     const [mensajeroMonto, setMensajeroMonto] = useState<string>('');
 
+    // ── Venta sin comisión (de la agencia) ──────────────────────────────────
+    // Decisión manual del vendedor/empleado por orden directa del dueño (ej. por teléfono): nadie
+    // gana comisión por esta venta — ni punto de venta ni gestor si después se configura uno —, toda
+    // la ganancia queda para la agencia. El mensajero no se ve afectado. Independiente de Venta
+    // Especial: pueden combinarse, el switch siempre fuerza comisión 0 igual.
+    const [esVentaSinComision, setEsVentaSinComision] = useState<boolean>(false);
+
     // ── Venta Especial ────────────────────────────────────────────────────────
     // La venta es especial si se activó a mano (botón del carrito) o mientras algún precio esté por
     // debajo de `precio base − comisión`: al subirlo otra vez, vuelve a ser normal sola. Es "bajo costo"
@@ -340,6 +347,7 @@ export default function PuntoVentaOficial({
         setCodigoSeleccionadoPorProducto({});
         setTieneMensajero(false);
         setMensajeroMonto('');
+        setEsVentaSinComision(false);
     };
 
     // Fichas hermanas (2026-09-28) viven solo dentro de `opciones[]` de la tarjeta principal — esta
@@ -806,6 +814,7 @@ export default function PuntoVentaOficial({
             tasa_cambio_principal: tasaCambioPrincipal,
             es_venta_especial: esVentaEspecial,
             nota_venta_especial: esVentaEspecial ? motivoEspecial.trim() : undefined,
+            es_venta_sin_comision: esVentaSinComision,
         };
 
         console.log('Datos de venta a enviar:', datosVenta);
@@ -829,6 +838,7 @@ export default function PuntoVentaOficial({
                 setMotivoEspecial('');
                 setTieneMensajero(false);
                 setMensajeroMonto('');
+                setEsVentaSinComision(false);
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1539,7 +1549,7 @@ export default function PuntoVentaOficial({
                                                         ${Number(calcularTotal).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </div>
-                                                {!esVentaEspecial && comisionTotalNum > 0 && (
+                                                {!esVentaEspecial && !esVentaSinComision && comisionTotalNum > 0 && (
                                                     <div className="flex items-center justify-between text-sm">
                                                         <span className="text-amber-600 font-medium">Comisión estimada:</span>
                                                         <span className="font-bold text-amber-700">
@@ -1632,6 +1642,25 @@ export default function PuntoVentaOficial({
                                                         </AlertDialogHeader>
                                                         <div className="grid flex-1 overflow-hidden md:grid-cols-2">
                                                             <div className="overflow-y-auto border-r p-6">
+                                                                {/* Venta sin comisión (de la agencia) — decisión manual, independiente de Venta Especial */}
+                                                                <div className="mb-4 space-y-1 rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950">
+                                                                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-violet-700 dark:text-violet-300">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={esVentaSinComision}
+                                                                            onChange={(e) => setEsVentaSinComision(e.target.checked)}
+                                                                            className="h-4 w-4 rounded"
+                                                                        />
+                                                                        <Building2 className="h-4 w-4" />
+                                                                        Venta sin comisión (de la agencia)
+                                                                    </label>
+                                                                    {esVentaSinComision && (
+                                                                        <p className="pl-6 text-xs text-violet-600 dark:text-violet-400">
+                                                                            Nadie gana comisión por esta venta — queda íntegra para la agencia. El mensajero, si lo hay, se cobra igual.
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+
                                                                 {/* Motivo venta especial */}
                                                                 {esVentaEspecial && (
                                                                     <div className="mb-4 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
