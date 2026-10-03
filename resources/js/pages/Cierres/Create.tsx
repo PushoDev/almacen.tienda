@@ -246,6 +246,11 @@ interface Calculos {
     ventas_especiales_costo_usd?: number;
     ventas_especiales_impacto_usd?: number;
     ventas_especiales_detalles?: VentaEspecialItem[];
+    ventas_sin_comision_count?: number;
+    ventas_sin_comision_total_usd?: number;
+    ventas_sin_comision_costo_usd?: number;
+    ventas_sin_comision_impacto_usd?: number;
+    ventas_sin_comision_detalles?: VentaSinComisionItem[];
     // Ventas anuladas
     ventas_anuladas_count?: number;
     ventas_anuladas_total_usd?: number;
@@ -280,6 +285,15 @@ interface VentaEspecialItem {
     costo: number;
     impacto: number;
     es_regalo: boolean;
+    fecha: string;
+}
+
+/** Venta marcada manualmente como "de la agencia" — nadie gana comisión por ella. */
+interface VentaSinComisionItem {
+    venta_id: number;
+    total: number;
+    costo: number;
+    impacto: number;
     fecha: string;
 }
 
@@ -1669,6 +1683,21 @@ export default function Create({
                                     )}
                                 </div>
                             )}
+
+                            {/* Ventas sin comisión (de la agencia) — si existen en el turno */}
+                            {(calculos.ventas_sin_comision_count ?? 0) > 0 && (
+                                <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas sin Comisión</p>
+                                    <p className="text-xl font-black text-violet-700 dark:text-violet-300">
+                                        {calculos.ventas_sin_comision_count} venta{(calculos.ventas_sin_comision_count ?? 0) > 1 ? 's' : ''}
+                                    </p>
+                                    {canViewEspecialesCostImpact && (
+                                        <p className="mt-1 text-xs font-semibold text-violet-600">
+                                            Impacto: ${Number(calculos.ventas_sin_comision_impacto_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Resumen Financiero del Turno */}
@@ -1809,6 +1838,53 @@ export default function Create({
                             </div>
                         )}
 
+                        {/* Detalle de ventas sin comisión (de la agencia) del turno */}
+                        {(calculos.ventas_sin_comision_count ?? 0) > 0 && (
+                            <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950">
+                                <p className="mb-3 text-sm font-bold text-violet-800 dark:text-violet-200">
+                                    Ventas sin Comisión del Turno ({calculos.ventas_sin_comision_count})
+                                </p>
+                                <div className="space-y-2">
+                                    {(calculos.ventas_sin_comision_detalles ?? []).map((vsc) => (
+                                        <div key={vsc.venta_id} className="flex items-center justify-between rounded-md border border-violet-200 bg-white px-3 py-2 text-xs dark:border-violet-700 dark:bg-violet-900/30">
+                                            <div className="flex-1 space-y-0.5">
+                                                <p className="font-semibold text-violet-800 dark:text-violet-200">Venta #{vsc.venta_id}</p>
+                                                <p className="text-violet-500 dark:text-violet-500">{vsc.fecha}</p>
+                                            </div>
+                                            <div className="ml-4 text-right">
+                                                <p className="text-violet-700 dark:text-violet-300">Cobrado: <strong>${vsc.total.toFixed(2)}</strong></p>
+                                                {canViewEspecialesCostImpact && (
+                                                    <>
+                                                        <p className="text-red-600 dark:text-red-400">Costo: <strong>${vsc.costo.toFixed(2)}</strong></p>
+                                                        <p className={`font-bold ${vsc.impacto < 0 ? 'text-red-700 dark:text-red-400' : 'text-violet-700 dark:text-violet-300'}`}>
+                                                            Impacto: ${vsc.impacto.toFixed(2)}
+                                                        </p>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-3 border-t border-violet-200 pt-2 dark:border-violet-700">
+                                    <div className="flex justify-between text-xs font-bold text-violet-800 dark:text-violet-200">
+                                        <span>Total cobrado sin comisión:</span>
+                                        <span>${Number(calculos.ventas_sin_comision_total_usd ?? 0).toFixed(2)} USD</span>
+                                    </div>
+                                    {canViewEspecialesCostImpact && (
+                                        <>
+                                            <div className="flex justify-between text-xs font-bold text-red-700 dark:text-red-400">
+                                                <span>Costo total sin comisión:</span>
+                                                <span>${Number(calculos.ventas_sin_comision_costo_usd ?? 0).toFixed(2)} USD</span>
+                                            </div>
+                                            <div className={`flex justify-between text-sm font-black ${(calculos.ventas_sin_comision_impacto_usd ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-violet-700 dark:text-violet-300'}`}>
+                                                <span>Impacto neto:</span>
+                                                <span>${Number(calculos.ventas_sin_comision_impacto_usd ?? 0).toFixed(2)} USD</span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Dialog detalle ventas anuladas */}
                         {(calculos.ventas_anuladas_count ?? 0) > 0 && (

@@ -501,3 +501,90 @@ test('un cierre guardado muestra las ventas devueltas del período', function ()
         ->where('ventas_devueltas_detalles.0.venta_id', $devuelta->id)
         ->where('ventas_devueltas_detalles.0.motivo', 'producto_defectuoso'));
 });
+
+// ==========================================================================
+// VENTAS SIN COMISIÓN (de la agencia) — visibilidad en el Cierre
+// ==========================================================================
+
+function crearVentaCompletadaSinComision(User $user, Almacen $almacen, float $total, float $costo): Venta
+{
+    $producto = Producto::factory()->create();
+    $codigo = ProductoCodigo::factory()->default()->create(['producto_id' => $producto->id]);
+
+    $venta = Venta::factory()->completada()->create([
+        'user_id' => $user->id, 'almacen_id' => $almacen->id, 'es_venta_sin_comision' => true, 'total' => $total,
+    ]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 1, 'precio_venta' => $total, 'subtotal' => $total,
+        'costo_unitario' => $costo, 'ganancia' => $total - $costo, 'comision_unitaria' => 0,
+    ]);
+
+    return $venta;
+}
+
+test('el cierre del turno en curso cuenta y totaliza las ventas sin comisión', function () {
+    $vendedor = User::factory()->admin()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    crearMonedaUsd();
+
+    $venta = crearVentaCompletadaSinComision($vendedor, $almacen, total: 75, costo: 50);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.ventas_sin_comision_count', 1)
+        ->where('calculos.ventas_sin_comision_total_usd', 75)
+        ->where('calculos.ventas_sin_comision_costo_usd', 50)
+        ->where('calculos.ventas_sin_comision_impacto_usd', 25)
+        ->where('calculos.ventas_sin_comision_detalles.0.venta_id', $venta->id));
+});
+
+test('un cierre guardado muestra las ventas sin comisión del período, con costo e impacto para admin', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    crearMonedaUsd();
+
+    $venta = crearVentaCompletadaSinComision($vendedor, $almacen, total: 40, costo: 30);
+    $cierre = CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_apertura' => now()->subHour(),
+        'fecha_cierre' => now()->addMinute(),
+    ]);
+
+    $this->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->where('ventas_sin_comision_count', 1)
+        ->where('ventas_sin_comision_total_usd', 40)
+        ->where('ventas_sin_comision_costo_usd', 30)
+        ->where('ventas_sin_comision_impacto_usd', 10)
+        ->where('ventas_sin_comision_detalles.0.venta_id', $venta->id));
+});
+
+test('un vendedor no ve el costo ni el impacto de las ventas sin comisión en el cierre guardado', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    crearMonedaUsd();
+
+    crearVentaCompletadaSinComision($vendedor, $almacen, total: 40, costo: 30);
+    $cierre = CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_apertura' => now()->subHour(),
+        'fecha_cierre' => now()->addMinute(),
+    ]);
+
+    $response = $this->get(route('ventas.cierres.show', $cierre->id));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('ventas_sin_comision_count', 1)
+        ->where('ventas_sin_comision_total_usd', 40)
+        ->missing('ventas_sin_comision_costo_usd')
+        ->missing('ventas_sin_comision_impacto_usd')
+        ->where('ventas_sin_comision_detalles.0', fn ($detalle) => ! isset($detalle['costo']) && ! isset($detalle['impacto'])));
+});
