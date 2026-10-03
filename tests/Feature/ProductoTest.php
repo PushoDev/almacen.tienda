@@ -639,6 +639,39 @@ test('un vendedor ve el conteo de stock bajo del listado pero no su valor', func
     );
 });
 
+test('el widget de cantidad de unidades suma el stock de todos los almacenes, de todo el catálogo filtrado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+    $producto = Producto::factory()->create(['nombre_producto' => 'AAA Unidades']);
+    $producto->almacenes()->attach($almacenA->id, ['cantidad' => 5]);
+    $producto->almacenes()->attach($almacenB->id, ['cantidad' => 3]);
+    $otro = Producto::factory()->create(['nombre_producto' => 'ZZZ Unidades']);
+    $otro->almacenes()->attach($almacenA->id, ['cantidad' => 10]);
+
+    $response = $this->get(route('productos.index', ['per_page' => 1]));
+
+    // 5 + 3 + 10 = 18, aunque la página solo muestre 1 producto.
+    $response->assertInertia(fn ($page) => $page->where('cantidad_total_unidades', 18));
+});
+
+test('el widget de cantidad de unidades solo cuenta el almacén filtrado cuando hay uno activo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+    $producto = Producto::factory()->create();
+    $producto->almacenes()->attach($almacenA->id, ['cantidad' => 5]);
+    $producto->almacenes()->attach($almacenB->id, ['cantidad' => 3]);
+
+    $response = $this->get(route('productos.index', ['almacen_id' => $almacenA->id]));
+
+    $response->assertInertia(fn ($page) => $page->where('cantidad_total_unidades', 5));
+});
+
 test('index() ordena por cantidad sin tirar 500 (cantidad_total no es una columna real)', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);

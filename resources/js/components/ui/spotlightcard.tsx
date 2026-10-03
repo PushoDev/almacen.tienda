@@ -7,8 +7,22 @@ interface SpotlightCardProps extends React.ComponentProps<'div'> {
      * ámbar en una venta especial ('especial') y rojo en una venta bajo costo ('bajo-costo').
      * En las tarjetas de cuenta distingue el tipo: esmeralda para 'efectivo' y azul para 'tarjeta'.
      * En las tarjetas asignadas de Empleados: esmeralda para acceso 'completo' y ámbar para 'cobro'.
+     * 'global' (violeta): acceso global de admin/moderador en Empleados. 'sin-comision' (fucsia):
+     * venta "de la agencia" sin comisión (Cierres, 2026-10-03) — color propio, sin pisar 'global'.
+     * 'indigo': widgets neutros de conteo (ej. "Cantidad de Unidades" en Productos/Index.tsx).
      */
-    estado: 'disponible' | 'agotado' | 'especial' | 'bajo-costo' | 'efectivo' | 'tarjeta' | 'completo' | 'cobro';
+    estado:
+        | 'disponible'
+        | 'agotado'
+        | 'especial'
+        | 'bajo-costo'
+        | 'efectivo'
+        | 'tarjeta'
+        | 'completo'
+        | 'cobro'
+        | 'global'
+        | 'sin-comision'
+        | 'indigo';
 }
 
 /**

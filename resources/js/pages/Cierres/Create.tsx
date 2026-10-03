@@ -10,11 +10,13 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -24,20 +26,24 @@ import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import {
+    AlertTriangle,
     ArrowDown,
     ArrowRightLeft,
     ArrowUp,
     Banknote,
     Briefcase,
+    Building2,
     CheckCircle2,
     ChevronDown,
     CreditCard,
     DollarSign,
     Eye,
     Globe,
+    HandCoins,
     Receipt,
     Search,
     ShoppingCart,
+    Store,
     TrendingUp,
     Wallet,
 } from 'lucide-react';
@@ -401,6 +407,7 @@ export default function Create({
     const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
     const [showComisionPVDialog, setShowComisionPVDialog] = useState(false);
     const [showComisionGestorDialog, setShowComisionGestorDialog] = useState(false);
+    const [showVentasSinComisionDialog, setShowVentasSinComisionDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
         ventaId: number | null;
@@ -1617,139 +1624,209 @@ export default function Create({
                         <CardTitle className="text-sm font-bold tracking-wider uppercase">Finalizar Cierre</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {/* Total de Venta */}
-                        <div className="border-primary bg-primary/10 rounded-lg border p-4">
-                            <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Total de Ventas del Turno</p>
-                            <p className="text-4xl font-black text-emerald-600">${Number(totalVentasProductos).toFixed(2)}</p>
-                            <p className="text-muted-foreground mt-2 text-xs">Total real de productos vendidos</p>
-                        </div>
+                        {/* Total de Venta — ícono/etiqueta a un lado, el número protagonista al otro */}
+                        <SpotlightCard estado="disponible" className="border-primary/30 bg-primary/5 relative overflow-hidden rounded-lg border p-4 shadow-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="bg-primary/15 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
+                                            <ShoppingCart className="h-4.5 w-4.5" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Total de Ventas del Turno</p>
+                                    </div>
+                                    <p className="text-muted-foreground mt-2 text-sm">Total real de productos vendidos</p>
+                                </div>
+                                <p className="text-5xl font-black text-emerald-600">${Number(totalVentasProductos).toFixed(2)}</p>
+                            </div>
+                        </SpotlightCard>
 
-                        {/* Widgets: Comisión PV, Comisión Gestor, Ganancia Agencia */}
-                        <div className="grid grid-cols-3 gap-3">
+                        {/* Widgets: Comisión PV, Comisión Gestor, Ganancia Agencia, Especiales, Sin Comisión —
+                            flex-wrap en vez de grid-cols fijo: con 3 a 5 widgets activos (los últimos 2 son
+                            condicionales) se acomodan solos llenando el ancho, sin dejar ninguno huérfano. */}
+                        <div className="flex flex-wrap gap-3">
                             {/* Comisión Punto de Venta — todos los roles */}
-                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:bg-blue-900/20">
-                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión P.V.</p>
-                                <p className="text-xl font-black text-blue-700 dark:text-blue-300">
-                                    ${Number(calculos.comision_pv_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="mt-0.5 text-xs text-blue-500 dark:text-blue-400">
-                                    {Number(calculos.comisiones_pv_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                </p>
+                            <SpotlightCard estado="tarjeta" className="min-w-[220px] flex-1 rounded-lg border border-blue-400/30 bg-blue-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-blue-500/10">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                                        <Store className="h-4 w-4" />
+                                    </span>
+                                    <p className="text-muted-foreground text-xs font-bold uppercase">Comisión P.V.</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-blue-500 to-blue-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-blue-500/30">
+                                        ${Number(calculos.comision_pv_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </Badge>
+                                    <Badge className="gap-1 border border-blue-400/30 bg-blue-500/10 text-sm font-semibold text-blue-700 backdrop-blur-sm dark:text-blue-300">
+                                        {Number(calculos.comisiones_pv_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                    </Badge>
+                                </div>
                                 {(calculos.comisiones_pv_detalles ?? []).length > 0 && (
                                     <button onClick={() => setShowComisionPVDialog(true)} className="mt-1 text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400">
                                         Ver detalles
                                     </button>
                                 )}
-                            </div>
+                            </SpotlightCard>
 
                             {/* Comisión Gestor — todos los roles */}
-                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 dark:bg-purple-900/20">
-                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión Gestor</p>
-                                <p className="text-xl font-black text-purple-700 dark:text-purple-300">
-                                    ${Number(calculos.comision_gestor_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="mt-0.5 text-xs text-purple-500 dark:text-purple-400">
-                                    {Number(calculos.comisiones_gestor_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                </p>
+                            <SpotlightCard estado="global" className="min-w-[220px] flex-1 rounded-lg border border-purple-400/30 bg-purple-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-purple-500/10">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                                        <HandCoins className="h-4 w-4" />
+                                    </span>
+                                    <p className="text-muted-foreground text-xs font-bold uppercase">Comisión Gestor</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-purple-500 to-purple-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-purple-500/30">
+                                        ${Number(calculos.comision_gestor_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </Badge>
+                                    <Badge className="gap-1 border border-purple-400/30 bg-purple-500/10 text-sm font-semibold text-purple-700 backdrop-blur-sm dark:text-purple-300">
+                                        {Number(calculos.comisiones_gestor_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                    </Badge>
+                                </div>
                                 {comisionesGestorDetalles.length > 0 && (
                                     <button onClick={() => setShowComisionGestorDialog(true)} className="mt-1 text-xs text-purple-600 underline hover:text-purple-800 dark:text-purple-400">
                                         Ver detalles
                                     </button>
                                 )}
-                            </div>
+                            </SpotlightCard>
 
-                            {/* Ganancia Agencia — solo admin */}
+                            {/* Ganancia Agencia — solo admin — efecto metálico, es el dato que más le importa al dueño */}
                             {auth.user.role === 'admin' && (
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:bg-emerald-900/20">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ganancia Agencia</p>
-                                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-300">
+                                <SpotlightCard estado="especial" className="min-w-[220px] flex-1 rounded-lg border border-amber-300/40 bg-amber-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-amber-500/10">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                            <TrendingUp className="h-4 w-4" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Ganancia Agencia</p>
+                                    </div>
+                                    <Badge className="gap-1 border border-amber-200 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-300 px-3 py-1 text-2xl font-black text-amber-950 shadow-md shadow-amber-500/40 transition-transform hover:scale-105">
                                         ${Number(calculos.ganancia_agencia_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </p>
-                                    <p className="text-muted-foreground mt-1 text-xs">Neto agencia</p>
-                                </div>
+                                    </Badge>
+                                    <p className="text-muted-foreground mt-1.5 text-sm">Neto agencia</p>
+                                </SpotlightCard>
                             )}
 
                             {/* Ventas Especiales — si existen en el turno */}
                             {(calculos.ventas_especiales_count ?? 0) > 0 && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Especiales</p>
-                                    <p className="text-xl font-black text-amber-700 dark:text-amber-300">
+                                <SpotlightCard estado="especial" className="min-w-[220px] flex-1 rounded-lg border border-amber-400/30 bg-amber-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-amber-500/10">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                            <AlertTriangle className="h-4 w-4" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Ventas Especiales</p>
+                                    </div>
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-amber-500/30">
                                         {calculos.ventas_especiales_count} venta{(calculos.ventas_especiales_count ?? 0) > 1 ? 's' : ''}
-                                    </p>
+                                    </Badge>
                                     {canViewEspecialesCostImpact && (
-                                        <p className={`mt-1 text-xs font-semibold ${(calculos.ventas_especiales_impacto_usd ?? 0) < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                                        <p className={`mt-1.5 text-sm font-semibold ${(calculos.ventas_especiales_impacto_usd ?? 0) < 0 ? 'text-red-600' : 'text-amber-600'}`}>
                                             Impacto: ${Number(calculos.ventas_especiales_impacto_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                         </p>
                                     )}
-                                </div>
+                                </SpotlightCard>
                             )}
 
                             {/* Ventas sin comisión (de la agencia) — si existen en el turno */}
                             {(calculos.ventas_sin_comision_count ?? 0) > 0 && (
-                                <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas sin Comisión</p>
-                                    <p className="text-xl font-black text-violet-700 dark:text-violet-300">
+                                <SpotlightCard estado="sin-comision" className="min-w-[220px] flex-1 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-fuchsia-500/10">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400">
+                                            <Building2 className="h-4 w-4" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Ventas sin Comisión</p>
+                                    </div>
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-fuchsia-500 to-fuchsia-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-fuchsia-500/30">
                                         {calculos.ventas_sin_comision_count} venta{(calculos.ventas_sin_comision_count ?? 0) > 1 ? 's' : ''}
-                                    </p>
+                                    </Badge>
                                     {canViewEspecialesCostImpact && (
-                                        <p className="mt-1 text-xs font-semibold text-violet-600">
+                                        <p className="mt-1.5 text-sm font-semibold text-fuchsia-600">
                                             Impacto: ${Number(calculos.ventas_sin_comision_impacto_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                         </p>
                                     )}
-                                </div>
+                                </SpotlightCard>
                             )}
                         </div>
 
-                        {/* Resumen Financiero del Turno */}
-                        {auth.user.role !== 'vendedor' && (calculos.ventas_brutas_usd ?? 0) > 0 && (
-                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950">
-                                <p className="text-muted-foreground mb-2 text-xs font-bold uppercase">Resumen Financiero del Turno</p>
-                                <div className="space-y-1.5 text-xs">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-emerald-700 dark:text-emerald-400">Ventas brutas</span>
-                                        <span className="font-semibold text-emerald-800 dark:text-emerald-200">
-                                            ${Number(calculos.ventas_brutas_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
-                                        </span>
-                                    </div>
-                                    {(calculos.comisiones_total_cup ?? 0) > 0 && (
+                        {/* Resumen Financiero del Turno + resumen de Ventas sin Comisión — en la misma fila
+                            (el detalle completo de ventas sin comisión vive en un modal, como ya hacen
+                            Comisión P.V./Gestor/Anuladas/Mensajería — no todo tiene que ser un bloque inline). */}
+                        <div className="flex flex-wrap gap-3">
+                            {auth.user.role !== 'vendedor' && (calculos.ventas_brutas_usd ?? 0) > 0 && (
+                                <SpotlightCard estado="disponible" className="min-w-[280px] flex-1 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
+                                    <p className="text-muted-foreground mb-2 text-xs font-bold uppercase">Resumen Financiero del Turno</p>
+                                    <div className="space-y-2 text-base">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-amber-600 dark:text-amber-400">
-                                                Comisiones
-                                                {(calculos.comisiones_pv_cup ?? 0) > 0 && (calculos.comisiones_gestor_cup ?? 0) > 0
-                                                    ? ' (PV + Gestor)'
-                                                    : (calculos.comisiones_gestor_cup ?? 0) > 0 ? ' (Gestor)' : ' (PV)'}
-                                            </span>
-                                            <span className="font-semibold text-amber-700 dark:text-amber-300">
-                                                −{Number(calculos.comisiones_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            <span className="text-emerald-700 dark:text-emerald-400">Ventas brutas</span>
+                                            <span className="font-semibold text-emerald-800 dark:text-emerald-200">
+                                                ${Number(calculos.ventas_brutas_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                             </span>
                                         </div>
-                                    )}
-                                    {(calculos.mensajero_total_cup ?? 0) > 0 && (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sky-600 dark:text-sky-400">Mensajería</span>
-                                            <span className="font-semibold text-sky-700 dark:text-sky-300">
-                                                −{Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                        {(calculos.comisiones_total_cup ?? 0) > 0 && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-amber-600 dark:text-amber-400">
+                                                    Comisiones
+                                                    {(calculos.comisiones_pv_cup ?? 0) > 0 && (calculos.comisiones_gestor_cup ?? 0) > 0
+                                                        ? ' (PV + Gestor)'
+                                                        : (calculos.comisiones_gestor_cup ?? 0) > 0 ? ' (Gestor)' : ' (PV)'}
+                                                </span>
+                                                <span className="font-semibold text-amber-700 dark:text-amber-300">
+                                                    −{Number(calculos.comisiones_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                </span>
+                                            </div>
+                                        )}
+                                        {(calculos.mensajero_total_cup ?? 0) > 0 && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sky-600 dark:text-sky-400">Mensajería</span>
+                                                <span className="font-semibold text-sky-700 dark:text-sky-300">
+                                                    −{Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div className="mt-2 flex items-center justify-between border-t border-emerald-200 pt-2 dark:border-emerald-700">
+                                            <span className="font-bold text-emerald-800 dark:text-emerald-200">Ganancia neta agencia</span>
+                                            <span className="text-xl font-black text-emerald-700 dark:text-emerald-300">
+                                                ${Number(calculos.ganancia_agencia_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                             </span>
                                         </div>
-                                    )}
-                                    <div className="mt-1.5 flex items-center justify-between border-t border-emerald-200 pt-1.5 dark:border-emerald-700">
-                                        <span className="font-bold text-emerald-800 dark:text-emerald-200">Ganancia neta agencia</span>
-                                        <span className="font-black text-emerald-700 dark:text-emerald-300">
-                                            ${Number(calculos.ganancia_agencia_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
-                                        </span>
                                     </div>
-                                </div>
-                            </div>
-                        )}
+                                </SpotlightCard>
+                            )}
+
+                            {/* Ventas sin comisión — resumen compacto, detalle completo en el modal */}
+                            {(calculos.ventas_sin_comision_count ?? 0) > 0 && (
+                                <SpotlightCard estado="sin-comision" className="min-w-[220px] flex-1 rounded-lg border border-fuchsia-300 bg-fuchsia-100 p-3 dark:border-fuchsia-800 dark:bg-fuchsia-950">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas sin Comisión</p>
+                                    <p className="text-xl font-black text-fuchsia-700 dark:text-fuchsia-300">
+                                        {calculos.ventas_sin_comision_count} venta{(calculos.ventas_sin_comision_count ?? 0) > 1 ? 's' : ''}
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold text-fuchsia-600 dark:text-fuchsia-400">
+                                        Cobrado: ${Number(calculos.ventas_sin_comision_total_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                    </p>
+                                    {canViewEspecialesCostImpact && (
+                                        <p className={`text-sm font-semibold ${(calculos.ventas_sin_comision_impacto_usd ?? 0) < 0 ? 'text-red-600' : 'text-fuchsia-600 dark:text-fuchsia-400'}`}>
+                                            Impacto: ${Number(calculos.ventas_sin_comision_impacto_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                        </p>
+                                    )}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-2 h-7 border-fuchsia-400 text-xs text-fuchsia-700 hover:bg-fuchsia-200 dark:border-fuchsia-700 dark:text-fuchsia-300"
+                                        onClick={() => setShowVentasSinComisionDialog(true)}
+                                    >
+                                        Ver detalles
+                                    </Button>
+                                </SpotlightCard>
+                            )}
+                        </div>
 
                         {/* Mensajería del turno — informativo */}
                         {(calculos.mensajero_count ?? 0) > 0 && (
-                            <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
+                            <SpotlightCard estado="tarjeta" className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
                                 <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Mensajería del Turno</p>
                                 <p className="text-xl font-black text-sky-700 dark:text-sky-300">
                                     {Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
                                 </p>
-                                <p className="mt-1 text-xs text-sky-600 dark:text-sky-400">
+                                <p className="mt-1 text-sm text-sky-600 dark:text-sky-400">
                                     ≈ ${Number(calculos.mensajero_total_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD · {calculos.mensajero_count} entrega{(calculos.mensajero_count ?? 0) > 1 ? 's' : ''}
                                 </p>
                                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1763,17 +1840,17 @@ export default function Create({
                                 >
                                     Ver entregas
                                 </Button>
-                            </div>
+                            </SpotlightCard>
                         )}
 
                         {/* Ventas Anuladas — tarjeta resumen */}
                         {(calculos.ventas_anuladas_count ?? 0) > 0 && (
-                            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+                            <SpotlightCard estado="agotado" className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
                                 <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Anuladas</p>
                                 <p className="text-xl font-black text-red-700 dark:text-red-300">
                                     {calculos.ventas_anuladas_count} venta{(calculos.ventas_anuladas_count ?? 0) > 1 ? 's' : ''}
                                 </p>
-                                <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
                                     Valor: ${Number(calculos.ventas_anuladas_total_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                 </p>
                                 <Button
@@ -1784,12 +1861,12 @@ export default function Create({
                                 >
                                     Ver detalles
                                 </Button>
-                            </div>
+                            </SpotlightCard>
                         )}
 
                         {/* Detalle de ventas especiales del turno */}
                         {(calculos.ventas_especiales_count ?? 0) > 0 && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                            <SpotlightCard estado="especial" className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
                                 <p className="mb-3 text-sm font-bold text-amber-800 dark:text-amber-200">
                                     Ventas Especiales del Turno ({calculos.ventas_especiales_count})
                                 </p>
@@ -1835,55 +1912,80 @@ export default function Create({
                                         </>
                                     )}
                                 </div>
-                            </div>
+                            </SpotlightCard>
                         )}
 
-                        {/* Detalle de ventas sin comisión (de la agencia) del turno */}
+                        {/* Dialog detalle Ventas sin Comisión */}
                         {(calculos.ventas_sin_comision_count ?? 0) > 0 && (
-                            <div className="rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950">
-                                <p className="mb-3 text-sm font-bold text-violet-800 dark:text-violet-200">
-                                    Ventas sin Comisión del Turno ({calculos.ventas_sin_comision_count})
-                                </p>
-                                <div className="space-y-2">
-                                    {(calculos.ventas_sin_comision_detalles ?? []).map((vsc) => (
-                                        <div key={vsc.venta_id} className="flex items-center justify-between rounded-md border border-violet-200 bg-white px-3 py-2 text-xs dark:border-violet-700 dark:bg-violet-900/30">
-                                            <div className="flex-1 space-y-0.5">
-                                                <p className="font-semibold text-violet-800 dark:text-violet-200">Venta #{vsc.venta_id}</p>
-                                                <p className="text-violet-500 dark:text-violet-500">{vsc.fecha}</p>
-                                            </div>
-                                            <div className="ml-4 text-right">
-                                                <p className="text-violet-700 dark:text-violet-300">Cobrado: <strong>${vsc.total.toFixed(2)}</strong></p>
-                                                {canViewEspecialesCostImpact && (
-                                                    <>
-                                                        <p className="text-red-600 dark:text-red-400">Costo: <strong>${vsc.costo.toFixed(2)}</strong></p>
-                                                        <p className={`font-bold ${vsc.impacto < 0 ? 'text-red-700 dark:text-red-400' : 'text-violet-700 dark:text-violet-300'}`}>
-                                                            Impacto: ${vsc.impacto.toFixed(2)}
-                                                        </p>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="mt-3 border-t border-violet-200 pt-2 dark:border-violet-700">
-                                    <div className="flex justify-between text-xs font-bold text-violet-800 dark:text-violet-200">
-                                        <span>Total cobrado sin comisión:</span>
-                                        <span>${Number(calculos.ventas_sin_comision_total_usd ?? 0).toFixed(2)} USD</span>
+                            <Dialog open={showVentasSinComisionDialog} onOpenChange={setShowVentasSinComisionDialog}>
+                                <DialogContent className="sm:max-w-2xl">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-fuchsia-700 dark:text-fuchsia-300">
+                                            Ventas sin Comisión del Turno
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total cobrado: <strong>${Number(calculos.ventas_sin_comision_total_usd ?? 0).toFixed(2)} USD</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs w-[80px]">Venta</TableHead>
+                                                    <TableHead className="text-xs">Fecha</TableHead>
+                                                    <TableHead className="text-right text-xs">Cobrado</TableHead>
+                                                    {canViewEspecialesCostImpact && (
+                                                        <>
+                                                            <TableHead className="text-right text-xs">Costo</TableHead>
+                                                            <TableHead className="text-right text-xs">Impacto</TableHead>
+                                                        </>
+                                                    )}
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {(calculos.ventas_sin_comision_detalles ?? []).map((vsc) => (
+                                                    <TableRow key={vsc.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{vsc.venta_id}</TableCell>
+                                                        <TableCell className="text-xs text-muted-foreground">{vsc.fecha}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-fuchsia-700 dark:text-fuchsia-300">
+                                                            ${vsc.total.toFixed(2)}
+                                                        </TableCell>
+                                                        {canViewEspecialesCostImpact && (
+                                                            <>
+                                                                <TableCell className="text-right text-xs text-red-600 dark:text-red-400">
+                                                                    ${vsc.costo.toFixed(2)}
+                                                                </TableCell>
+                                                                <TableCell className={`text-right text-xs font-bold ${vsc.impacto < 0 ? 'text-red-700 dark:text-red-400' : 'text-fuchsia-700 dark:text-fuchsia-300'}`}>
+                                                                    ${vsc.impacto.toFixed(2)}
+                                                                </TableCell>
+                                                            </>
+                                                        )}
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell />
+                                                    <TableCell className="text-right text-xs font-bold text-fuchsia-700 dark:text-fuchsia-300">
+                                                        ${Number(calculos.ventas_sin_comision_total_usd ?? 0).toFixed(2)}
+                                                    </TableCell>
+                                                    {canViewEspecialesCostImpact && (
+                                                        <>
+                                                            <TableCell className="text-right text-xs font-bold text-red-700 dark:text-red-400">
+                                                                ${Number(calculos.ventas_sin_comision_costo_usd ?? 0).toFixed(2)}
+                                                            </TableCell>
+                                                            <TableCell className={`text-right text-xs font-bold ${(calculos.ventas_sin_comision_impacto_usd ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-fuchsia-700 dark:text-fuchsia-300'}`}>
+                                                                ${Number(calculos.ventas_sin_comision_impacto_usd ?? 0).toFixed(2)}
+                                                            </TableCell>
+                                                        </>
+                                                    )}
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
                                     </div>
-                                    {canViewEspecialesCostImpact && (
-                                        <>
-                                            <div className="flex justify-between text-xs font-bold text-red-700 dark:text-red-400">
-                                                <span>Costo total sin comisión:</span>
-                                                <span>${Number(calculos.ventas_sin_comision_costo_usd ?? 0).toFixed(2)} USD</span>
-                                            </div>
-                                            <div className={`flex justify-between text-sm font-black ${(calculos.ventas_sin_comision_impacto_usd ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-violet-700 dark:text-violet-300'}`}>
-                                                <span>Impacto neto:</span>
-                                                <span>${Number(calculos.ventas_sin_comision_impacto_usd ?? 0).toFixed(2)} USD</span>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
+                                </DialogContent>
+                            </Dialog>
                         )}
 
                         {/* Dialog detalle ventas anuladas */}
