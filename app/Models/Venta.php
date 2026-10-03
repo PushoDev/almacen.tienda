@@ -39,6 +39,9 @@ class Venta extends Model
         'nota_venta_especial',
         'tipo_venta_especial',
         'decision_notificada',
+        // VENTA SIN COMISIÓN (de la agencia, decisión manual al crear): nadie gana comisión
+        // (ni punto de venta ni gestor), el mensajero no se ve afectado.
+        'es_venta_sin_comision',
         // ANULACIÓN
         'motivo_anulacion',
         'detalle_anulacion',
@@ -77,6 +80,7 @@ class Venta extends Model
         'monto_diferencia_cambiaria' => 'decimal:2',
         'tasa_aplicada_gestor' => 'decimal:2',
         'es_venta_especial' => 'boolean',
+        'es_venta_sin_comision' => 'boolean',
         'decision_notificada' => 'boolean',
         'mensajero_monto' => 'decimal:2',
         'mensajero_monto_final_cup' => 'decimal:2',
