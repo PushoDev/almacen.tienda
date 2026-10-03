@@ -3585,6 +3585,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             )}
                                         </>;
                                     })()}
+
+                                    
                                     {currentVenta.mensajero.tasa && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">Tasa aplicada:</span>
