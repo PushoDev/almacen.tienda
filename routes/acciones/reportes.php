@@ -13,6 +13,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // --- RASTREO DE OPERACIONES --- (todos los roles; el propio controller ya
         // restringe a vendedor a sus propias operaciones y le oculta costo/margen)
         Route::get('/rastreo-operaciones', RastreoOperacionesController::class)->name('rastreo_operaciones');
+        // Búsqueda remota de productos para el filtro de Rastreo de Operaciones (catálogo
+        // grande, ~666 productos — no se puede mandar la lista completa como Cliente/
+        // Proveedor/Cuenta, que son decenas).
+        Route::get('/rastreo-operaciones/productos-buscar', [RastreoOperacionesController::class, 'buscarProductos'])->name('rastreo_operaciones.productos_buscar');
 
         // Resto de reportes: exponen costo, margen o movimientos financieros completos del
         // sistema — solo admin/moderador, mismo criterio que ya usaba historialCostoPrecio()

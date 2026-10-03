@@ -1643,8 +1643,8 @@ export default function PuntoVentaOficial({
                                                         <div className="grid flex-1 overflow-hidden md:grid-cols-2">
                                                             <div className="overflow-y-auto border-r p-6">
                                                                 {/* Venta sin comisión (de la agencia) — decisión manual, independiente de Venta Especial */}
-                                                                <div className="mb-4 space-y-1 rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950">
-                                                                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-violet-700 dark:text-violet-300">
+                                                                <div className="mb-4 space-y-1 rounded-lg border border-fuchsia-200 bg-fuchsia-50 p-3 dark:border-fuchsia-800 dark:bg-fuchsia-950">
+                                                                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fuchsia-700 dark:text-fuchsia-300">
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={esVentaSinComision}
@@ -1655,7 +1655,7 @@ export default function PuntoVentaOficial({
                                                                         Venta sin comisión (de la agencia)
                                                                     </label>
                                                                     {esVentaSinComision && (
-                                                                        <p className="pl-6 text-xs text-violet-600 dark:text-violet-400">
+                                                                        <p className="pl-6 text-xs text-fuchsia-600 dark:text-fuchsia-400">
                                                                             Nadie gana comisión por esta venta — queda íntegra para la agencia. El mensajero, si lo hay, se cobra igual.
                                                                         </p>
                                                                     )}

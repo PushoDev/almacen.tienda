@@ -42,8 +42,9 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
 import { ArrowLeftRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, Shuffle, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
 
@@ -97,6 +98,10 @@ interface RastreoOperacionesPageProps {
     clientes: EntidadFiltro[];
     proveedores: EntidadFiltro[];
     cuentas: EntidadFiltro[];
+    // Almacén: mismo criterio que clientes/proveedores/cuentas (volumen chico, ~23 registros,
+    // lista completa). Producto NO viene como prop — el catálogo es demasiado grande (~666),
+    // se busca por el endpoint `reportes.rastreo_operaciones.productos_buscar`.
+    almacenes: EntidadFiltro[];
     filtros: {
         fecha?: string;
         user_id?: string;
@@ -105,6 +110,8 @@ interface RastreoOperacionesPageProps {
         cliente_ids?: string[];
         proveedor_ids?: string[];
         cuenta_ids?: string[];
+        producto_ids?: string[];
+        almacen_ids?: string[];
         cliente_direccion?: Direccion;
         proveedor_direccion?: Direccion;
         cuenta_direccion?: Direccion;
@@ -261,14 +268,22 @@ function ComboboxFiltro({
     direccion,
     onDireccionChange,
     placeholder,
+    onSearchChange,
+    loading,
 }: {
     label: string;
     items: { value: number; label: string }[];
     selected: number[];
     onChange: (ids: number[]) => void;
-    direccion: Direccion;
-    onDireccionChange: (d: Direccion) => void;
+    // Envía/Recibe/Cualquiera — solo tiene sentido para Cliente/Proveedor/Cuenta (dinero).
+    // Producto y Almacén no tienen ese concepto, así que se omiten los dos juntos.
+    direccion?: Direccion;
+    onDireccionChange?: (d: Direccion) => void;
     placeholder: string;
+    // Búsqueda remota (Producto, catálogo grande): si viene, se asume que `items` ya es el
+    // resultado del servidor para el término actual — el Combobox no vuelve a filtrar encima.
+    onSearchChange?: (termino: string) => void;
+    loading?: boolean;
 }) {
     const anchor = useComboboxAnchor();
     return (
@@ -278,18 +293,26 @@ function ComboboxFiltro({
                 {/* Envía/Recibe acota a un solo lado de la operación (mismo concepto que las
                     columnas "Cuenta Envía"/"Cuenta que Recibe" de la tabla) — Cualquiera
                     (default) es el comportamiento de antes, coincide en cualquier lado. */}
-                <Select value={direccion} onValueChange={(v) => onDireccionChange(v as Direccion)}>
-                    <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1 text-xs text-muted-foreground shadow-none hover:bg-accent">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent align="end">
-                        <SelectItem value="cualquiera">Cualquiera</SelectItem>
-                        <SelectItem value="envia">Envía</SelectItem>
-                        <SelectItem value="recibe">Recibe</SelectItem>
-                    </SelectContent>
-                </Select>
+                {direccion && onDireccionChange && (
+                    <Select value={direccion} onValueChange={(v) => onDireccionChange(v as Direccion)}>
+                        <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1 text-xs text-muted-foreground shadow-none hover:bg-accent">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                            <SelectItem value="cualquiera">Cualquiera</SelectItem>
+                            <SelectItem value="envia">Envía</SelectItem>
+                            <SelectItem value="recibe">Recibe</SelectItem>
+                        </SelectContent>
+                    </Select>
+                )}
             </div>
-            <Combobox multiple items={items} value={selected} onValueChange={onChange}>
+            <Combobox
+                multiple
+                items={items}
+                value={selected}
+                onValueChange={onChange}
+                {...(onSearchChange ? { onInputValueChange: onSearchChange } : {})}
+            >
                 <div ref={anchor}>
                     <ComboboxChips>
                         {selected.map((id) => {
@@ -300,7 +323,7 @@ function ComboboxFiltro({
                     </ComboboxChips>
                 </div>
                 <ComboboxContent anchor={anchor}>
-                    <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                    <ComboboxEmpty>{loading ? 'Buscando...' : 'Sin resultados'}</ComboboxEmpty>
                     <ComboboxList>
                         <ComboboxCollection>
                             {(item: { value: number; label: string }) => (
@@ -324,6 +347,7 @@ export default function RastreoOperacionesPage({
     clientes,
     proveedores,
     cuentas,
+    almacenes,
     filtros,
     puedeVerCosto,
     puedeVerRemesas,
@@ -336,6 +360,8 @@ export default function RastreoOperacionesPage({
     const [clienteIds, setClienteIds] = useState<number[]>((filtros.cliente_ids || []).map(Number));
     const [proveedorIds, setProveedorIds] = useState<number[]>((filtros.proveedor_ids || []).map(Number));
     const [cuentaIds, setCuentaIds] = useState<number[]>((filtros.cuenta_ids || []).map(Number));
+    const [productoIds, setProductoIds] = useState<number[]>((filtros.producto_ids || []).map(Number));
+    const [almacenIds, setAlmacenIds] = useState<number[]>((filtros.almacen_ids || []).map(Number));
     const [clienteDireccion, setClienteDireccion] = useState<Direccion>(filtros.cliente_direccion || 'cualquiera');
     const [proveedorDireccion, setProveedorDireccion] = useState<Direccion>(filtros.proveedor_direccion || 'cualquiera');
     const [cuentaDireccion, setCuentaDireccion] = useState<Direccion>(filtros.cuenta_direccion || 'cualquiera');
@@ -344,6 +370,58 @@ export default function RastreoOperacionesPage({
     const clienteItems = clientes.map((c) => ({ value: c.id, label: c.nombre }));
     const proveedorItems = proveedores.map((p) => ({ value: p.id, label: p.nombre }));
     const cuentaItems = cuentas.map((c) => ({ value: c.id, label: c.nombre }));
+    const almacenItems = almacenes.map((a) => ({ value: a.id, label: a.nombre }));
+
+    // Producto: catálogo demasiado grande (~666) para mandarlo completo — se busca en el
+    // servidor con debounce (300ms, mismo criterio que Comprar/Index.tsx). `productoResultados`
+    // es solo la tanda EN PANTALLA de la lista desplegable (se reemplaza en cada búsqueda).
+    // `productoNombres` es una caché aparte que solo CRECE (nunca se vacía) con todo nombre ya
+    // resuelto — hace falta separarla de productoResultados: al elegir un producto, el combobox
+    // borra el texto escrito, lo que dispara una "búsqueda" con término vacío que limpiaría
+    // productoResultados — si el nombre solo viviera ahí, se perdía justo el que se acaba de
+    // elegir y el chip caía al respaldo "Producto #id" (bug real encontrado 2026-10-03).
+    const [productoQuery, setProductoQuery] = useState('');
+    const [productoResultados, setProductoResultados] = useState<{ value: number; label: string }[]>([]);
+    const [productoNombres, setProductoNombres] = useState<Record<number, string>>({});
+    const [buscandoProducto, setBuscandoProducto] = useState(false);
+    // Para la lista desplegable: resultados en vivo. Para los chips ya elegidos que no están en
+    // la tanda actual, se resuelve por la caché — "Producto #id" queda solo para un id que nunca
+    // se llegó a buscar (ej. se abrió la página con producto_ids en la URL desde otra pestaña).
+    const productoItems = [
+        ...productoResultados,
+        ...productoIds
+            .filter((id) => !productoResultados.some((r) => r.value === id))
+            .map((id) => ({ value: id, label: productoNombres[id] ?? `Producto #${id}` })),
+    ];
+
+    useEffect(() => {
+        const termino = productoQuery.trim();
+        if (termino.length < 2) {
+            setProductoResultados([]);
+            return;
+        }
+
+        setBuscandoProducto(true);
+        const debounceTimer = setTimeout(async () => {
+            try {
+                const response = await axios.get(route('reportes.rastreo_operaciones.productos_buscar'), {
+                    params: { q: termino },
+                });
+                const resultados = response.data.map((p: { id: number; nombre: string }) => ({ value: p.id, label: p.nombre }));
+                setProductoResultados(resultados);
+                setProductoNombres((prev) => ({
+                    ...prev,
+                    ...Object.fromEntries(resultados.map((r: { value: number; label: string }) => [r.value, r.label])),
+                }));
+            } catch (error) {
+                console.error('Error buscando productos:', error);
+            } finally {
+                setBuscandoProducto(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(debounceTimer);
+    }, [productoQuery]);
 
     // Solo una fila abierta a la vez — evita que la pantalla se llene si el
     // usuario expande varias operaciones seguidas.
@@ -359,6 +437,8 @@ export default function RastreoOperacionesPage({
         cliente_ids: clienteIds,
         proveedor_ids: proveedorIds,
         cuenta_ids: cuentaIds,
+        producto_ids: productoIds,
+        almacen_ids: almacenIds,
         cliente_direccion: clienteDireccion,
         proveedor_direccion: proveedorDireccion,
         cuenta_direccion: cuentaDireccion,
@@ -370,6 +450,22 @@ export default function RastreoOperacionesPage({
             preserveState: true,
             replace: true,
         });
+    };
+
+    // Elegir un producto/cliente/proveedor/cuenta/almacén sigue necesitando el botón "Filtrar"
+    // (se puede querer armar una lista de varios antes de aplicar) — pero QUITAR un chip ya
+    // elegido debe reflejarse al toque, sin ese paso extra. `buildParams()` lee el estado
+    // actual por closure, que todavía no tiene el valor nuevo (setState es async) — por eso
+    // acá se pisa esa única clave con `next` directo, en vez de esperar al siguiente render.
+    const handleMultiFiltroChange = (anterior: number[], siguiente: number[], setter: (ids: number[]) => void, clave: string) => {
+        setter(siguiente);
+        if (siguiente.length < anterior.length) {
+            router.get(
+                route('reportes.rastreo_operaciones'),
+                { ...buildParams(1), [clave]: siguiente },
+                { preserveState: true, replace: true },
+            );
+        }
     };
 
     const handlePageChange = (page: number) => {
@@ -619,7 +715,7 @@ export default function RastreoOperacionesPage({
                                 label="Cliente"
                                 items={clienteItems}
                                 selected={clienteIds}
-                                onChange={setClienteIds}
+                                onChange={(ids) => handleMultiFiltroChange(clienteIds, ids, setClienteIds, 'cliente_ids')}
                                 direccion={clienteDireccion}
                                 onDireccionChange={setClienteDireccion}
                                 placeholder="Buscar cliente..."
@@ -628,7 +724,7 @@ export default function RastreoOperacionesPage({
                                 label="Proveedor"
                                 items={proveedorItems}
                                 selected={proveedorIds}
-                                onChange={setProveedorIds}
+                                onChange={(ids) => handleMultiFiltroChange(proveedorIds, ids, setProveedorIds, 'proveedor_ids')}
                                 direccion={proveedorDireccion}
                                 onDireccionChange={setProveedorDireccion}
                                 placeholder="Buscar proveedor..."
@@ -637,10 +733,26 @@ export default function RastreoOperacionesPage({
                                 label="Cuenta"
                                 items={cuentaItems}
                                 selected={cuentaIds}
-                                onChange={setCuentaIds}
+                                onChange={(ids) => handleMultiFiltroChange(cuentaIds, ids, setCuentaIds, 'cuenta_ids')}
                                 direccion={cuentaDireccion}
                                 onDireccionChange={setCuentaDireccion}
                                 placeholder="Buscar cuenta..."
+                            />
+                            <ComboboxFiltro
+                                label="Producto"
+                                items={productoItems}
+                                selected={productoIds}
+                                onChange={(ids) => handleMultiFiltroChange(productoIds, ids, setProductoIds, 'producto_ids')}
+                                onSearchChange={setProductoQuery}
+                                loading={buscandoProducto}
+                                placeholder="Buscar producto (mín. 2 letras)..."
+                            />
+                            <ComboboxFiltro
+                                label="Almacén"
+                                items={almacenItems}
+                                selected={almacenIds}
+                                onChange={(ids) => handleMultiFiltroChange(almacenIds, ids, setAlmacenIds, 'almacen_ids')}
+                                placeholder="Buscar almacén..."
                             />
                             <div className="flex gap-2">
                                 <Button onClick={handleFilter} className="w-full">
