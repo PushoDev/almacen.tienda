@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AjusteValorInventario;
 use App\Models\Compra;
 use App\Models\CompraProducto;
 use App\Models\LoteFusion;
@@ -27,19 +28,26 @@ class FusionLotesService
     /**
      * @param  array<int, int>  $loteIds
      * @param  float|null  $precioVenta  precio propio del lote resultante; null = hereda el del producto en el almacén
+     * @param  float|null  $costoForzado  2026-10-02: cuando el admin elige actualizar el costo de VARIOS almacenes
+     *                                    a la vez (ver `FusionProductosService::actualizarCostoEnAlmacenes()`), el
+     *                                    costo resultante no es el promedio local de ESTOS lotes sino el promedio
+     *                                    combinado de todos los almacenes elegidos — se fuerza ese valor en vez de
+     *                                    calcularlo acá. null (el caso normal, de siempre) = promedio ponderado de
+     *                                    estos lotes nomás, sin cambios de comportamiento.
+     * @return array{lote: LoteStock, ajuste: float|null} `ajuste` = diferencia de redondeo del costo promedio ponderado ya auditada en ajustes_valor_inventario (null = sin diferencia)
      *
      * @throws ValidationException
      */
-    public function fusionar(int $productoId, int $almacenId, array $loteIds, ?float $precioVenta, User $user): LoteStock
+    public function fusionar(int $productoId, int $almacenId, array $loteIds, ?float $precioVenta, User $user, ?float $costoForzado = null): array
     {
-        return DB::transaction(function () use ($productoId, $almacenId, $loteIds, $precioVenta, $user) {
+        return DB::transaction(function () use ($productoId, $almacenId, $loteIds, $precioVenta, $user, $costoForzado) {
             $lotes = LoteStock::whereIn('id', $loteIds)->lockForUpdate()->orderBy('created_at')->orderBy('id')->get();
 
             $this->validar($lotes, $loteIds, $productoId, $almacenId);
 
             $cantidadTotal = (int) $lotes->sum('cantidad_disponible');
             $valorTotal = $lotes->sum(fn (LoteStock $lote) => $lote->cantidad_disponible * (float) $lote->precio_costo);
-            $costoResultante = round($valorTotal / $cantidadTotal, 2);
+            $costoResultante = $costoForzado !== null ? round($costoForzado, 2) : round($valorTotal / $cantidadTotal, 2);
 
             $resultante = LoteStock::create([
                 'codigo' => LoteStock::generarCodigoFusion($productoId, $almacenId),
@@ -58,7 +66,7 @@ class FusionLotesService
             $resultante->created_at = $lotes->first()->created_at;
             $resultante->save();
 
-            LoteFusion::create([
+            $loteFusion = LoteFusion::create([
                 'producto_id' => $productoId,
                 'almacen_id' => $almacenId,
                 'lote_resultante_id' => $resultante->id,
@@ -81,7 +89,25 @@ class FusionLotesService
                 'updated_at' => now(),
             ]);
 
-            return $resultante->fresh();
+            // El costo promedio ponderado no pierde valor en sí (costoResultante × cantidadTotal
+            // debería dar exacto valorTotal), pero redondear el costo unitario a 2 decimales antes
+            // de guardarlo puede dejar una diferencia de centavos al multiplicar de vuelta por la
+            // cantidad — se audita para que el reporte histórico cuadre siempre al centavo.
+            $deltaRedondeo = round($costoResultante * $cantidadTotal - $valorTotal, 2);
+            if ($deltaRedondeo !== 0.0) {
+                AjusteValorInventario::create([
+                    'tipo' => AjusteValorInventario::TIPO_FUSION_LOTES,
+                    'producto_id' => $productoId,
+                    'almacen_id' => $almacenId,
+                    'lote_id' => $resultante->id,
+                    'lote_fusion_id' => $loteFusion->id,
+                    'monto' => $deltaRedondeo,
+                    'detalle' => "Ajuste de redondeo al fusionar {$lotes->count()} lotes en {$resultante->codigo} (costo promedio ponderado a 2 decimales).",
+                    'user_id' => $user->id,
+                ]);
+            }
+
+            return ['lote' => $resultante->fresh(), 'ajuste' => $deltaRedondeo !== 0.0 ? $deltaRedondeo : null];
         });
     }
 
@@ -92,7 +118,7 @@ class FusionLotesService
      * se informa el motivo para que el usuario lo revise.
      *
      * @param  array<int, int>  $productoIds
-     * @return array{fusionados: array<int, array{producto_id: int, codigo: string, cantidad: int, costo: float}>, fallidos: array<int, array{producto_id: int, motivo: string}>}
+     * @return array{fusionados: array<int, array{producto_id: int, codigo: string, cantidad: int, costo: float, ajuste: float|null}>, fallidos: array<int, array{producto_id: int, motivo: string}>}
      */
     public function fusionarEnAlmacen(array $productoIds, int $almacenId, User $user): array
     {
@@ -107,12 +133,14 @@ class FusionLotesService
                 ->all();
 
             try {
-                $lote = $this->fusionar((int) $productoId, $almacenId, $loteIds, null, $user);
+                $resultado = $this->fusionar((int) $productoId, $almacenId, $loteIds, null, $user);
+                $lote = $resultado['lote'];
                 $fusionados[] = [
                     'producto_id' => (int) $productoId,
                     'codigo' => $lote->codigo,
                     'cantidad' => $lote->cantidad_disponible,
                     'costo' => (float) $lote->precio_costo,
+                    'ajuste' => $resultado['ajuste'],
                 ];
             } catch (ValidationException $e) {
                 $fallidos[] = ['producto_id' => (int) $productoId, 'motivo' => collect($e->errors())->flatten()->first()];

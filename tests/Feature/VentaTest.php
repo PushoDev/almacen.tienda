@@ -305,7 +305,7 @@ test('anular una venta de un lote que después se fusionó devuelve las unidades
         'tasa_cambio' => 1, 'monto_equivalente' => 150, 'cuenta_id' => crearCuentaUsd()->id,
     ]];
     $this->postJson(route('ventas.procesar'), $payload)->assertOk();
-    $resultante = app(FusionLotesService::class)->fusionar($producto->id, $almacen->id, [$loteA->id, $loteB->id], null, $admin);
+    $resultante = app(FusionLotesService::class)->fusionar($producto->id, $almacen->id, [$loteA->id, $loteB->id], null, $admin)['lote'];
     expect($resultante->cantidad_disponible)->toBe(45);
 
     $venta = Venta::where('almacen_id', $almacen->id)->sole();
@@ -3075,5 +3075,37 @@ test('ventas.show manda las vías de transferencia por moneda en monedasSistema,
             return $usd !== null
                 && array_key_exists('vias_transferencia', $usd)
                 && collect($usd['vias_transferencia'])->pluck('slug')->contains('zelle');
+        }));
+});
+
+test('ventas.show manda tasa_comision en monedasSistema, null si la moneda no la tiene configurada', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true, 'tasa_comision' => null]);
+    Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true, 'tasa_cambio' => 380, 'tasa_comision' => 395]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta = crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 20,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 20,
+        'cuenta_id' => $cuenta->id,
+    ]];
+    $this->postJson(route('ventas.procesar'), $payload)->assertOk();
+    $venta = Venta::firstOrFail();
+
+    $this->get(route('ventas.show', $venta))->assertInertia(fn ($page) => $page
+        ->where('monedasSistema', function ($monedas) {
+            $usd = collect($monedas)->firstWhere('codigo', 'USD');
+            $cup = collect($monedas)->firstWhere('codigo', 'CUP');
+
+            return $usd !== null && $usd['tasa_comision'] === null
+                && $cup !== null && (float) $cup['tasa_comision'] === 395.0;
         }));
 });

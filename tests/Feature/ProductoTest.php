@@ -863,3 +863,61 @@ test('el export general de un vendedor no incluye costo, importe ni el total gen
 test('el export general redirige al login cuando no hay sesión', function () {
     $this->get(route('productos.export-general'))->assertRedirect(route('login'));
 });
+
+// ===========================================================================
+// scopeBuscar() — 3 mejoras 2026-10-02: varios términos a la vez, capacidad tolerante a
+// espacios, código de barras exacto. Ver docs/ESTADO_DESARROLLO.md (2026-10-02).
+// ===========================================================================
+
+test('la búsqueda encuentra el producto aunque los términos no estén juntos ni en orden', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $categoria = Categoria::factory()->create();
+    $match = Producto::factory()->create([
+        'nombre_producto' => 'PANEL SOLAR', 'marca_producto' => 'LONGI', 'capacidad_producto' => '635 W', 'categoria_id' => $categoria->id,
+    ]);
+    $otro = Producto::factory()->create([
+        'nombre_producto' => 'PANEL SOLAR', 'marca_producto' => 'JMD', 'capacidad_producto' => '650 W', 'categoria_id' => $categoria->id,
+    ]);
+
+    $response = $this->get(route('productos.index', ['search' => 'panel longi 635']));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data', fn ($data) => collect($data)->pluck('id')->all() === [$match->id])
+    );
+    expect($otro)->not->toBeNull();
+});
+
+test('la búsqueda de capacidad es tolerante a espacios en cualquier dirección', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $conEspacioEnBd = Producto::factory()->create(['capacidad_producto' => '635 W']);
+    Producto::factory()->create(['capacidad_producto' => '650 W']);
+
+    // Término SIN espacio contra capacidad CON espacio en la BD.
+    $response = $this->get(route('productos.index', ['search' => '635w']));
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data', fn ($data) => collect($data)->pluck('id')->all() === [$conEspacioEnBd->id])
+    );
+
+    $sinEspacioEnBd = Producto::factory()->create(['capacidad_producto' => '720W']);
+    Producto::factory()->create(['capacidad_producto' => '750W']);
+
+    // Término CON espacio contra capacidad SIN espacio en la BD.
+    $response2 = $this->get(route('productos.index', ['search' => '720 w']));
+    $response2->assertInertia(fn ($page) => $page
+        ->where('productos.data', fn ($data) => collect($data)->pluck('id')->all() === [$sinEspacioEnBd->id])
+    );
+});
+
+test('un código de barras exacto salta directo a esa ficha, sin mezclar con texto libre', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $buscado = Producto::factory()->create(['nombre_producto' => 'PANEL SOLAR']);
+    ProductoCodigo::create(['producto_id' => $buscado->id, 'codigo_barras' => 'PANLONBIF63581', 'cantidad' => 10, 'es_default' => true]);
+    // Otro producto que también matchearía por texto libre si no se detectara el código exacto.
+    Producto::factory()->create(['nombre_producto' => 'PANLONBIF63581 EN EL NOMBRE']);
+
+    $response = $this->get(route('productos.index', ['search' => 'PANLONBIF63581']));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('productos.data', fn ($data) => collect($data)->pluck('id')->all() === [$buscado->id])
+    );
+});

@@ -66,6 +66,45 @@ test('fusionar dos lotes crea uno solo con la cantidad sumada, costo ponderado y
         ->and(collect($fusion->lotes_origen)->pluck('codigo')->all())->toBe(['AJUSTE-LEGADO-OLLA', 'LOTE-MOV-209-OLLA']);
 });
 
+test('fusionar lotes con costos distintos audita el ajuste de redondeo del costo promedio ponderado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    ['producto' => $producto, 'almacen' => $almacen, 'viejo' => $viejo, 'nuevo' => $nuevo] = ollaConDosLotes();
+
+    $this->postJson(route('productos.lotes.fusionar', $producto), [
+        'almacen_id' => $almacen->id,
+        'lote_ids' => [$viejo->id, $nuevo->id],
+    ])->assertOk();
+
+    $resultante = LoteStock::where('codigo', "FUSION-{$producto->id}-{$almacen->id}-1")->sole();
+
+    // (28*21.38 + 50*21.85) = 1691.14 exacto; 21.68 * 78 = 1691.04 guardado -> -0.10 de redondeo.
+    $this->assertDatabaseHas('ajustes_valor_inventario', [
+        'tipo' => 'fusion_lotes',
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacen->id,
+        'lote_id' => $resultante->id,
+        'monto' => '-0.10',
+        'user_id' => $admin->id,
+    ]);
+});
+
+test('fusionar lotes sin diferencia de redondeo no crea ajuste de valor de inventario', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $producto = Producto::factory()->create();
+    $almacen = Almacen::factory()->create();
+    $producto->almacenes()->attach($almacen->id, ['cantidad' => 20]);
+    $a = LoteStock::create(['codigo' => 'LOTE-A', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 10, 'precio_costo' => 5]);
+    $b = LoteStock::create(['codigo' => 'LOTE-B', 'producto_id' => $producto->id, 'almacen_id' => $almacen->id, 'cantidad' => 10, 'precio_costo' => 5]);
+
+    $this->postJson(route('productos.lotes.fusionar', $producto), [
+        'almacen_id' => $almacen->id,
+        'lote_ids' => [$a->id, $b->id],
+    ])->assertOk();
+
+    $this->assertDatabaseCount('ajustes_valor_inventario', 0);
+});
+
 test('el lote fusionado hereda la comisión propia del lote más viejo que la tenga', function () {
     $this->actingAs(User::factory()->admin()->create());
     ['producto' => $producto, 'almacen' => $almacen, 'viejo' => $viejo, 'nuevo' => $nuevo] = ollaConDosLotes();

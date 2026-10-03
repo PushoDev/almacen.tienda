@@ -20,6 +20,11 @@ Route::middleware(['auth', 'verified'])->group(
             // almacenes sin relación entre sí.
             Route::post('/listado-productos/{producto}/fusionar-en-almacen', [ProductoController::class, 'fusionarEnAlmacen'])->name('productos.fusionar-en-almacen');
 
+            // "¿En qué almacenes aplicar el nuevo costo?" (2026-10-02, pedido del cliente): paso
+            // suelto desde Edit.tsx o disparado al terminar una fusión en Limpiar duplicados.
+            Route::get('/listado-productos/{producto}/almacenes-con-stock', [ProductoController::class, 'almacenesConStock'])->name('productos.almacenes-con-stock');
+            Route::post('/listado-productos/{producto}/actualizar-costo-almacenes', [ProductoController::class, 'actualizarCostoEnAlmacenes'])->name('productos.actualizar-costo-almacenes');
+
             // Historial de importaciones de Excel: listado, detalle fila por fila y vista previa de "deshacer".
             Route::get('/importaciones-productos', [ImportacionProductoController::class, 'index'])->name('importaciones-productos.index');
             Route::get('/importaciones-productos/{importacion}', [ImportacionProductoController::class, 'show'])->name('importaciones-productos.show');
@@ -54,6 +59,13 @@ Route::middleware(['auth', 'verified'])->group(
         Route::post('/listado-productos/{producto}/lotes/fusionar', [ProductoController::class, 'fusionarLotes'])
             ->middleware('admin')
             ->name('productos.lotes.fusionar');
+
+        // Editar en lote varios productos a la vez (solo admin, a diferencia de 'admin' arriba
+        // que también deja pasar moderador) — pedido del cliente 2026-10-02 tras el caso de
+        // Compra #14 (ficha "635W" duplicando "635 W" por un tipeo sin corregir a tiempo).
+        Route::post('/listado-productos/editar-en-lote', [ProductoController::class, 'editarEnLote'])
+            ->middleware('admin.only')
+            ->name('productos.editar-en-lote');
 
         // Override opcional de precio de venta por lote puntual ("Opción A", ver Edit.tsx/Show.tsx)
         Route::put('/listado-productos/{producto}/lotes/{lote}/precio-venta', [ProductoController::class, 'actualizarPrecioVentaLote'])

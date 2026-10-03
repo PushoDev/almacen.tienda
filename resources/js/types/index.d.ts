@@ -150,7 +150,7 @@ export interface CuentaProps {
     nombre_cuenta: string;
     saldo_cuenta: number | null;
     deuda: number;
-    tipo_cuenta: 'permanentes' | 'temporales' | 'deudas';
+    tipo_cuenta: 'permanentes' | 'deudas';
     tipo_moneda: 'USD' | 'EUR' | 'MLC' | 'CUP';
     notas_cuenta?: string | null;
     created_at: string;
@@ -313,7 +313,7 @@ export interface CuentaNegocioProps {
     nombre_cuenta: string;
     saldo_cuenta: number;
     deuda: number;
-    tipo_cuenta: 'permanentes' | 'temporales' | 'deudas';
+    tipo_cuenta: 'permanentes' | 'deudas';
     notas_cuenta?: string;
     created_at?: string;
     updated_at?: string;

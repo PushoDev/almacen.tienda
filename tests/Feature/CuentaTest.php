@@ -725,6 +725,94 @@ test('create() y edit() exponen la lista plana de bancos para el select de tipo_
     );
 });
 
+test('store() guarda el ámbito también en una cuenta de efectivo, y sin ámbito queda sin clasificar', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $datos = [
+        'tipo' => 'efectivo',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+    ];
+
+    $this->post(route('cuentas.store'), $datos + ['nombre_cuenta' => 'CAJA USD NACIONAL', 'ambito' => Cuenta::AMBITO_NACIONAL])
+        ->assertRedirect(route('cuentas.index'));
+    $this->post(route('cuentas.store'), $datos + ['nombre_cuenta' => 'CAJA USD SIN AMBITO'])
+        ->assertRedirect(route('cuentas.index'));
+
+    $this->assertDatabaseHas('cuentas', ['nombre_cuenta' => 'CAJA USD NACIONAL', 'ambito' => 'nacional']);
+    $this->assertDatabaseHas('cuentas', ['nombre_cuenta' => 'CAJA USD SIN AMBITO', 'ambito' => null]);
+});
+
+test('store() rechaza un ámbito que no es nacional ni internacional', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $response = $this->post(route('cuentas.store'), [
+        'nombre_cuenta' => 'Cuenta Ambito Falso '.uniqid(),
+        'tipo' => 'tarjeta',
+        'moneda_id' => crearMonedaUsd()->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'ambito' => 'cuba',
+    ]);
+
+    $response->assertSessionHasErrors('ambito');
+});
+
+test('update() cambia el ámbito de una cuenta existente y edit() lo expone', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta ambito a editar '.uniqid(),
+        'tipo' => 'tarjeta',
+        'saldo_cuenta' => 0,
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'clasica',
+    ]);
+
+    $this->put(route('cuentas.update', $cuenta), [
+        'nombre_cuenta' => $cuenta->nombre_cuenta,
+        'tipo' => 'tarjeta',
+        'moneda_id' => $moneda->id,
+        'tipo_cuenta' => 'permanentes',
+        'estado' => 'activa',
+        'tipo_banco' => 'clasica',
+        'ambito' => Cuenta::AMBITO_NACIONAL,
+    ])->assertRedirect(route('cuentas.index'));
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'ambito' => 'nacional']);
+    $this->get(route('cuentas.edit', $cuenta))->assertInertia(fn ($page) => $page->where('cuenta.ambito', 'nacional'));
+});
+
+test('create() y edit() mandan el logo de la insignia de cada moneda para el select, null si no tiene', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $moneda = crearMonedaUsd();
+    $moneda->update(['imagen' => 'usd']);
+    $cuenta = crearCuentaEnMoneda($moneda);
+
+    $this->get(route('cuentas.edit', $cuenta))->assertInertia(fn ($page) => $page
+        ->where('monedas.0.imagen_url', asset('projects/monedas/usd.webp'))
+    );
+    $this->get(route('cuentas.create'))->assertInertia(fn ($page) => $page
+        ->where('monedas.0.imagen_url', asset('projects/monedas/usd.webp'))
+    );
+
+    $moneda->update(['imagen' => null]);
+
+    $this->get(route('cuentas.edit', $cuenta))->assertInertia(fn ($page) => $page
+        ->where('monedas.0.imagen_url', null)
+    );
+});
+
 // ==========================================================================
 // HISTORIAL — Fase 2 (unifica movimientos_financieros + pagos/comisiones de
 // venta + pagos de compra, ninguno de los cuales vive en una sola tabla)

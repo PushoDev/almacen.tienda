@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\DistribuirCostosManualRequest;
+use App\Models\AjusteValorInventario;
 use App\Models\Almacen;
 use App\Models\Compra;
 use App\Models\CostDistribution;
@@ -20,6 +21,7 @@ use App\Models\MovimientoSeguimiento;
 use App\Models\Producto;
 use App\Models\Proveedor;
 use App\Services\FusionLotesService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -305,7 +307,39 @@ class DistribucionCostosController extends Controller
         return $this->distribuirLoteCompras($validatedData);
     }
 
-    private function distribuirLoteCompras(array $validatedData)
+    /**
+     * Vista previa de "distribuir": corre exactamente el mismo cálculo (misma validación, mismos
+     * cálculos de incremento y de pérdida) dentro de la transacción de distribuirLoteCompras()/
+     * distribuirLoteMovimientos(), pero con $previsualizar=true esas dos SIEMPRE revierten al final
+     * en vez de comitear — así no hay dos fórmulas que puedan divergir con el tiempo. El frontend la
+     * llama antes de aplicar de verdad; si devuelve un ajuste (pérdida real, no el redondeo de
+     * fusionar lotes, que sigue siendo informativo-después), le pide confirmación al usuario antes
+     * de mandar la petición real a distribuirCostosManual().
+     */
+    public function previsualizarProrrateo(DistribuirCostosManualRequest $request)
+    {
+        $validatedData = $request->validated();
+
+        if (! empty($validatedData['movimiento_ids'] ?? [])) {
+            return $this->distribuirLoteMovimientos($validatedData, previsualizar: true);
+        }
+
+        return $this->distribuirLoteCompras($validatedData, previsualizar: true);
+    }
+
+    /**
+     * Error de validación/negocio de la distribución: redirect con flash fuera de una previsualización
+     * (el usuario está en CambiarCostoManual.tsx, un `post()` de Inertia normal), JSON 422 dentro de
+     * una ($previsualizar=true, la llama previsualizarProrrateo() vía fetch, no espera un redirect).
+     */
+    private function respuestaError(bool $previsualizar, string $mensaje)
+    {
+        return $previsualizar
+            ? response()->json(['error' => $mensaje], 422)
+            : redirect()->back()->with('error', $mensaje);
+    }
+
+    private function distribuirLoteCompras(array $validatedData, bool $previsualizar = false)
     {
         DB::beginTransaction();
 
@@ -315,7 +349,7 @@ class DistribucionCostosController extends Controller
             if ($compras->isEmpty()) {
                 DB::rollBack();
 
-                return redirect()->back()->with('error', 'No se encontraron las compras seleccionadas.');
+                return $this->respuestaError($previsualizar, 'No se encontraron las compras seleccionadas.');
             }
 
             // Mismo guard que mostrarFormularioDistribucion() — defensa en profundidad, por si se
@@ -323,7 +357,7 @@ class DistribucionCostosController extends Controller
             if ($compras->contains(fn ($compra) => $compra->estado !== 'aprobada')) {
                 DB::rollBack();
 
-                return redirect()->back()->with('error', 'Solo se pueden prorratear costos sobre compras ya aprobadas.');
+                return $this->respuestaError($previsualizar, 'Solo se pueden prorratear costos sobre compras ya aprobadas.');
             }
 
             $compraIds = $compras->pluck('id')->sort()->implode(', ');
@@ -342,7 +376,7 @@ class DistribucionCostosController extends Controller
                 $validatedData,
                 $compras->first()->id,
                 "compras #{$compraIds}",
-                function (Producto $producto, float $incrementoUnitario, float $nuevoCosto, $productoAgrupado) {
+                function (Producto $producto, float $incrementoUnitario, float $nuevoCosto, $productoAgrupado, CostDistribution $distribution) use ($compraIds) {
                     $producto->update(['precio_compra_producto' => $nuevoCosto]);
 
                     $compraProductoIds = $productoAgrupado->pivot->compra_producto_ids ?? [];
@@ -352,15 +386,20 @@ class DistribucionCostosController extends Controller
                         ->unique()
                         ->all();
 
-                    LoteStock::whereIn('id', $loteIds)->increment('precio_costo', $incrementoUnitario);
+                    $ajuste = $this->aplicarIncrementoALotes($loteIds, $incrementoUnitario, (int) $productoAgrupado->pivot->cantidad, $producto, $distribution, "compras #{$compraIds}");
 
                     foreach ($producto->almacenes as $almacen) {
                         app(ProductoVendedorController::class)->actualizarGananciaPorCambioCosto($producto->id, $almacen->id);
                     }
-                }
+
+                    return $ajuste;
+                },
+                $previsualizar
             );
 
-            if ($resultado instanceof RedirectResponse) {
+            // Cualquier error de ejecutarProrrateoAutomatico() (tasa, permisos, saldo…) llega acá
+            // como RedirectResponse o JsonResponse según $previsualizar — nunca como el array de éxito.
+            if (! is_array($resultado)) {
                 DB::rollBack();
 
                 return $resultado;
@@ -379,20 +418,32 @@ class DistribucionCostosController extends Controller
                 ]);
             }
 
+            if ($previsualizar) {
+                DB::rollBack();
+
+                return response()->json([
+                    'mensaje' => $this->mensajeExitoDistribucion($resultado),
+                    'ajuste' => $resultado['ajusteTotal'] < 0 ? $resultado['ajusteTotal'] : null,
+                ]);
+            }
+
             DB::commit();
 
             return redirect()
                 ->route('distribucion-costos.index')
-                ->with('success', $this->mensajeExitoDistribucion($resultado));
+                ->with('distribucion_resultado', [
+                    'mensaje' => $this->mensajeExitoDistribucion($resultado),
+                    'ajuste' => $resultado['ajusteTotal'] < 0 ? $resultado['ajusteTotal'] : null,
+                ]);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al distribuir costos manualmente (compras): '.$e->getMessage());
 
-            return redirect()->back()->with('error', 'Ocurrió un error al distribuir los costos. Por favor, revisa los datos e intenta de nuevo.');
+            return $this->respuestaError($previsualizar, 'Ocurrió un error al distribuir los costos. Por favor, revisa los datos e intenta de nuevo.');
         }
     }
 
-    private function distribuirLoteMovimientos(array $validatedData)
+    private function distribuirLoteMovimientos(array $validatedData, bool $previsualizar = false)
     {
         if (! in_array(Auth::user()->role, ['admin', 'moderador'])) {
             abort(403, 'Solo admin/moderador puede prorratear costos de movimientos.');
@@ -411,7 +462,7 @@ class DistribucionCostosController extends Controller
             if ($movimientos->isEmpty()) {
                 DB::rollBack();
 
-                return redirect()->back()->with('error', 'No se encontraron movimientos válidos entre los seleccionados.');
+                return $this->respuestaError($previsualizar, 'No se encontraron movimientos válidos entre los seleccionados.');
             }
 
             $movimientoIds = $movimientos->pluck('id')->sort()->implode(', ');
@@ -433,18 +484,24 @@ class DistribucionCostosController extends Controller
                 $validatedData,
                 null,
                 "movimientos #{$movimientoIds}",
-                function (Producto $producto, float $incrementoUnitario, float $nuevoCosto) use ($movimientoIdsDelLote) {
-                    LoteStock::whereIn('movimiento_id', $movimientoIdsDelLote)
+                function (Producto $producto, float $incrementoUnitario, float $nuevoCosto, $productoAgrupado, CostDistribution $distribution) use ($movimientoIdsDelLote, $movimientoIds) {
+                    $loteIds = LoteStock::whereIn('movimiento_id', $movimientoIdsDelLote)
                         ->where('producto_id', $producto->id)
-                        ->increment('precio_costo', $incrementoUnitario);
+                        ->pluck('id')
+                        ->all();
+
+                    $ajuste = $this->aplicarIncrementoALotes($loteIds, $incrementoUnitario, (int) $productoAgrupado->pivot->cantidad, $producto, $distribution, "movimientos #{$movimientoIds}");
 
                     foreach ($producto->almacenes as $almacen) {
                         app(ProductoVendedorController::class)->actualizarGananciaPorCambioCosto($producto->id, $almacen->id);
                     }
-                }
+
+                    return $ajuste;
+                },
+                $previsualizar
             );
 
-            if ($resultado instanceof RedirectResponse) {
+            if (! is_array($resultado)) {
                 DB::rollBack();
 
                 return $resultado;
@@ -470,26 +527,45 @@ class DistribucionCostosController extends Controller
                 ]);
             }
 
+            if ($previsualizar) {
+                DB::rollBack();
+
+                return response()->json([
+                    'mensaje' => $this->mensajeExitoDistribucion($resultado),
+                    'ajuste' => $resultado['ajusteTotal'] < 0 ? $resultado['ajusteTotal'] : null,
+                ]);
+            }
+
             DB::commit();
 
             return redirect()
                 ->route('distribucion-costos.index')
-                ->with('success', $this->mensajeExitoDistribucion($resultado));
+                ->with('distribucion_resultado', [
+                    'mensaje' => $this->mensajeExitoDistribucion($resultado),
+                    'ajuste' => $resultado['ajusteTotal'] < 0 ? $resultado['ajusteTotal'] : null,
+                ]);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al distribuir costos manualmente (movimientos): '.$e->getMessage());
 
-            return redirect()->back()->with('error', 'Ocurrió un error al distribuir los costos. Por favor, revisa los datos e intenta de nuevo.');
+            return $this->respuestaError($previsualizar, 'Ocurrió un error al distribuir los costos. Por favor, revisa los datos e intenta de nuevo.');
         }
     }
 
     private function mensajeExitoDistribucion(array $resultado): string
     {
-        return $resultado['totalUsdSobrante'] > 0.01
+        $mensaje = $resultado['totalUsdSobrante'] > 0.01
             ? 'Costos distribuidos manualmente con éxito. Se registró un sobrante de '.
                 number_format($resultado['totalUsdSobrante'], 2).' USD ('.
                 number_format($resultado['totalCupSobrante'], 2).' CUP) como gasto directo.'
             : 'Costos distribuidos manualmente con éxito.';
+
+        if (($resultado['ajusteTotal'] ?? 0.0) < 0) {
+            $mensaje .= ' Aviso: '.number_format(abs($resultado['ajusteTotal']), 2).
+                ' USD del incremento no encontraron unidades vivas donde aplicarse (vendidas antes de decidir el prorrateo, fusionadas o no) — quedó auditado como ajuste de valor de inventario.';
+        }
+
+        return $mensaje;
     }
 
     /**
@@ -501,10 +577,10 @@ class DistribucionCostosController extends Controller
      * crea después (ver distribuirLoteCompras/distribuirLoteMovimientos).
      *
      * @param  Collection  $productosAgrupados  Producto con pivot->cantidad ya sumado (ver agruparProductosPorLinea/agruparProductosPorMovimiento).
-     * @param  callable(Producto, float, float, mixed): void  $aplicarNuevoCosto  Dónde aplicar el incremento por unidad calculado — Compras lo aplica al costo global de la ficha y a los lotes que descienden de las líneas de compra de este lote (ver LoteStock::idsConDescendientes(), una ficha puede recibir de más de una compra desde 2026-09-20); Movimientos lo aplica solo al lote del almacén destino de ESE traslado (ver distribuirLoteCompras/distribuirLoteMovimientos). Firma: (Producto $producto, float $incrementoUnitario, float $nuevoCostoGlobalReferencia, mixed $productoAgrupado — el elemento actual de $productosAgrupados, con su pivot).
-     * @return RedirectResponse|array{distribution: CostDistribution, totalUsdSobrante: float, totalCupSobrante: float}
+     * @param  callable(Producto, float, float, mixed, CostDistribution): float  $aplicarNuevoCosto  Dónde aplicar el incremento por unidad calculado — Compras lo aplica al costo global de la ficha y a los lotes que descienden de las líneas de compra de este lote (ver LoteStock::idsConDescendientes(), una ficha puede recibir de más de una compra desde 2026-09-20); Movimientos lo aplica solo al lote del almacén destino de ESE traslado (ver distribuirLoteCompras/distribuirLoteMovimientos). Ambos delegan a aplicarIncrementoALotes() para redirigir a loteVigente()/auditar la pérdida y devuelven su resultado (0.0 o negativo). Firma: (Producto $producto, float $incrementoUnitario, float $nuevoCostoGlobalReferencia, mixed $productoAgrupado — el elemento actual de $productosAgrupados, con su pivot, CostDistribution $distribution — para enlazar la auditoría): float.
+     * @return RedirectResponse|JsonResponse|array{distribution: CostDistribution, totalUsdSobrante: float, totalCupSobrante: float, ajusteTotal: float}
      */
-    private function ejecutarProrrateoAutomatico($productosAgrupados, array $validatedData, ?int $purchaseIdLegado, string $etiquetaLote, callable $aplicarNuevoCosto)
+    private function ejecutarProrrateoAutomatico($productosAgrupados, array $validatedData, ?int $purchaseIdLegado, string $etiquetaLote, callable $aplicarNuevoCosto, bool $previsualizar = false)
     {
         // Tasa de cambio de la operación — aplica solo a las cuentas CUP del lote; las cuentas
         // USD no la necesitan. Por defecto, la tasa CUP general del sistema.
@@ -512,7 +588,7 @@ class DistribucionCostosController extends Controller
         $tasa_cambio = $validatedData['exchange_rate'] ?? ($monedaCUP->tasa_cambio ?? null);
 
         if (! $tasa_cambio || $tasa_cambio == 0) {
-            return redirect()->back()->with('error', 'La tasa de cambio no está definida o es cero.');
+            return $this->respuestaError($previsualizar, 'La tasa de cambio no está definida o es cero.');
         }
 
         // Cada cuenta financia en su propia moneda (CUP o USD, mezcladas está permitido).
@@ -538,19 +614,19 @@ class DistribucionCostosController extends Controller
             $cuenta = $item['cuenta'];
 
             if ($cuentasAsignadas !== null && ! in_array($cuenta->id, $cuentasAsignadas)) {
-                return redirect()->back()->with('error', "No tiene permiso para operar con la cuenta {$cuenta->nombre_cuenta}.");
+                return $this->respuestaError($previsualizar, "No tiene permiso para operar con la cuenta {$cuenta->nombre_cuenta}.");
             }
 
             if ($cuenta->tipo_cuenta === 'deudas') {
-                return redirect()->back()->with('error', 'No se puede usar una cuenta de deudas para esta operación.');
+                return $this->respuestaError($previsualizar, 'No se puede usar una cuenta de deudas para esta operación.');
             }
 
             if (! in_array($cuenta->moneda->codigo_moneda, ['CUP', 'USD'])) {
-                return redirect()->back()->with('error', 'Solo se pueden usar cuentas en moneda CUP o USD para esta operación.');
+                return $this->respuestaError($previsualizar, 'Solo se pueden usar cuentas en moneda CUP o USD para esta operación.');
             }
 
             if ($cuenta->saldo_cuenta < $item['monto']) {
-                return redirect()->back()->with('error', "El saldo de la cuenta {$cuenta->nombre_cuenta} es insuficiente.");
+                return $this->respuestaError($previsualizar, "El saldo de la cuenta {$cuenta->nombre_cuenta} es insuficiente.");
             }
         }
 
@@ -591,6 +667,7 @@ class DistribucionCostosController extends Controller
         $totalLote = $productosAgrupados->sum(fn ($p) => $p->precio_compra_producto * $p->pivot->cantidad);
 
         $totalUsdDistribuidoProductos = 0;
+        $ajusteTotal = 0.0;
 
         foreach ($productosAgrupados as $productoAgrupado) {
             $cantidad = $productoAgrupado->pivot->cantidad;
@@ -630,7 +707,7 @@ class DistribucionCostosController extends Controller
                 'comentario' => "Ajuste por distribución automática de costos ({$etiquetaLote}).",
             ]);
 
-            $aplicarNuevoCosto($producto, $incrementoUnitario, $nuevoCosto, $productoAgrupado);
+            $ajusteTotal += $aplicarNuevoCosto($producto, $incrementoUnitario, $nuevoCosto, $productoAgrupado, $distribution);
 
             $totalUsdDistribuidoProductos += $montoAsignado;
         }
@@ -699,7 +776,63 @@ class DistribucionCostosController extends Controller
             'distribution' => $distribution,
             'totalUsdSobrante' => $totalUsdSobrante,
             'totalCupSobrante' => $totalCupSobrante,
+            'ajusteTotal' => $ajusteTotal,
         ];
+    }
+
+    /**
+     * Sube `precio_costo` de los lotes encontrados en `$loteIds` y, si alguno ya se fusionó (ver
+     * FusionLotesService y LoteStock::loteVigente()), también en el lote vigente donde esas
+     * unidades viven hoy — así el incremento sube el valor real del inventario en vez de perderse
+     * en un lote con 0 unidades disponibles. Lo que ni así encuentra dónde caer (unidades ya
+     * vendidas antes de decidirse este prorrateo, fusionadas o no) se audita como pérdida en
+     * `ajustes_valor_inventario` — ver el hallazgo original en
+     * docs/arreglos-pendientes/costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md.
+     *
+     * @param  array<int, int>  $loteIds
+     * @return float El monto (negativo, o 0.0 si no hubo pérdida) auditado como ajuste — para que el llamador lo sume y lo muestre en el frontend.
+     */
+    private function aplicarIncrementoALotes(array $loteIds, float $incrementoUnitario, int $cantidadOriginal, Producto $producto, CostDistribution $distribution, string $etiqueta): float
+    {
+        if (empty($loteIds)) {
+            return 0.0;
+        }
+
+        $lotes = LoteStock::whereIn('id', $loteIds)->get();
+        $vigentes = $lotes->map(fn (LoteStock $lote) => $lote->loteVigente());
+        $idsAIncrementar = $lotes->pluck('id')->merge($vigentes->pluck('id'))->unique()->values()->all();
+
+        LoteStock::whereIn('id', $idsAIncrementar)->increment('precio_costo', $incrementoUnitario);
+
+        $cantidadViva = (int) $vigentes->unique('id')->sum('cantidad_disponible');
+        $cantidadPerdida = max(0, $cantidadOriginal - $cantidadViva);
+
+        if ($cantidadPerdida <= 0) {
+            return 0.0;
+        }
+
+        $montoPerdido = round($incrementoUnitario * $cantidadPerdida, 2);
+        if ($montoPerdido <= 0) {
+            return 0.0;
+        }
+
+        // Sin un lote vivo claro (todos los encontrados ya estaban en 0, ninguno fusionado a algo
+        // con stock), se audita contra el almacén del primer lote encontrado — sigue siendo la
+        // operación real que originó la pérdida, aunque hoy no tenga unidades ahí.
+        $almacenId = $vigentes->first(fn (LoteStock $lote) => $lote->cantidad_disponible > 0)?->almacen_id
+            ?? $lotes->first()?->almacen_id;
+
+        AjusteValorInventario::create([
+            'tipo' => AjusteValorInventario::TIPO_PRORRATEO_SIN_DESTINO,
+            'producto_id' => $producto->id,
+            'almacen_id' => $almacenId,
+            'cost_distribution_id' => $distribution->id,
+            'monto' => -$montoPerdido,
+            'detalle' => "Prorrateo de {$etiqueta}: {$cantidadPerdida} de {$cantidadOriginal} unidad(es) sin stock vivo al aplicar \${$incrementoUnitario} por unidad (vendidas antes de decidir el prorrateo, o fusionadas sin lote vigente con stock).",
+            'user_id' => auth()->id(),
+        ]);
+
+        return -$montoPerdido;
     }
 
     /**

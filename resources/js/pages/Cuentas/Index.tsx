@@ -14,7 +14,7 @@ import { CuentaCard, type CuentaCardData } from '@/components/CuentaCard';
 import { type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
     Pagination,
@@ -491,63 +491,82 @@ export default function CuentasPage({
                     </CardHeader>
                 </Card>
 
-                {/* Grilla de cards */}
-                {cuentasPagina.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {cuentasPagina.map((cuenta) => (
-                            <CuentaCard
-                                key={cuenta.id}
-                                cuenta={cuenta as CuentaCardData}
-                                isAdmin={isAdmin}
-                                onEditClick={handleEditClick}
-                                onDeleteClick={(c) => handleDeleteClick(c as CuentaConMoneda)}
-                                tipoCuenta={tiposCuenta.find((tipo) => tipo.slug === cuenta.tipo)}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <Card>
-                        <CardContent className="text-muted-foreground py-12 text-center">
-                            {hasFilters ? 'No hay cuentas que coincidan con los filtros aplicados.' : 'No hay cuentas registradas.'}
-                        </CardContent>
-                    </Card>
-                )}
+                {/* Lista de Cuentas — mismo patrón que Clientes/Productos Index: filtros en su card,
+                    el listado dentro de una card con header degradado (índigo, color del módulo). */}
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Landmark className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Lista de Cuentas</CardTitle>
+                                <CardDescription className="text-indigo-100">
+                                    {cuentasFiltradas.length} cuenta{cuentasFiltradas.length !== 1 ? 's' : ''}
+                                    {hasFilters ? ' con los filtros aplicados' : ' en total'}
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-5">
+                        {/* Grilla de cards */}
+                        {cuentasPagina.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                                {cuentasPagina.map((cuenta) => (
+                                    <CuentaCard
+                                        key={cuenta.id}
+                                        cuenta={cuenta as CuentaCardData}
+                                        isAdmin={isAdmin}
+                                        onEditClick={handleEditClick}
+                                        onDeleteClick={(c) => handleDeleteClick(c as CuentaConMoneda)}
+                                        tipoCuenta={tiposCuenta.find((tipo) => tipo.slug === cuenta.tipo)}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-muted-foreground flex flex-col items-center gap-2 py-12 text-center">
+                                <Landmark size={32} className="opacity-40" />
+                                <p>{hasFilters ? 'No hay cuentas que coincidan con los filtros aplicados.' : 'No hay cuentas registradas.'}</p>
+                            </div>
+                        )}
 
-                {cuentasPagina.length > 0 && (
-                    <p className="text-muted-foreground text-right text-sm">
-                        Total de cuentas filtradas: <span className="text-foreground font-medium">{cuentasFiltradas.length}</span>
-                        {' · '}
-                        <span className="font-medium text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</span>
-                    </p>
-                )}
+                        {cuentasPagina.length > 0 && (
+                            <p className="text-muted-foreground text-right text-sm">
+                                Total de cuentas filtradas: <span className="text-foreground font-medium">{cuentasFiltradas.length}</span>
+                                {' · '}
+                                <span className="font-medium text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</span>
+                            </p>
+                        )}
 
-                {/* Pagination */}
-                {totalPaginas > 1 && (
-                    <div className="flex flex-col items-center justify-between gap-2 sm:flex-row">
-                        <div className="text-muted-foreground text-sm">{desde + 1} - {Math.min(desde + elementosPorPagina, cuentasFiltradas.length)} de {cuentasFiltradas.length} cuentas</div>
-                        <Pagination>
-                            <PaginationContent>
-                                <PaginationItem>
-                                    <PaginationPrevious onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
-                                        className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
-                                </PaginationItem>
-                                {paginas.map((item, i) =>
-                                    item === 'ellipsis' ? (
-                                        <PaginationItem key={`e-${i}`}><PaginationEllipsis /></PaginationItem>
-                                    ) : (
-                                        <PaginationItem key={item}>
-                                            <PaginationLink isActive={paginaActual === item} onClick={() => setPaginaActual(item)} className="cursor-pointer">{item}</PaginationLink>
+                        {/* Pagination */}
+                        {totalPaginas > 1 && (
+                            <div className="flex flex-col items-center justify-between gap-2 sm:flex-row">
+                                <div className="text-muted-foreground text-sm">{desde + 1} - {Math.min(desde + elementosPorPagina, cuentasFiltradas.length)} de {cuentasFiltradas.length} cuentas</div>
+                                <Pagination>
+                                    <PaginationContent>
+                                        <PaginationItem>
+                                            <PaginationPrevious onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
+                                                className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                                         </PaginationItem>
-                                    )
-                                )}
-                                <PaginationItem>
-                                    <PaginationNext onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
-                                        className={paginaActual === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
-                                </PaginationItem>
-                            </PaginationContent>
-                        </Pagination>
-                    </div>
-                )}
+                                        {paginas.map((item, i) =>
+                                            item === 'ellipsis' ? (
+                                                <PaginationItem key={`e-${i}`}><PaginationEllipsis /></PaginationItem>
+                                            ) : (
+                                                <PaginationItem key={item}>
+                                                    <PaginationLink isActive={paginaActual === item} onClick={() => setPaginaActual(item)} className="cursor-pointer">{item}</PaginationLink>
+                                                </PaginationItem>
+                                            )
+                                        )}
+                                        <PaginationItem>
+                                            <PaginationNext onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
+                                                className={paginaActual === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                                        </PaginationItem>
+                                    </PaginationContent>
+                                </Pagination>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
 
             {/* ── Dialog: Sin acceso ─────────────────────────────────────── */}
