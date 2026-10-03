@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -37,6 +38,7 @@ import {
     Download,
     Edit3,
     Eye,
+    Boxes,
     FileSpreadsheet,
     FileText,
     Filter,
@@ -323,6 +325,7 @@ interface ProductosPageProps {
     canViewSensitiveData?: boolean;
     total_importe_global?: number;
     resumen_stock_bajo?: { cantidad: number; valor: number | null };
+    cantidad_total_unidades?: number;
 }
 
 const defaultPaginator = {
@@ -343,6 +346,7 @@ export default function ProductosPage({
     canViewSensitiveData = false,
     total_importe_global = 0,
     resumen_stock_bajo,
+    cantidad_total_unidades = 0,
 }: ProductosPageProps) {
     const isAdmin = usePage().props.auth?.user?.role === 'admin';
 
@@ -686,49 +690,74 @@ export default function ProductosPage({
                             </span>
                         </div>
                     )}
-                    <div className={`grid gap-4 ${canViewStockStats ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`}>
+                    <div className={`grid gap-4 ${canViewStockStats ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-3'}`}>
                         {/* Widget: Productos Totales */}
-                        <div className="bg-card rounded-lg border p-4 shadow-sm">
-                            <div className="flex items-center justify-between">
+                        <SpotlightCard estado="tarjeta" className="rounded-lg border border-blue-400/30 bg-blue-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-blue-500/10">
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                                    <Package className="h-4 w-4" />
+                                </span>
                                 <p className="text-muted-foreground text-sm font-medium">Productos Totales</p>
-                                <Package className="h-4 w-4 text-blue-500" />
                             </div>
-                            <p className="mt-1 text-2xl font-bold">{productos.total}</p>
-                        </div>
+                            <Badge className="gap-1 border-0 bg-gradient-to-r from-blue-500 to-blue-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-blue-500/30">
+                                {productos.total}
+                            </Badge>
+                        </SpotlightCard>
+
+                        {/* Widget: Cantidad de Unidades — suma de stock, no fichas; todos los roles */}
+                        <SpotlightCard estado="indigo" className="rounded-lg border border-indigo-400/30 bg-indigo-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-indigo-500/10">
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                                    <Boxes className="h-4 w-4" />
+                                </span>
+                                <p className="text-muted-foreground text-sm font-medium">Cantidad de Unidades</p>
+                            </div>
+                            <Badge className="gap-1 border-0 bg-gradient-to-r from-indigo-500 to-indigo-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-indigo-500/30">
+                                {cantidad_total_unidades.toLocaleString('es-ES')}
+                            </Badge>
+                        </SpotlightCard>
 
                         {/* Widget: Valor Total del Inventario */}
                         {canViewSensitiveData && (
-                            <div className="bg-card rounded-lg border p-4 shadow-sm">
-                                <div className="flex items-center justify-between">
+                            <SpotlightCard estado="disponible" className="rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-emerald-500/10">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                        <DollarSign className="h-4 w-4" />
+                                    </span>
                                     <p className="text-muted-foreground text-sm font-medium">Valor Total</p>
-                                    <DollarSign className="h-4 w-4 text-green-500" />
                                 </div>
-                                <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
+                                <Badge className="gap-1 border-0 bg-gradient-to-r from-emerald-500 to-emerald-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-emerald-500/30">
                                     ${total_importe_global.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                            </div>
+                                </Badge>
+                            </SpotlightCard>
                         )}
 
                         {/* Widget: Productos con Stock Bajo */}
-                        <div className="bg-card rounded-lg border p-4 shadow-sm">
-                            <div className="flex items-center justify-between">
+                        <SpotlightCard estado="especial" className="rounded-lg border border-amber-400/30 bg-amber-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-amber-500/10">
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                    <AlertTriangle className="h-4 w-4" />
+                                </span>
                                 <p className="text-muted-foreground text-sm font-medium">Stock Bajo</p>
-                                <AlertTriangle className="h-4 w-4 text-amber-500" />
                             </div>
-                            <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{cantidadStockBajo}</p>
-                        </div>
+                            <Badge className="gap-1 border-0 bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-amber-500/30">
+                                {cantidadStockBajo}
+                            </Badge>
+                        </SpotlightCard>
 
                         {/* Widget: Valor Stock Bajo (Condicional) */}
                         {canViewStockStats && (
-                            <div className="bg-card rounded-lg border p-4 shadow-sm">
-                                <div className="flex items-center justify-between">
+                            <SpotlightCard estado="agotado" className="rounded-lg border border-red-400/30 bg-red-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-red-500/10">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-600 dark:text-red-400">
+                                        <Wallet className="h-4 w-4" />
+                                    </span>
                                     <p className="text-muted-foreground text-sm font-medium">Valor Stock Bajo</p>
-                                    <Wallet className="h-4 w-4 text-red-500" />
                                 </div>
-                                <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">
+                                <Badge className="gap-1 border-0 bg-gradient-to-r from-red-500 to-red-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-red-500/30">
                                     ${valorStockBajo.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                            </div>
+                                </Badge>
+                            </SpotlightCard>
                         )}
                     </div>
                 </div>

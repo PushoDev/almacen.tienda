@@ -46,6 +46,17 @@ class ProductoController extends Controller
 
         [$query, $almacenFiltroId, $sortField, $sortDirection] = $this->consultaListado($request);
 
+        // Widget "Cantidad de Unidades": sobre el MISMO filtro activo que ya usa "Productos
+        // Totales" (búsqueda/categoría/almacén/stock bajo). `cantidad_total` no es una columna
+        // real (accessor de Producto, ver getCantidadTotalAttribute()) — mismo criterio que el
+        // sort de más abajo: suma almacen_producto.cantidad de todos los almacenes sin filtro,
+        // o solo del almacén filtrado, coherente con lo que muestra cada fila (filaListado()).
+        $productIdsFiltrados = (clone $query)->pluck('productos.id');
+        $cantidadTotalUnidades = (int) DB::table('almacen_producto')
+            ->whereIn('producto_id', $productIdsFiltrados)
+            ->when($almacenFiltroId !== null, fn ($q) => $q->where('almacen_id', $almacenFiltroId))
+            ->sum('cantidad');
+
         // Paginación
         $perPage = $request->get('per_page', 15);
         $paginatedProducts = $query->paginate($perPage)->withQueryString();
@@ -87,6 +98,7 @@ class ProductoController extends Controller
             'canViewSensitiveData' => $canViewSensitiveData,
             'total_importe_global' => (float) $totalImporteGlobal,
             'resumen_stock_bajo' => $resumenStockBajo,
+            'cantidad_total_unidades' => $cantidadTotalUnidades,
         ]);
     }
 

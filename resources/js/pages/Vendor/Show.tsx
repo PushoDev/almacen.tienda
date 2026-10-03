@@ -46,6 +46,7 @@ import {
     AlertTriangle,
     ArrowRightLeft,
     Banknote,
+    Building2,
     Calendar,
     CheckCircle,
     Clock,
@@ -280,6 +281,8 @@ interface Venta {
     tipo_venta_especial?: 'descuento' | 'bajo_costo' | null;
     /** El servidor dice si este usuario puede aprobar/rechazar la solicitud (moderador: no las de bajo costo). */
     puede_decidir_solicitud_especial?: boolean;
+    /** Venta "de la agencia": nadie gana comisión (ni punto de venta ni gestor), decidido al crearla. */
+    es_venta_sin_comision: boolean;
     decision_notificada: boolean;
     motivo_anulacion?: string | null;
     detalle_anulacion?: string | null;
@@ -1732,7 +1735,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         <Users className="h-4 w-4" />
                                         Receptor
                                     </TabsTrigger>
-                                    <TabsTrigger value="gestor" className="flex items-center gap-2">
+                                    <TabsTrigger value="gestor" disabled={currentVenta.es_venta_sin_comision} className="flex items-center gap-2">
                                         <DollarSign className="h-4 w-4" />
                                         Gestor
                                         {esVentaGestor && !gestorCuentaId && (
@@ -1928,6 +1931,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     <Switch
                                                         id="gestor-switch"
                                                         checked={esVentaGestor}
+                                                        disabled={currentVenta.es_venta_sin_comision}
                                                         onCheckedChange={(checked) => {
                                                             setEsVentaGestor(checked);
                                                             if (!checked) limpiarEstadosGestor();
@@ -1935,9 +1939,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                         className="data-[state=checked]:bg-emerald-600"
                                                     />
                                                 </div>
+                                                {currentVenta.es_venta_sin_comision && (
+                                                    <p className="text-muted-foreground mt-2 text-xs">
+                                                        Esta venta es de la agencia (sin comisión) — no puede tener Gestor.
+                                                    </p>
+                                                )}
                                             </div>
 
-                                            {esVentaGestor && (
+                                            {esVentaGestor && !currentVenta.es_venta_sin_comision && (
                                                 <div className="space-y-4 rounded-lg border p-4">
                                                     {/* Badges de todas las monedas del sistema */}
                                                     {monedasSistema.length > 0 && (
@@ -2957,12 +2966,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 <div>
                                     <CardTitle className="text-base font-semibold text-white">Comisión</CardTitle>
                                     <CardDescription className="text-xs text-amber-100">
-                                        {formatCurrency(currentVenta.total_comision, 'USD')} a distribuir — punto de venta o gestor
+                                        {currentVenta.es_venta_sin_comision
+                                            ? 'Venta de la agencia — nada que distribuir'
+                                            : `${formatCurrency(currentVenta.total_comision, 'USD')} a distribuir — punto de venta o gestor`}
                                     </CardDescription>
                                 </div>
                             </div>
                         </CardHeader>
                         <CardContent className="pt-5">
+                            {currentVenta.es_venta_sin_comision ? (
+                                <div className="flex items-center gap-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                                    <Building2 className="h-5 w-5 shrink-0" />
+                                    <span>Esta venta es de la agencia (sin comisión) — nadie gana comisión por ella, ni punto de venta ni gestor.</span>
+                                </div>
+                            ) : (
+                                <>
                                 {/* Selector XOR */}
                                 <div className="flex gap-2 mb-3">
                                     <Button
@@ -3223,6 +3241,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         )}
                                     </div>
                                 )}
+                                </>
+                            )}
                         </CardContent>
                     </Card>
                     </div>
@@ -3565,6 +3585,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             )}
                                         </>;
                                     })()}
+
+                                    
                                     {currentVenta.mensajero.tasa && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">Tasa aplicada:</span>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AjusteSaldoCuenta;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
+use App\Models\Producto;
 use App\Models\Remesa;
 use App\Models\Venta;
 use App\Services\DetalleOperacionService;
@@ -40,6 +41,10 @@ class RastreoOperacionesController extends Controller
             'cliente_direccion' => 'nullable|in:envia,recibe,cualquiera',
             'proveedor_direccion' => 'nullable|in:envia,recibe,cualquiera',
             'cuenta_direccion' => 'nullable|in:envia,recibe,cualquiera',
+            'producto_ids' => 'nullable|array',
+            'producto_ids.*' => 'integer|exists:productos,id',
+            'almacen_ids' => 'nullable|array',
+            'almacen_ids.*' => 'integer|exists:almacens,id',
         ]);
 
         $puedeVerCosto = in_array($request->user()->role, ['admin', 'moderador']);
@@ -52,6 +57,8 @@ class RastreoOperacionesController extends Controller
         $clienteIds = $request->input('cliente_ids', []);
         $proveedorIds = $request->input('proveedor_ids', []);
         $cuentaIds = $request->input('cuenta_ids', []);
+        $productoIds = $request->input('producto_ids', []);
+        $almacenIds = $request->input('almacen_ids', []);
         // Dirección de cada filtro — "cualquiera" (default) es el comportamiento de antes
         // (coincide en cualquier lado). "envia"/"recibe" acotan a un solo lado de la
         // operación: quién mandó el dinero vs. quién lo recibió, mismo concepto que ya
@@ -134,7 +141,16 @@ class RastreoOperacionesController extends Controller
             // Venta nunca involucra un proveedor — si el filtro está activo, ninguna venta
             // puede calificar (no "no aplicar el filtro", sino "cero resultados de este tipo"),
             // sin importar la dirección elegida.
-            ->when($proveedorIds, fn ($q) => $q->whereRaw('1 = 0'));
+            ->when($proveedorIds, fn ($q) => $q->whereRaw('1 = 0'))
+            // Producto: vive en venta_detalles, una venta puede tener varias líneas.
+            ->when($productoIds, fn ($q) => $q->whereExists(function ($sub) use ($productoIds) {
+                $sub->select(DB::raw(1))
+                    ->from('venta_detalles')
+                    ->whereColumn('venta_detalles.venta_id', 'ventas.id')
+                    ->whereIn('venta_detalles.producto_id', $productoIds);
+            }))
+            // Almacén: la venta entera es de un solo almacén (columna directa).
+            ->when($almacenIds, fn ($q) => $q->whereIn('ventas.almacen_id', $almacenIds));
 
         // El nombre de tipos_movimiento_financiero.nombre es texto libre editable (en la
         // BD de este cliente, el id 2 está guardado como "Ingreso por Venta", aunque
@@ -142,9 +158,9 @@ class RastreoOperacionesController extends Controller
         // mostrar. Usamos la etiqueta fija por tipo_movimiento_id que ya es la convención
         // del código (1=Gasto/2=Ingreso/3=Transferencia, ver GastoController/IngresoController/
         // TransferenciaController) en vez de confiar en ese campo.
-        $gastosSub = $this->construirSubqueryMovimiento($request, 1, 'Gasto', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion);
-        $ingresosSub = $this->construirSubqueryMovimiento($request, 2, 'Ingreso', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion);
-        $transferenciasSub = $this->construirSubqueryMovimiento($request, 3, 'Transferencia', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion);
+        $gastosSub = $this->construirSubqueryMovimiento($request, 1, 'Gasto', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion, $productoIds, $almacenIds);
+        $ingresosSub = $this->construirSubqueryMovimiento($request, 2, 'Ingreso', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion, $productoIds, $almacenIds);
+        $transferenciasSub = $this->construirSubqueryMovimiento($request, 3, 'Transferencia', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion, $productoIds, $almacenIds);
 
         // Compra es admin/moderador-only dentro de este reporte (mismo criterio que ya
         // aplica Cuentas/Show para ocultar Compras a vendedor — es dato de costo). A
@@ -153,19 +169,19 @@ class RastreoOperacionesController extends Controller
         // add_user_id_to_compras_table) y, aunque existiera, vendedor no debería ver costos
         // de compra en absoluto. Por eso el subquery ni se arma cuando !$puedeVerCosto —
         // así ?tipo=Compra por URL directa devuelve vacío en vez de filtrar nada.
-        $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion) : null;
+        $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion, $productoIds, $almacenIds) : null;
 
         // Remesa ("Operaciones Múltiples" en el texto de cara al usuario, el código sigue
         // usando el nombre original — ver memoria del proyecto) es admin/moderador-only en
         // TODAS las demás pantallas donde aparece su historial (Cuentas/Clientes/Proveedores
         // Show, ver `puedeVerRemesas` ahí) — mismo gate que Compra acá, por consistencia.
-        $remesasSub = $puedeVerCosto ? $this->construirSubqueryRemesa($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion) : null;
+        $remesasSub = $puedeVerCosto ? $this->construirSubqueryRemesa($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion, $productoIds, $almacenIds) : null;
 
         // Ajuste manual de saldo — solo toca Cuentas, nunca Cliente/Proveedor (ver
         // construirSubqueryAjuste). Disponible para todos los roles, igual que Gasto/
         // Ingreso/Transferencia: no es dato de costo como Compra, y el userIdFiltro de
         // vendedor ya lo deja vacío en la práctica (los ajustes los hace admin/moderador).
-        $ajustesSub = $this->construirSubqueryAjuste($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $cuentaDireccion);
+        $ajustesSub = $this->construirSubqueryAjuste($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $cuentaDireccion, $productoIds, $almacenIds);
 
         // Conteo por tipo para los widgets sobre el filtro — respeta fecha/usuario/buscar
         // pero NO el filtro de tipo (si no, al filtrar por "Venta" los otros 3 se irían a
@@ -289,6 +305,9 @@ class RastreoOperacionesController extends Controller
             'clientes' => DB::table('clientes')->select('id', 'nombre_cliente as nombre')->orderBy('nombre_cliente')->get(),
             'proveedores' => DB::table('proveedors')->select('id', 'nombre_proveedor as nombre')->orderBy('nombre_proveedor')->get(),
             'cuentas' => DB::table('cuentas')->select('id', 'nombre_cuenta as nombre')->orderBy('nombre_cuenta')->get(),
+            // Almacén: mismo criterio que clientes/proveedores/cuentas (volumen chico, ~23
+            // registros) — a diferencia de Producto, que sí necesita búsqueda remota.
+            'almacenes' => DB::table('almacens')->select('id', 'nombre_almacen as nombre')->orderBy('nombre_almacen')->get(),
             'filtros' => $request->except('page'),
             'puedeVerCosto' => $puedeVerCosto,
             // Mismo valor que puedeVerCosto hoy (ambos son admin/moderador), pero con su
@@ -318,6 +337,8 @@ class RastreoOperacionesController extends Controller
         string $clienteDireccion,
         string $proveedorDireccion,
         string $cuentaDireccion,
+        array $productoIds = [],
+        array $almacenIds = [],
     ) {
         return DB::table('movimientos_financieros as mf')
             ->leftJoin('users', 'users.id', '=', 'mf.user_id')
@@ -373,7 +394,12 @@ class RastreoOperacionesController extends Controller
                     return;
                 }
                 $q->whereIn('proveedor_destino.id', $proveedorIds);
-            });
+            })
+            // Gasto/Ingreso/Transferencia nunca involucran un producto ni un almacén — son
+            // puro movimiento de dinero entre cuentas/clientes/proveedores. Mismo criterio
+            // que "Venta nunca tiene proveedor": cero resultados si cualquiera está activo.
+            ->when($productoIds, fn ($q) => $q->whereRaw('1 = 0'))
+            ->when($almacenIds, fn ($q) => $q->whereRaw('1 = 0'));
     }
 
     /**
@@ -393,6 +419,8 @@ class RastreoOperacionesController extends Controller
         string $clienteDireccion,
         string $proveedorDireccion,
         string $cuentaDireccion,
+        array $productoIds = [],
+        array $almacenIds = [],
     ) {
         return DB::table('compras')
             ->leftJoin('proveedors', 'proveedors.id', '=', 'compras.proveedor_id')
@@ -450,7 +478,21 @@ class RastreoOperacionesController extends Controller
                         ->whereColumn('compra_pago.compra_id', 'compras.id')
                         ->whereIn('compra_pago.cuenta_id', $cuentaIds);
                 });
-            });
+            })
+            // Producto y Almacén viven juntos en compra_producto (el almacén es por línea de
+            // producto, no de la compra entera — una compra puede repartir a varios almacenes).
+            ->when($productoIds, fn ($q) => $q->whereExists(function ($sub) use ($productoIds) {
+                $sub->select(DB::raw(1))
+                    ->from('compra_producto')
+                    ->whereColumn('compra_producto.compra_id', 'compras.id')
+                    ->whereIn('compra_producto.producto_id', $productoIds);
+            }))
+            ->when($almacenIds, fn ($q) => $q->whereExists(function ($sub) use ($almacenIds) {
+                $sub->select(DB::raw(1))
+                    ->from('compra_producto')
+                    ->whereColumn('compra_producto.compra_id', 'compras.id')
+                    ->whereIn('compra_producto.almacen_id', $almacenIds);
+            }));
     }
 
     /**
@@ -467,6 +509,8 @@ class RastreoOperacionesController extends Controller
         array $proveedorIds,
         array $cuentaIds,
         string $cuentaDireccion,
+        array $productoIds = [],
+        array $almacenIds = [],
     ) {
         return DB::table('ajustes_saldo_cuenta as a')
             ->leftJoin('users', 'users.id', '=', 'a.user_id')
@@ -491,7 +535,10 @@ class RastreoOperacionesController extends Controller
                     return;
                 }
                 $q->whereIn('a.cuenta_id', $cuentaIds);
-            });
+            })
+            // Un ajuste solo toca una cuenta — nunca producto ni almacén.
+            ->when($productoIds, fn ($q) => $q->whereRaw('1 = 0'))
+            ->when($almacenIds, fn ($q) => $q->whereRaw('1 = 0'));
     }
 
     /**
@@ -515,6 +562,8 @@ class RastreoOperacionesController extends Controller
         string $clienteDireccion,
         string $proveedorDireccion,
         string $cuentaDireccion,
+        array $productoIds = [],
+        array $almacenIds = [],
     ) {
         return DB::table('remesas')
             ->leftJoin('users', 'users.id', '=', 'remesas.user_id')
@@ -565,7 +614,11 @@ class RastreoOperacionesController extends Controller
                     $qq->orWhereIn('cuenta_salida.id', $cuentaIds);
                 }
                 $qq->orWhereIn('cuenta_mensajero.id', $cuentaIds);
-            }));
+            }))
+            // Una remesa mueve dinero entre cuentas/clientes/proveedores — nunca un producto
+            // ni un almacén.
+            ->when($productoIds, fn ($q) => $q->whereRaw('1 = 0'))
+            ->when($almacenIds, fn ($q) => $q->whereRaw('1 = 0'));
     }
 
     private function transformarMovimiento(MovimientoFinanciero $mov, string $tipo): array
@@ -681,5 +734,28 @@ class RastreoOperacionesController extends Controller
             'detalle_movimiento' => null,
             'detalle_remesa' => $this->detalleOperacionService->detalleRemesa($remesa),
         ];
+    }
+
+    /**
+     * Búsqueda remota para el combobox de filtro "Producto" — el catálogo (~666 productos)
+     * es demasiado grande para mandarlo completo como Cliente/Proveedor/Cuenta. Reusa
+     * Producto::scopeBuscar() (mismo criterio de búsqueda que Productos/Index.tsx), limitado
+     * a 20 resultados. Disponible para todos los roles: nombre de producto no es dato de costo.
+     */
+    public function buscarProductos(Request $request)
+    {
+        $request->validate(['q' => 'nullable|string|max:255']);
+
+        $productos = Producto::buscar($request->input('q'))
+            ->select('id', 'nombre_producto', 'marca_producto', 'modelo_producto')
+            ->orderBy('nombre_producto')
+            ->limit(20)
+            ->get()
+            ->map(fn (Producto $p) => [
+                'id' => $p->id,
+                'nombre' => collect([$p->nombre_producto, $p->marca_producto, $p->modelo_producto])->filter()->implode(' '),
+            ]);
+
+        return response()->json($productos);
     }
 }

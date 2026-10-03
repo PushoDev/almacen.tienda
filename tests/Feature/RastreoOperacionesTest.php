@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AjusteSaldoCuenta;
+use App\Models\Almacen;
 use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago;
@@ -1320,4 +1321,128 @@ test('proveedor_direccion=envia siempre da cero resultados, sin importar el tipo
     ]), ['X-Inertia' => 'true']);
 
     expect(collect($response->json('props.operaciones.data')))->toHaveCount(0);
+});
+
+// ==========================================================================
+// FILTROS: producto_ids / almacen_ids
+// ==========================================================================
+
+test('el filtro por producto_ids encuentra una Venta por venta_detalles y una Compra por compra_producto', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $producto = Producto::factory()->create();
+
+    $ventaConProducto = Venta::factory()->create();
+    VentaDetalle::factory()->create(['venta_id' => $ventaConProducto->id, 'producto_id' => $producto->id]);
+    $ventaSinProducto = Venta::factory()->create();
+
+    $compraConProducto = Compra::factory()->create(['tipo_compra' => 'deuda_proveedor']);
+    $compraConProducto->productos()->attach($producto->id, ['cantidad' => 2, 'precio' => 50, 'almacen_id' => Almacen::factory()->create()->id]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['producto_ids' => [$producto->id]]), ['X-Inertia' => 'true']);
+    $ids = collect($response->json('props.operaciones.data'))->pluck('id');
+
+    expect($ids)->toContain($ventaConProducto->id);
+    expect($ids)->toContain($compraConProducto->id);
+    expect($ids)->not->toContain($ventaSinProducto->id);
+});
+
+test('el filtro por producto_ids nunca incluye Gasto ni Ajuste', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $producto = Producto::factory()->create();
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    MovimientoFinanciero::factory()->gasto()->create();
+    AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuenta->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 100,
+        'saldo_nuevo' => 150,
+        'motivo' => 'Corrección de prueba',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['producto_ids' => [$producto->id]]), ['X-Inertia' => 'true']);
+    $tipos = collect($response->json('props.operaciones.data'))->pluck('tipo')->unique()->all();
+
+    expect($tipos)->not->toContain('Gasto');
+    expect($tipos)->not->toContain('Ajuste');
+});
+
+test('el filtro por almacen_ids encuentra una Venta de ese almacén y una Compra con una línea en ese almacén', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $almacen = Almacen::factory()->create();
+
+    $ventaDelAlmacen = Venta::factory()->create(['almacen_id' => $almacen->id]);
+    $ventaDeOtroAlmacen = Venta::factory()->create();
+
+    $producto = Producto::factory()->create();
+    $compraDelAlmacen = Compra::factory()->create(['tipo_compra' => 'deuda_proveedor']);
+    $compraDelAlmacen->productos()->attach($producto->id, ['cantidad' => 1, 'precio' => 10, 'almacen_id' => $almacen->id]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['almacen_ids' => [$almacen->id]]), ['X-Inertia' => 'true']);
+    $ids = collect($response->json('props.operaciones.data'))->pluck('id');
+
+    expect($ids)->toContain($ventaDelAlmacen->id);
+    expect($ids)->toContain($compraDelAlmacen->id);
+    expect($ids)->not->toContain($ventaDeOtroAlmacen->id);
+});
+
+test('el filtro por almacen_ids nunca incluye Ingreso ni Ajuste', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $almacen = Almacen::factory()->create();
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    MovimientoFinanciero::factory()->ingreso()->create();
+    AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuenta->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 100,
+        'saldo_nuevo' => 150,
+        'motivo' => 'Corrección de prueba',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['almacen_ids' => [$almacen->id]]), ['X-Inertia' => 'true']);
+    $tipos = collect($response->json('props.operaciones.data'))->pluck('tipo')->unique()->all();
+
+    expect($tipos)->not->toContain('Ingreso');
+    expect($tipos)->not->toContain('Ajuste');
+});
+
+test('el endpoint de búsqueda de productos devuelve coincidencias por nombre, para todos los roles', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $match = Producto::factory()->create(['nombre_producto' => 'Panel Solar Longi']);
+    Producto::factory()->create(['nombre_producto' => 'Bocina Premier']);
+
+    $response = $this->getJson(route('reportes.rastreo_operaciones.productos_buscar', ['q' => 'Panel Solar']));
+
+    $response->assertOk();
+    $ids = collect($response->json())->pluck('id');
+    expect($ids)->toContain($match->id);
+    expect($ids)->toHaveCount(1);
+});
+
+test('el almacén para los combobox de filtro se manda a todos los roles', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    Almacen::factory()->create(['nombre_almacen' => 'Almacén Central']);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+
+    expect(collect($response->json('props.almacenes'))->pluck('nombre'))->toContain('Almacén Central');
 });

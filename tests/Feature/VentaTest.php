@@ -515,6 +515,110 @@ test('no permite vender por debajo del precio mínimo (base - comisión) sin ven
 });
 
 // ==========================================================================
+// VENTA SIN COMISIÓN — decisión manual del dueño, nadie gana comisión
+// ==========================================================================
+
+test('una venta marcada sin comisión no genera comisión de vendedor, aunque el lote tenga una configurada', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    // precio_base = 20, comision = 5 → sin el switch, vendiendo a 25 daría comisión 10 (5 + 5 markup)
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 5);
+
+    $cuenta = crearCuentaUsd();
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 25, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 25,
+        'tasa_cambio' => 1, 'monto_equivalente' => 25, 'cuenta_id' => $cuenta->id,
+    ]];
+    $payload['es_venta_sin_comision'] = true;
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+    $response->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('venta_detalles', [
+        'producto_id' => $producto->id,
+        'comision_unitaria' => 0,
+    ]);
+    $this->assertDatabaseHas('ventas', [
+        'id' => Venta::first()->id,
+        'total_comision' => 0,
+        'es_venta_sin_comision' => true,
+    ]);
+});
+
+test('una venta sin comisión no afecta el pago del mensajero', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 5);
+
+    $cuenta = crearCuentaUsd();
+    $cuentaMensajero = crearCuentaUsd(saldo: 500);
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 25, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 25,
+        'tasa_cambio' => 1, 'monto_equivalente' => 25, 'cuenta_id' => $cuenta->id,
+    ]];
+    $payload['es_venta_sin_comision'] = true;
+    $payload['mensajero_monto'] = 5;
+    $payload['mensajero_tipo'] = 'externo';
+    $payload['mensajero_cuenta_id'] = $cuentaMensajero->id;
+    $payload['total'] = 30; // 25 producto + 5 mensajero
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+    $response->assertJson(['success' => true]);
+
+    $this->assertDatabaseHas('ventas', [
+        'id' => Venta::first()->id,
+        'es_venta_sin_comision' => true,
+        'total_comision' => 0,
+        'mensajero_monto' => 5,
+        'mensajero_cuenta_id' => $cuentaMensajero->id,
+    ]);
+});
+
+test('editar el precio de una línea de una venta sin comisión mantiene la comisión en 0', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 5);
+
+    $cuenta = crearCuentaUsd();
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 25, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 25,
+        'tasa_cambio' => 1, 'monto_equivalente' => 25, 'cuenta_id' => $cuenta->id,
+    ]];
+    $payload['es_venta_sin_comision'] = true;
+    $this->postJson(route('ventas.procesar'), $payload)->assertJson(['success' => true]);
+
+    $venta = Venta::first();
+    $detalle = $venta->detalles->first();
+
+    $response = $this->postJson(route('ventas.editar.pendiente', $venta), [
+        'items' => [[
+            'venta_detalle_id' => $detalle->id,
+            'precio_venta' => 30,
+        ]],
+        'pagos' => [[
+            'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id, 'monto' => 30,
+            'tasa_cambio' => 1, 'monto_equivalente' => 30, 'cuenta_id' => $cuenta->id,
+        ]],
+    ]);
+
+    $response->assertJson(['success' => true]);
+    expect((float) $detalle->fresh()->comision_unitaria)->toBe(0.0);
+    $this->assertDatabaseHas('ventas', ['id' => $venta->id, 'total_comision' => 0]);
+});
+
+// ==========================================================================
 // VENTA CON GESTOR — XOR con comisión vendedor
 // ==========================================================================
 
@@ -758,6 +862,18 @@ test('la comisión sigue pudiendo salir de una cuenta CUP con su tasa (el monto 
         ->assertJsonPath('comision_pago.monto_cup', 3650)
         ->assertJsonPath('comision_pago.monto_cuenta', 3650);
     expect((float) $venta->fresh()->comision_tasa)->toBe(365.0);
+});
+
+test('guardarDistribucion() rechaza asignar comisión a una venta marcada sin comisión (de la agencia)', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    $venta = ventaPendienteConComision(User::factory()->vendedor()->create(), comision: 0);
+    $venta->update(['es_venta_sin_comision' => true]);
+    $cuentaCup = crearCuentaCup(saldo: 5000);
+
+    $respuesta = $this->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaCup->id, 'comision_tasa' => 365]);
+
+    $respuesta->assertStatus(422);
+    expect($venta->fresh()->comision_cuenta_id)->toBeNull();
 });
 
 test('show() entrega las cuentas que puede usar quien configura la comisión: todas para admin y moderador, solo las suyas de acceso completo para un vendedor', function () {
@@ -1273,6 +1389,27 @@ test('un vendedor no puede guardar el destinatario de la venta pendiente de otro
     $response->assertStatus(403);
     $response->assertJson(['success' => false]);
     $this->assertDatabaseMissing('destinatarios_venta', ['venta_id' => $venta->id]);
+});
+
+test('guardarDestinatario() rechaza convertir a Gestor una venta marcada sin comisión (de la agencia)', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $venta = Venta::factory()->create(['user_id' => $vendedor->id, 'estado' => 'pendiente', 'es_venta_sin_comision' => true]);
+    $cuentaGestor = crearCuentaUsd();
+
+    $response = $this->postJson(route('ventas.destinatario.store', $venta), [
+        'nombre' => 'Juan', 'apellidos' => 'Pérez', 'telefono_contacto' => '55555555',
+        'es_venta_gestor' => true,
+        'gestor_monto' => 10,
+        'gestor_cuenta_id' => $cuentaGestor->id,
+        'tasa_aplicada_gestor' => 1,
+    ]);
+
+    $response->assertStatus(422);
+    $response->assertJson(['success' => false]);
+    expect((bool) $venta->fresh()->es_venta_gestor)->toBeFalse();
 });
 
 test('un vendedor no puede marcar como notificada la decisión de la venta especial de otro vendedor', function () {
@@ -1940,6 +2077,65 @@ test('getCuentasFiltradas() solo devuelve al vendedor sus propias cuentas, aunqu
     $ids = collect($response->json())->pluck('id');
     expect($ids->all())->toBe([$cuentaAsignada->id]);
     expect($ids)->not->toContain($cuentaAjena->id);
+});
+
+test('getCuentasFiltradas() oculta el saldo de una cuenta de acceso cobro al vendedor, pero la sigue ofreciendo como destino', function () {
+    // Un vendedor cobra igual en una cuenta `completo` o `cobro` (para eso existe el acceso
+    // `cobro`) — lo único que no debe ver es el saldo de una que no es suya para operar.
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $monedaCup = Moneda::firstOrCreate(
+        ['codigo_moneda' => 'CUP'],
+        ['nombre_moneda' => 'Peso Cubano', 'simbolo_moneda' => 'CUP', 'tasa_cambio' => 365, 'estado' => true, 'principal' => false]
+    );
+    $cuentaCobro = crearCuentaCup();
+    $cuentaCobro->update(['saldo_cuenta' => 500]);
+    $vendedor->cuentas()->attach($cuentaCobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->getJson(route('ventas.getCuentasFiltradas', ['moneda_id' => $monedaCup->id]));
+
+    $response->assertOk();
+    $fila = collect($response->json())->firstWhere('id', $cuentaCobro->id);
+    expect($fila)->not->toBeNull();
+    expect($fila['saldo_actual'])->toBeNull();
+});
+
+test('getCuentasFiltradas() sí muestra el saldo de una cuenta de acceso completo al vendedor', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $monedaCup = Moneda::firstOrCreate(
+        ['codigo_moneda' => 'CUP'],
+        ['nombre_moneda' => 'Peso Cubano', 'simbolo_moneda' => 'CUP', 'tasa_cambio' => 365, 'estado' => true, 'principal' => false]
+    );
+    $cuentaCompleta = crearCuentaCup();
+    $cuentaCompleta->update(['saldo_cuenta' => 500]);
+    $vendedor->cuentas()->attach($cuentaCompleta->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+
+    $response = $this->getJson(route('ventas.getCuentasFiltradas', ['moneda_id' => $monedaCup->id]));
+
+    $response->assertOk();
+    $fila = collect($response->json())->firstWhere('id', $cuentaCompleta->id);
+    expect((float) $fila['saldo_actual'])->toBe(500.0);
+});
+
+test('getCuentasFiltradas() muestra el saldo real a un admin sin importar el nivel de acceso', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $monedaCup = Moneda::firstOrCreate(
+        ['codigo_moneda' => 'CUP'],
+        ['nombre_moneda' => 'Peso Cubano', 'simbolo_moneda' => 'CUP', 'tasa_cambio' => 365, 'estado' => true, 'principal' => false]
+    );
+    $cuenta = crearCuentaCup();
+    $cuenta->update(['saldo_cuenta' => 500]);
+
+    $response = $this->getJson(route('ventas.getCuentasFiltradas', ['moneda_id' => $monedaCup->id]));
+
+    $response->assertOk();
+    $fila = collect($response->json())->firstWhere('id', $cuenta->id);
+    expect((float) $fila['saldo_actual'])->toBe(500.0);
 });
 
 test('getCuentasParaGestor() solo devuelve al vendedor sus propias cuentas', function () {
