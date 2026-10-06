@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Moneda;
+use App\Models\TransferenciaPendiente;
 use App\Services\CatalogoTarjetasService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -19,6 +20,13 @@ class HandleInertiaRequests extends Middleware
      * @var string
      */
     protected $rootView = 'app';
+
+    /**
+     * Pantallas que muestran el aviso de envíos de dinero en tránsito (Dashboard, Cuentas y Resumen Financiero).
+     *
+     * @var array<int, string>
+     */
+    private const RUTAS_CON_AVISO_DE_ENVIOS = ['dashboard', 'cuentas.index', 'cuentas.show', 'logistica.index'];
 
     /**
      * Determines the current asset version.
@@ -53,6 +61,11 @@ class HandleInertiaRequests extends Middleware
                 'location' => $request->url(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            // Aviso de dinero en tránsito bajo el encabezado: solo se calcula en las pantallas donde se mira el
+            // dinero (no en cada petición) y solo con lo que el usuario puede ver (TransferenciaPendiente::visiblesPara).
+            'enviosAbiertos' => fn () => $request->user() && $request->routeIs(self::RUTAS_CON_AVISO_DE_ENVIOS)
+                ? TransferenciaPendiente::resumenAbiertosPara($request->user())
+                : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import AvisoEnvios from '@/components/transacciones/aviso-envios';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
@@ -83,6 +84,9 @@ export default function LogisticaPage({
                     />
                 </div>
                 <Separator className="col-span-4" />
+
+                {/* El Resumen Financiero no es para el vendedor: el aviso sigue a canViewFinance */}
+                <AvisoEnvios visible={canViewFinance} />
 
                 <div className="grid auto-rows-min gap-4 md:grid-cols-4">
                     {/* Capitales Financieros */}

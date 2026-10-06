@@ -182,6 +182,11 @@ test('el detalle de una remesa muestra entrada, salida y mensajero con sus saldo
         ->where('detallesSalida.saldo_posterior', -450)
         ->where('detallesMensajero.monto_operacion', -20)
         ->where('detallesMensajero.saldo_posterior', 180)
+        ->where('detallesEntrada.saldos_visibles', true)
+        ->where('detallesEntrada.tiene_datos_historicos', true)
+        ->where('detallesEntrada.simbolo', $monedaUsd->simbolo_moneda)
+        ->has('detallesSalida.banco')
+        ->where('detallesMensajero.saldos_visibles', true)
     );
 });
 
@@ -233,4 +238,53 @@ test('mensajero_monto sin mensajero_cuenta_id falla la validación', function ()
 
     $response->assertSessionHasErrors('mensajero_cuenta_id');
     $this->assertDatabaseCount('remesas', 0);
+});
+
+test('no se puede registrar una remesa con la misma entidad en la entrada y en la salida', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 500);
+    $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 100]);
+
+    foreach ([['cuenta', $cuenta->id], ['cliente', $cliente->id]] as [$tipo, $id]) {
+        $this->post(route('transacciones.remesa.store'), [
+            'entrada_tipo' => $tipo, 'entrada_id' => $id, 'entrada_monto' => 100,
+            'salida_tipo' => $tipo, 'salida_id' => $id, 'salida_monto' => 90,
+        ])->assertSessionHasErrors('salida_id');
+    }
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 500]);
+    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 100]);
+    $this->assertDatabaseCount('remesas', 0);
+});
+
+test('la misma id con tipos distintos sí es una remesa válida (una cuenta y un cliente pueden compartir id)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 500);
+    $cliente = Cliente::factory()->create(['id' => $cuenta->id, 'deuda_pago_cliente' => 100]);
+
+    $this->post(route('transacciones.remesa.store'), [
+        'entrada_tipo' => 'cuenta', 'entrada_id' => $cuenta->id, 'entrada_monto' => 100,
+        'salida_tipo' => 'cliente', 'salida_id' => $cliente->id, 'salida_monto' => 90,
+    ])->assertRedirect();
+
+    $this->assertDatabaseCount('remesas', 1);
+});
+
+test('formData() de la remesa entrega las cuentas con el logo del banco', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $conLogo = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 100);
+    $conLogo->update(['imagen' => 'visa']);
+    $sinLogo = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 200);
+
+    $respuesta = $this->getJson(route('transacciones.remesa.data'))->assertOk()->assertJsonCount(2, 'cuentas');
+    $cuentas = collect($respuesta->json('cuentas'))->keyBy('id');
+
+    expect($cuentas[$conLogo->id]['banco'])->toHaveKeys(['slug', 'nombre', 'imagen_url']);
+    expect($cuentas[$sinLogo->id]['banco'])->toBeNull();
 });

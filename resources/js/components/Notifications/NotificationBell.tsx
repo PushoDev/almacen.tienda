@@ -70,6 +70,8 @@ export const NotificationBell = () => {
                 router.visit(route('ventas.cierres.show', notification.data.cierre_id));
             } else if (type === 'movimiento_financiero') {
                 router.visit(route('transacciones.show', notification.data.movimiento_id));
+            } else if (type === 'transferencia_pendiente') {
+                router.visit(route('transacciones.envios.index'));
             } else if (type === 'venta_especial_solicitud' || type === 'venta_especial_decision') {
                 router.visit(route('ventas.show', notification.data.venta_id));
             } else if (type === 'cambio_precio') {

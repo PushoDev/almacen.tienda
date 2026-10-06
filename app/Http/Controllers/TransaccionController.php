@@ -10,7 +10,10 @@ use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\Producto;
 use App\Models\Proveedor;
+use App\Models\TransferenciaPendiente;
+use App\Models\User;
 use App\Notifications\MovimientoFinancieroNotification;
+use App\Services\CatalogoTarjetasService;
 use App\Services\NotificationService;
 use Exception;
 use Illuminate\Http\Request;
@@ -35,26 +38,31 @@ class TransaccionController extends Controller
      */
     public function index()
     {
-        // Origen: vendedor solo ve sus cuentas asignadas personales (admin/moderador, todas sin
-        // filtrar por titular — cuentasPropias() ya les da Cuenta::query() completo);
-        // destino: cuentas asignadas a cualquier usuario.
+        // Origen: vendedor solo ve sus cuentas personales de acceso `completo` (una de `cobro` solo
+        // recibe pagos de ventas: ni se lista ni viaja su saldo); admin/moderador, todas sin filtrar
+        // por titular — cuentasUsables() ya les da Cuenta::query() completo. Destino: cuentas
+        // asignadas a cualquier usuario.
         $esVendedor = auth()->user()->role === 'vendedor';
-        $origenQuery = auth()->user()->cuentasPropias();
+        $origenQuery = auth()->user()->cuentasUsables();
         if ($esVendedor) {
-            $origenQuery->where('tipo_titular', 'personal');
+            $origenQuery->where('cuentas.tipo_titular', 'personal');
         }
-        $cuentasOrigen = $origenQuery->with('moneda')->get();
+        // `banco`: logo real del banco/tarjeta (o insignia de efectivo) para el selector visual
+        $cuentasOrigen = $origenQuery->with('moneda')->get()
+            ->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
         $cuentasDestino = $esVendedor
             ? Cuenta::with('moneda')->whereHas('users')->get()
             : Cuenta::with('moneda')->get();
 
-        $clientes = Cliente::all();
+        // Un vendedor no tiene acceso a los clientes en Gastos ni en Ingresos
+        $clientes = $esVendedor ? collect() : Cliente::all();
         $proveedores = Proveedor::all();
 
         // ✅ Obtener monedas activas
         $monedasActivas = Moneda::where('estado', true)->get();
 
         return Inertia::render('Transacciones/Index', [
+            'totalesTransito' => TransferenciaPendiente::totalesPara(auth()->user()),
             'cuentasOrigen' => $cuentasOrigen,
             'cuentasDestino' => $cuentasDestino,
             'clientes' => $clientes,
@@ -99,12 +107,17 @@ class TransaccionController extends Controller
         $detallesOrigen = null;
         $detallesDestino = null;
 
+        $usuario = auth()->user();
+
         // Construir detalles del ORIGEN
         if ($movimiento->cuenta_origen_id || $movimiento->cliente_origen_id) {
             $detallesOrigen = [
                 'tipo' => $movimiento->cuenta_origen_id ? 'cuenta' : 'cliente',
                 'nombre' => $movimiento->nombreOrigen,
                 'moneda' => $movimiento->moneda_origen ?? $movimiento->moneda,
+                'simbolo' => $movimiento->cuentaOrigen?->moneda?->simbolo_moneda ?? '$',
+                'banco' => $movimiento->cuentaOrigen ? CatalogoTarjetasService::porSlug($movimiento->cuentaOrigen->imagen) : null,
+                'saldos_visibles' => $this->puedeVerSaldosDelDetalle($usuario, $movimiento->cuentaOrigen),
                 'tiene_datos_historicos' => $movimiento->saldo_anterior_origen !== null,
                 'saldo_anterior' => $movimiento->saldo_anterior_origen,
                 'saldo_posterior' => $movimiento->saldo_posterior_origen,
@@ -134,20 +147,83 @@ class TransaccionController extends Controller
                 'tipo' => $tipoDestino,
                 'nombre' => $movimiento->nombreDestino,
                 'moneda' => $movimiento->moneda_destino ?? $movimiento->moneda,
+                'simbolo' => $movimiento->cuentaDestino?->moneda?->simbolo_moneda ?? '$',
+                'banco' => $movimiento->cuentaDestino ? CatalogoTarjetasService::porSlug($movimiento->cuentaDestino->imagen) : null,
+                'saldos_visibles' => $this->puedeVerSaldosDelDetalle($usuario, $movimiento->cuentaDestino),
                 'tiene_datos_historicos' => $movimiento->saldo_anterior_destino !== null,
                 'saldo_anterior' => $movimiento->saldo_anterior_destino,
                 'saldo_posterior' => $movimiento->saldo_posterior_destino,
-                'monto_operacion' => abs($movimiento->monto), // Positivo porque entra dinero
+                // Positivo porque entra dinero. El movimiento solo guarda el monto en la moneda del origen: si las monedas
+                // difieren, lo que recibió el destino sale de la diferencia de sus saldos (si el registro la tiene).
+                'monto_operacion' => $this->montoRecibidoPorElDestino($movimiento),
                 'saldo_actual' => $saldoActual,
             ];
         }
+
+        // Un vendedor no ve los saldos de una cuenta que no puede usar (la de otro vendedor, una de cobro) ni los
+        // de un cliente o proveedor: la operación muestra el nombre y el monto, pero no cuánto había ni cuánto queda.
+        $sinSaldosAjenos = fn (?array $detalle): ?array => $detalle && ! $detalle['saldos_visibles']
+            ? [...$detalle, 'saldo_anterior' => null, 'saldo_posterior' => null, 'saldo_actual' => null]
+            : $detalle;
+        $detallesOrigen = $sinSaldosAjenos($detallesOrigen);
+        $detallesDestino = $sinSaldosAjenos($detallesDestino);
 
         return Inertia::render('Transacciones/Show', [
             'movimiento' => $movimiento,
             'detallesOrigen' => $detallesOrigen,
             'detallesDestino' => $detallesDestino,
-            'userRole' => auth()->user()->role ?? 'vendedor',
+            'envioOrigen' => $this->envioDeOrigen($movimiento, $usuario),
+            'userRole' => $usuario->role ?? 'vendedor',
         ]);
+    }
+
+    private function montoRecibidoPorElDestino(MovimientoFinanciero $movimiento): float
+    {
+        $monedaDestino = $movimiento->moneda_destino ?? $movimiento->moneda;
+        $hayDiferenciaDeMoneda = $monedaDestino !== $movimiento->moneda;
+        $tieneSaldos = $movimiento->saldo_anterior_destino !== null && $movimiento->saldo_posterior_destino !== null;
+
+        return $hayDiferenciaDeMoneda && $tieneSaldos
+            ? round(abs($movimiento->saldo_posterior_destino - $movimiento->saldo_anterior_destino), 2)
+            : abs($movimiento->monto);
+    }
+
+    /**
+     * Admin y moderador ven todos los saldos; un vendedor solo los de las cuentas que puede usar. Los clientes y
+     * proveedores (sin cuenta) quedan fuera para el vendedor.
+     */
+    private function puedeVerSaldosDelDetalle(User $usuario, ?Cuenta $cuenta): bool
+    {
+        if ($usuario->role !== 'vendedor') {
+            return true;
+        }
+
+        return $cuenta !== null && $usuario->puedeUsarCuenta($cuenta->id);
+    }
+
+    /**
+     * El envío en tránsito que originó esta transferencia, si lo hubo y el usuario puede verlo: dice quién lo
+     * envió y quién lo confirmó.
+     *
+     * @return array{id: int, estado: string, enviado_por: ?string, fecha_envio: string, confirmado_por: ?string, fecha_confirmacion: ?string, diferencia: ?float}|null
+     */
+    private function envioDeOrigen(MovimientoFinanciero $movimiento, User $usuario): ?array
+    {
+        $envio = TransferenciaPendiente::query()
+            ->visiblesPara($usuario)
+            ->where('movimiento_financiero_id', $movimiento->id)
+            ->with(['usuario', 'confirmador'])
+            ->first();
+
+        return $envio ? [
+            'id' => $envio->id,
+            'estado' => $envio->estado,
+            'enviado_por' => $envio->usuario?->name,
+            'fecha_envio' => $envio->created_at->toIso8601String(),
+            'confirmado_por' => $envio->confirmador?->name,
+            'fecha_confirmacion' => $envio->fecha_confirmacion?->toIso8601String(),
+            'diferencia' => $envio->diferencia,
+        ] : null;
     }
 
     // =======================================================

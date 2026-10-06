@@ -18,6 +18,7 @@ import {
     ShoppingBasket,
     ShoppingCart,
     StoreIcon,
+    Truck,
     Users,
     CalendarIcon,
     DollarSignIcon,
@@ -84,6 +85,12 @@ const allNavItems: NavItem[] = [
         title: 'Cuentas Monetarias',
         href: '/cuentas',
         icon: Landmark,
+        roles: ['admin', 'moderador', 'vendedor'],
+    },
+    {
+        title: 'Envíos de Dinero',
+        href: '/transacciones/envios',
+        icon: Truck,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {

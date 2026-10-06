@@ -21,12 +21,17 @@ class GastoController extends Controller
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
+        // Un vendedor no tiene acceso a los clientes en Gastos: solo gasta desde sus cuentas
+        $tiposOrigenPermitidos = auth()->user()->role === 'vendedor' ? 'cuenta' : 'cuenta,cliente';
+
         $request->validate([
-            'origen_tipo' => 'required|string|in:cuenta,cliente',
+            'origen_tipo' => 'required|string|in:'.$tiposOrigenPermitidos,
             'origen_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
+        ], [
+            'origen_tipo.in' => 'No tiene permiso para operar con clientes.',
         ]);
 
         DB::beginTransaction();
@@ -53,8 +58,9 @@ class GastoController extends Controller
                 $origen = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->origen_id);
 
                 if (auth()->user()->role === 'vendedor') {
-                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                    if (! in_array($origen->id, $cuentasAsignadas)) {
+                    // Solo las cuentas de acceso `completo`: una de `cobro` solo sirve para recibir
+                    // pagos de ventas, no para sacar dinero de ella (ver User::cuentasUsables()).
+                    if (! auth()->user()->puedeUsarCuenta($origen->id)) {
                         throw new \Exception('No tiene permiso para operar con esta cuenta.');
                     }
 
