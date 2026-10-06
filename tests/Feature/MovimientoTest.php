@@ -825,10 +825,55 @@ test('un vendedor puede abrir un movimiento que llega a su almacén', function (
 });
 
 // ==========================================================================
-// FILTROS — estado, almacenes, sentido, fechas y búsqueda
+// PANTALLA DE TRABAJO — solo lo reciente (3 días) y lo que sigue abierto
 // ==========================================================================
 
-test('index() filtra por estado y por almacén origen y destino', function () {
+test('index() muestra lo de los últimos 3 días y todo lo abierto, aunque sea viejo', function () {
+    $this->travelTo('2026-10-06 12:00:00');
+    $this->actingAs(User::factory()->admin()->create());
+
+    $hoy = Movimiento::factory()->create(['estado' => 'recibido_completo', 'created_at' => '2026-10-06 08:00:00']);
+    $limite = Movimiento::factory()->create(['estado' => 'recibido_completo', 'created_at' => '2026-10-04 00:30:00']);
+    Movimiento::factory()->create(['estado' => 'recibido_completo', 'created_at' => '2026-10-03 23:30:00']);
+    $pendienteViejo = Movimiento::factory()->create(['estado' => 'pendiente_confirmacion', 'created_at' => '2026-09-01 10:00:00']);
+    $transitoViejo = Movimiento::factory()->enTransito()->create(['created_at' => '2026-09-10 10:00:00']);
+    Movimiento::factory()->create(['estado' => 'rechazado', 'created_at' => '2026-09-15 10:00:00']);
+
+    $this->get(route('movimientos.index'))->assertInertia(function ($page) use ($hoy, $limite, $pendienteViejo, $transitoViejo) {
+        $ids = collect($page->toArray()['props']['movimientos']['data'])->pluck('id')->sort()->values()->all();
+
+        expect($ids)->toBe(collect([$hoy->id, $limite->id, $pendienteViejo->id, $transitoViejo->id])->sort()->values()->all());
+    });
+});
+
+test('el reporte de historial muestra todos los movimientos sin la ventana de 3 días', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    Movimiento::factory()->create(['estado' => 'recibido_completo', 'created_at' => '2026-01-10 10:00:00']);
+    Movimiento::factory()->create(['estado' => 'recibido_completo', 'created_at' => '2026-09-10 10:00:00']);
+
+    $this->get(route('reportes.historial_movimientos'))->assertInertia(fn ($page) => $page->has('movimientos.data', 2));
+});
+
+test('un vendedor ve en el reporte de historial solo los movimientos de sus almacenes', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $suyo = Almacen::factory()->almacen()->create();
+    $vendedor->almacenes()->attach($suyo->id);
+    $visible = Movimiento::factory()->create(['almacen_origen_id' => $suyo->id, 'estado' => 'recibido_completo', 'created_at' => '2026-01-10 10:00:00']);
+    Movimiento::factory()->create(['estado' => 'recibido_completo', 'created_at' => '2026-01-10 10:00:00']);
+
+    $this->get(route('reportes.historial_movimientos'))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $visible->id)->where('esVendedor', true));
+});
+
+// ==========================================================================
+// FILTROS DEL REPORTE — estado, almacenes, sentido, fechas y búsqueda
+// ==========================================================================
+
+test('el reporte filtra por estado y por almacén origen y destino', function () {
     $this->actingAs(User::factory()->admin()->create());
 
     $almacenA = Almacen::factory()->almacen()->create();
@@ -836,37 +881,37 @@ test('index() filtra por estado y por almacén origen y destino', function () {
     $pendienteAB = Movimiento::factory()->create(['almacen_origen_id' => $almacenA->id, 'almacen_destino_id' => $almacenB->id, 'estado' => 'pendiente_confirmacion']);
     $rechazadoBA = Movimiento::factory()->create(['almacen_origen_id' => $almacenB->id, 'almacen_destino_id' => $almacenA->id, 'estado' => 'rechazado']);
 
-    $this->get(route('movimientos.index', ['estado' => 'rechazado']))
+    $this->get(route('reportes.historial_movimientos', ['estado' => 'rechazado']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $rechazadoBA->id));
 
-    $this->get(route('movimientos.index', ['almacen_origen_id' => $almacenA->id]))
+    $this->get(route('reportes.historial_movimientos', ['almacen_origen_id' => $almacenA->id]))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $pendienteAB->id));
 
-    $this->get(route('movimientos.index', ['almacen_destino_id' => $almacenA->id]))
+    $this->get(route('reportes.historial_movimientos', ['almacen_destino_id' => $almacenA->id]))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $rechazadoBA->id));
 });
 
-test('index() filtra por rango de fechas de creación', function () {
+test('el reporte filtra por rango de fechas de creación', function () {
     $this->actingAs(User::factory()->admin()->create());
 
     $viejo = Movimiento::factory()->create(['created_at' => '2026-09-01 10:00:00']);
     $reciente = Movimiento::factory()->create(['created_at' => '2026-10-05 10:00:00']);
 
-    $this->get(route('movimientos.index', ['desde' => '2026-10-01', 'hasta' => '2026-10-06']))
+    $this->get(route('reportes.historial_movimientos', ['desde' => '2026-10-01', 'hasta' => '2026-10-06']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $reciente->id));
 
-    $this->get(route('movimientos.index', ['hasta' => '2026-09-30']))
+    $this->get(route('reportes.historial_movimientos', ['hasta' => '2026-09-30']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $viejo->id));
 });
 
-test('index() rechaza un rango de fechas invertido', function () {
+test('el reporte rechaza un rango de fechas invertido', function () {
     $this->actingAs(User::factory()->admin()->create());
 
-    $this->get(route('movimientos.index', ['desde' => '2026-10-06', 'hasta' => '2026-10-01']))
+    $this->get(route('reportes.historial_movimientos', ['desde' => '2026-10-06', 'hasta' => '2026-10-01']))
         ->assertSessionHasErrors('hasta');
 });
 
-test('index() busca por número de movimiento, producto y solicitante', function () {
+test('el reporte busca por número de movimiento, producto y solicitante', function () {
     $this->actingAs(User::factory()->admin()->create());
 
     $solicitante = User::factory()->vendedor()->create(['name' => 'Marta Pérez']);
@@ -875,17 +920,17 @@ test('index() busca por número de movimiento, producto y solicitante', function
     $conProducto->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 2]);
     $otro = Movimiento::factory()->create();
 
-    $this->get(route('movimientos.index', ['buscar' => "#{$otro->id}"]))
+    $this->get(route('reportes.historial_movimientos', ['buscar' => "#{$otro->id}"]))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $otro->id));
 
-    $this->get(route('movimientos.index', ['buscar' => 'lavadora']))
+    $this->get(route('reportes.historial_movimientos', ['buscar' => 'lavadora']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $conProducto->id));
 
-    $this->get(route('movimientos.index', ['buscar' => 'Marta']))
+    $this->get(route('reportes.historial_movimientos', ['buscar' => 'Marta']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $conProducto->id));
 });
 
-test('index() permite al vendedor filtrar salientes y entrantes sin salirse de sus almacenes', function () {
+test('el reporte permite al vendedor filtrar salientes y entrantes sin salirse de sus almacenes', function () {
     $vendedor = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedor);
     $this->actingAs($vendedor);
@@ -898,15 +943,136 @@ test('index() permite al vendedor filtrar salientes y entrantes sin salirse de s
     $entrante = Movimiento::factory()->create(['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $suyo->id]);
     Movimiento::factory()->create(['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $ajeno->id]);
 
-    $this->get(route('movimientos.index', ['sentido' => 'salientes']))
+    $this->get(route('reportes.historial_movimientos', ['sentido' => 'salientes']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $saliente->id));
 
-    $this->get(route('movimientos.index', ['sentido' => 'entrantes']))
+    $this->get(route('reportes.historial_movimientos', ['sentido' => 'entrantes']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $entrante->id));
 
     // Filtrar por un almacén ajeno como destino no destapa movimientos que no son suyos
-    $this->get(route('movimientos.index', ['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $ajeno->id]))
+    $this->get(route('reportes.historial_movimientos', ['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $ajeno->id]))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 0));
+});
+
+test('el reporte totaliza todo lo filtrado, no solo la página, y respeta los filtros', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $producto = Producto::factory()->create();
+    $recibido = Movimiento::factory()->create(['estado' => 'recibido_parcial']);
+    $recibido->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10, 'cantidad_recibida' => 7]);
+    $transito = Movimiento::factory()->enTransito()->create();
+    $transito->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 5, 'cantidad_despachada' => 5]);
+    Movimiento::factory()->count(16)->create(['estado' => 'rechazado']);
+
+    $this->get(route('reportes.historial_movimientos'))->assertInertia(fn ($page) => $page
+        ->where('totales.movimientos', 18)
+        ->where('totales.unidades_solicitadas', 15)
+        ->where('totales.unidades_despachadas', 15)
+        ->where('totales.unidades_recibidas', 7)
+        ->where('totales.por_estado', ['recibido_parcial' => 1, 'en_transito' => 1, 'rechazado' => 16])
+        ->where('totales.parciales', ['movimientos' => 1, 'unidades_faltantes' => 3])
+        ->has('movimientos.data', 15)
+    );
+
+    $this->get(route('reportes.historial_movimientos', ['estado' => 'en_transito']))->assertInertia(fn ($page) => $page
+        ->where('totales.movimientos', 1)
+        ->where('totales.unidades_solicitadas', 5)
+        ->where('totales.unidades_recibidas', 0)
+        ->where('totales.parciales', ['movimientos' => 0, 'unidades_faltantes' => 0])
+    );
+});
+
+test('el reporte indica quién envió, recibió y rechazó cada movimiento', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $quienEnvia = User::factory()->vendedor()->create(['name' => 'Ana Envía']);
+    $quienRecibe = User::factory()->vendedor()->create(['name' => 'Luis Recibe']);
+    $quienRechaza = User::factory()->vendedor()->create(['name' => 'Eva Rechaza']);
+
+    $recibido = Movimiento::factory()->create(['estado' => 'recibido_completo']);
+    $recibido->seguimientos()->create(['estado' => 'en_transito', 'user_id' => $quienEnvia->id]);
+    $recibido->seguimientos()->create(['estado' => 'recibido_completo', 'user_id' => $quienRecibe->id]);
+
+    $rechazado = Movimiento::factory()->create(['estado' => 'rechazado']);
+    $rechazado->seguimientos()->create(['estado' => 'rechazado', 'user_id' => $quienRechaza->id]);
+
+    $this->get(route('reportes.historial_movimientos'))->assertInertia(function ($page) use ($recibido, $rechazado) {
+        $filas = collect($page->toArray()['props']['movimientos']['data'])->keyBy('id');
+
+        expect($filas[$recibido->id]['enviado_por'])->toBe('Ana Envía');
+        expect($filas[$recibido->id]['recibido_por'])->toBe('Luis Recibe');
+        expect($filas[$recibido->id]['rechazado_por'])->toBeNull();
+        expect($filas[$rechazado->id]['rechazado_por'])->toBe('Eva Rechaza');
+        expect($filas[$rechazado->id]['enviado_por'])->toBeNull();
+    });
+});
+
+// ==========================================================================
+// HOJA IMPRIMIBLE — comprobante de envío (recibido en blanco) y evidencia de recepción
+// ==========================================================================
+
+test('imprimir() de un movimiento sin recibir manda lo a enviar y deja lo recibido en blanco', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $producto = Producto::factory()->create(['nombre_producto' => 'LAVADORA EKO']);
+    $pendiente = Movimiento::factory()->create(['estado' => 'pendiente_confirmacion']);
+    $pendiente->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 4]);
+    $enTransito = Movimiento::factory()->enTransito()->create();
+    $enTransito->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 6, 'cantidad_despachada' => 5]);
+
+    $this->get(route('movimientos.imprimir', $pendiente))->assertInertia(fn ($page) => $page
+        ->component('Movimientos/Imprimir')
+        ->where('movimiento.es_evidencia', false)
+        ->where('movimiento.detalles.0.cantidad_enviada', 4)
+        ->where('movimiento.detalles.0.cantidad_recibida', null)
+        ->where('movimiento.detalles.0.producto.nombre', 'LAVADORA EKO')
+    );
+
+    // Ya despachado, lo que sale es lo despachado, no lo solicitado
+    $this->get(route('movimientos.imprimir', $enTransito))->assertInertia(fn ($page) => $page
+        ->where('movimiento.es_evidencia', false)
+        ->where('movimiento.detalles.0.cantidad_enviada', 5)
+    );
+});
+
+test('imprimir() de un movimiento recibido es la evidencia, con lo recibido y quién lo recibió', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $quienEnvia = User::factory()->vendedor()->create(['name' => 'Ana Envía']);
+    $quienRecibe = User::factory()->vendedor()->create(['name' => 'Luis Recibe']);
+    $producto = Producto::factory()->create();
+    $movimiento = Movimiento::factory()->create(['estado' => 'recibido_parcial', 'fecha_recepcion' => now()]);
+    $movimiento->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10, 'cantidad_recibida' => 7]);
+    $movimiento->seguimientos()->create(['estado' => 'en_transito', 'user_id' => $quienEnvia->id]);
+    $movimiento->seguimientos()->create(['estado' => 'recibido_parcial', 'user_id' => $quienRecibe->id]);
+
+    $this->get(route('movimientos.imprimir', $movimiento))->assertInertia(fn ($page) => $page
+        ->where('movimiento.es_evidencia', true)
+        ->where('movimiento.enviado_por', 'Ana Envía')
+        ->where('movimiento.recibido_por', 'Luis Recibe')
+        ->where('movimiento.detalles.0.cantidad_enviada', 10)
+        ->where('movimiento.detalles.0.cantidad_recibida', 7)
+    );
+});
+
+test('imprimir() lo pueden abrir el almacén origen y el destino, pero no un vendedor ajeno', function () {
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $movimiento = Movimiento::factory()->create(['almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id]);
+
+    $vendedorOrigen = User::factory()->vendedor()->create();
+    $vendedorDestino = User::factory()->vendedor()->create();
+    $vendedorAjeno = User::factory()->vendedor()->create();
+    $vendedorOrigen->almacenes()->attach($origen->id);
+    $vendedorDestino->almacenes()->attach($destino->id);
+
+    foreach ([$vendedorOrigen, $vendedorDestino] as $vendedor) {
+        crearTurnoActivo($vendedor);
+        $this->actingAs($vendedor)->get(route('movimientos.imprimir', $movimiento))->assertOk();
+    }
+
+    crearTurnoActivo($vendedorAjeno);
+    $this->actingAs($vendedorAjeno)->get(route('movimientos.imprimir', $movimiento))->assertForbidden();
 });
 
 // ==========================================================================

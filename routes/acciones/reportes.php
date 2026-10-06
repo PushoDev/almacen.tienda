@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\Reportes\HistorialMovimientosController;
 use App\Http\Controllers\Reportes\RastreoOperacionesController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // grande, ~666 productos — no se puede mandar la lista completa como Cliente/
         // Proveedor/Cuenta, que son decenas).
         Route::get('/rastreo-operaciones/productos-buscar', [RastreoOperacionesController::class, 'buscarProductos'])->name('rastreo_operaciones.productos_buscar');
+
+        // --- HISTORIAL DE MOVIMIENTOS --- (todos los roles; un vendedor solo ve los movimientos
+        // que salen de o llegan a sus almacenes, ver Movimiento::scopeVisiblesPara)
+        Route::get('/historial-movimientos', HistorialMovimientosController::class)->name('historial_movimientos');
 
         // Resto de reportes: exponen costo, margen o movimientos financieros completos del
         // sistema — solo admin/moderador, mismo criterio que ya usaba historialCostoPrecio()

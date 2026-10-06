@@ -295,6 +295,14 @@
     --spotlight-brillo: oklch(0.81 0.12 265);
 }
 
+/* Tarjetas con degradado propio de color (ej. las de /reportes, 16 colores distintos): un destello
+   blanco se ve bien sobre cualquiera, sin definir un estado por color. */
+.spotlight-card[data-estado='claro'] {
+    --spotlight-base: oklch(1 0 0 / 0.25);
+    --spotlight-medio: oklch(0.95 0 0 / 0.75);
+    --spotlight-brillo: oklch(1 0 0);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .spotlight-card::before {
         animation: none;

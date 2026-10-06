@@ -16,7 +16,6 @@ use App\Services\CodigoStockService;
 use App\Services\FusionLotesService;
 use App\Services\LoteConsumoService;
 use App\Services\NotificationService;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -81,36 +80,12 @@ class MovimientosController extends Controller
     }
 
     /**
-     * Movimientos que el usuario puede ver: admin y moderador todos; un vendedor solo los que
-     * salen de alguno de sus almacenes o llegan a alguno (misma regla con la que se decide a
-     * quién se le notifica un movimiento, ver MovimientoStockNotification).
-     *
-     * @return Builder<Movimiento>
-     */
-    private function movimientosVisibles(): Builder
-    {
-        $user = Auth::user();
-        $consulta = Movimiento::query();
-
-        if (in_array($user->role, ['admin', 'moderador'])) {
-            return $consulta;
-        }
-
-        $almacenesIds = $user->almacenes()->pluck('almacens.id');
-
-        return $consulta->where(function (Builder $query) use ($almacenesIds) {
-            $query->whereIn('almacen_origen_id', $almacenesIds)
-                ->orWhereIn('almacen_destino_id', $almacenesIds);
-        });
-    }
-
-    /**
      * Un vendedor solo puede consultar movimientos de sus almacenes (origen o destino).
      */
     private function autorizarVisibilidad(Movimiento $movimiento): void
     {
         abort_unless(
-            $this->movimientosVisibles()->whereKey($movimiento->id)->exists(),
+            Movimiento::visiblesPara(Auth::user())->whereKey($movimiento->id)->exists(),
             403,
             'No tienes acceso a este movimiento'
         );
@@ -156,50 +131,19 @@ class MovimientosController extends Controller
     /**
      * Muestra la interfaz principal de movimientos
      */
-    public function index(Request $request)
+    public function index()
     {
-        $filtros = $request->validate([
-            'estado' => ['nullable', 'in:pendiente_confirmacion,en_transito,recibido_parcial,recibido_completo,rechazado,cancelado'],
-            'almacen_origen_id' => ['nullable', 'integer', 'exists:almacens,id'],
-            'almacen_destino_id' => ['nullable', 'integer', 'exists:almacens,id'],
-            'sentido' => ['nullable', 'in:salientes,entrantes'],
-            'desde' => ['nullable', 'date'],
-            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
-            'buscar' => ['nullable', 'string', 'max:100'],
-        ]);
-
         $user = Auth::user();
         $userAlmacenesIds = in_array($user->role, ['admin', 'moderador']) ? [] : $user->almacenes()->pluck('almacens.id')->toArray();
 
-        $movimientos = $this->movimientosVisibles()
+        // Pantalla de trabajo diario: lo de los últimos 3 días y lo que sigue abierto. El historial
+        // completo, con filtros, vive en el reporte "Historial de Movimientos".
+        $movimientos = Movimiento::visiblesPara($user)
+            ->recientesOAbiertos()
             ->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
-            ->when($filtros['estado'] ?? null, fn (Builder $query, string $estado) => $query->where('estado', $estado))
-            ->when($filtros['almacen_origen_id'] ?? null, fn (Builder $query, int $id) => $query->where('almacen_origen_id', $id))
-            ->when($filtros['almacen_destino_id'] ?? null, fn (Builder $query, int $id) => $query->where('almacen_destino_id', $id))
-            ->when($userAlmacenesIds && ($filtros['sentido'] ?? null) === 'salientes', fn (Builder $query) => $query->whereIn('almacen_origen_id', $userAlmacenesIds))
-            ->when($userAlmacenesIds && ($filtros['sentido'] ?? null) === 'entrantes', fn (Builder $query) => $query->whereIn('almacen_destino_id', $userAlmacenesIds))
-            ->when($filtros['desde'] ?? null, fn (Builder $query, string $desde) => $query->whereDate('created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn (Builder $query, string $hasta) => $query->whereDate('created_at', '<=', $hasta))
-            ->when(trim($filtros['buscar'] ?? '') !== '', function (Builder $query) use ($filtros) {
-                $termino = trim($filtros['buscar']);
-
-                $query->where(function (Builder $query) use ($termino) {
-                    if (ctype_digit(ltrim($termino, '#'))) {
-                        $query->orWhere('id', (int) ltrim($termino, '#'));
-                    }
-
-                    $query->orWhereHas('usuario', fn (Builder $usuario) => $usuario->where('name', 'like', "%{$termino}%"))
-                        ->orWhereHas('detalles.producto', fn (Builder $producto) => $producto
-                            ->where('nombre_producto', 'like', "%{$termino}%")
-                            ->orWhere('marca_producto', 'like', "%{$termino}%")
-                            ->orWhere('modelo_producto', 'like', "%{$termino}%")
-                            ->orWhere('codigo_producto', 'like', "%{$termino}%"));
-                });
-            })
             ->orderBy('created_at', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(10)
-            ->withQueryString()
             ->through(function (Movimiento $movimiento) use ($user, $userAlmacenesIds) {
                 $movimiento->setAttribute('permisos', $this->permisosSobreMovimiento($movimiento, $user, $userAlmacenesIds));
 
@@ -210,15 +154,6 @@ class MovimientosController extends Controller
             'almacenes' => Almacen::select('id', 'nombre_almacen', 'tipo_almacen')->get(),
             'userAlmacenesIds' => $userAlmacenesIds,
             'movimientos' => $movimientos,
-            'filtros' => [
-                'estado' => $filtros['estado'] ?? '',
-                'almacen_origen_id' => $filtros['almacen_origen_id'] ?? '',
-                'almacen_destino_id' => $filtros['almacen_destino_id'] ?? '',
-                'sentido' => $filtros['sentido'] ?? '',
-                'desde' => $filtros['desde'] ?? '',
-                'hasta' => $filtros['hasta'] ?? '',
-                'buscar' => $filtros['buscar'] ?? '',
-            ],
             'estados' => [
                 'pendiente_confirmacion' => 'Pendiente Confirmación',
                 'en_transito' => 'En Tránsito',
@@ -865,7 +800,7 @@ class MovimientosController extends Controller
      */
     public function reporteDiscrepancias()
     {
-        $discrepancias = $this->movimientosVisibles()->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
+        $discrepancias = Movimiento::visiblesPara(Auth::user())->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
             ->whereIn('estado', ['recibido_parcial', 'rechazado'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
@@ -896,6 +831,69 @@ class MovimientosController extends Controller
             'discrepancias' => $detallesDiscrepancia,
             'total' => count($detallesDiscrepancia),
             'movimientosPage' => $discrepancias,
+        ]);
+    }
+
+    /**
+     * Hoja imprimible del movimiento: viaja con la mercancía como comprobante de lo que sale y,
+     * mientras no se haya recibido, trae la columna "Recibido" en blanco para que quien recibe
+     * vaya anotando la cantidad exacta por producto. Ya recibido, se reimprime con lo recibido, la
+     * diferencia y quién recibió, como evidencia. Se abre en pestaña nueva (Ctrl+P / Guardar PDF).
+     */
+    public function imprimir(Movimiento $movimiento)
+    {
+        $this->autorizarVisibilidad($movimiento);
+
+        $movimiento->load([
+            'almacenOrigen',
+            'almacenDestino',
+            'usuario',
+            'detalles.producto',
+            'seguimientos.usuario',
+        ]);
+
+        $fueRecibido = in_array($movimiento->estado, ['recibido_completo', 'recibido_parcial']);
+
+        return Inertia::render('Movimientos/Imprimir', [
+            'movimiento' => [
+                'id' => $movimiento->id,
+                'estado' => $movimiento->estado,
+                'es_evidencia' => $fueRecibido,
+                'created_at' => $movimiento->created_at->toISOString(),
+                'fecha_envio' => $movimiento->fecha_envio?->toISOString(),
+                'fecha_recepcion' => $movimiento->fecha_recepcion?->toISOString(),
+                'guia_transporte' => $movimiento->guia_transporte,
+                'transportista' => $movimiento->transportista,
+                'observaciones' => $movimiento->observaciones,
+                'solicitado_por' => $movimiento->usuario?->name,
+                'enviado_por' => $movimiento->registradoPor('en_transito'),
+                'recibido_por' => $movimiento->registradoPor(['recibido_completo', 'recibido_parcial']),
+                'almacen_origen' => [
+                    'nombre' => $movimiento->almacenOrigen->nombre_almacen,
+                    'ciudad' => $movimiento->almacenOrigen->ciudad_almacen,
+                    'provincia' => $movimiento->almacenOrigen->provincia_almacen,
+                ],
+                'almacen_destino' => [
+                    'nombre' => $movimiento->almacenDestino->nombre_almacen,
+                    'ciudad' => $movimiento->almacenDestino->ciudad_almacen,
+                    'provincia' => $movimiento->almacenDestino->provincia_almacen,
+                ],
+                'detalles' => $movimiento->detalles->map(fn (MovimientoDetalle $detalle) => [
+                    'id' => $detalle->id,
+                    'producto' => [
+                        'nombre' => $detalle->producto?->nombre_producto,
+                        'marca' => $detalle->producto?->marca_producto,
+                        'modelo' => $detalle->producto?->modelo_producto,
+                        'capacidad' => $detalle->producto?->capacidad_producto,
+                        'color' => $detalle->producto?->color_producto,
+                        'codigo' => $detalle->producto?->codigo_producto,
+                    ],
+                    // Sin despachar todavía, lo que se va a enviar es lo solicitado
+                    'cantidad_enviada' => $detalle->cantidad_despachada > 0 ? $detalle->cantidad_despachada : $detalle->cantidad_solicitada,
+                    'cantidad_recibida' => $fueRecibido ? ($detalle->cantidad_recibida ?? 0) : null,
+                    'observaciones' => $detalle->observaciones,
+                ])->values(),
+            ],
         ]);
     }
 

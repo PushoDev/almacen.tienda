@@ -10,6 +10,7 @@ interface SpotlightCardProps extends React.ComponentProps<'div'> {
      * 'global' (violeta): acceso global de admin/moderador en Empleados. 'sin-comision' (fucsia):
      * venta "de la agencia" sin comisión (Cierres, 2026-10-03) — color propio, sin pisar 'global'.
      * 'indigo': widgets neutros de conteo (ej. "Cantidad de Unidades" en Productos/Index.tsx).
+     * 'claro' (blanco): tarjetas con degradado propio de color, como las de /reportes.
      */
     estado:
         | 'disponible'
@@ -22,7 +23,8 @@ interface SpotlightCardProps extends React.ComponentProps<'div'> {
         | 'cobro'
         | 'global'
         | 'sin-comision'
-        | 'indigo';
+        | 'indigo'
+        | 'claro';
 }
 
 /**

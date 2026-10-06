@@ -40,6 +40,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/movimientos/{movimiento}/seguimiento', [MovimientosController::class, 'seguimiento'])
         ->name('movimientos.seguimiento');
 
+    // Hoja imprimible (comprobante de envío / evidencia de recepción), se abre en pestaña nueva
+    Route::get('/movimientos/{movimiento}/imprimir', [MovimientosController::class, 'imprimir'])
+        ->name('movimientos.imprimir');
+
     Route::get('/movimientos/reportes/discrepancias', [MovimientosController::class, 'reporteDiscrepancias'])
         ->name('movimientos.reportes.discrepancias');
 
