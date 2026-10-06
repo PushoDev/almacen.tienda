@@ -52,6 +52,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function MonedasIndex() {
     const { props } = usePage<PageProps>();
     const { monedas, success, error } = props;
+    // Crear y eliminar monedas es solo del admin; el moderador las ve y las edita (ver routes/crud/monedas.php)
+    const esAdmin = (props.auth as { user?: { role?: string } } | undefined)?.user?.role === 'admin';
 
     const [loadingStates, setLoadingStates] = useState<{ [key: number]: string }>({});
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -138,12 +140,14 @@ export default function MonedasIndex() {
                                 </CardDescription>
                             </div>
                         </div>
-                        <Button asChild className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
-                            <Link href="/monedas/create">
-                                <Plus className="mr-2 h-4 w-4" />
-                                Nueva Moneda
-                            </Link>
-                        </Button>
+                        {esAdmin && (
+                            <Button asChild className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
+                                <Link href="/monedas/create">
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Nueva Moneda
+                                </Link>
+                            </Button>
+                        )}
                     </CardHeader>
                     <CardContent className="pt-5">
                         {monedas.length === 0 ? (
@@ -162,6 +166,7 @@ export default function MonedasIndex() {
                                         onEstablecerPrincipal={() => handleAction(moneda.id, 'establecer-principal')}
                                         onDeleteClick={handleDeleteClick}
                                         formatNumber={formatNumber}
+                                        puedeEliminar={esAdmin}
                                     />
                                 ))}
                             </div>

@@ -290,7 +290,7 @@ test('create() y edit() exponen el catálogo de insignias de moneda, incluyendo 
 });
 
 // ==========================================================================
-// ACCESO — admin.only (routes/crud/monedas.php). Antes solo 'auth'+'verified',
+// ACCESO — crear/eliminar: admin.only; ver/editar: admin + moderador (routes/crud/monedas.php). Antes solo 'auth'+'verified',
 // cualquier rol autenticado podía cambiar tasa de cambio o borrar una moneda
 // por bypass directo de URL, aunque el sidebar ya lo ocultaba a todos menos admin.
 // ==========================================================================
@@ -304,14 +304,80 @@ test('un admin puede acceder al listado de Monedas', function () {
     $response->assertOk();
 });
 
-test('un moderador no puede acceder al listado de Monedas (403)', function () {
+test('un moderador puede ver el listado, el detalle y el formulario de edición de las monedas', function () {
     $moderador = User::factory()->moderador()->create();
     crearTurnoActivo($moderador);
     $this->actingAs($moderador);
 
-    $response = $this->get(route('monedas.index'), ['X-Inertia' => 'true']);
+    $moneda = Moneda::factory()->create();
 
-    $response->assertStatus(403);
+    $this->get(route('monedas.index'), ['X-Inertia' => 'true'])->assertOk();
+    $this->get(route('monedas.show', $moneda), ['X-Inertia' => 'true'])->assertOk();
+    $this->get(route('monedas.edit', $moneda), ['X-Inertia' => 'true'])->assertOk();
+});
+
+test('un moderador puede editar una moneda y el cambio de tasa queda a su nombre en el historial', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $moneda = Moneda::factory()->create(['tasa_cambio' => 675, 'principal' => false]);
+
+    $this->put(route('monedas.update', $moneda), [
+        'codigo_moneda' => $moneda->codigo_moneda,
+        'nombre_moneda' => $moneda->nombre_moneda,
+        'simbolo_moneda' => $moneda->simbolo_moneda,
+        'tasa_cambio' => 700,
+        ...datosDePagoDeMoneda(),
+        'estado' => true,
+        'principal' => false,
+    ], ['X-Inertia' => 'true'])->assertRedirect(route('monedas.index'));
+
+    expect($moneda->fresh()->tasa_cambio)->toEqual(700.0);
+    expect(HistorialTasaCambio::where('moneda_id', $moneda->id)->latest('id')->first()->user_id)->toBe($moderador->id);
+});
+
+test('un moderador puede activar o desactivar una moneda', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $moneda = Moneda::factory()->create(['estado' => true, 'principal' => false]);
+
+    $this->patch(route('monedas.cambiar-estado', $moneda), [], ['X-Inertia' => 'true'])->assertRedirect(route('monedas.index'));
+
+    expect($moneda->fresh()->estado)->toBeFalsy();
+});
+
+test('un moderador no puede crear monedas (403) ni ver el formulario de creación', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $this->get(route('monedas.create'), ['X-Inertia' => 'true'])->assertStatus(403);
+
+    $antes = Moneda::count();
+    $this->post(route('monedas.store'), nuevaMonedaPost(datosDePagoDeMoneda()), ['X-Inertia' => 'true'])->assertStatus(403);
+
+    expect(Moneda::count())->toBe($antes);
+});
+
+test('un moderador no puede eliminar una moneda (403), y no se borra', function () {
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $moneda = Moneda::factory()->create(['principal' => false]);
+
+    $this->delete(route('monedas.destroy', $moneda), [], ['X-Inertia' => 'true'])->assertStatus(403);
+
+    $this->assertDatabaseHas('monedas', ['id' => $moneda->id]);
+});
+
+test('un admin sí puede ver el formulario de creación de monedas', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('monedas.create'), ['X-Inertia' => 'true'])->assertOk();
 });
 
 test('un vendedor no puede acceder al listado de Monedas (403)', function () {
