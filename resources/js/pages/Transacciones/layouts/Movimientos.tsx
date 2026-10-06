@@ -1,7 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowDownCircle, ArrowLeftRight, ArrowUpCircle, Repeat, Send } from 'lucide-react';
-import React from 'react';
 import GastoForm from '../forms/GastoForm';
 import IngresoForm from '../forms/IngresoForm';
 import RemesaForm from '../forms/RemesaForm';
@@ -56,6 +55,8 @@ interface Props {
 
 export default function Movimientos({ cuentasOrigen, clientes, userRole }: Props) {
     const puedeVerRemesa = userRole !== 'vendedor';
+    // Un vendedor no tiene acceso a clientes en Gastos, ni a clientes ni proveedores en Ingresos y Transferencias
+    const puedeUsarClientes = userRole !== 'vendedor';
 
     return (
         <Card className="overflow-hidden border-l-4 border-blue-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
@@ -67,7 +68,8 @@ export default function Movimientos({ cuentasOrigen, clientes, userRole }: Props
                     <div>
                         <CardTitle className="text-white">Movimientos Financieros</CardTitle>
                         <CardDescription className="text-blue-100">
-                            Registre entradas (Ingreso), salidas (Gasto), movimientos entre sus entidades (Transferencia){puedeVerRemesa && ' u operaciones múltiples (Operación Múltiple)'}.
+                            Registre entradas (Ingreso), salidas (Gasto), movimientos entre sus entidades (Transferencia)
+                            {puedeVerRemesa && ' u operaciones múltiples (Operación Múltiple)'}.
                         </CardDescription>
                     </div>
                 </div>
@@ -95,13 +97,13 @@ export default function Movimientos({ cuentasOrigen, clientes, userRole }: Props
                         )}
                     </TabsList>
                     <TabsContent value="gasto" className="mt-4">
-                        <GastoForm cuentasOrigen={cuentasOrigen} clientes={clientes} />
+                        <GastoForm cuentasOrigen={cuentasOrigen} clientes={clientes} puedeUsarClientes={puedeUsarClientes} />
                     </TabsContent>
                     <TabsContent value="ingreso" className="mt-4">
-                        <IngresoForm />
+                        <IngresoForm soloCuentas={!puedeUsarClientes} />
                     </TabsContent>
                     <TabsContent value="transferir" className="mt-4">
-                        <TransferenciaForm />
+                        <TransferenciaForm soloCuentas={!puedeUsarClientes} />
                     </TabsContent>
                     {puedeVerRemesa && (
                         <TabsContent value="remesa" className="mt-4">

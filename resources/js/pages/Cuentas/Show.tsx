@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import AvisoEnvios from '@/components/transacciones/aviso-envios';
 import {
     DetalleCompra,
     DetalleCompraExpandido,
@@ -590,6 +591,8 @@ export default function ShowCuentasPage({
                             </div>
                         )}
                     </div>
+
+                    <AvisoEnvios />
 
                     {/* Navegación */}
                     <div className="flex items-center gap-2">

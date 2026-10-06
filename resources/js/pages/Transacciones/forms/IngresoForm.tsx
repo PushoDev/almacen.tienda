@@ -1,69 +1,54 @@
+import {
+    CampoConcepto,
+    CampoMonto,
+    CampoTitulo,
+    claseBoton,
+    claseCifra,
+    type ClienteEntidad,
+    type CuentaEntidad,
+    entidadDeCliente,
+    entidadDeCuenta,
+    entidadDeProveedor,
+    etiquetaSaldoDe,
+    formatear,
+    OpcionesTipo,
+    type OpcionTipo,
+    type ProveedorEntidad,
+    ResumenCard,
+    ResumenDato,
+    SeccionTitulo,
+    SelectorEntidad,
+    TarjetaEntidad,
+    type TipoEntidad,
+} from '@/components/transacciones/entidad';
 import { Button } from '@/components/ui/button';
-import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { sileo } from '@/lib/sileo';
+import { cn } from '@/lib/utils';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
-import { sileo } from '@/lib/sileo';
-import { Building, DollarSign, User } from 'lucide-react';
+import { ArrowUpCircle, Building2, FileText, Loader2, Receipt, UserRound, Wallet } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
-interface Moneda {
-    id: number;
-    codigo_moneda: string;
-    nombre_moneda: string;
-    simbolo_moneda: string;
-    tasa_cambio: number;
-    estado: boolean;
-    principal: boolean;
-}
+const TIPOS_DESTINO: OpcionTipo<TipoEntidad>[] = [
+    { valor: 'cuenta', titulo: 'Cuenta', descripcion: 'El dinero entra a una de tus cuentas', icono: Wallet },
+    { valor: 'cliente', titulo: 'Cliente', descripcion: 'Afecta la deuda o el pago del cliente', icono: UserRound },
+    { valor: 'proveedor', titulo: 'Proveedor', descripcion: 'Suma al saldo del proveedor', icono: Building2 },
+];
 
-interface Cuenta {
-    id: number;
-    nombre_cuenta: string;
-    saldo_cuenta: number;
-    deuda: number;
-    tipo_cuenta: string;
-    tipo_titular: string | null;
-    estado: string;
-    moneda_id: number;
-    moneda: Moneda;
-}
+const NOMBRE_TIPO: Record<TipoEntidad, string> = { cuenta: 'cuenta', cliente: 'cliente', proveedor: 'proveedor' };
 
-interface Cliente {
-    id: number;
-    nombre_cliente: string;
-    deuda_pago_cliente: number | string | null;
-}
+export default function IngresoForm({ soloCuentas }: { soloCuentas: boolean }) {
+    // El vendedor no tiene acceso a clientes ni a proveedores en Ingresos: solo ingresa a cuentas
+    const tiposDestino = soloCuentas ? TIPOS_DESTINO.filter((tipo) => tipo.valor === 'cuenta') : TIPOS_DESTINO;
 
-interface Proveedor {
-    id: number;
-    nombre_proveedor: string;
-    telefono_proveedor: string | null;
-    saldo_proveedor: number;
-    correo_proveedor: string | null;
-    localidad_proveedor: string | null;
-    notas_proveedor: string | null;
-}
-
-interface SelectItem {
-    id: string;
-    label: string;
-    monedaCodigo: string;
-}
-
-type EntidadTipo = 'cuenta' | 'cliente' | 'proveedor';
-
-export default function IngresoForm() {
-    const [cuentasDestino, setCuentasDestino] = useState<Cuenta[]>([]);
-    const [clientes, setClientes] = useState<Cliente[]>([]);
-    const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+    const [cuentasDestino, setCuentasDestino] = useState<CuentaEntidad[]>([]);
+    const [clientes, setClientes] = useState<ClienteEntidad[]>([]);
+    const [proveedores, setProveedores] = useState<ProveedorEntidad[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        axios.get(route('transacciones.ingreso.data'))
+        axios
+            .get(route('transacciones.ingreso.data'))
             .then((res) => {
                 setCuentasDestino(res.data.cuentasDestino);
                 setClientes(res.data.clientes);
@@ -74,7 +59,7 @@ export default function IngresoForm() {
     }, []);
 
     const { data, setData, post, processing, errors } = useForm({
-        destino_tipo: 'cuenta' as EntidadTipo,
+        destino_tipo: 'cuenta' as TipoEntidad,
         destino_id: '',
         monto: '',
         moneda: '',
@@ -90,114 +75,119 @@ export default function IngresoForm() {
         });
     };
 
-    const getItems = (tipo: EntidadTipo): SelectItem[] => {
-        if (tipo === 'cuenta') {
-            return cuentasDestino.map((c) => ({
-                id: String(c.id),
-                label: `${c.nombre_cuenta} (${c.moneda.codigo_moneda}) - Saldo: ${c.saldo_cuenta.toFixed(2)}`,
-                monedaCodigo: c.moneda.codigo_moneda,
-            }));
-        }
-        if (tipo === 'cliente') {
-            return clientes.map((cl) => ({
-                id: String(cl.id),
-                label: `${cl.nombre_cliente} (Cliente) - Deuda/Pago: ${(Number(cl.deuda_pago_cliente) || 0).toFixed(2)} USD`,
-                monedaCodigo: 'USD',
-            }));
-        }
-        return proveedores.map((p) => ({
-            id: String(p.id),
-            label: `${p.nombre_proveedor} (Proveedor) - Saldo: ${(Number(p.saldo_proveedor) || 0).toFixed(2)} USD`,
-            monedaCodigo: 'USD',
-        }));
-    };
-
-    const items = getItems(data.destino_tipo);
-    const selectedItem = items.find((i) => i.id === data.destino_id) || null;
-
-    const placeholderTipo = data.destino_tipo === 'cuenta' ? 'cuenta' : data.destino_tipo === 'cliente' ? 'cliente' : 'proveedor';
-
     if (loading) {
-        return <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">Cargando...</div>;
+        return (
+            <div className="text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" /> Cargando cuentas...
+            </div>
+        );
     }
 
+    const entidades =
+        data.destino_tipo === 'cuenta'
+            ? cuentasDestino.map(entidadDeCuenta)
+            : data.destino_tipo === 'cliente'
+              ? clientes.map(entidadDeCliente)
+              : proveedores.map(entidadDeProveedor);
+    const seleccionada = entidades.find((e) => e.id === data.destino_id) ?? null;
+
+    const monto = parseFloat(data.monto) || 0;
+    const saldoDespues = seleccionada && seleccionada.saldo !== null ? seleccionada.saldo + monto : null;
+    const nombreTipo = NOMBRE_TIPO[data.destino_tipo];
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <Label className="mb-2 block">Destino del Ingreso</Label>
-                <ToggleGroup
-                    type="single"
-                    value={data.destino_tipo}
-                    onValueChange={(value: string) => {
-                        if (value === 'cuenta' || value === 'cliente' || value === 'proveedor') {
-                            setData({ ...data, destino_tipo: value as EntidadTipo, destino_id: '', moneda: '' });
-                        }
-                    }}
-                    className="justify-start"
-                >
-                    <ToggleGroupItem value="cuenta" aria-label="Cuenta">
-                        <DollarSign className="mr-2 h-4 w-4" /> Cuenta
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="cliente" aria-label="Cliente">
-                        <User className="mr-2 h-4 w-4" /> Cliente (Afecta Deuda)
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="proveedor" aria-label="Proveedor">
-                        <Building className="mr-2 h-4 w-4" /> Proveedor
-                    </ToggleGroupItem>
-                </ToggleGroup>
+        <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-5">
+            <div className="space-y-8 lg:col-span-3">
+                <section className="space-y-4" aria-labelledby="ingreso-destino">
+                    <SeccionTitulo id="ingreso-destino" icono={Wallet} acento="emerald">
+                        ¿A dónde entra el ingreso?
+                    </SeccionTitulo>
+
+                    {/* Con una sola opción (el vendedor solo ingresa a cuentas) no hay nada que elegir */}
+                    {tiposDestino.length > 1 && (
+                        <OpcionesTipo
+                            opciones={tiposDestino}
+                            valor={data.destino_tipo}
+                            onChange={(tipo) => data.destino_tipo !== tipo && setData({ ...data, destino_tipo: tipo, destino_id: '', moneda: '' })}
+                            acento="emerald"
+                            etiqueta="Tipo de destino del ingreso"
+                        />
+                    )}
+
+                    <div className="space-y-2">
+                        <CampoTitulo htmlFor="destino_id">{`${nombreTipo.charAt(0).toUpperCase()}${nombreTipo.slice(1)} de destino`}</CampoTitulo>
+                        <SelectorEntidad
+                            key={data.destino_tipo}
+                            id="destino_id"
+                            entidades={entidades}
+                            valor={data.destino_id}
+                            onChange={(entidad) => setData({ ...data, destino_id: entidad?.id ?? '', moneda: entidad?.monedaCodigo ?? '' })}
+                            placeholder={`Buscar ${nombreTipo}...`}
+                        />
+                        {errors.destino_id && <p className="text-sm text-red-500">{errors.destino_id}</p>}
+                        {errors.moneda && <p className="text-sm text-red-500">{errors.moneda}</p>}
+                    </div>
+
+                    {seleccionada && <TarjetaEntidad entidad={seleccionada} acento="emerald" />}
+                </section>
+
+                <section className="space-y-4" aria-labelledby="ingreso-detalle">
+                    <SeccionTitulo id="ingreso-detalle" icono={FileText} acento="emerald">
+                        Detalle del ingreso
+                    </SeccionTitulo>
+
+                    <CampoMonto
+                        valor={data.monto}
+                        onChange={(monto) => setData({ ...data, monto })}
+                        moneda={data.moneda}
+                        deshabilitado={!seleccionada}
+                        error={errors.monto}
+                        ayuda="Elige primero a dónde entra el ingreso."
+                    />
+
+                    <CampoConcepto
+                        valor={data.comentario}
+                        onChange={(comentario) => setData({ ...data, comentario })}
+                        error={errors.comentario}
+                        placeholder="¿De dónde viene? Ej: cobro de una venta"
+                    />
+                </section>
             </div>
 
-            <div>
-                <Label htmlFor="destino_id">Entidad de Destino ({data.destino_tipo === 'cuenta' ? 'Cuenta' : data.destino_tipo === 'cliente' ? 'Cliente' : 'Proveedor'})</Label>
-                <Combobox
-                    items={items}
-                    itemToStringLabel={(item: SelectItem) => item.label}
-                    itemToStringValue={(item: SelectItem) => item.label}
-                    value={selectedItem}
-                    onValueChange={(item: SelectItem | null) => {
-                        if (item) {
-                            setData({ ...data, destino_id: item.id, moneda: item.monedaCodigo });
-                        } else {
-                            setData({ ...data, destino_id: '', moneda: '' });
-                        }
-                    }}
-                >
-                    <ComboboxInput id="destino_id" className="w-full" placeholder={`Buscar ${placeholderTipo}...`} showClear={!!data.destino_id} />
-                    <ComboboxContent>
-                        <ComboboxEmpty>Sin resultados</ComboboxEmpty>
-                        <ComboboxList>
-                            {(item: SelectItem) => (
-                                <ComboboxItem key={item.id} value={item}>
-                                    <span>{item.label}</span>
-                                </ComboboxItem>
-                            )}
-                        </ComboboxList>
-                    </ComboboxContent>
-                </Combobox>
-                {errors.destino_id && <p className="mt-1 text-sm text-red-500">{errors.destino_id}</p>}
-            </div>
+            <aside className="lg:col-span-2">
+                <ResumenCard acento="emerald" titulo="Resumen" icono={Receipt}>
+                    <ResumenDato titulo="Destino">
+                        <p className="truncate text-base font-semibold">{seleccionada ? seleccionada.nombre : 'Sin elegir'}</p>
+                    </ResumenDato>
 
-            <div>
-                <Label htmlFor="moneda">Moneda</Label>
-                <Input id="moneda" value={data.moneda || 'Seleccione entidad primero'} readOnly className="bg-gray-100 dark:bg-gray-800" />
-                {errors.moneda && <p className="mt-1 text-sm text-red-500">{errors.moneda}</p>}
-            </div>
+                    <ResumenDato titulo="Ingresa">
+                        <p className={cn('text-3xl font-black tabular-nums', claseCifra('emerald'))}>
+                            {monto > 0 && seleccionada ? `+ ${seleccionada.simbolo} ${formatear(monto)}` : '—'}
+                        </p>
+                    </ResumenDato>
 
-            <div>
-                <Label htmlFor="monto">Monto del Ingreso</Label>
-                <Input type="number" id="monto" value={data.monto} onChange={(e) => setData({ ...data, monto: e.target.value })} step="0.01" min="0.01" placeholder="0.00" />
-                {errors.monto && <p className="mt-1 text-sm text-red-500">{errors.monto}</p>}
-            </div>
+                    <ResumenDato titulo={`${etiquetaSaldoDe(data.destino_tipo)} después del ingreso`} separado>
+                        <p className="text-foreground text-3xl font-black tabular-nums">
+                            {saldoDespues !== null && seleccionada ? `${seleccionada.simbolo} ${formatear(saldoDespues)}` : '—'}
+                        </p>
+                    </ResumenDato>
 
-            <div>
-                <Label htmlFor="comentario">Comentario / Concepto</Label>
-                <Textarea id="comentario" value={data.comentario} onChange={(e) => setData({ ...data, comentario: e.target.value })} placeholder="Descripción del ingreso..." />
-                {errors.comentario && <p className="mt-1 text-sm text-red-500">{errors.comentario}</p>}
-            </div>
+                    {errors.message && (
+                        <p role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
+                            {errors.message}
+                        </p>
+                    )}
 
-            <Button type="submit" disabled={processing || !data.destino_id || !data.monto || Number(data.monto) <= 0} className="w-full">
-                {processing ? 'Procesando...' : 'Registrar Ingreso'}
-            </Button>
+                    <Button
+                        type="submit"
+                        disabled={processing || !data.destino_id || !data.monto || monto <= 0}
+                        className={cn('h-12 w-full gap-2 text-base font-bold text-white shadow-md', claseBoton('emerald'))}
+                    >
+                        <ArrowUpCircle className="h-5 w-5" />
+                        {processing ? 'Procesando...' : 'Registrar ingreso'}
+                    </Button>
+                </ResumenCard>
+            </aside>
         </form>
     );
 }
