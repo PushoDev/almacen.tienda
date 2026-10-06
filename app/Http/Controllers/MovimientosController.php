@@ -58,6 +58,40 @@ class MovimientosController extends Controller
     }
 
     /**
+     * Bloquea la fila del movimiento y confirma que sigue en uno de los estados esperados. La
+     * revisión de estado de enviar()/recibir()/rechazar()/actualizar() usa el modelo cargado al
+     * inicio de la petición: con dos peticiones a la vez (doble clic, o dos pestañas) ambas la
+     * pasan y duplicarían la reserva, el stock en destino o la liberación. Solo la primera debe
+     * actuar. Al terminar, $movimiento queda con los valores y relaciones actuales de la fila.
+     *
+     * @param  array<int, string>  $estadosPermitidos
+     *
+     * @throws \DomainException si otra petición ya cambió el estado del movimiento
+     */
+    private function bloquearMovimientoEnEstado(Movimiento $movimiento, array $estadosPermitidos, string $mensaje): void
+    {
+        $estadoActual = Movimiento::whereKey($movimiento->id)->lockForUpdate()->value('estado');
+
+        if (! in_array($estadoActual, $estadosPermitidos, true)) {
+            throw new \DomainException($mensaje);
+        }
+
+        $movimiento->refresh();
+    }
+
+    /**
+     * Un vendedor solo puede consultar movimientos de sus almacenes (origen o destino).
+     */
+    private function autorizarVisibilidad(Movimiento $movimiento): void
+    {
+        abort_unless(
+            Movimiento::visiblesPara(Auth::user())->whereKey($movimiento->id)->exists(),
+            403,
+            'No tienes acceso a este movimiento'
+        );
+    }
+
+    /**
      * Obtiene almacenes según rol del usuario
      */
     private function getPermittedAlmacenes()
@@ -70,16 +104,51 @@ class MovimientosController extends Controller
     }
 
     /**
+     * Qué acciones puede hacer el usuario sobre un movimiento, para que la pantalla muestre solo
+     * los botones que el servidor aceptaría. Mismas reglas que actualizar/enviar/rechazar (almacén
+     * origen) y recibir (almacén destino); admin y moderador no dependen del almacén.
+     *
+     * @param  array<int, int>  $userAlmacenesIds  vacío para admin y moderador
+     * @return array{editar: bool, enviar: bool, rechazar: bool, recibir: bool}
+     */
+    private function permisosSobreMovimiento(Movimiento $movimiento, User $user, array $userAlmacenesIds): array
+    {
+        $esGlobal = in_array($user->role, ['admin', 'moderador']);
+        $esOrigen = $esGlobal || in_array($movimiento->almacen_origen_id, $userAlmacenesIds);
+        $esDestino = $esGlobal || in_array($movimiento->almacen_destino_id, $userAlmacenesIds);
+
+        $estaPendiente = $movimiento->estado === 'pendiente_confirmacion';
+        $estaEnTransito = $movimiento->estado === 'en_transito';
+
+        return [
+            'editar' => $esOrigen && $estaPendiente,
+            'enviar' => $esOrigen && $estaPendiente,
+            'rechazar' => $esOrigen && ($estaPendiente || $estaEnTransito),
+            'recibir' => $esDestino && $estaEnTransito,
+        ];
+    }
+
+    /**
      * Muestra la interfaz principal de movimientos
      */
     public function index()
     {
-        $movimientos = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
-
         $user = Auth::user();
-        $userAlmacenesIds = in_array($user->role, ['admin', 'moderador']) ? [] : $user->almacenes()->pluck('id')->toArray();
+        $userAlmacenesIds = in_array($user->role, ['admin', 'moderador']) ? [] : $user->almacenes()->pluck('almacens.id')->toArray();
+
+        // Pantalla de trabajo diario: lo de los últimos 3 días y lo que sigue abierto. El historial
+        // completo, con filtros, vive en el reporte "Historial de Movimientos".
+        $movimientos = Movimiento::visiblesPara($user)
+            ->recientesOAbiertos()
+            ->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(10)
+            ->through(function (Movimiento $movimiento) use ($user, $userAlmacenesIds) {
+                $movimiento->setAttribute('permisos', $this->permisosSobreMovimiento($movimiento, $user, $userAlmacenesIds));
+
+                return $movimiento;
+            });
 
         return Inertia::render('Movimientos/Index', [
             'almacenes' => Almacen::select('id', 'nombre_almacen', 'tipo_almacen')->get(),
@@ -287,9 +356,11 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            if ($movimiento->estado !== 'pendiente_confirmacion') {
-                throw new \Exception('Solo se pueden editar movimientos pendientes de confirmación (antes de enviar).');
-            }
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['pendiente_confirmacion'],
+                'Solo se pueden editar movimientos pendientes de confirmación (antes de enviar).'
+            );
 
             // Nada se reservó todavía en este estado (cantidad_en_transito solo se toca en
             // enviar()), así que el chequeo de stock es el mismo que en store(): disponible
@@ -379,9 +450,11 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            if ($movimiento->estado !== 'pendiente_confirmacion') {
-                throw new \Exception('Solo se pueden enviar movimientos en estado pendiente de confirmación.');
-            }
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['pendiente_confirmacion'],
+                'Solo se pueden enviar movimientos en estado pendiente de confirmación.'
+            );
 
             foreach ($movimiento->detalles as $detalle) {
                 $stock = AlmacenProducto::where([
@@ -469,9 +542,22 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            // Verificar que el movimiento esté en tránsito
-            if ($movimiento->estado !== 'en_transito') {
-                throw new \Exception('Solo se pueden recibir movimientos en estado en tránsito.');
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['en_transito'],
+                'Solo se pueden recibir movimientos en estado en tránsito.'
+            );
+
+            // Cada línea despachada debe venir en la petición: una línea omitida nunca restaría
+            // `cantidad` ni liberaría `cantidad_en_transito` en el origen y su reserva quedaría atascada.
+            $idsRecibidos = collect($request->productos)->pluck('id')->map(fn ($id) => (int) $id);
+            $idsFaltantes = $movimiento->detalles->pluck('producto_id')->map(fn ($id) => (int) $id)->diff($idsRecibidos);
+
+            if ($idsFaltantes->isNotEmpty()) {
+                throw new \DomainException(
+                    'Falta indicar la cantidad recibida de todos los productos del movimiento (productos sin indicar: '.
+                    $idsFaltantes->implode(', ').').'
+                );
             }
 
             $totalRecibido = 0;
@@ -649,9 +735,11 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            if (! in_array($movimiento->estado, ['pendiente_confirmacion', 'en_transito'])) {
-                throw new \Exception('Solo se pueden rechazar movimientos pendientes o en tránsito.');
-            }
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['pendiente_confirmacion', 'en_transito'],
+                'Solo se pueden rechazar movimientos pendientes o en tránsito.'
+            );
 
             if ($movimiento->estado === 'en_transito') {
                 foreach ($movimiento->detalles as $detalle) {
@@ -697,6 +785,8 @@ class MovimientosController extends Controller
      */
     public function seguimiento(Movimiento $movimiento)
     {
+        $this->autorizarVisibilidad($movimiento);
+
         $seguimientos = $movimiento->seguimientos()
             ->with('usuario')
             ->orderBy('created_at', 'desc')
@@ -710,7 +800,7 @@ class MovimientosController extends Controller
      */
     public function reporteDiscrepancias()
     {
-        $discrepancias = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
+        $discrepancias = Movimiento::visiblesPara(Auth::user())->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
             ->whereIn('estado', ['recibido_parcial', 'rechazado'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
@@ -745,10 +835,75 @@ class MovimientosController extends Controller
     }
 
     /**
+     * Hoja imprimible del movimiento: viaja con la mercancía como comprobante de lo que sale y,
+     * mientras no se haya recibido, trae la columna "Recibido" en blanco para que quien recibe
+     * vaya anotando la cantidad exacta por producto. Ya recibido, se reimprime con lo recibido, la
+     * diferencia y quién recibió, como evidencia. Se abre en pestaña nueva (Ctrl+P / Guardar PDF).
+     */
+    public function imprimir(Movimiento $movimiento)
+    {
+        $this->autorizarVisibilidad($movimiento);
+
+        $movimiento->load([
+            'almacenOrigen',
+            'almacenDestino',
+            'usuario',
+            'detalles.producto',
+            'seguimientos.usuario',
+        ]);
+
+        $fueRecibido = in_array($movimiento->estado, ['recibido_completo', 'recibido_parcial']);
+
+        return Inertia::render('Movimientos/Imprimir', [
+            'movimiento' => [
+                'id' => $movimiento->id,
+                'estado' => $movimiento->estado,
+                'es_evidencia' => $fueRecibido,
+                'created_at' => $movimiento->created_at->toISOString(),
+                'fecha_envio' => $movimiento->fecha_envio?->toISOString(),
+                'fecha_recepcion' => $movimiento->fecha_recepcion?->toISOString(),
+                'guia_transporte' => $movimiento->guia_transporte,
+                'transportista' => $movimiento->transportista,
+                'observaciones' => $movimiento->observaciones,
+                'solicitado_por' => $movimiento->usuario?->name,
+                'enviado_por' => $movimiento->registradoPor('en_transito'),
+                'recibido_por' => $movimiento->registradoPor(['recibido_completo', 'recibido_parcial']),
+                'almacen_origen' => [
+                    'nombre' => $movimiento->almacenOrigen->nombre_almacen,
+                    'ciudad' => $movimiento->almacenOrigen->ciudad_almacen,
+                    'provincia' => $movimiento->almacenOrigen->provincia_almacen,
+                ],
+                'almacen_destino' => [
+                    'nombre' => $movimiento->almacenDestino->nombre_almacen,
+                    'ciudad' => $movimiento->almacenDestino->ciudad_almacen,
+                    'provincia' => $movimiento->almacenDestino->provincia_almacen,
+                ],
+                'detalles' => $movimiento->detalles->map(fn (MovimientoDetalle $detalle) => [
+                    'id' => $detalle->id,
+                    'producto' => [
+                        'nombre' => $detalle->producto?->nombre_producto,
+                        'marca' => $detalle->producto?->marca_producto,
+                        'modelo' => $detalle->producto?->modelo_producto,
+                        'capacidad' => $detalle->producto?->capacidad_producto,
+                        'color' => $detalle->producto?->color_producto,
+                        'codigo' => $detalle->producto?->codigo_producto,
+                    ],
+                    // Sin despachar todavía, lo que se va a enviar es lo solicitado
+                    'cantidad_enviada' => $detalle->cantidad_despachada > 0 ? $detalle->cantidad_despachada : $detalle->cantidad_solicitada,
+                    'cantidad_recibida' => $fueRecibido ? ($detalle->cantidad_recibida ?? 0) : null,
+                    'observaciones' => $detalle->observaciones,
+                ])->values(),
+            ],
+        ]);
+    }
+
+    /**
      * Muestra el detalle de un movimiento
      */
     public function show(Movimiento $movimiento)
     {
+        $this->autorizarVisibilidad($movimiento);
+
         $movimiento->load([
             'almacenOrigen',
             'almacenDestino',

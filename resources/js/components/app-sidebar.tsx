@@ -102,7 +102,7 @@ const allNavItems: NavItem[] = [
         title: 'Gestión de Monedas',
         href: '/monedas',
         icon: HandCoins,
-        roles: ['admin'],
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Categorias',
