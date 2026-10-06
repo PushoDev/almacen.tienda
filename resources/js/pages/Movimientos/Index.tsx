@@ -15,13 +15,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink } from '@/components/ui/pagination';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { sileo } from '@/lib/sileo';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeftRight, Caravan, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, History, ListCheck, Package, PackageCheck, PackageSearch, Pencil, Search, Send, TrendingUp, XCircle } from 'lucide-react';
+import { ArrowLeftRight, Caravan, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, Filter, FilterX, History, ListCheck, Package, PackageCheck, PackageSearch, Pencil, Search, Send, TrendingUp, XCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -100,6 +101,12 @@ interface MovimientoWithDetails extends Movimiento {
     usuario: {
         name: string;
     };
+    permisos: {
+        editar: boolean;
+        enviar: boolean;
+        rechazar: boolean;
+        recibir: boolean;
+    };
 }
 
 interface MovimientoPaginado {
@@ -112,6 +119,16 @@ interface MovimientoPaginado {
         label: string;
         active: boolean;
     }>;
+}
+
+interface FiltrosMovimientos {
+    estado: string;
+    almacen_origen_id: string | number;
+    almacen_destino_id: string | number;
+    sentido: string;
+    desde: string;
+    hasta: string;
+    buscar: string;
 }
 
 interface ErrorResponse {
@@ -140,17 +157,87 @@ function EstadoBadge({ estado, label }: { estado: string; label: string }) {
     );
 }
 
+// Texto de unidades según hasta dónde llegó el movimiento: en un recibido parcial lo solicitado
+// ya no cuenta la historia, hay que mostrar cuánto llegó de lo despachado.
+function resumenUnidades(movimiento: MovimientoWithDetails): string {
+    const detalles = movimiento.detalles ?? [];
+    const suma = (campo: 'cantidad_solicitada' | 'cantidad_despachada' | 'cantidad_recibida') =>
+        detalles.reduce((total, detalle) => total + (detalle[campo] ?? 0), 0);
+
+    const unidades = (cantidad: number, singular: string, plural: string) => `${cantidad} ${cantidad === 1 ? singular : plural}`;
+
+    if (movimiento.estado === 'recibido_completo' || movimiento.estado === 'recibido_parcial') {
+        const recibidas = suma('cantidad_recibida');
+        const despachadas = suma('cantidad_despachada');
+
+        return recibidas === despachadas
+            ? unidades(recibidas, 'unidad recibida', 'unidades recibidas')
+            : `${recibidas} de ${unidades(despachadas, 'unidad recibida', 'unidades recibidas')}`;
+    }
+
+    if (movimiento.estado === 'en_transito') {
+        return unidades(suma('cantidad_despachada'), 'unidad en camino', 'unidades en camino');
+    }
+
+    return unidades(suma('cantidad_solicitada'), 'unidad solicitada', 'unidades solicitadas');
+}
+
 export default function MovimientosPage({
     movimientos,
     almacenes,
     estados,
     userAlmacenesIds,
+    filtros,
 }: {
     movimientos: MovimientoPaginado;
     almacenes: AlmacenProps[];
     estados: Record<string, string>;
     userAlmacenesIds: number[];
+    filtros: FiltrosMovimientos;
 }) {
+    // ── Filtros del historial (se aplican en el servidor; Filtrar los envía) ──
+    const [filtroEstado, setFiltroEstado] = useState(filtros.estado || 'all');
+    const [filtroSentido, setFiltroSentido] = useState(filtros.sentido || 'all');
+    const [filtroOrigenId, setFiltroOrigenId] = useState(String(filtros.almacen_origen_id || ''));
+    const [filtroDestinoId, setFiltroDestinoId] = useState(String(filtros.almacen_destino_id || ''));
+    const [filtroOrigenSearch, setFiltroOrigenSearch] = useState('');
+    const [filtroDestinoSearch, setFiltroDestinoSearch] = useState('');
+    const [filtroDesde, setFiltroDesde] = useState(filtros.desde || '');
+    const [filtroHasta, setFiltroHasta] = useState(filtros.hasta || '');
+    const [filtroBuscar, setFiltroBuscar] = useState(filtros.buscar || '');
+
+    const hayFiltrosActivos = Object.values(filtros).some((valor) => valor !== '' && valor !== null);
+
+    const aplicarFiltros = (valores: Partial<FiltrosMovimientos> = {}) => {
+        router.get(
+            route('movimientos.index'),
+            {
+                estado: filtroEstado === 'all' ? '' : filtroEstado,
+                sentido: filtroSentido === 'all' ? '' : filtroSentido,
+                almacen_origen_id: filtroOrigenId,
+                almacen_destino_id: filtroDestinoId,
+                desde: filtroDesde,
+                hasta: filtroHasta,
+                buscar: filtroBuscar.trim(),
+                ...valores,
+            },
+            { preserveState: true, preserveScroll: true, replace: true, only: ['movimientos', 'filtros'] },
+        );
+    };
+
+    const limpiarFiltros = () => {
+        setFiltroEstado('all');
+        setFiltroSentido('all');
+        setFiltroOrigenId('');
+        setFiltroDestinoId('');
+        setFiltroDesde('');
+        setFiltroHasta('');
+        setFiltroBuscar('');
+        router.get(route('movimientos.index'), {}, { preserveState: true, preserveScroll: true, replace: true, only: ['movimientos', 'filtros'] });
+    };
+
+    const nombreAlmacen = (id: string) => almacenes.find((a) => a.id.toString() === id)?.nombre_almacen ?? '';
+
     const [productosEmisor, setProductosEmisor] = useState<ProductoConStock[]>([]);
     const [almacenOrigenId, setAlmacenOrigenId] = useState<string>('');
     const [almacenDestinoId, setAlmacenDestinoId] = useState<string>('');
@@ -815,38 +902,160 @@ export default function MovimientosPage({
                         </div>
                     </CardHeader>
                     <CardContent>
+                        {/* Filtros */}
+                        <div className="mb-4 space-y-3 rounded-lg border bg-muted/30 p-4">
+                            <div className="relative">
+                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    type="text"
+                                    placeholder="Buscar por # de movimiento, producto, marca, modelo o solicitante..."
+                                    value={filtroBuscar}
+                                    onChange={(e) => setFiltroBuscar(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && aplicarFiltros()}
+                                    className="pl-9"
+                                />
+                            </div>
+                            <div className={`grid grid-cols-1 gap-3 md:grid-cols-3 ${isVendedor ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
+                                <div>
+                                    <Label className="text-muted-foreground mb-1 block text-xs">Estado</Label>
+                                    <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Todos" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Todos los estados</SelectItem>
+                                            {Object.entries(estados).map(([valor, etiqueta]) => (
+                                                <SelectItem key={valor} value={valor}>
+                                                    {etiqueta}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                {isVendedor && (
+                                    <div>
+                                        <Label className="text-muted-foreground mb-1 block text-xs">Sentido</Label>
+                                        <Select value={filtroSentido} onValueChange={setFiltroSentido}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Todos" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Salientes y entrantes</SelectItem>
+                                                <SelectItem value="salientes">Salientes (de mis almacenes)</SelectItem>
+                                                <SelectItem value="entrantes">Entrantes (a mis almacenes)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                <div>
+                                    <Label className="text-muted-foreground mb-1 block text-xs">Almacén origen</Label>
+                                    <Combobox
+                                        value={filtroOrigenId || null}
+                                        onValueChange={(val) => setFiltroOrigenId(val ?? '')}
+                                        onInputValueChange={setFiltroOrigenSearch}
+                                        itemToStringLabel={nombreAlmacen}
+                                    >
+                                        <ComboboxInput className="w-full" placeholder="Cualquiera..." showClear />
+                                        <ComboboxContent>
+                                            <ComboboxList>
+                                                {almacenes
+                                                    .filter((a) => !filtroOrigenSearch || a.nombre_almacen.toLowerCase().includes(filtroOrigenSearch.toLowerCase()))
+                                                    .map((almacen) => (
+                                                        <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
+                                                            {almacen.nombre_almacen}
+                                                        </ComboboxItem>
+                                                    ))}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground mb-1 block text-xs">Almacén destino</Label>
+                                    <Combobox
+                                        value={filtroDestinoId || null}
+                                        onValueChange={(val) => setFiltroDestinoId(val ?? '')}
+                                        onInputValueChange={setFiltroDestinoSearch}
+                                        itemToStringLabel={nombreAlmacen}
+                                    >
+                                        <ComboboxInput className="w-full" placeholder="Cualquiera..." showClear />
+                                        <ComboboxContent>
+                                            <ComboboxList>
+                                                {almacenes
+                                                    .filter((a) => !filtroDestinoSearch || a.nombre_almacen.toLowerCase().includes(filtroDestinoSearch.toLowerCase()))
+                                                    .map((almacen) => (
+                                                        <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
+                                                            {almacen.nombre_almacen}
+                                                        </ComboboxItem>
+                                                    ))}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground mb-1 block text-xs">Desde</Label>
+                                    <Input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="w-full" />
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground mb-1 block text-xs">Hasta</Label>
+                                    <Input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="w-full" />
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                {hayFiltrosActivos && (
+                                    <Button variant="outline" size="sm" onClick={limpiarFiltros} className="gap-1">
+                                        <FilterX className="h-4 w-4" /> Limpiar
+                                    </Button>
+                                )}
+                                <Button size="sm" onClick={() => aplicarFiltros()} className="gap-1">
+                                    <Filter className="h-4 w-4" /> Filtrar
+                                </Button>
+                            </div>
+                        </div>
+
                         <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full text-sm">
                                 <thead className="sticky top-0 bg-gradient-to-r from-slate-700 to-slate-800 text-white">
                                     <tr>
-                                        <th className="px-6 py-3 text-left font-semibold">#Productos</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Movimiento</th>
                                         <th className="px-6 py-3 text-left font-semibold">Origen → Destino</th>
-                                        <th className="px-6 py-3 text-left font-semibold">Cantidad</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Productos / Unidades</th>
                                         <th className="px-6 py-3 text-left font-semibold">Estado</th>
                                         <th className="px-6 py-3 text-left font-semibold">Solicitado por</th>
                                         <th className="px-6 py-3 text-left font-semibold">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
+                                    {movimientos.data.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} className="text-muted-foreground px-6 py-10 text-center">
+                                                {hayFiltrosActivos ? 'Ningún movimiento coincide con los filtros.' : 'Todavía no hay movimientos.'}
+                                            </td>
+                                        </tr>
+                                    )}
                                     {movimientos.data.map((movimiento: MovimientoWithDetails) => (
                                         <tr key={movimiento.id} className="transition-colors">
                                             <td className="px-6 py-4">
-                                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                                                    {movimiento.detalles?.length || 0}
-                                                </span>
+                                                <div className="font-semibold">#{movimiento.id}</div>
+                                                <div className="text-muted-foreground text-xs">
+                                                    {new Date(movimiento.created_at).toLocaleDateString('es-ES', {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                    })}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-medium">{movimiento.almacen_origen?.nombre_almacen}</span>
-                                                    <TrendingUp className="h-4 w-4 rotate-90" />
+                                                    <TrendingUp className="h-4 w-4 shrink-0 rotate-90" />
                                                     <span className="font-medium">{movimiento.almacen_destino?.nombre_almacen}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="font-semibold">
-                                                    {movimiento.detalles?.reduce((total: number, detalle) => total + detalle.cantidad_solicitada, 0)}{' '}
-                                                    unidades
-                                                </span>
+                                                <div className="font-semibold">
+                                                    {movimiento.detalles?.length || 0} {(movimiento.detalles?.length || 0) === 1 ? 'producto' : 'productos'}
+                                                </div>
+                                                <div className="text-muted-foreground text-xs">{resumenUnidades(movimiento)}</div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <EstadoBadge estado={movimiento.estado} label={estados[movimiento.estado]} />
@@ -880,46 +1089,49 @@ export default function MovimientosPage({
                                                         </Button>
                                                     </Link>
 
-                                                    {movimiento.estado === 'pendiente_confirmacion' && (
-                                                        <>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={() => handleEditarClick(movimiento)}
-                                                                title="Editar productos y cantidades"
-                                                            >
-                                                                <Pencil className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => handleEnviarClick(movimiento)}
-                                                                title="Despachar movimiento"
-                                                                className="gap-1"
-                                                            >
-                                                                <Send className="h-3.5 w-3.5" /> Enviar
-                                                            </Button>
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                                onClick={() => handleRechazarClick(movimiento)}
-                                                                title="Rechazar movimiento"
-                                                            >
-                                                                <XCircle className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                        </>
+                                                    {movimiento.permisos.editar && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleEditarClick(movimiento)}
+                                                            title="Editar productos y cantidades"
+                                                        >
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </Button>
                                                     )}
 
-                                                    {movimiento.estado === 'en_transito' &&
-                                                        (!isVendedor || userAlmacenesIds.includes(movimiento.almacen_destino_id)) && (
-                                                            <Button
-                                                                size="sm"
-                                                                className="gap-1"
-                                                                onClick={() => handleRecibirClick(movimiento)}
-                                                                title="Registrar recepción"
-                                                            >
-                                                                <Package className="h-3.5 w-3.5" /> Recibir
-                                                            </Button>
-                                                        )}
+                                                    {movimiento.permisos.enviar && (
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => handleEnviarClick(movimiento)}
+                                                            title="Despachar movimiento"
+                                                            className="gap-1"
+                                                        >
+                                                            <Send className="h-3.5 w-3.5" /> Enviar
+                                                        </Button>
+                                                    )}
+
+                                                    {movimiento.permisos.recibir && (
+                                                        <Button
+                                                            size="sm"
+                                                            className="gap-1"
+                                                            onClick={() => handleRecibirClick(movimiento)}
+                                                            title="Registrar recepción"
+                                                        >
+                                                            <Package className="h-3.5 w-3.5" /> Recibir
+                                                        </Button>
+                                                    )}
+
+                                                    {movimiento.permisos.rechazar && (
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            onClick={() => handleRechazarClick(movimiento)}
+                                                            title="Rechazar movimiento"
+                                                        >
+                                                            <XCircle className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -948,7 +1160,7 @@ export default function MovimientosPage({
                                                 variant={link.active ? 'default' : 'outline'}
                                                 size="sm"
                                                 disabled={!link.url}
-                                                onClick={() => router.get(link.url || '#')}
+                                                onClick={() => link.url && router.get(link.url, {}, { preserveState: true, preserveScroll: true, only: ['movimientos', 'filtros'] })}
                                             >
                                                 {displayLabel}
                                             </Button>

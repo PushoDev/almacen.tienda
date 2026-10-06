@@ -765,3 +765,190 @@ test('un vendedor no puede ver productos de un almacén que no tiene asignado', 
 
     $response->assertStatus(403);
 });
+
+// ==========================================================================
+// VISIBILIDAD — un vendedor solo ve los movimientos que salen de o llegan a sus almacenes
+// ==========================================================================
+
+test('index() muestra al vendedor solo los movimientos cuyo origen o destino es suyo', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $suyo = Almacen::factory()->almacen()->create();
+    $ajeno1 = Almacen::factory()->almacen()->create();
+    $ajeno2 = Almacen::factory()->almacen()->create();
+    $vendedor->almacenes()->attach($suyo->id);
+
+    $saliente = Movimiento::factory()->create(['almacen_origen_id' => $suyo->id, 'almacen_destino_id' => $ajeno1->id]);
+    $entrante = Movimiento::factory()->create(['almacen_origen_id' => $ajeno1->id, 'almacen_destino_id' => $suyo->id]);
+    Movimiento::factory()->create(['almacen_origen_id' => $ajeno1->id, 'almacen_destino_id' => $ajeno2->id]);
+
+    $this->get(route('movimientos.index'))->assertInertia(fn ($page) => $page
+        ->has('movimientos.data', 2)
+        ->where('movimientos.data', fn ($data) => collect($data)->pluck('id')->sort()->values()->all() === collect([$saliente->id, $entrante->id])->sort()->values()->all())
+    );
+});
+
+test('index() muestra todos los movimientos a admin y moderador', function () {
+    Movimiento::factory()->count(3)->create();
+
+    foreach ([User::factory()->admin()->create(), User::factory()->moderador()->create()] as $usuario) {
+        $this->actingAs($usuario)
+            ->get(route('movimientos.index'))
+            ->assertInertia(fn ($page) => $page->has('movimientos.data', 3));
+    }
+});
+
+test('un vendedor no puede abrir ni consultar el seguimiento de un movimiento ajeno', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $movimiento = Movimiento::factory()->create();
+
+    $this->get(route('movimientos.show', $movimiento))->assertForbidden();
+    $this->get(route('movimientos.seguimiento', $movimiento))->assertForbidden();
+});
+
+test('un vendedor puede abrir un movimiento que llega a su almacén', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $destino = Almacen::factory()->almacen()->create();
+    $vendedor->almacenes()->attach($destino->id);
+    $movimiento = Movimiento::factory()->create(['almacen_destino_id' => $destino->id]);
+
+    $this->get(route('movimientos.show', $movimiento))->assertOk();
+    $this->get(route('movimientos.seguimiento', $movimiento))->assertOk();
+});
+
+// ==========================================================================
+// FILTROS — estado, almacenes, sentido, fechas y búsqueda
+// ==========================================================================
+
+test('index() filtra por estado y por almacén origen y destino', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $almacenA = Almacen::factory()->almacen()->create();
+    $almacenB = Almacen::factory()->almacen()->create();
+    $pendienteAB = Movimiento::factory()->create(['almacen_origen_id' => $almacenA->id, 'almacen_destino_id' => $almacenB->id, 'estado' => 'pendiente_confirmacion']);
+    $rechazadoBA = Movimiento::factory()->create(['almacen_origen_id' => $almacenB->id, 'almacen_destino_id' => $almacenA->id, 'estado' => 'rechazado']);
+
+    $this->get(route('movimientos.index', ['estado' => 'rechazado']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $rechazadoBA->id));
+
+    $this->get(route('movimientos.index', ['almacen_origen_id' => $almacenA->id]))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $pendienteAB->id));
+
+    $this->get(route('movimientos.index', ['almacen_destino_id' => $almacenA->id]))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $rechazadoBA->id));
+});
+
+test('index() filtra por rango de fechas de creación', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $viejo = Movimiento::factory()->create(['created_at' => '2026-09-01 10:00:00']);
+    $reciente = Movimiento::factory()->create(['created_at' => '2026-10-05 10:00:00']);
+
+    $this->get(route('movimientos.index', ['desde' => '2026-10-01', 'hasta' => '2026-10-06']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $reciente->id));
+
+    $this->get(route('movimientos.index', ['hasta' => '2026-09-30']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $viejo->id));
+});
+
+test('index() rechaza un rango de fechas invertido', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('movimientos.index', ['desde' => '2026-10-06', 'hasta' => '2026-10-01']))
+        ->assertSessionHasErrors('hasta');
+});
+
+test('index() busca por número de movimiento, producto y solicitante', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $solicitante = User::factory()->vendedor()->create(['name' => 'Marta Pérez']);
+    $producto = Producto::factory()->create(['nombre_producto' => 'LAVADORA EKO']);
+    $conProducto = Movimiento::factory()->create(['user_id' => $solicitante->id]);
+    $conProducto->detalles()->create(['producto_id' => $producto->id, 'cantidad_solicitada' => 2]);
+    $otro = Movimiento::factory()->create();
+
+    $this->get(route('movimientos.index', ['buscar' => "#{$otro->id}"]))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $otro->id));
+
+    $this->get(route('movimientos.index', ['buscar' => 'lavadora']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $conProducto->id));
+
+    $this->get(route('movimientos.index', ['buscar' => 'Marta']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $conProducto->id));
+});
+
+test('index() permite al vendedor filtrar salientes y entrantes sin salirse de sus almacenes', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $suyo = Almacen::factory()->almacen()->create();
+    $ajeno = Almacen::factory()->almacen()->create();
+    $vendedor->almacenes()->attach($suyo->id);
+
+    $saliente = Movimiento::factory()->create(['almacen_origen_id' => $suyo->id, 'almacen_destino_id' => $ajeno->id]);
+    $entrante = Movimiento::factory()->create(['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $suyo->id]);
+    Movimiento::factory()->create(['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $ajeno->id]);
+
+    $this->get(route('movimientos.index', ['sentido' => 'salientes']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $saliente->id));
+
+    $this->get(route('movimientos.index', ['sentido' => 'entrantes']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.id', $entrante->id));
+
+    // Filtrar por un almacén ajeno como destino no destapa movimientos que no son suyos
+    $this->get(route('movimientos.index', ['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $ajeno->id]))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 0));
+});
+
+// ==========================================================================
+// PERMISOS POR FILA — la pantalla solo muestra los botones que el servidor aceptaría
+// ==========================================================================
+
+test('index() marca el origen como quien edita/envía/rechaza y el destino como quien recibe', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $suyo = Almacen::factory()->almacen()->create();
+    $ajeno = Almacen::factory()->almacen()->create();
+    $vendedor->almacenes()->attach($suyo->id);
+
+    $pendienteSaliente = Movimiento::factory()->create(['almacen_origen_id' => $suyo->id, 'almacen_destino_id' => $ajeno->id, 'estado' => 'pendiente_confirmacion']);
+    $pendienteEntrante = Movimiento::factory()->create(['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $suyo->id, 'estado' => 'pendiente_confirmacion']);
+    $transitoSaliente = Movimiento::factory()->enTransito()->create(['almacen_origen_id' => $suyo->id, 'almacen_destino_id' => $ajeno->id]);
+    $transitoEntrante = Movimiento::factory()->enTransito()->create(['almacen_origen_id' => $ajeno->id, 'almacen_destino_id' => $suyo->id]);
+
+    $this->get(route('movimientos.index'))->assertInertia(function ($page) use ($pendienteSaliente, $pendienteEntrante, $transitoSaliente, $transitoEntrante) {
+        $permisos = collect($page->toArray()['props']['movimientos']['data'])->keyBy('id')->map(fn ($movimiento) => $movimiento['permisos']);
+
+        expect($permisos[$pendienteSaliente->id])->toBe(['editar' => true, 'enviar' => true, 'rechazar' => true, 'recibir' => false]);
+        expect($permisos[$pendienteEntrante->id])->toBe(['editar' => false, 'enviar' => false, 'rechazar' => false, 'recibir' => false]);
+        expect($permisos[$transitoSaliente->id])->toBe(['editar' => false, 'enviar' => false, 'rechazar' => true, 'recibir' => false]);
+        expect($permisos[$transitoEntrante->id])->toBe(['editar' => false, 'enviar' => false, 'rechazar' => false, 'recibir' => true]);
+    });
+});
+
+test('index() da a admin todos los permisos que el estado permite y ninguno a un movimiento ya cerrado', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $pendiente = Movimiento::factory()->create(['estado' => 'pendiente_confirmacion']);
+    $transito = Movimiento::factory()->enTransito()->create();
+    $recibido = Movimiento::factory()->create(['estado' => 'recibido_completo']);
+
+    $this->get(route('movimientos.index'))->assertInertia(function ($page) use ($pendiente, $transito, $recibido) {
+        $permisos = collect($page->toArray()['props']['movimientos']['data'])->keyBy('id')->map(fn ($movimiento) => $movimiento['permisos']);
+
+        expect($permisos[$pendiente->id])->toBe(['editar' => true, 'enviar' => true, 'rechazar' => true, 'recibir' => false]);
+        expect($permisos[$transito->id])->toBe(['editar' => false, 'enviar' => false, 'rechazar' => true, 'recibir' => true]);
+        expect($permisos[$recibido->id])->toBe(['editar' => false, 'enviar' => false, 'rechazar' => false, 'recibir' => false]);
+    });
+});

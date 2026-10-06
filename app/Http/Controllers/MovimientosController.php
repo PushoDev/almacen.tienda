@@ -129,21 +129,96 @@ class MovimientosController extends Controller
     }
 
     /**
+     * Qué acciones puede hacer el usuario sobre un movimiento, para que la pantalla muestre solo
+     * los botones que el servidor aceptaría. Mismas reglas que actualizar/enviar/rechazar (almacén
+     * origen) y recibir (almacén destino); admin y moderador no dependen del almacén.
+     *
+     * @param  array<int, int>  $userAlmacenesIds  vacío para admin y moderador
+     * @return array{editar: bool, enviar: bool, rechazar: bool, recibir: bool}
+     */
+    private function permisosSobreMovimiento(Movimiento $movimiento, User $user, array $userAlmacenesIds): array
+    {
+        $esGlobal = in_array($user->role, ['admin', 'moderador']);
+        $esOrigen = $esGlobal || in_array($movimiento->almacen_origen_id, $userAlmacenesIds);
+        $esDestino = $esGlobal || in_array($movimiento->almacen_destino_id, $userAlmacenesIds);
+
+        $estaPendiente = $movimiento->estado === 'pendiente_confirmacion';
+        $estaEnTransito = $movimiento->estado === 'en_transito';
+
+        return [
+            'editar' => $esOrigen && $estaPendiente,
+            'enviar' => $esOrigen && $estaPendiente,
+            'rechazar' => $esOrigen && ($estaPendiente || $estaEnTransito),
+            'recibir' => $esDestino && $estaEnTransito,
+        ];
+    }
+
+    /**
      * Muestra la interfaz principal de movimientos
      */
-    public function index()
+    public function index(Request $request)
     {
-        $movimientos = $this->movimientosVisibles()->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
+        $filtros = $request->validate([
+            'estado' => ['nullable', 'in:pendiente_confirmacion,en_transito,recibido_parcial,recibido_completo,rechazado,cancelado'],
+            'almacen_origen_id' => ['nullable', 'integer', 'exists:almacens,id'],
+            'almacen_destino_id' => ['nullable', 'integer', 'exists:almacens,id'],
+            'sentido' => ['nullable', 'in:salientes,entrantes'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
+            'buscar' => ['nullable', 'string', 'max:100'],
+        ]);
 
         $user = Auth::user();
-        $userAlmacenesIds = in_array($user->role, ['admin', 'moderador']) ? [] : $user->almacenes()->pluck('id')->toArray();
+        $userAlmacenesIds = in_array($user->role, ['admin', 'moderador']) ? [] : $user->almacenes()->pluck('almacens.id')->toArray();
+
+        $movimientos = $this->movimientosVisibles()
+            ->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
+            ->when($filtros['estado'] ?? null, fn (Builder $query, string $estado) => $query->where('estado', $estado))
+            ->when($filtros['almacen_origen_id'] ?? null, fn (Builder $query, int $id) => $query->where('almacen_origen_id', $id))
+            ->when($filtros['almacen_destino_id'] ?? null, fn (Builder $query, int $id) => $query->where('almacen_destino_id', $id))
+            ->when($userAlmacenesIds && ($filtros['sentido'] ?? null) === 'salientes', fn (Builder $query) => $query->whereIn('almacen_origen_id', $userAlmacenesIds))
+            ->when($userAlmacenesIds && ($filtros['sentido'] ?? null) === 'entrantes', fn (Builder $query) => $query->whereIn('almacen_destino_id', $userAlmacenesIds))
+            ->when($filtros['desde'] ?? null, fn (Builder $query, string $desde) => $query->whereDate('created_at', '>=', $desde))
+            ->when($filtros['hasta'] ?? null, fn (Builder $query, string $hasta) => $query->whereDate('created_at', '<=', $hasta))
+            ->when(trim($filtros['buscar'] ?? '') !== '', function (Builder $query) use ($filtros) {
+                $termino = trim($filtros['buscar']);
+
+                $query->where(function (Builder $query) use ($termino) {
+                    if (ctype_digit(ltrim($termino, '#'))) {
+                        $query->orWhere('id', (int) ltrim($termino, '#'));
+                    }
+
+                    $query->orWhereHas('usuario', fn (Builder $usuario) => $usuario->where('name', 'like', "%{$termino}%"))
+                        ->orWhereHas('detalles.producto', fn (Builder $producto) => $producto
+                            ->where('nombre_producto', 'like', "%{$termino}%")
+                            ->orWhere('marca_producto', 'like', "%{$termino}%")
+                            ->orWhere('modelo_producto', 'like', "%{$termino}%")
+                            ->orWhere('codigo_producto', 'like', "%{$termino}%"));
+                });
+            })
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(10)
+            ->withQueryString()
+            ->through(function (Movimiento $movimiento) use ($user, $userAlmacenesIds) {
+                $movimiento->setAttribute('permisos', $this->permisosSobreMovimiento($movimiento, $user, $userAlmacenesIds));
+
+                return $movimiento;
+            });
 
         return Inertia::render('Movimientos/Index', [
             'almacenes' => Almacen::select('id', 'nombre_almacen', 'tipo_almacen')->get(),
             'userAlmacenesIds' => $userAlmacenesIds,
             'movimientos' => $movimientos,
+            'filtros' => [
+                'estado' => $filtros['estado'] ?? '',
+                'almacen_origen_id' => $filtros['almacen_origen_id'] ?? '',
+                'almacen_destino_id' => $filtros['almacen_destino_id'] ?? '',
+                'sentido' => $filtros['sentido'] ?? '',
+                'desde' => $filtros['desde'] ?? '',
+                'hasta' => $filtros['hasta'] ?? '',
+                'buscar' => $filtros['buscar'] ?? '',
+            ],
             'estados' => [
                 'pendiente_confirmacion' => 'Pendiente Confirmación',
                 'en_transito' => 'En Tránsito',
