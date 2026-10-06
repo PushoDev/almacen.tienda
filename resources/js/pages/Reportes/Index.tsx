@@ -2,6 +2,7 @@ import HeadingSmall from '@/components/heading-small';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import AppLayout from '@/layouts/app-layout';
 import { ChartsReportePage } from '@/layouts/charts/ChartReportesGral';
 import { type BreadcrumbItem } from '@/types';
@@ -17,6 +18,7 @@ import {
     History,
     Landmark,
     LibraryBig,
+    Repeat,
     ShoppingBasket,
     TrendingUp,
     Users,
@@ -133,6 +135,13 @@ const reportesAuditoria: ReportCardProps[] = [
         icon: History,
         colors: 'from-slate-900 to-slate-600',
     },
+    {
+        title: 'Historial de Movimientos',
+        description: 'Todos los traslados de inventario entre almacenes, con filtros y detalle.',
+        href: route('reportes.historial_movimientos'),
+        icon: Repeat,
+        colors: 'from-violet-900 to-violet-500',
+    },
 ];
 
 const reportesFinanzasOtros: ReportCardProps[] = [
@@ -160,7 +169,8 @@ const reportesFinanzasOtros: ReportCardProps[] = [
 ];
 
 const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors }) => (
-    <div
+    <SpotlightCard
+        estado="claro"
         className={`border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br ${colors}`}
     >
         <div className="absolute inset-0 flex items-center justify-center opacity-10">
@@ -182,7 +192,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors
             </Link>
         </div>
         <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-    </div>
+    </SpotlightCard>
 );
 
 const ReportSection: React.FC<{ title: string; reports: ReportCardProps[] }> = ({ title, reports }) => (

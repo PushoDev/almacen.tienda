@@ -26,8 +26,11 @@ export function MonedaCard({
     onEstablecerPrincipal,
     onDeleteClick,
     formatNumber,
+    puedeEliminar = true,
 }: {
     moneda: MonedaCardData;
+    /** Eliminar monedas es solo del admin: al moderador se le oculta la opción. */
+    puedeEliminar?: boolean;
     /** Acción en curso para esta moneda ('cambiar-estado' | 'establecer-principal' | ''). */
     loadingAction: string;
     onCambiarEstado: () => void;
@@ -122,17 +125,19 @@ export function MonedaCard({
                             )}
                             {moneda.estado ? 'Desactivar' : 'Activar'}
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => onDeleteClick(moneda)}
-                            disabled={moneda.principal}
-                            className={
-                                moneda.principal
-                                    ? 'text-muted-foreground flex cursor-pointer items-center gap-2'
-                                    : 'flex cursor-pointer items-center gap-2 text-red-600'
-                            }
-                        >
-                            {moneda.principal ? <Lock className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />} Eliminar
-                        </DropdownMenuItem>
+                        {puedeEliminar && (
+                            <DropdownMenuItem
+                                onClick={() => onDeleteClick(moneda)}
+                                disabled={moneda.principal}
+                                className={
+                                    moneda.principal
+                                        ? 'text-muted-foreground flex cursor-pointer items-center gap-2'
+                                        : 'flex cursor-pointer items-center gap-2 text-red-600'
+                                }
+                            >
+                                {moneda.principal ? <Lock className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />} Eliminar
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

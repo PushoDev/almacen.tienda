@@ -16,12 +16,13 @@ import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink } from '@/components/ui/pagination';
+import { EstadoBadge, resumenUnidades } from '@/components/movimiento-estado';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { sileo } from '@/lib/sileo';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeftRight, Caravan, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, History, ListCheck, Package, PackageCheck, PackageSearch, Pencil, Search, Send, TrendingUp, XCircle } from 'lucide-react';
+import { ArrowLeftRight, Caravan, Check, ChevronLeft, ChevronRight, Eye, FileText, History, ListCheck, Package, PackageCheck, PackageSearch, Pencil, Printer, Search, Send, TrendingUp, XCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -100,6 +101,12 @@ interface MovimientoWithDetails extends Movimiento {
     usuario: {
         name: string;
     };
+    permisos: {
+        editar: boolean;
+        enviar: boolean;
+        rechazar: boolean;
+        recibir: boolean;
+    };
 }
 
 interface MovimientoPaginado {
@@ -117,27 +124,6 @@ interface MovimientoPaginado {
 interface ErrorResponse {
     general?: string;
     [key: string]: string | undefined;
-}
-
-// Mismos tokens que Show.tsx (basados en opacidad, funcionan en claro/oscuro) —
-// un solo lugar para no repetir esta lógica en la tabla y en el timeline de seguimiento.
-const ESTADO_BADGE: Record<string, { badgeClass: string; icon: React.ReactNode }> = {
-    pendiente_confirmacion: { badgeClass: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20', icon: <Clock className="h-3.5 w-3.5" /> },
-    en_transito: { badgeClass: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20', icon: <Send className="h-3.5 w-3.5" /> },
-    recibido_parcial: { badgeClass: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20', icon: <Package className="h-3.5 w-3.5" /> },
-    recibido_completo: { badgeClass: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
-    rechazado: { badgeClass: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20', icon: <XCircle className="h-3.5 w-3.5" /> },
-    cancelado: { badgeClass: 'bg-muted text-muted-foreground border-border', icon: <XCircle className="h-3.5 w-3.5" /> },
-};
-
-function EstadoBadge({ estado, label }: { estado: string; label: string }) {
-    const config = ESTADO_BADGE[estado] ?? ESTADO_BADGE.cancelado;
-    return (
-        <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold ${config.badgeClass}`}>
-            {config.icon}
-            {label}
-        </span>
-    );
 }
 
 export default function MovimientosPage({
@@ -809,44 +795,67 @@ export default function MovimientosPage({
                                 <History className="h-5 w-5" />
                             </div>
                             <div>
-                                <CardTitle className="text-white">Historial de Movimientos</CardTitle>
-                                <CardDescription className="text-violet-100">Gestiona y monitorea el flujo de tus movimientos logísticos</CardDescription>
+                                <CardTitle className="text-white">Movimientos Recientes y Abiertos</CardTitle>
+                                <CardDescription className="text-violet-100">Envía, recibe y da seguimiento a tus movimientos logísticos</CardDescription>
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                            <span className="text-muted-foreground">
+                                Se muestran los movimientos de los últimos 3 días y los que siguen abiertos (pendientes o en tránsito).
+                            </span>
+                            <Link href={route('reportes.historial_movimientos')}>
+                                <Button variant="outline" size="sm" className="gap-1">
+                                    <FileText className="h-4 w-4" /> Ver historial completo
+                                </Button>
+                            </Link>
+                        </div>
+
                         <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full text-sm">
                                 <thead className="sticky top-0 bg-gradient-to-r from-slate-700 to-slate-800 text-white">
                                     <tr>
-                                        <th className="px-6 py-3 text-left font-semibold">#Productos</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Movimiento</th>
                                         <th className="px-6 py-3 text-left font-semibold">Origen → Destino</th>
-                                        <th className="px-6 py-3 text-left font-semibold">Cantidad</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Productos / Unidades</th>
                                         <th className="px-6 py-3 text-left font-semibold">Estado</th>
                                         <th className="px-6 py-3 text-left font-semibold">Solicitado por</th>
                                         <th className="px-6 py-3 text-left font-semibold">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
+                                    {movimientos.data.length === 0 && (
+                                        <tr>
+                                            <td colSpan={6} className="text-muted-foreground px-6 py-10 text-center">
+                                                No hay movimientos recientes ni abiertos. El historial completo está en el reporte.
+                                            </td>
+                                        </tr>
+                                    )}
                                     {movimientos.data.map((movimiento: MovimientoWithDetails) => (
                                         <tr key={movimiento.id} className="transition-colors">
                                             <td className="px-6 py-4">
-                                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                                                    {movimiento.detalles?.length || 0}
-                                                </span>
+                                                <div className="font-semibold">#{movimiento.id}</div>
+                                                <div className="text-muted-foreground text-xs">
+                                                    {new Date(movimiento.created_at).toLocaleDateString('es-ES', {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                    })}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-medium">{movimiento.almacen_origen?.nombre_almacen}</span>
-                                                    <TrendingUp className="h-4 w-4 rotate-90" />
+                                                    <TrendingUp className="h-4 w-4 shrink-0 rotate-90" />
                                                     <span className="font-medium">{movimiento.almacen_destino?.nombre_almacen}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="font-semibold">
-                                                    {movimiento.detalles?.reduce((total: number, detalle) => total + detalle.cantidad_solicitada, 0)}{' '}
-                                                    unidades
-                                                </span>
+                                                <div className="font-semibold">
+                                                    {movimiento.detalles?.length || 0} {(movimiento.detalles?.length || 0) === 1 ? 'producto' : 'productos'}
+                                                </div>
+                                                <div className="text-muted-foreground text-xs">{resumenUnidades(movimiento)}</div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <EstadoBadge estado={movimiento.estado} label={estados[movimiento.estado]} />
@@ -880,46 +889,60 @@ export default function MovimientosPage({
                                                         </Button>
                                                     </Link>
 
-                                                    {movimiento.estado === 'pendiente_confirmacion' && (
-                                                        <>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={() => handleEditarClick(movimiento)}
-                                                                title="Editar productos y cantidades"
-                                                            >
-                                                                <Pencil className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                onClick={() => handleEnviarClick(movimiento)}
-                                                                title="Despachar movimiento"
-                                                                className="gap-1"
-                                                            >
-                                                                <Send className="h-3.5 w-3.5" /> Enviar
-                                                            </Button>
-                                                            <Button
-                                                                variant="destructive"
-                                                                size="sm"
-                                                                onClick={() => handleRechazarClick(movimiento)}
-                                                                title="Rechazar movimiento"
-                                                            >
-                                                                <XCircle className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                        </>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        title="Imprimir hoja del movimiento"
+                                                        aria-label={`Imprimir hoja del movimiento ${movimiento.id}`}
+                                                        className="cursor-pointer"
+                                                        onClick={() => window.open(route('movimientos.imprimir', movimiento.id), '_blank')}
+                                                    >
+                                                        <Printer className="h-4 w-4" />
+                                                    </Button>
+
+                                                    {movimiento.permisos.editar && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleEditarClick(movimiento)}
+                                                            title="Editar productos y cantidades"
+                                                        >
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </Button>
                                                     )}
 
-                                                    {movimiento.estado === 'en_transito' &&
-                                                        (!isVendedor || userAlmacenesIds.includes(movimiento.almacen_destino_id)) && (
-                                                            <Button
-                                                                size="sm"
-                                                                className="gap-1"
-                                                                onClick={() => handleRecibirClick(movimiento)}
-                                                                title="Registrar recepción"
-                                                            >
-                                                                <Package className="h-3.5 w-3.5" /> Recibir
-                                                            </Button>
-                                                        )}
+                                                    {movimiento.permisos.enviar && (
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => handleEnviarClick(movimiento)}
+                                                            title="Despachar movimiento"
+                                                            className="gap-1"
+                                                        >
+                                                            <Send className="h-3.5 w-3.5" /> Enviar
+                                                        </Button>
+                                                    )}
+
+                                                    {movimiento.permisos.recibir && (
+                                                        <Button
+                                                            size="sm"
+                                                            className="gap-1"
+                                                            onClick={() => handleRecibirClick(movimiento)}
+                                                            title="Registrar recepción"
+                                                        >
+                                                            <Package className="h-3.5 w-3.5" /> Recibir
+                                                        </Button>
+                                                    )}
+
+                                                    {movimiento.permisos.rechazar && (
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            onClick={() => handleRechazarClick(movimiento)}
+                                                            title="Rechazar movimiento"
+                                                        >
+                                                            <XCircle className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -948,7 +971,7 @@ export default function MovimientosPage({
                                                 variant={link.active ? 'default' : 'outline'}
                                                 size="sm"
                                                 disabled={!link.url}
-                                                onClick={() => router.get(link.url || '#')}
+                                                onClick={() => link.url && router.get(link.url, {}, { preserveState: true, preserveScroll: true, only: ['movimientos'] })}
                                             >
                                                 {displayLabel}
                                             </Button>
