@@ -16,6 +16,7 @@ use App\Services\CodigoStockService;
 use App\Services\FusionLotesService;
 use App\Services\LoteConsumoService;
 use App\Services\NotificationService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,64 @@ class MovimientosController extends Controller
     }
 
     /**
+     * Bloquea la fila del movimiento y confirma que sigue en uno de los estados esperados. La
+     * revisión de estado de enviar()/recibir()/rechazar()/actualizar() usa el modelo cargado al
+     * inicio de la petición: con dos peticiones a la vez (doble clic, o dos pestañas) ambas la
+     * pasan y duplicarían la reserva, el stock en destino o la liberación. Solo la primera debe
+     * actuar. Al terminar, $movimiento queda con los valores y relaciones actuales de la fila.
+     *
+     * @param  array<int, string>  $estadosPermitidos
+     *
+     * @throws \DomainException si otra petición ya cambió el estado del movimiento
+     */
+    private function bloquearMovimientoEnEstado(Movimiento $movimiento, array $estadosPermitidos, string $mensaje): void
+    {
+        $estadoActual = Movimiento::whereKey($movimiento->id)->lockForUpdate()->value('estado');
+
+        if (! in_array($estadoActual, $estadosPermitidos, true)) {
+            throw new \DomainException($mensaje);
+        }
+
+        $movimiento->refresh();
+    }
+
+    /**
+     * Movimientos que el usuario puede ver: admin y moderador todos; un vendedor solo los que
+     * salen de alguno de sus almacenes o llegan a alguno (misma regla con la que se decide a
+     * quién se le notifica un movimiento, ver MovimientoStockNotification).
+     *
+     * @return Builder<Movimiento>
+     */
+    private function movimientosVisibles(): Builder
+    {
+        $user = Auth::user();
+        $consulta = Movimiento::query();
+
+        if (in_array($user->role, ['admin', 'moderador'])) {
+            return $consulta;
+        }
+
+        $almacenesIds = $user->almacenes()->pluck('almacens.id');
+
+        return $consulta->where(function (Builder $query) use ($almacenesIds) {
+            $query->whereIn('almacen_origen_id', $almacenesIds)
+                ->orWhereIn('almacen_destino_id', $almacenesIds);
+        });
+    }
+
+    /**
+     * Un vendedor solo puede consultar movimientos de sus almacenes (origen o destino).
+     */
+    private function autorizarVisibilidad(Movimiento $movimiento): void
+    {
+        abort_unless(
+            $this->movimientosVisibles()->whereKey($movimiento->id)->exists(),
+            403,
+            'No tienes acceso a este movimiento'
+        );
+    }
+
+    /**
      * Obtiene almacenes según rol del usuario
      */
     private function getPermittedAlmacenes()
@@ -74,7 +133,7 @@ class MovimientosController extends Controller
      */
     public function index()
     {
-        $movimientos = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
+        $movimientos = $this->movimientosVisibles()->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
@@ -287,9 +346,11 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            if ($movimiento->estado !== 'pendiente_confirmacion') {
-                throw new \Exception('Solo se pueden editar movimientos pendientes de confirmación (antes de enviar).');
-            }
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['pendiente_confirmacion'],
+                'Solo se pueden editar movimientos pendientes de confirmación (antes de enviar).'
+            );
 
             // Nada se reservó todavía en este estado (cantidad_en_transito solo se toca en
             // enviar()), así que el chequeo de stock es el mismo que en store(): disponible
@@ -379,9 +440,11 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            if ($movimiento->estado !== 'pendiente_confirmacion') {
-                throw new \Exception('Solo se pueden enviar movimientos en estado pendiente de confirmación.');
-            }
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['pendiente_confirmacion'],
+                'Solo se pueden enviar movimientos en estado pendiente de confirmación.'
+            );
 
             foreach ($movimiento->detalles as $detalle) {
                 $stock = AlmacenProducto::where([
@@ -469,9 +532,22 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            // Verificar que el movimiento esté en tránsito
-            if ($movimiento->estado !== 'en_transito') {
-                throw new \Exception('Solo se pueden recibir movimientos en estado en tránsito.');
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['en_transito'],
+                'Solo se pueden recibir movimientos en estado en tránsito.'
+            );
+
+            // Cada línea despachada debe venir en la petición: una línea omitida nunca restaría
+            // `cantidad` ni liberaría `cantidad_en_transito` en el origen y su reserva quedaría atascada.
+            $idsRecibidos = collect($request->productos)->pluck('id')->map(fn ($id) => (int) $id);
+            $idsFaltantes = $movimiento->detalles->pluck('producto_id')->map(fn ($id) => (int) $id)->diff($idsRecibidos);
+
+            if ($idsFaltantes->isNotEmpty()) {
+                throw new \DomainException(
+                    'Falta indicar la cantidad recibida de todos los productos del movimiento (productos sin indicar: '.
+                    $idsFaltantes->implode(', ').').'
+                );
             }
 
             $totalRecibido = 0;
@@ -649,9 +725,11 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            if (! in_array($movimiento->estado, ['pendiente_confirmacion', 'en_transito'])) {
-                throw new \Exception('Solo se pueden rechazar movimientos pendientes o en tránsito.');
-            }
+            $this->bloquearMovimientoEnEstado(
+                $movimiento,
+                ['pendiente_confirmacion', 'en_transito'],
+                'Solo se pueden rechazar movimientos pendientes o en tránsito.'
+            );
 
             if ($movimiento->estado === 'en_transito') {
                 foreach ($movimiento->detalles as $detalle) {
@@ -697,6 +775,8 @@ class MovimientosController extends Controller
      */
     public function seguimiento(Movimiento $movimiento)
     {
+        $this->autorizarVisibilidad($movimiento);
+
         $seguimientos = $movimiento->seguimientos()
             ->with('usuario')
             ->orderBy('created_at', 'desc')
@@ -710,7 +790,7 @@ class MovimientosController extends Controller
      */
     public function reporteDiscrepancias()
     {
-        $discrepancias = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
+        $discrepancias = $this->movimientosVisibles()->with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
             ->whereIn('estado', ['recibido_parcial', 'rechazado'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
@@ -749,6 +829,8 @@ class MovimientosController extends Controller
      */
     public function show(Movimiento $movimiento)
     {
+        $this->autorizarVisibilidad($movimiento);
+
         $movimiento->load([
             'almacenOrigen',
             'almacenDestino',

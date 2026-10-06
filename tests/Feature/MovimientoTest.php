@@ -483,6 +483,66 @@ test('no se puede recibir un movimiento que no está en tránsito', function () 
     $response->assertSessionHasErrors('general');
 });
 
+test('recibir() dos veces seguidas (doble clic) suma al destino una sola vez', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($destino, $producto, cantidad: 0);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $admin->id,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10,
+    ]);
+    $payload = ['productos' => [['id' => $producto->id, 'cantidad_recibida' => 10]]];
+
+    $this->post(route('movimientos.recibir', $movimiento), $payload)->assertRedirect(route('movimientos.index'));
+    $this->post(route('movimientos.recibir', $movimiento), $payload)->assertSessionHasErrors('general');
+
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $destino->id, 'producto_id' => $producto->id, 'cantidad' => 10,
+    ]);
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $origen->id, 'producto_id' => $producto->id, 'cantidad' => 40, 'cantidad_en_transito' => 0,
+    ]);
+});
+
+test('recibir() rechaza la petición si omite alguna línea del movimiento y no toca el stock', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $productoA = Producto::factory()->create();
+    $productoB = Producto::factory()->create();
+    crearAlmacenProducto($origen, $productoA, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($origen, $productoB, cantidad: 50, cantidadEnTransito: 5);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $admin->id,
+    ]);
+    $movimiento->detalles()->create(['producto_id' => $productoA->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10]);
+    $movimiento->detalles()->create(['producto_id' => $productoB->id, 'cantidad_solicitada' => 5, 'cantidad_despachada' => 5]);
+
+    $response = $this->post(route('movimientos.recibir', $movimiento), [
+        'productos' => [['id' => $productoA->id, 'cantidad_recibida' => 10]],
+    ]);
+
+    $response->assertSessionHasErrors('general');
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'en_transito']);
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $origen->id, 'producto_id' => $productoA->id, 'cantidad' => 50, 'cantidad_en_transito' => 10,
+    ]);
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $origen->id, 'producto_id' => $productoB->id, 'cantidad' => 50, 'cantidad_en_transito' => 5,
+    ]);
+});
+
 test('un vendedor no puede recibir en un almacén destino que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedor);
@@ -562,6 +622,31 @@ test('rechazar() en tránsito libera cantidad_en_transito sin tocar cantidad', f
         'almacen_id' => $origen->id, 'producto_id' => $producto->id, 'cantidad' => 50, 'cantidad_en_transito' => 0,
     ]);
     $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'rechazado']);
+});
+
+test('rechazar() dos veces seguidas (doble clic) libera la reserva una sola vez', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'user_id' => $admin->id,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10,
+    ]);
+
+    $this->post(route('movimientos.rechazar', $movimiento), ['observaciones' => 'Cliente canceló'])
+        ->assertRedirect(route('movimientos.index'));
+    $this->post(route('movimientos.rechazar', $movimiento), ['observaciones' => 'Cliente canceló'])
+        ->assertSessionHasErrors('general');
+
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $origen->id, 'producto_id' => $producto->id, 'cantidad' => 50, 'cantidad_en_transito' => 0,
+    ]);
 });
 
 test('rechazar() pendiente de confirmación no toca el stock (nunca se reservó)', function () {
