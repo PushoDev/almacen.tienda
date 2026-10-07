@@ -10,7 +10,20 @@ import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
 import { router } from '@inertiajs/react';
 import axios from 'axios';
-import { Ban, CheckCircle2, ChevronDown, CreditCard, History, Loader2, PackageCheck, ShieldCheck, Truck, Undo2, XCircle } from 'lucide-react';
+import {
+    Ban,
+    CheckCircle2,
+    ChevronDown,
+    CreditCard,
+    History,
+    Loader2,
+    PackageCheck,
+    Printer,
+    ShieldCheck,
+    Truck,
+    Undo2,
+    XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 
 interface CuentaEnvio {
@@ -271,34 +284,40 @@ export default function EnviosLista({ envios, hayFiltro }: { envios: Envio[]; ha
                             )}
                         </dl>
 
-                        {(envio.permisos.confirmar || envio.permisos.rechazar || envio.permisos.anular || envio.permisos.resolver_diferencia) && (
-                            <div className="flex flex-wrap gap-2">
-                                {envio.permisos.confirmar && (
-                                    <Button
-                                        size="sm"
-                                        className="gap-1.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white"
-                                        onClick={() => abrir('confirmar', envio)}
-                                    >
-                                        <PackageCheck className="h-4 w-4" /> Confirmar recepción
-                                    </Button>
-                                )}
-                                {envio.permisos.rechazar && (
-                                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => abrir('rechazar', envio)}>
-                                        <XCircle className="h-4 w-4" /> Rechazar
-                                    </Button>
-                                )}
-                                {envio.permisos.anular && (
-                                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => abrir('anular', envio)}>
-                                        <Ban className="h-4 w-4" /> Anular
-                                    </Button>
-                                )}
-                                {envio.permisos.resolver_diferencia && (
-                                    <Button size="sm" className="gap-1.5" onClick={() => abrir('resolver', envio)}>
-                                        <ShieldCheck className="h-4 w-4" /> Resolver diferencia
-                                    </Button>
-                                )}
-                            </div>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5"
+                                onClick={() => window.open(route('transacciones.envios.imprimir', envio.id), '_blank')}
+                            >
+                                <Printer className="h-4 w-4" /> Imprimir
+                            </Button>
+                            {envio.permisos.confirmar && (
+                                <Button
+                                    size="sm"
+                                    className="gap-1.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white"
+                                    onClick={() => abrir('confirmar', envio)}
+                                >
+                                    <PackageCheck className="h-4 w-4" /> Confirmar recepción
+                                </Button>
+                            )}
+                            {envio.permisos.rechazar && (
+                                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => abrir('rechazar', envio)}>
+                                    <XCircle className="h-4 w-4" /> Rechazar
+                                </Button>
+                            )}
+                            {envio.permisos.anular && (
+                                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => abrir('anular', envio)}>
+                                    <Ban className="h-4 w-4" /> Anular
+                                </Button>
+                            )}
+                            {envio.permisos.resolver_diferencia && (
+                                <Button size="sm" className="gap-1.5" onClick={() => abrir('resolver', envio)}>
+                                    <ShieldCheck className="h-4 w-4" /> Resolver diferencia
+                                </Button>
+                            )}
+                        </div>
 
                         <Collapsible>
                             <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-semibold">

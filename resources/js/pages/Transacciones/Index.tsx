@@ -50,7 +50,6 @@ interface Proveedor {
 
 interface Props {
     cuentasOrigen: Cuenta[];
-    cuentasDestino: Cuenta[];
     clientes: Cliente[];
     proveedores: Proveedor[];
     monedasActivas: Moneda[];
@@ -77,7 +76,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas, userRole, totalesTransito }: Props) {
+export default function Transacciones({ cuentasOrigen, clientes, proveedores, monedasActivas, userRole, totalesTransito }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -158,7 +157,6 @@ export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes,
                     (2026-08-28) y quedó como única opción sin nada entre qué elegir. */}
                 <Movimientos
                     cuentasOrigen={cuentasOrigen}
-                    cuentasDestino={cuentasDestino}
                     clientes={clientes}
                     proveedores={proveedores}
                     monedasActivas={monedasActivas}

@@ -486,3 +486,44 @@ test('el detalle de un gasto del vendedor no trae envío de origen y muestra su 
         ->where('envioOrigen', null)
     );
 });
+
+// ==========================================================================
+// HOJA IMPRIMIBLE
+// ==========================================================================
+
+test('la hoja imprimible la abre quien ve el envío y no lleva saldos de ninguna cuenta', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'envio' => $envio] = prepararEnvioEnTransito();
+
+    foreach ([$emisor, $receptor, User::factory()->admin()->create()] as $usuario) {
+        $respuesta = $this->actingAs($usuario)->get(route('transacciones.envios.imprimir', $envio))->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Transacciones/ImprimirEnvio')
+            ->where('envio.id', $envio->id)
+            ->where('envio.es_evidencia', false)
+            ->where('envio.monto', 100)
+            ->where('envio.comentario', 'Préstamo para vueltos')
+        );
+
+        expect(json_encode($respuesta->inertiaProps()))->not->toContain('saldo_cuenta')->not->toContain('saldo_anterior')->not->toContain('saldo_posterior');
+    }
+});
+
+test('un vendedor sin relación con el envío no puede abrir su hoja', function () {
+    ['envio' => $envio] = prepararEnvioEnTransito();
+    $ajeno = User::factory()->vendedor()->create();
+    crearTurnoActivo($ajeno);
+
+    $this->actingAs($ajeno)->get(route('transacciones.envios.imprimir', $envio))->assertForbidden();
+});
+
+test('la hoja de un envío ya confirmado es la evidencia con lo recibido y quién lo confirmó', function () {
+    ['receptor' => $receptor, 'envio' => $envio] = prepararEnvioEnTransito();
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 80])->assertOk();
+
+    $this->actingAs($receptor)->get(route('transacciones.envios.imprimir', $envio))->assertInertia(fn ($page) => $page
+        ->where('envio.es_evidencia', true)
+        ->where('envio.estado', 'recibido_parcial')
+        ->where('envio.monto_recibido', 80)
+        ->where('envio.diferencia', 20)
+        ->where('envio.confirmado_por', $receptor->name)
+    );
+});

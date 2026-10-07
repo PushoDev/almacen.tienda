@@ -2,10 +2,8 @@ import HeadingSmall from '@/components/heading-small';
 import { ViaLogo } from '@/components/monedas/via-logo';
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
-    AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
@@ -13,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SpotlightCard from '@/components/ui/spotlightcard';
@@ -40,6 +38,7 @@ import {
     Eye,
     Globe,
     HandCoins,
+    Loader2,
     Receipt,
     Search,
     ShoppingCart,
@@ -615,6 +614,7 @@ export default function Create({
                 console.error('Errores en el cierre:', err);
                 sileo.error({ title: 'Error al cerrar', description: 'Revisa los datos e inténtalo de nuevo' });
             },
+            onFinish: () => setShowConfirmModal(false),
         });
     };
 
@@ -2301,7 +2301,7 @@ export default function Create({
                         </div>
 
                         <div className="flex flex-col gap-2 pt-2">
-                            <Button type="button" className="h-12 w-full text-base font-bold" disabled={processing} onClick={() => submit()}>
+                            <Button type="button" className="h-12 w-full text-base font-bold" disabled={processing} onClick={() => setShowConfirmModal(true)}>
                                 <CheckCircle2 className="mr-2 h-5 w-5" /> FINALIZAR CIERRE
                             </Button>
                             <p className="text-muted-foreground px-4 text-center text-[10px] leading-tight italic">
@@ -2312,25 +2312,54 @@ export default function Create({
                 </Card>
 
                 {/* Modal de Confirmación */}
-                <AlertDialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>¿Finalizar Cierre?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Al finalizar se registrará el cierre con los datos calculados del sistema.
-                                <br />
-                                <br />
-                                <span className="font-bold text-emerald-600">¿Estás seguro de que deseas finalizar el cierre?</span>
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-                            <AlertDialogAction type="button" onClick={() => submit()} className="bg-primary cursor-pointer">
-                                Sí, Finalizar Cierre
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                <Dialog open={showConfirmModal} onOpenChange={(abierto) => !processing && setShowConfirmModal(abierto)}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader className="items-center text-center sm:text-center">
+                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                                <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <DialogTitle className="text-xl">¿Finalizar Cierre?</DialogTitle>
+                            <DialogDescription>Revisa el resumen: al confirmar se registra el cierre con los datos calculados del sistema.</DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm dark:border-emerald-800 dark:bg-emerald-900/20">
+                            <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Total de ventas del turno</span>
+                                <span className="font-bold text-emerald-700 dark:text-emerald-300">${Number(totalVentasProductos).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Saldo esperado</span>
+                                <span className="font-bold">
+                                    {Number(calculos.saldo_esperado_global || 0) < 0 ? '-' : ''}${Math.abs(Number(calculos.saldo_esperado_global || 0)).toFixed(2)}
+                                </span>
+                            </div>
+                            {data.observaciones.trim() !== '' && (
+                                <div className="border-t border-emerald-200 pt-2 text-left dark:border-emerald-800">
+                                    <span className="text-muted-foreground text-xs font-bold uppercase">Observaciones</span>
+                                    <p className="break-words">{data.observaciones}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+                            <h4 className="mb-2 text-sm font-medium text-amber-800 dark:text-amber-200">Qué va a pasar</h4>
+                            <ul className="space-y-1 text-left text-sm text-amber-700 dark:text-amber-300">
+                                <li>• Se notificará a los administradores.</li>
+                                <li>• Se cerrará tu sesión de venta.</li>
+                            </ul>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:justify-center">
+                            <Button type="button" variant="outline" onClick={() => setShowConfirmModal(false)} disabled={processing} className="cursor-pointer">
+                                Cancelar
+                            </Button>
+                            <Button type="button" onClick={() => submit()} disabled={processing} className="cursor-pointer gap-2 bg-emerald-600 hover:bg-emerald-700">
+                                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                {processing ? 'Finalizando...' : 'Sí, Finalizar Cierre'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 {/* Modal de Detalles de la Venta Completa */}
                 <AlertDialog
