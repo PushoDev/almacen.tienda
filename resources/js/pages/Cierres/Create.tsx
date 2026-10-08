@@ -47,6 +47,7 @@ import {
     Store,
     TrendingUp,
     Truck,
+    Undo2,
     Users,
     Wallet,
 } from 'lucide-react';
@@ -269,7 +270,8 @@ interface OperacionesMultiplesCierre {
 
 /** Cuánto cambió respecto al cierre anterior: `bueno` pinta de verde (mejoró) o rojo (empeoró); null = sin cambio. */
 function BadgeDiferencia({ diferencia, moneda, bueno }: { diferencia: number; moneda: string; bueno: boolean | null }) {
-    if (bueno === null) {
+    // Menos de un centavo no es un cambio: evita un "-$0.00" si llega un residuo de redondeo.
+    if (bueno === null || Math.abs(diferencia) < 0.005) {
         return <Badge className="text-muted-foreground border border-white/10 bg-white/5 font-mono">—</Badge>;
     }
     const Flecha = diferencia > 0 ? ArrowUp : ArrowDown;
@@ -551,6 +553,10 @@ interface Calculos {
     ventas_anuladas_count?: number;
     ventas_anuladas_total_usd?: number;
     ventas_anuladas_detalles?: VentaAnuladaItem[];
+    // Ventas completadas que después se devolvieron (mismo formato que las anuladas)
+    ventas_devueltas_count?: number;
+    ventas_devueltas_total_usd?: number;
+    ventas_devueltas_detalles?: VentaAnuladaItem[];
     // Mensajero del turno
     mensajero_total_usd?: number;
     mensajero_total_cup?: number;
@@ -1666,7 +1672,7 @@ export default function Create({
                 {/* Movimientos Financieros */}
                 <div className="space-y-2">
                     <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
-                    <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${verOperacionesMultiples ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
+                    <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${verOperacionesMultiples ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}>
                         <SpotlightCard
                             estado="agotado"
                             className="rounded-xl border border-red-400/30 bg-red-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-red-500/10"
@@ -1823,6 +1829,35 @@ export default function Create({
                                 </div>
                             </SpotlightCard>
                         )}
+
+                        <SpotlightCard
+                            estado="sin-comision"
+                            className="rounded-xl border border-pink-400/30 bg-pink-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-pink-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/30">
+                                    <Undo2 className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Devueltas</p>
+                                    <p className="text-2xl font-black text-pink-600 dark:text-pink-400">
+                                        ${Number(calculos.ventas_devueltas_total_usd ?? 0).toFixed(2)} <span className="text-sm font-bold">USD</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                <Badge className="border border-pink-400/30 bg-pink-500/10 font-mono text-pink-700 dark:text-pink-300">
+                                    {(calculos.ventas_devueltas_detalles ?? [])
+                                        .slice(0, 3)
+                                        .map((v) => `#${v.venta_id}`)
+                                        .join(' ') || 'Ninguna'}
+                                    {(calculos.ventas_devueltas_detalles?.length ?? 0) > 3 ? ' …' : ''}
+                                </Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-pink-500 to-rose-600 shadow-md shadow-pink-500/30">
+                                    {calculos.ventas_devueltas_count ?? 0} {(calculos.ventas_devueltas_count ?? 0) === 1 ? 'venta' : 'ventas'}
+                                </Badge>
+                            </div>
+                        </SpotlightCard>
                     </div>
                 </div>
 

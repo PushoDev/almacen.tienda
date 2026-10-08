@@ -107,10 +107,17 @@ class TransferenciaController extends Controller
             // Un vendedor puede transferir a cualquier cuenta del sistema. Si el destino es una cuenta suya (de
             // cualquier nivel de acceso: acreditar a una de `cobro` es recibir, no operarla) la transferencia es
             // inmediata; si es de otra persona, el dinero sale del origen y espera la confirmación del destino.
-            // Admin y moderador no tienen cuentas propias y pueden confirmar todo: siempre es inmediata.
-            $destinoEsAjena = $esVendedor
-                && $request->destino_tipo === 'cuenta'
-                && ! auth()->user()->cuentas()->where('cuentas.id', $destino->id)->exists();
+            // Admin y moderador no tienen cuentas propias: para ellos el efectivo es lo que viaja (puede cambiar de
+            // provincia y llegar días después), así que una transferencia de cuenta de efectivo a cuenta de efectivo
+            // también queda en tránsito hasta confirmarse; con una tarjeta de por medio es inmediata. Sin campo de
+            // provincia en las cuentas: lo decide el tipo de cuenta.
+            $quedaEnTransito = $esVendedor
+                ? $request->destino_tipo === 'cuenta'
+                    && ! auth()->user()->cuentas()->where('cuentas.id', $destino->id)->exists()
+                : $request->origen_tipo === 'cuenta'
+                    && $request->destino_tipo === 'cuenta'
+                    && $origen->tipo === 'efectivo'
+                    && $destino->tipo === 'efectivo';
 
             $monedaOrigen = $this->obtenerMonedaEntidad($origen, $request->origen_tipo);
             $monedaDestino = $this->obtenerMonedaEntidad($destino, $request->destino_tipo);
@@ -139,7 +146,7 @@ class TransferenciaController extends Controller
                 ? round($diferenciaMonedaDestino / $tasaUsdMonedaDestino, 2)
                 : 0.0;
 
-            if ($destinoEsAjena) {
+            if ($quedaEnTransito) {
                 app(TransferenciaPendienteService::class)->enviar(auth()->user(), $origen, $destino, [
                     'monto' => $montoOrigen,
                     'moneda' => $request->moneda,

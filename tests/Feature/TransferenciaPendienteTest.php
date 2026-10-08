@@ -489,6 +489,64 @@ test('la comparativa del cierre marca el dinero en tránsito en la cuenta que en
         ->where('comparativa_cuentas.0.en_transito_entrada', 0));
 });
 
+test('una transferencia de efectivo a efectivo de un admin o un moderador queda en tránsito hasta confirmarse', function (string $rol) {
+    crearTiposMovimientoFinanciero();
+    $emisor = User::factory()->{$rol}()->create();
+    if ($rol === 'moderador') {
+        crearTurnoActivo($emisor); // el moderador necesita un turno activo para escribir (RequireTurnoActivo)
+    }
+    $usd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($usd, saldo: 500);
+    $destino = crearCuentaEnMoneda($usd, saldo: 100);
+    $origen->update(['tipo' => 'efectivo']);
+    $destino->update(['tipo' => 'efectivo']);
+
+    $this->actingAs($emisor)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => 100, 'moneda' => 'USD',
+    ])->assertRedirect(route('transacciones.envios.index'));
+
+    $envio = TransferenciaPendiente::firstOrFail();
+    expect($envio->estado)->toBe(TransferenciaPendiente::ESTADO_EN_TRANSITO)
+        ->and($envio->user_id)->toBe($emisor->id)
+        ->and(saldoDe($origen))->toBe(400.0)
+        ->and(saldoDe($destino))->toBe(100.0);
+    $this->assertDatabaseCount('movimientos_financieros', 0);
+
+    // Mientras viaja el Cierre del emisor lo muestra como enviado y la cuenta destino como "por llegar".
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito.total', 1)
+        ->has('calculos.envios_en_transito_detalle.enviados', 1));
+
+    $this->actingAs($emisor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+    expect(saldoDe($destino))->toBe(200.0);
+    $this->assertDatabaseCount('movimientos_financieros', 1);
+})->with(['admin', 'moderador']);
+
+test('una transferencia de un admin con una tarjeta de por medio sigue siendo inmediata', function (string $tipoOrigen, string $tipoDestino) {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $usd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($usd, saldo: 500);
+    $destino = crearCuentaEnMoneda($usd, saldo: 100);
+    $origen->update(['tipo' => $tipoOrigen]);
+    $destino->update(['tipo' => $tipoDestino]);
+
+    $this->actingAs($admin)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => 100, 'moneda' => 'USD',
+    ])->assertRedirect();
+
+    $this->assertDatabaseCount('transferencias_pendientes', 0);
+    expect(saldoDe($origen))->toBe(400.0)->and(saldoDe($destino))->toBe(200.0);
+})->with([
+    'efectivo a tarjeta' => ['efectivo', 'tarjeta'],
+    'tarjeta a efectivo' => ['tarjeta', 'efectivo'],
+    'tarjeta a tarjeta' => ['tarjeta', 'tarjeta'],
+]);
+
 test('el aviso no se calcula ni viaja en pantallas que no son del dinero', function () {
     prepararEnvioEnTransito();
 

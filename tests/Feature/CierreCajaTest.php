@@ -656,6 +656,29 @@ test('la comparativa con el cierre anterior trae el logo de cada cuenta y marca 
         ->where('comparativa_cuentas.0.estado', 'bajo'));
 });
 
+test('un residuo de redondeo en coma flotante no cuenta como cambio en la comparativa', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $usd = crearMonedaUsd();
+    // 0.1 + 0.2 - 0.3 = 5.55e-17 en coma flotante: sin redondear marcaba "subió" y se mostraba como +$0.00.
+    $cuenta = crearCuentaEnMoneda($usd, saldo: 0.1 + 0.2, propietario: $vendedor);
+    $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 0.1 + 0.2]);
+
+    CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_cierre' => now()->subDay(),
+        'snapshot_cuentas' => [['id' => $cuenta->id, 'nombre' => $cuenta->nombre_cuenta, 'tipo' => 'banco', 'moneda' => 'USD', 'saldo' => 0.3]],
+        'snapshot_clientes' => [['id' => $cliente->id, 'nombre' => $cliente->nombre_cliente, 'deuda' => 0.3]],
+    ]);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas.0.diferencia', 0)
+        ->where('comparativa_cuentas.0.estado', 'igual')
+        ->where('comparativa_clientes', fn ($clientes) => collect($clientes)->firstWhere('id', $cliente->id)['estado'] === 'igual'));
+});
+
 test('la comparativa marca como nueva la cuenta que no estaba en el cierre anterior', function () {
     $vendedor = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedor);

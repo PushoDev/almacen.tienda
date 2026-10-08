@@ -224,7 +224,9 @@ class CierreCajaController extends Controller
             } else {
                 $saldoAnterior = $saldoActual;
             }
-            $diferencia = $saldoActual - $saldoAnterior;
+            // Redondeada ANTES de decidir el estado: la resta de dos decimales en coma flotante deja residuos
+            // (ej. 3e-11) que pasaban por "subió/bajó" pero se mostraban como -$0.00.
+            $diferencia = round($saldoActual - $saldoAnterior, 2);
 
             $comparativaCuentas[] = [
                 'es_nueva' => (bool) $esNueva,
@@ -252,7 +254,8 @@ class CierreCajaController extends Controller
             } else {
                 $deudaAnterior = $deudaActual;
             }
-            $diferencia = $deudaActual - $deudaAnterior;
+            // Redondeada antes de decidir el estado (ver la comparativa de cuentas).
+            $diferencia = round($deudaActual - $deudaAnterior, 2);
 
             $comparativaClientes[] = [
                 'id' => $cliente->id,

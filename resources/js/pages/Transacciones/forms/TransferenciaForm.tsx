@@ -184,7 +184,11 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
     const saldoOrigenDespues = origen && origen.saldo !== null ? origen.saldo - monto : null;
     // Un vendedor que envía a una cuenta de otra persona no acredita al instante: el dinero sale del origen y
     // espera a que el destino (o admin/moderador) confirme cuánto llegó. A una cuenta suya es inmediato.
-    const quedaPendiente = soloCuentas && destino?.tipo === 'cuenta' && destino.propia === false;
+    // Admin y moderador no tienen cuentas propias: para ellos lo que viaja es el efectivo (de una cuenta de
+    // efectivo a otra de efectivo); con una tarjeta de por medio es inmediato. Mismo criterio que el servidor.
+    const esEfectivoAEfectivo =
+        origen?.tipo === 'cuenta' && destino?.tipo === 'cuenta' && origen.tipoCuenta === 'efectivo' && destino.tipoCuenta === 'efectivo';
+    const quedaPendiente = soloCuentas ? destino?.tipo === 'cuenta' && destino.propia === false : esEfectivoAEfectivo;
     const saldoDestinoDespues = !quedaPendiente && destino && destino.saldo !== null ? destino.saldo + montoDestino : null;
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -367,10 +371,10 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
                                 <Clock className="h-4 w-4" /> Quedará pendiente de confirmación
                             </p>
                             <p className="text-muted-foreground text-xs">
-                                Esta cuenta no es tuya
+                                {soloCuentas ? 'Esta cuenta no es tuya' : 'Es efectivo de una cuenta de efectivo a otra'}
                                 {destino.responsables && destino.responsables.length > 0 ? ` (${destino.responsables.join(', ')})` : ''}. El dinero
-                                sale de tu cuenta ahora y se acredita cuando el destino confirme cuánto llegó. Puedes seguirlo en la pestaña “En
-                                tránsito”.
+                                sale de la cuenta de origen ahora y se acredita cuando el destino confirme cuánto llegó. Puedes seguirlo en
+                                Envíos de Dinero.
                             </p>
                         </div>
                     )}
