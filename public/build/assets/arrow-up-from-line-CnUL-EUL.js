@@ -1,1 +1,0 @@
-import{c as o}from"./createLucideIcon-NU_0DrsN.js";const e=[["path",{d:"M12 17V3",key:"1cwfxf"}],["path",{d:"m6 11 6 6 6-6",key:"12ii2o"}],["path",{d:"M19 21H5",key:"150jfl"}]],r=o("arrow-down-to-line",e);const a=[["path",{d:"m18 9-6-6-6 6",key:"kcunyi"}],["path",{d:"M12 3v14",key:"7cf3v8"}],["path",{d:"M5 21h14",key:"11awu3"}]],t=o("arrow-up-from-line",a);export{r as A,t as a};
