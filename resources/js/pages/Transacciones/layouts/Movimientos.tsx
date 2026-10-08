@@ -46,7 +46,6 @@ interface Proveedor {
 
 interface Props {
     cuentasOrigen: Cuenta[];
-    cuentasDestino: Cuenta[];
     clientes: Cliente[];
     proveedores: Proveedor[];
     monedasActivas: Moneda[];

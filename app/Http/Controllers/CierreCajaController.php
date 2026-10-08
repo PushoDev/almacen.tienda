@@ -9,9 +9,12 @@ use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\PagoVenta;
+use App\Models\Remesa;
+use App\Models\TransferenciaPendiente;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\CierreCajaNotification;
+use App\Services\CatalogoTarjetasService;
 use App\Services\MetodosPagoService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
@@ -136,14 +139,10 @@ class CierreCajaController extends Controller
         $comparativaCuentas = [];
         $comparativaClientes = [];
 
-        // Obtener saldos actuales de TODAS las cuentas accesibles por el usuario
-        $cuentasQuery = Cuenta::with('moneda');
-        if (! in_array($user->role, ['admin', 'moderador'])) {
-            $cuentasQuery->whereHas('users', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            });
-        }
-        $cuentasActuales = $cuentasQuery->get();
+        // Saldos actuales de las cuentas cuyo saldo puede ver el usuario: todas para admin/moderador y, para un
+        // vendedor, solo las de acceso `completo`. Las de `cobro` no se comparan: de ellas solo ve lo que cobró.
+        $cuentasActuales = $user->cuentasUsables()->with('moneda')->get();
+        $comparativaCuentasCobro = $this->cuentasDeCobroDelTurno($user, $inicioTurno);
 
         // Obtener deudas actuales de TODOS los clientes
         $clientesActuales = Cliente::all();
@@ -203,9 +202,21 @@ class CierreCajaController extends Controller
             }
         }
 
+        // Dinero en tránsito por cuenta, para explicar saldos que no cuadran con el cierre anterior: lo que salió de
+        // la cuenta origen al enviar (ya descontado de su saldo) y lo que aún no llegó a la cuenta destino.
+        $enviosAbiertos = TransferenciaPendiente::visiblesPara($user)
+            ->where('estado', TransferenciaPendiente::ESTADO_EN_TRANSITO)
+            ->get(['cuenta_origen_id', 'cuenta_destino_id', 'monto', 'monto_destino']);
+        $enTransitoSalida = $enviosAbiertos->groupBy('cuenta_origen_id')->map(fn ($grupo) => round((float) $grupo->sum('monto'), 2));
+        $enTransitoEntrada = $enviosAbiertos->groupBy('cuenta_destino_id')->map(fn ($grupo) => round((float) $grupo->sum('monto_destino'), 2));
+
         // Comparar cuentas (si no hay cierre anterior, mostrar saldo actual como anterior)
         foreach ($cuentasActuales as $cuenta) {
             $saldoActual = (float) $cuenta->saldo_cuenta;
+            // Cuenta que no estaba en el cierre anterior: no tiene saldo anterior real con qué comparar.
+            $esNueva = $ultimoCierre
+                && ! isset($cuentasCierreAnteriorPorId[$cuenta->id])
+                && ! isset($cuentasCierreAnteriorPorNombre[$cuenta->nombre_cuenta]);
             if ($ultimoCierre) {
                 $saldoAnterior = $cuentasCierreAnteriorPorId[$cuenta->id]
                     ?? $cuentasCierreAnteriorPorNombre[$cuenta->nombre_cuenta]
@@ -213,12 +224,18 @@ class CierreCajaController extends Controller
             } else {
                 $saldoAnterior = $saldoActual;
             }
-            $diferencia = $saldoActual - $saldoAnterior;
+            // Redondeada ANTES de decidir el estado: la resta de dos decimales en coma flotante deja residuos
+            // (ej. 3e-11) que pasaban por "subió/bajó" pero se mostraban como -$0.00.
+            $diferencia = round($saldoActual - $saldoAnterior, 2);
 
             $comparativaCuentas[] = [
+                'es_nueva' => (bool) $esNueva,
+                'en_transito_salida' => $enTransitoSalida[$cuenta->id] ?? 0,
+                'en_transito_entrada' => $enTransitoEntrada[$cuenta->id] ?? 0,
                 'id' => $cuenta->id,
                 'nombre' => $cuenta->nombre_cuenta,
                 'tipo' => $cuenta->tipo,
+                'banco' => $this->logoDeCuenta($cuenta),
                 'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
                 'saldo_anterior' => round($saldoAnterior, 2),
                 'saldo_actual' => round($saldoActual, 2),
@@ -237,7 +254,8 @@ class CierreCajaController extends Controller
             } else {
                 $deudaAnterior = $deudaActual;
             }
-            $diferencia = $deudaActual - $deudaAnterior;
+            // Redondeada antes de decidir el estado (ver la comparativa de cuentas).
+            $diferencia = round($deudaActual - $deudaAnterior, 2);
 
             $comparativaClientes[] = [
                 'id' => $cliente->id,
@@ -287,6 +305,10 @@ class CierreCajaController extends Controller
                 'comision_gestor_total' => $calculos['comision_gestor_total'] ?? 0,
                 'comisiones_pv_detalles' => $calculos['comisiones_pv_detalles'] ?? [],
                 'ganancia_agencia_total' => $calculos['ganancia_agencia_total'] ?? 0,
+                // Envíos de dinero abiertos que el usuario puede ver (informativo: no entra en ningún saldo)
+                'envios_en_transito' => TransferenciaPendiente::resumenAbiertosPara($user),
+                'envios_en_transito_detalle' => $this->detalleEnviosAbiertos($user),
+                'operaciones_multiples' => $this->detalleOperacionesMultiples($user, $inicioTurno),
                 // Resumen financiero
                 'ventas_brutas_usd' => $calculos['ventas_brutas_usd'] ?? 0,
                 'comisiones_pv_cup' => $calculos['comisiones_pv_cup'] ?? 0,
@@ -320,6 +342,7 @@ class CierreCajaController extends Controller
             ],
             // NUEVO: Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
+            'comparativa_cuentas_cobro' => $comparativaCuentasCobro,
             'comparativa_clientes' => $comparativaClientes,
             'tiene_cierre_anterior' => $ultimoCierre !== null,
         ];
@@ -404,14 +427,9 @@ class CierreCajaController extends Controller
         // Calcular diferencia usando el saldo esperado del backend
         $diferencia = round($saldoContado - $saldoEsperado, 2);
 
-        // Snapshot real de cuentas accesibles
-        $cuentasSnapshotQuery = Cuenta::with('moneda');
-        if (! in_array($user->role, ['admin', 'moderador'])) {
-            $cuentasSnapshotQuery->whereHas('users', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            });
-        }
-        $cuentasSnapshot = $cuentasSnapshotQuery->get()->map(function ($cuenta) {
+        // Snapshot de las cuentas cuyo saldo puede ver el usuario (a un vendedor, solo las de acceso `completo`:
+        // el saldo de una cuenta de cobro no debe quedar guardado en el cierre).
+        $cuentasSnapshot = $user->cuentasUsables()->with('moneda')->get()->map(function ($cuenta) {
             return [
                 'id' => $cuenta->id,
                 'nombre' => $cuenta->nombre_cuenta,
@@ -1030,6 +1048,7 @@ class CierreCajaController extends Controller
             $resumenPorMoneda[$moneda->codigo_moneda] = [
                 'moneda' => $moneda->codigo_moneda,
                 'tasa_cambio' => $moneda->tasa_cambio > 0 ? $moneda->tasa_cambio : 1,
+                'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
                 // Pagos que entraron a CUENTAS del vendedor (afectan saldo)
                 'ventas_efectivo_cuentas' => 0,
                 'ventas_transferencia_cuentas' => 0,
@@ -1135,6 +1154,8 @@ class CierreCajaController extends Controller
             $destinoNombre = $pago->cuenta
                 ? $pago->cuenta->nombre_cuenta
                 : ($pago->cliente ? $pago->cliente->nombre_cliente : null);
+            $bancoCuenta = CatalogoTarjetasService::porSlug($pago->cuenta?->imagen);
+            $monedaImagenUrl = CatalogoTarjetasService::monedaImagenPorSlug($pago->moneda?->imagen)['imagen_url'] ?? null;
             $itemVenta = [
                 'id' => 'p_'.$pago->id,
                 'venta_id' => $pago->venta_id,
@@ -1153,6 +1174,8 @@ class CierreCajaController extends Controller
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
                 'cliente_nombre' => $pago->cliente ? $pago->cliente->nombre_cliente : null,
                 'destino_nombre' => $destinoNombre,
+                'banco' => $bancoCuenta,
+                'moneda_imagen_url' => $monedaImagenUrl,
             ];
 
             // ===== CLASIFICAR PAGO POR DESTINO Y MÉTODO =====
@@ -1210,6 +1233,8 @@ class CierreCajaController extends Controller
                 'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
                 'destino_nombre' => $destinoNombre,
+                'banco' => $bancoCuenta,
+                'moneda_imagen_url' => $monedaImagenUrl,
                 'productos' => $detallesProductos,
             ];
 
@@ -1301,9 +1326,11 @@ class CierreCajaController extends Controller
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
                     'moneda' => $mov->moneda ?? 'USD',
+                    'moneda_imagen_url' => $resumenPorMoneda[$codigo]['moneda_imagen_url'] ?? null,
                     'hora' => $mov->created_at->format('H:i'),
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
+                    'banco' => $this->logoDeCuenta($mov->cuentaOrigen),
                     'usuario_nombre' => $mov->user?->name ?? 'Sistema',
                     'es_propio' => $mov->user_id == $user->id,
                 ];
@@ -1320,9 +1347,11 @@ class CierreCajaController extends Controller
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
                     'moneda' => $mov->moneda ?? 'USD',
+                    'moneda_imagen_url' => $resumenPorMoneda[$codigo]['moneda_imagen_url'] ?? null,
                     'hora' => $mov->created_at->format('H:i'),
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
+                    'banco' => $this->logoDeCuenta($mov->cuentaDestino),
                     'usuario_nombre' => $mov->user?->name ?? 'Sistema',
                     'es_propio' => $mov->user_id == $user->id,
                 ];
@@ -1831,6 +1860,172 @@ class CierreCajaController extends Controller
     }
 
     /**
+     * Cuentas que el vendedor tiene solo para cobrar (acceso `cobro`): no se le muestra su saldo ni se comparan
+     * con el cierre anterior, únicamente lo que cobró en ellas durante el turno. Admin y moderador no tienen
+     * cuentas de cobro (ven todas con saldo), así que para ellos es una lista vacía.
+     *
+     * @return array<int, array{id: int, nombre: string, tipo: string|null, banco: array{slug: string, nombre: string, imagen_url: string}|null, moneda: string|null, operado_turno: float}>
+     */
+    private function cuentasDeCobroDelTurno(User $user, mixed $inicioTurno): array
+    {
+        if (in_array($user->role, ['admin', 'moderador'], true)) {
+            return [];
+        }
+
+        $cuentasCobro = $user->cuentas()->wherePivot('acceso', Cuenta::ACCESO_COBRO)->with('moneda')->get();
+
+        if ($cuentasCobro->isEmpty()) {
+            return [];
+        }
+
+        $cobradoPorCuenta = PagoVenta::whereIn('cuenta_id', $cuentasCobro->pluck('id'))
+            ->whereHas('venta', fn ($q) => $q->where('user_id', $user->id)
+                ->where('created_at', '>=', $inicioTurno)
+                ->where('estado', 'completada'))
+            ->selectRaw('cuenta_id, SUM(monto) as total')
+            ->groupBy('cuenta_id')
+            ->pluck('total', 'cuenta_id');
+
+        return $cuentasCobro->map(fn (Cuenta $cuenta) => [
+            'id' => $cuenta->id,
+            'nombre' => $cuenta->nombre_cuenta,
+            'tipo' => $cuenta->tipo,
+            'banco' => $this->logoDeCuenta($cuenta),
+            'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+            'operado_turno' => round((float) ($cobradoPorCuenta[$cuenta->id] ?? 0), 2),
+        ])->values()->all();
+    }
+
+    /**
+     * Operaciones Múltiples (remesas) del turno. Solo las ven admin y moderador, como en todo el módulo: para un
+     * vendedor `visible` es false y no viaja nada. Mueven saldos de cuentas directamente (no crean un movimiento
+     * financiero), así que el Cierre no las contaba en ningún lado; esto es informativo y NO entra en el saldo
+     * esperado. Las anuladas se listan con su estado pero no suman al resumen.
+     *
+     * @return array{visible: bool, items: array<int, array<string, mixed>>, resumen: array{total: int, entradas: array<int, array{moneda: string, monto: float}>, salidas: array<int, array{moneda: string, monto: float}>}}
+     */
+    private function detalleOperacionesMultiples(User $user, mixed $inicioTurno): array
+    {
+        $vacio = ['visible' => false, 'items' => [], 'resumen' => ['total' => 0, 'entradas' => [], 'salidas' => []]];
+
+        if (! in_array($user->role, ['admin', 'moderador'], true)) {
+            return $vacio;
+        }
+
+        $remesas = Remesa::with(['user:id,name', 'entradaCuenta', 'entradaCliente', 'entradaProveedor', 'salidaCuenta', 'salidaCliente', 'salidaProveedor', 'mensajeroCuenta'])
+            ->where('fecha_operacion', '>=', $inicioTurno)
+            ->orderByDesc('id')
+            ->get();
+
+        $items = $remesas->map(fn (Remesa $remesa) => [
+            'id' => $remesa->id,
+            'hora' => $remesa->fecha_operacion->format('H:i'),
+            'usuario_nombre' => $remesa->user?->name ?? 'Sistema',
+            'es_propio' => $remesa->user_id === $user->id,
+            'estado' => $remesa->estado,
+            'anulada' => $remesa->estado === 'anulada',
+            'notas' => $remesa->notas,
+            'entrada' => [
+                'tipo' => $remesa->entrada_tipo,
+                'nombre' => $remesa->nombre_entrada ?? 'No especificado',
+                'monto' => (float) $remesa->entrada_monto,
+                'moneda' => $remesa->entrada_moneda,
+                'banco' => $this->logoDeCuenta($remesa->entradaCuenta),
+            ],
+            'salida' => [
+                'tipo' => $remesa->salida_tipo,
+                'nombre' => $remesa->nombre_salida ?? 'No especificado',
+                'monto' => (float) $remesa->salida_monto,
+                'moneda' => $remesa->salida_moneda,
+                'banco' => $this->logoDeCuenta($remesa->salidaCuenta),
+            ],
+            'mensajero' => $remesa->mensajero_cuenta_id ? [
+                'tipo' => 'cuenta',
+                'nombre' => $remesa->mensajeroCuenta?->nombre_cuenta ?? 'No especificado',
+                'monto' => (float) $remesa->mensajero_monto,
+                'moneda' => $remesa->mensajero_moneda,
+                'banco' => $this->logoDeCuenta($remesa->mensajeroCuenta),
+            ] : null,
+        ]);
+
+        $vigentes = $remesas->where('estado', '!=', 'anulada');
+        $sumarPorMoneda = fn ($pares) => collect($pares)
+            ->groupBy('moneda')
+            ->map(fn ($grupo, $moneda) => ['moneda' => (string) $moneda, 'monto' => round((float) $grupo->sum('monto'), 2)])
+            ->values()
+            ->all();
+
+        return [
+            'visible' => true,
+            'items' => $items->values()->all(),
+            'resumen' => [
+                'total' => $vigentes->count(),
+                'entradas' => $sumarPorMoneda($vigentes->map(fn (Remesa $r) => ['moneda' => $r->entrada_moneda, 'monto' => $r->entrada_monto])),
+                // El mensajero también es dinero que sale de una cuenta.
+                'salidas' => $sumarPorMoneda($vigentes->flatMap(fn (Remesa $r) => array_filter([
+                    ['moneda' => $r->salida_moneda, 'monto' => $r->salida_monto],
+                    $r->mensajero_cuenta_id ? ['moneda' => $r->mensajero_moneda, 'monto' => $r->mensajero_monto] : null,
+                ]))),
+            ],
+        ];
+    }
+
+    /**
+     * Envíos de dinero que siguen en tránsito y el usuario puede ver, repartidos en dos listas que suman lo
+     * mismo que `TransferenciaPendiente::resumenAbiertosPara()`: "por_recibir" son los que otro envió y le toca
+     * confirmar a este usuario (o a un admin/moderador, que confirma cualquiera); "enviados" son el resto, sobre
+     * todo los que salieron de él y esperan que el destino los confirme. Informativo: no entra en ningún saldo.
+     *
+     * @return array{enviados: array<int, array<string, mixed>>, por_recibir: array<int, array<string, mixed>>}
+     */
+    private function detalleEnviosAbiertos(User $user): array
+    {
+        $envios = TransferenciaPendiente::visiblesPara($user)
+            ->with(['cuentaOrigen.moneda', 'cuentaDestino.moneda', 'usuario:id,name'])
+            ->where('estado', TransferenciaPendiente::ESTADO_EN_TRANSITO)
+            ->orderByDesc('id')
+            ->get();
+
+        $items = $envios->map(function (TransferenciaPendiente $envio) use ($user) {
+            $esPropio = $envio->user_id === $user->id;
+
+            return [
+                'id' => $envio->id,
+                'fecha' => $envio->created_at->format('d/m H:i'),
+                'origen_nombre' => $envio->cuentaOrigen?->nombre_cuenta ?? 'No especificado',
+                'banco_origen' => $this->logoDeCuenta($envio->cuentaOrigen),
+                'destino_nombre' => $envio->cuentaDestino?->nombre_cuenta ?? 'No especificado',
+                'banco_destino' => $this->logoDeCuenta($envio->cuentaDestino),
+                'monto' => (float) $envio->monto,
+                'moneda' => $envio->moneda,
+                'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($envio->cuentaOrigen?->moneda?->imagen)['imagen_url'] ?? null,
+                'monto_destino' => (float) $envio->monto_destino,
+                'moneda_destino' => $envio->moneda_destino,
+                'tasa_cambio' => $envio->tasa_cambio_aplicada,
+                'usuario_nombre' => $envio->usuario?->name ?? 'Sistema',
+                'es_propio' => $esPropio,
+                'comentario' => $envio->comentario,
+                'por_recibir' => ! $esPropio && $envio->puedeRecibir($user),
+            ];
+        });
+
+        return [
+            'enviados' => $items->where('por_recibir', false)->values()->all(),
+            'por_recibir' => $items->where('por_recibir', true)->values()->all(),
+        ];
+    }
+
+    /**
+     * Logo de la cuenta (banco/tarjeta o insignia de efectivo) o null si no tiene uno asignado.
+     *
+     * @return array{slug: string, nombre: string, imagen_url: string}|null
+     */
+    private function logoDeCuenta(?Cuenta $cuenta): ?array
+    {
+        return CatalogoTarjetasService::porSlug($cuenta?->imagen);
+    }
+
+    /**
      * Obtiene el nombre descriptivo del origen de un movimiento
      */
     private function obtenerNombreOrigen($movimiento): string
@@ -1896,6 +2091,8 @@ class CierreCajaController extends Controller
             'hora' => $movimiento->created_at->format('H:i'),
             'afecta_saldo_usuario' => $afectaSaldoOrigen,
             'es_receptor' => $esReceptor,
+            'banco_origen' => $this->logoDeCuenta($movimiento->cuentaOrigen),
+            'banco_destino' => $this->logoDeCuenta($movimiento->cuentaDestino),
             'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
             'es_propio' => $movimiento->user_id == $user->id,
         ];
@@ -1943,6 +2140,9 @@ class CierreCajaController extends Controller
             ];
             $montoEntrada = $movimiento->monto;
         }
+
+        $itemEntrada['banco_origen'] = $itemSalida['banco_origen'];
+        $itemEntrada['banco_destino'] = $itemSalida['banco_destino'];
 
         // Si el usuario es el receptor, agregar a transferencias entrantes y al saldo
         if ($esReceptor && $itemEntrada) {

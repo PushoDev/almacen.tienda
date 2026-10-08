@@ -33,6 +33,8 @@ export interface Entidad {
     /** null cuando el usuario no puede ver el saldo (cuentas de cobro de un vendedor). */
     saldo: number | null;
     banco: Banco | null;
+    /** 'efectivo' o 'tarjeta' (`cuentas.tipo`): el efectivo es lo que viaja. Solo las cuentas lo traen. */
+    tipoCuenta?: string | null;
     /** Quién tiene la cuenta asignada: dice a quién se envía el dinero. */
     responsables?: string[];
     /** true si la cuenta es del usuario: una transferencia a una cuenta propia es inmediata. */
@@ -47,6 +49,8 @@ export interface CuentaEntidad {
     moneda: { codigo_moneda: string; simbolo_moneda: string };
     /** Logo real del banco/tarjeta (o insignia de efectivo); null si la cuenta no tiene uno asignado. */
     banco?: Banco | null;
+    /** 'efectivo' o 'tarjeta'. */
+    tipo?: string | null;
     responsables?: string[];
     propia?: boolean;
 }
@@ -71,9 +75,32 @@ export const entidadDeCuenta = (c: CuentaEntidad): Entidad => ({
     simbolo: c.moneda.simbolo_moneda,
     saldo: c.saldo_cuenta === null ? null : Number(c.saldo_cuenta) || 0,
     banco: c.banco ?? null,
+    tipoCuenta: c.tipo ?? null,
     responsables: c.responsables,
     propia: c.propia,
 });
+
+/** Badge Efectivo / Tarjeta de una cuenta (nada para clientes, proveedores o cuentas sin tipo). */
+export function BadgeTipoCuenta({ tipo, className }: { tipo?: string | null; className?: string }) {
+    if (tipo !== 'efectivo' && tipo !== 'tarjeta') {
+        return null;
+    }
+
+    return (
+        <Badge
+            variant="outline"
+            className={cn(
+                'shrink-0 text-[10px]',
+                tipo === 'efectivo'
+                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    : 'border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+                className,
+            )}
+        >
+            {tipo === 'efectivo' ? 'Efectivo' : 'Tarjeta'}
+        </Badge>
+    );
+}
 
 export const entidadDeCliente = (c: ClienteEntidad): Entidad => ({
     id: String(c.id),
@@ -322,6 +349,7 @@ export function SelectorEntidad({
                                         <span className="text-muted-foreground block truncate text-xs">{entidad.responsables.join(', ')}</span>
                                     )}
                                 </span>
+                                <BadgeTipoCuenta tipo={entidad.tipoCuenta} />
                                 {entidad.propia && (
                                     <Badge
                                         variant="outline"
@@ -359,7 +387,10 @@ export function TarjetaEntidad({ entidad, acento }: { entidad: Entidad; acento: 
             <Insignia entidad={entidad} tamano="lg" />
             <div className="min-w-0 flex-1 space-y-1">
                 <h3 className="truncate text-lg font-semibold">{entidad.nombre}</h3>
-                <Badge className={cn('border-0 px-3 py-0.5 font-bold text-white shadow-md', ACENTOS[acento].badge)}>{entidad.monedaCodigo}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={cn('border-0 px-3 py-0.5 font-bold text-white shadow-md', ACENTOS[acento].badge)}>{entidad.monedaCodigo}</Badge>
+                    <BadgeTipoCuenta tipo={entidad.tipoCuenta} />
+                </div>
                 {entidad.responsables && entidad.responsables.length > 0 && (
                     <p className="text-muted-foreground truncate text-xs">Responsable: {entidad.responsables.join(', ')}</p>
                 )}

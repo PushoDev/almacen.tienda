@@ -74,6 +74,59 @@ class TransferenciaPendienteController extends Controller
         ]);
     }
 
+    /**
+     * Hoja imprimible del envío: antes de recibir es el comprobante con el recuadro en blanco para anotar lo
+     * recibido; ya cerrado, la evidencia (lo recibido, la diferencia y quién lo confirmó). Sin saldos de cuentas.
+     * La puede abrir quien puede ver el envío. Se abre en pestaña nueva (Ctrl+P / Guardar PDF).
+     */
+    public function imprimir(TransferenciaPendiente $transferenciaPendiente): Response
+    {
+        $usuario = Auth::user();
+
+        abort_unless(
+            TransferenciaPendiente::visiblesPara($usuario)->whereKey($transferenciaPendiente->id)->exists(),
+            403,
+            'No tienes acceso a este envío.'
+        );
+
+        $transferenciaPendiente->load([
+            'cuentaOrigen.moneda',
+            'cuentaDestino.moneda',
+            'cuentaDestino.users:id,name',
+            'usuario:id,name',
+            'confirmador:id,name',
+            'seguimientos.usuario:id,name',
+        ]);
+
+        $envio = $this->presentar($transferenciaPendiente, $usuario);
+
+        return Inertia::render('Transacciones/ImprimirEnvio', [
+            'envio' => [
+                ...collect($envio)->only([
+                    'id', 'estado', 'monto', 'moneda', 'monto_destino', 'moneda_destino', 'tasa_cambio_aplicada', 'comentario',
+                    'monto_recibido', 'diferencia', 'diferencia_por_resolver', 'diferencia_nota', 'fecha_envio', 'fecha_confirmacion',
+                    'enviado_por', 'confirmado_por',
+                ])->all(),
+                'cuenta_origen' => ['nombre' => $envio['cuenta_origen']['nombre'], 'moneda' => $envio['cuenta_origen']['moneda']],
+                'cuenta_destino' => [
+                    'nombre' => $envio['cuenta_destino']['nombre'],
+                    'moneda' => $envio['cuenta_destino']['moneda'],
+                    'responsables' => $envio['cuenta_destino']['responsables'],
+                ],
+                // Quien y por qué cerró un envío rechazado o anulado
+                'motivo_cierre' => $transferenciaPendiente->seguimientos
+                    ->whereIn('estado', [TransferenciaPendiente::ESTADO_RECHAZADO, TransferenciaPendiente::ESTADO_ANULADO])
+                    ->sortByDesc('id')
+                    ->map(fn (TransferenciaPendienteSeguimiento $seguimiento) => [
+                        'observaciones' => $seguimiento->observaciones,
+                        'usuario' => $seguimiento->usuario?->name,
+                    ])
+                    ->first(),
+                'es_evidencia' => ! $transferenciaPendiente->estaEnTransito(),
+            ],
+        ]);
+    }
+
     public function confirmar(Request $request, TransferenciaPendiente $transferenciaPendiente): JsonResponse
     {
         abort_unless($transferenciaPendiente->puedeRecibir(Auth::user()), 403, 'No tienes acceso a este envío.');

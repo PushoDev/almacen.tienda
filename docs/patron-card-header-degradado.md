@@ -72,6 +72,8 @@ className="border-white/30 bg-white/20 text-white placeholder:text-white/70 back
 - `resources/js/pages/Productos/Show.tsx` (2026-09-19) — "Detalles del Producto" (azul), "Fichas hermanas" si hay (ámbar), "Distribución en Almacenes" (esmeralda), "Imagen del Producto" (índigo), "Códigos de Barras" (púrpura), "Resumen Rápido" (rosa).
 - `resources/js/pages/Productos/Index.tsx` (2026-09-19) — tabla "Lista de Productos" (teal, mismo color que "Lista de Clientes"/"Lista de Productos" en Comprar), buscador+filtros en Card plana sin degradado (mismo criterio que `Clientes/Index.tsx`).
 
+- `resources/js/pages/Cierres/Create.tsx` (2026-10-08) — "Ventas" (teal, `Package`) y "Por dónde entraron" (esmeralda, `Banknote`); ambas con `gap-0 overflow-hidden py-0` en el Card y `CardContent className="p-0"` (la tabla pegada al borde; con solo `pt-0` quedaba una franja vacía abajo). En tablas usar `bg-muted`/`bg-muted/50` para thead/tfoot: **`bg-sidebar-accent` es rojo en este tema**. Los 5 widgets de "Movimientos Financieros" son KPI con `SpotlightCard`, sin `CardHeader` degradado. `Cierres/Show.tsx` NO se tocó (pendiente). Quedan planas: Transacciones del Turno, Comparativa con Cierre Anterior y Finalizar Cierre.
+
 ## Dónde falta aplicarlo (pendiente, no arrancar sin que el cliente lo pida)
 
 El cliente mencionó en su momento que "existen otros lugares donde debemos arreglar eso también" pero no dijo cuáles — no asumir qué pantalla sigue, preguntar primero. **`Logistica/Index.tsx` queda explícitamente fuera** — el cliente pidió no tocarla en esta ronda (ver [[project_dashboard_resumen_financiero]]).

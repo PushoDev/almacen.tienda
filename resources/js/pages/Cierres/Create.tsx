@@ -1,11 +1,10 @@
 import HeadingSmall from '@/components/heading-small';
 import { ViaLogo } from '@/components/monedas/via-logo';
+import { type Banco, Insignia, type TipoEntidad } from '@/components/transacciones/entidad';
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
-    AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
@@ -13,17 +12,16 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SpotlightCard from '@/components/ui/spotlightcard';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import {
     AlertTriangle,
@@ -40,11 +38,17 @@ import {
     Eye,
     Globe,
     HandCoins,
-    Receipt,
+    Loader2,
+    Package,
+    Scale,
     Search,
+    Shuffle,
     ShoppingCart,
     Store,
     TrendingUp,
+    Truck,
+    Undo2,
+    Users,
     Wallet,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
@@ -61,6 +65,7 @@ interface Props extends PageProps {
     moneda_referencia?: string;
     // NUEVO: Comparativa con cierre anterior
     comparativa_cuentas?: ComparativaItem[];
+    comparativa_cuentas_cobro?: CuentaDeCobro[];
     comparativa_clientes?: ComparativaClienteItem[];
     tiene_cierre_anterior?: boolean;
 }
@@ -69,11 +74,29 @@ interface ComparativaItem {
     id: number;
     nombre: string;
     tipo: string;
+    /** Logo de la cuenta; null si no tiene uno asignado (y en cierres guardados antes de este dato). */
+    banco?: Banco | null;
+    /** Cuenta que no estaba en el cierre anterior: no hay saldo anterior real con qué compararla. */
+    es_nueva?: boolean;
+    /** Dinero enviado desde esta cuenta que sigue en tránsito (ya salió de su saldo). */
+    en_transito_salida?: number;
+    /** Dinero en camino hacia esta cuenta que todavía no se acredita. */
+    en_transito_entrada?: number;
     moneda: string;
     saldo_anterior: number;
     saldo_actual: number;
     diferencia: number;
     estado: 'subio' | 'bajo' | 'igual';
+}
+
+/** Cuenta que el vendedor tiene solo para cobrar: no se le muestra su saldo, solo lo cobrado en el turno. */
+interface CuentaDeCobro {
+    id: number;
+    nombre: string;
+    tipo: string | null;
+    banco: Banco | null;
+    moneda: string | null;
+    operado_turno: number;
 }
 
 interface ComparativaClienteItem {
@@ -106,11 +129,15 @@ interface OperacionDetaile {
     via_info?: { slug: string; nombre: string; imagen_url: string | null } | null;
     cuenta_nombre?: string | null;
     destino_nombre?: string | null;
+    /** Logo de la cuenta destino; null si no tiene uno asignado (y en cierres viejos, que no lo traen). */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
+    moneda_imagen_url?: string | null;
     productos: ProductItem[];
 }
 
 interface DetalleMoneda {
     moneda: string;
+    moneda_imagen_url?: string | null;
     tasa_cambio: number;
     ventas_efectivo: number;
     ventas_transferencia: number;
@@ -170,11 +197,270 @@ interface ItemMovimiento {
     desc: string;
     monto: number;
     moneda?: string;
+    moneda_imagen_url?: string | null;
     hora: string;
     origen: string;
     destino: string;
+    /** Logo de la cuenta de la operación; null si no tiene uno asignado (y en cierres viejos). */
+    banco?: Banco | null;
     usuario_nombre?: string;
     es_propio?: boolean;
+}
+
+/** Separa "Cuenta: X" / "Cliente: Y" / "Proveedor: Z" (como lo arma el servidor) en tipo y nombre. */
+const partirEntidad = (texto: string): { tipo: TipoEntidad; nombre: string } => {
+    const [prefijo, ...resto] = texto.split(': ');
+    if (resto.length === 0) {
+        return { tipo: 'cuenta', nombre: texto };
+    }
+    return { tipo: prefijo === 'Cliente' ? 'cliente' : prefijo === 'Proveedor' ? 'proveedor' : 'cuenta', nombre: resto.join(': ') };
+};
+
+/** `origen_tipo`/`destino_tipo` del servidor también puede traer 'desconocido'; se trata como cuenta. */
+const tipoEntidadDe = (tipo: string): TipoEntidad => (tipo === 'cliente' || tipo === 'proveedor' ? tipo : 'cuenta');
+
+/** Envío de dinero que sigue en tránsito (sin confirmar). Informativo: no entra en el saldo esperado. */
+interface EnvioAbierto {
+    id: number;
+    fecha: string;
+    origen_nombre: string;
+    banco_origen: Banco | null;
+    destino_nombre: string;
+    banco_destino: Banco | null;
+    monto: number;
+    moneda: string;
+    moneda_imagen_url: string | null;
+    monto_destino: number;
+    moneda_destino: string;
+    tasa_cambio: number | null;
+    usuario_nombre: string;
+    es_propio: boolean;
+    comentario: string | null;
+    por_recibir: boolean;
+}
+
+/** Una pata (entrada, salida o mensajero) de una Operación Múltiple. */
+interface PataOperacionMultiple {
+    tipo: string;
+    nombre: string;
+    monto: number;
+    moneda: string;
+    banco: Banco | null;
+}
+
+/** Operación Múltiple (remesa) del turno. Solo la ven admin y moderador; es informativa: no entra en el saldo esperado. */
+interface OperacionMultiple {
+    id: number;
+    hora: string;
+    usuario_nombre: string;
+    es_propio: boolean;
+    estado: string;
+    anulada: boolean;
+    notas: string | null;
+    entrada: PataOperacionMultiple;
+    salida: PataOperacionMultiple;
+    mensajero: PataOperacionMultiple | null;
+}
+
+interface OperacionesMultiplesCierre {
+    visible: boolean;
+    items: OperacionMultiple[];
+    resumen: { total: number; entradas: Array<{ moneda: string; monto: number }>; salidas: Array<{ moneda: string; monto: number }> };
+}
+
+/** Cuánto cambió respecto al cierre anterior: `bueno` pinta de verde (mejoró) o rojo (empeoró); null = sin cambio. */
+function BadgeDiferencia({ diferencia, moneda, bueno }: { diferencia: number; moneda: string; bueno: boolean | null }) {
+    // Menos de un centavo no es un cambio: evita un "-$0.00" si llega un residuo de redondeo.
+    if (bueno === null || Math.abs(diferencia) < 0.005) {
+        return <Badge className="text-muted-foreground border border-white/10 bg-white/5 font-mono">—</Badge>;
+    }
+    const Flecha = diferencia > 0 ? ArrowUp : ArrowDown;
+    const clase = bueno
+        ? 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+        : 'border border-red-400/30 bg-red-500/10 text-red-700 dark:text-red-300';
+    // Sin backdrop-blur: se repite en cada fila (más de cien) y las capas de desenfoque saturan la GPU.
+    return (
+        <Badge className={`gap-1 font-mono font-bold whitespace-nowrap ${clase}`}>
+            <Flecha className="h-3 w-3" />
+            {diferencia > 0 ? '+' : '-'}${Math.abs(diferencia).toFixed(2)} {moneda}
+        </Badge>
+    );
+}
+
+const COLORES_WIDGET_CAMBIO = {
+    emerald: { caja: 'border-emerald-400/30 bg-emerald-500/5 dark:bg-emerald-500/10', icono: 'from-emerald-500 to-green-600 shadow-emerald-500/30', cifra: 'text-emerald-600 dark:text-emerald-400' },
+    red: { caja: 'border-red-400/30 bg-red-500/5 dark:bg-red-500/10', icono: 'from-red-500 to-rose-600 shadow-red-500/30', cifra: 'text-red-600 dark:text-red-400' },
+    indigo: { caja: 'border-indigo-400/30 bg-indigo-500/5 dark:bg-indigo-500/10', icono: 'from-indigo-500 to-violet-600 shadow-indigo-500/30', cifra: 'text-indigo-600 dark:text-indigo-400' },
+} as const;
+
+/** Widget de conteo de la Comparativa (subieron / bajaron / sin cambio), con el borde animado como los demás. */
+function WidgetCambio({ estado, color, icono: Icono, titulo, valor }: { estado: 'disponible' | 'agotado' | 'indigo'; color: keyof typeof COLORES_WIDGET_CAMBIO; icono: React.ElementType; titulo: string; valor: number }) {
+    const c = COLORES_WIDGET_CAMBIO[color];
+    return (
+        <SpotlightCard estado={estado} className={`rounded-xl border p-3 shadow-sm backdrop-blur-sm ${c.caja}`}>
+            <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-white shadow-md ${c.icono}`}>
+                    <Icono className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{titulo}</p>
+                    <p className={`text-2xl font-black ${c.cifra}`}>{valor}</p>
+                </div>
+            </div>
+        </SpotlightCard>
+    );
+}
+
+/** Tabla de las Operaciones Múltiples del turno: entrada, salida y mensajero con el logo de cada cuenta. */
+function TablaOperacionesMultiples({ operaciones, mensajeVacio }: { operaciones: OperacionMultiple[]; mensajeVacio: string }) {
+    const pata = (p: PataOperacionMultiple, clase: string, signo: string, anulada: boolean) => (
+        <div className={anulada ? 'space-y-1 line-through opacity-60' : 'space-y-1'}>
+            <EntidadFila tipo={tipoEntidadDe(p.tipo)} nombre={p.nombre} banco={p.banco} />
+            <Badge className={`font-mono font-bold whitespace-nowrap backdrop-blur-sm ${clase}`}>
+                {signo}${Number(p.monto).toFixed(2)} {p.moneda}
+            </Badge>
+        </div>
+    );
+
+    return (
+        <div className="rounded-md border">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-16">Hora</TableHead>
+                        <TableHead>Entrada</TableHead>
+                        <TableHead>Salida</TableHead>
+                        <TableHead>Mensajero</TableHead>
+                        <TableHead className="w-28">Creado por</TableHead>
+                        <TableHead className="w-28 text-center">Estado</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {operaciones.length > 0 ? (
+                        operaciones.map((op) => (
+                            <TableRow key={op.id} className={!op.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
+                                <TableCell className="font-mono text-xs">{op.hora}</TableCell>
+                                <TableCell className="text-xs">
+                                    {pata(op.entrada, 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', '+', op.anulada)}
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                    {pata(op.salida, 'border border-red-400/30 bg-red-500/10 text-red-700 dark:text-red-300', '-', op.anulada)}
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                    {op.mensajero ? (
+                                        pata(op.mensajero, 'border border-amber-400/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', '-', op.anulada)
+                                    ) : (
+                                        <span className="text-muted-foreground">-</span>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                    {op.es_propio ? (
+                                        <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
+                                    ) : (
+                                        op.usuario_nombre
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    <Link href={route('transacciones.remesa.show', op.id)}>
+                                        {op.anulada ? (
+                                            <Badge className="border border-red-400/30 bg-red-500/10 text-red-700 backdrop-blur-sm dark:text-red-300">Anulada</Badge>
+                                        ) : (
+                                            <Badge className="border border-cyan-400/30 bg-cyan-500/10 text-cyan-700 backdrop-blur-sm dark:text-cyan-300">Ver detalle</Badge>
+                                        )}
+                                    </Link>
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
+                                {mensajeVacio}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/** Tabla de los envíos de dinero abiertos: los que enviaste (esperan confirmación) o los que te toca recibir. */
+function TablaEnviosAbiertos({ envios, mensajeVacio, porRecibir }: { envios: EnvioAbierto[]; mensajeVacio: string; porRecibir: boolean }) {
+    return (
+        <div className="rounded-md border">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-24">Fecha</TableHead>
+                        <TableHead>Origen</TableHead>
+                        <TableHead>Destino</TableHead>
+                        <TableHead className="w-32">Enviado por</TableHead>
+                        <TableHead className="w-48 text-right">Monto</TableHead>
+                        <TableHead className="w-32 text-center">Estado</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {envios.length > 0 ? (
+                        envios.map((envio) => (
+                            <TableRow key={envio.id}>
+                                <TableCell className="font-mono text-xs">{envio.fecha}</TableCell>
+                                <TableCell className="text-xs">
+                                    <EntidadFila tipo="cuenta" nombre={envio.origen_nombre} banco={envio.banco_origen} />
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                    <EntidadFila tipo="cuenta" nombre={envio.destino_nombre} banco={envio.banco_destino} />
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                    {envio.es_propio ? (
+                                        <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
+                                    ) : (
+                                        envio.usuario_nombre
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <Badge className="gap-1.5 border border-amber-400/30 bg-amber-500/10 font-mono font-bold whitespace-nowrap text-amber-700 backdrop-blur-sm dark:text-amber-300">
+                                        {envio.moneda_imagen_url && <img src={envio.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto" />}
+                                        ${Number(envio.monto).toFixed(2)} {envio.moneda}
+                                    </Badge>
+                                    {envio.moneda !== envio.moneda_destino && (
+                                        <div className="text-muted-foreground mt-0.5 font-mono text-[10px] leading-tight whitespace-nowrap">
+                                            ≈ ${Number(envio.monto_destino).toFixed(2)} {envio.moneda_destino}
+                                            {envio.tasa_cambio ? <span className="ml-0.5">@ {Number(envio.tasa_cambio).toFixed(2)}</span> : null}
+                                        </div>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    <Link href={route('transacciones.envios.index', { estado: porRecibir ? 'por_confirmar' : 'en_transito' })}>
+                                        {porRecibir ? (
+                                            <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30">Confirma tú</Badge>
+                                        ) : (
+                                            <Badge className="border border-amber-400/30 bg-amber-500/10 text-amber-700 backdrop-blur-sm dark:text-amber-300">Sin confirmar</Badge>
+                                        )}
+                                    </Link>
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
+                                {mensajeVacio}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
+/** Logo de la cuenta (o ícono de cliente/proveedor) junto a su nombre. */
+function EntidadFila({ tipo, nombre, banco }: { tipo: TipoEntidad; nombre: string; banco: Banco | null }) {
+    return (
+        <div className="flex items-center gap-2" title={nombre}>
+            <Insignia entidad={{ id: '0', tipo, nombre, monedaCodigo: '', simbolo: '', saldo: null, banco }} tamano="sm" />
+            <span className="max-w-[140px] truncate">{nombre}</span>
+        </div>
+    );
 }
 
 interface TransferenciaItem {
@@ -188,6 +474,8 @@ interface TransferenciaItem {
     moneda_destino: string;
     destino_tipo: string;
     destino_nombre: string;
+    banco_origen?: Banco | null;
+    banco_destino?: Banco | null;
     tasa_cambio: number;
     hora: string;
     afecta_saldo_usuario?: boolean;
@@ -227,6 +515,10 @@ interface Calculos {
     detalles: DetalleMoneda[];
     transferencias_resumen?: TransferenciasResumen;
     // NUEVO: Totales separados por destino
+    /** Envíos de dinero abiertos que el usuario puede ver (informativo: no entra en el saldo esperado). */
+    envios_en_transito?: { total: number; por_confirmar: number; montos: Array<{ moneda: string; monto: number }> };
+    envios_en_transito_detalle?: { enviados: EnvioAbierto[]; por_recibir: EnvioAbierto[] };
+    operaciones_multiples?: OperacionesMultiplesCierre;
     ventas_a_cuentas_total_usd?: number;
     ventas_a_clientes_total_usd?: number;
     ventas_a_cuentas_efectivo_usd?: number;
@@ -261,6 +553,10 @@ interface Calculos {
     ventas_anuladas_count?: number;
     ventas_anuladas_total_usd?: number;
     ventas_anuladas_detalles?: VentaAnuladaItem[];
+    // Ventas completadas que después se devolvieron (mismo formato que las anuladas)
+    ventas_devueltas_count?: number;
+    ventas_devueltas_total_usd?: number;
+    ventas_devueltas_detalles?: VentaAnuladaItem[];
     // Mensajero del turno
     mensajero_total_usd?: number;
     mensajero_total_cup?: number;
@@ -380,6 +676,7 @@ export default function Create({
     moneda_referencia = 'USD',
     almacenes = [],
     comparativa_cuentas = [],
+    comparativa_cuentas_cobro = [],
     comparativa_clientes = [],
     tiene_cierre_anterior = false,
     auth,
@@ -492,6 +789,7 @@ export default function Create({
     // NUEVO: Calcular total de comisiones a gestores
     const totalComisionesGestor = calculos.comisiones_gestor_total ?? 0;
     const comisionesGestorDetalles = calculos.comisiones_gestor_detalles ?? [];
+    const enviosEnTransito = calculos.envios_en_transito ?? { total: 0, por_confirmar: 0, montos: [] };
 
     // Agrupar comisiones de gestores por moneda
     const comisionesPorMoneda = comisionesGestorDetalles.reduce(
@@ -564,6 +862,31 @@ export default function Create({
         [todasTransferencias, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
     );
 
+    // Envíos de dinero sin confirmar: los que salieron de ti y los que te toca recibir (mismos filtros que lo demás).
+    const enviosEnviados = calculos.envios_en_transito_detalle?.enviados ?? [];
+    const enviosPorRecibir = calculos.envios_en_transito_detalle?.por_recibir ?? [];
+    const filtrarEnvios = (envios: EnvioAbierto[]) =>
+        envios.filter((e) =>
+            coincideFiltrosTransaccion(
+                e.es_propio,
+                `${e.origen_nombre} ${e.destino_nombre} ${e.usuario_nombre} ${e.comentario ?? ''}`,
+                [e.moneda, e.moneda_destino],
+            ),
+        );
+    const enviosEnviadosFiltrados = filtrarEnvios(enviosEnviados);
+    const enviosPorRecibirFiltrados = filtrarEnvios(enviosPorRecibir);
+
+    // Operaciones Múltiples (solo admin/moderador): el servidor manda `visible: false` al resto.
+    const operacionesMultiples = calculos.operaciones_multiples;
+    const verOperacionesMultiples = operacionesMultiples?.visible === true;
+    const operacionesFiltradas = (operacionesMultiples?.items ?? []).filter((op) =>
+        coincideFiltrosTransaccion(
+            op.es_propio,
+            `${op.entrada.nombre} ${op.salida.nombre} ${op.mensajero?.nombre ?? ''} ${op.usuario_nombre} ${op.notas ?? ''}`,
+            [op.entrada.moneda, op.salida.moneda, ...(op.mensajero ? [op.mensajero.moneda] : [])],
+        ),
+    );
+
     // Cuando se filtra por una moneda específica, mostrar la transferencia desde la
     // perspectiva de esa moneda (signo/monto principal) en vez del `tipo` canónico
     // que trae el backend (pensado solo para la vista "Todas").
@@ -580,25 +903,71 @@ export default function Create({
     const [busquedaCuentas, setBusquedaCuentas] = useState('');
     const [filtroTipoCuentas, setFiltroTipoCuentas] = useState('todos');
     const [busquedaClientes, setBusquedaClientes] = useState('');
+    const [soloConCambios, setSoloConCambios] = useState(false);
 
     const tiposUnicos = useMemo(() => {
         const tipos = new Set((comparativa_cuentas ?? []).map(c => c.tipo));
         return ['todos', ...Array.from(tipos).sort()];
     }, [comparativa_cuentas]);
 
+    // Las que más cambiaron primero (el cambio se mide en la moneda de cada cuenta); a igual cambio, por nombre.
     const cuentasFiltradas = useMemo(() => {
-        return (comparativa_cuentas ?? []).filter(c => {
-            const matchTexto = !busquedaCuentas || c.nombre.toLowerCase().includes(busquedaCuentas.toLowerCase());
-            const matchTipo = filtroTipoCuentas === 'todos' || c.tipo === filtroTipoCuentas;
-            return matchTexto && matchTipo;
-        });
-    }, [comparativa_cuentas, busquedaCuentas, filtroTipoCuentas]);
+        return (comparativa_cuentas ?? [])
+            .filter(c => {
+                const matchTexto = !busquedaCuentas || c.nombre.toLowerCase().includes(busquedaCuentas.toLowerCase());
+                const matchTipo = filtroTipoCuentas === 'todos' || c.tipo === filtroTipoCuentas;
+                const matchCambio = !soloConCambios || c.estado !== 'igual' || c.es_nueva === true;
+                return matchTexto && matchTipo && matchCambio;
+            })
+            .sort(
+                (a, b) =>
+                    Number(b.es_nueva ?? false) - Number(a.es_nueva ?? false) ||
+                    Math.abs(b.diferencia) - Math.abs(a.diferencia) ||
+                    a.nombre.localeCompare(b.nombre),
+            );
+    }, [comparativa_cuentas, busquedaCuentas, filtroTipoCuentas, soloConCambios]);
 
     const clientesFiltrados = useMemo(() => {
-        return (comparativa_clientes ?? []).filter(c => {
-            return !busquedaClientes || c.nombre.toLowerCase().includes(busquedaClientes.toLowerCase());
+        return (comparativa_clientes ?? [])
+            .filter(c => {
+                const matchTexto = !busquedaClientes || c.nombre.toLowerCase().includes(busquedaClientes.toLowerCase());
+                const matchCambio = !soloConCambios || c.estado !== 'igual';
+                return matchTexto && matchCambio;
+            })
+            .sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia) || a.nombre.localeCompare(b.nombre));
+    }, [comparativa_clientes, busquedaClientes, soloConCambios]);
+
+    // Resumen de la comparativa: cuántas subieron/bajaron y cuánto se movió por moneda (o el saldo actual si es el primer cierre).
+    const resumenCuentas = useMemo(() => {
+        const lista = comparativa_cuentas ?? [];
+        const porMoneda: Record<string, { saldo: number; diferencia: number }> = {};
+        lista.forEach((c) => {
+            porMoneda[c.moneda] = porMoneda[c.moneda] ?? { saldo: 0, diferencia: 0 };
+            porMoneda[c.moneda].saldo += Number(c.saldo_actual) || 0;
+            // Una cuenta nueva no tiene saldo anterior: su saldo entero no es un "movimiento" y distorsionaría el neto.
+            if (!c.es_nueva) {
+                porMoneda[c.moneda].diferencia += Number(c.diferencia) || 0;
+            }
         });
-    }, [comparativa_clientes, busquedaClientes]);
+        return {
+            nuevas: lista.filter((c) => c.es_nueva).length,
+            subieron: lista.filter((c) => !c.es_nueva && c.estado === 'subio').length,
+            bajaron: lista.filter((c) => !c.es_nueva && c.estado === 'bajo').length,
+            iguales: lista.filter((c) => !c.es_nueva && c.estado === 'igual').length,
+            porMoneda: Object.entries(porMoneda).sort(([a], [b]) => a.localeCompare(b)),
+        };
+    }, [comparativa_cuentas]);
+
+    const resumenClientes = useMemo(() => {
+        const lista = comparativa_clientes ?? [];
+        return {
+            mejoraron: lista.filter((c) => c.estado === 'mejoro').length,
+            empeoraron: lista.filter((c) => c.estado === 'empeoro').length,
+            iguales: lista.filter((c) => c.estado === 'igual').length,
+            deudaTotal: lista.reduce((s, c) => s + (Number(c.deuda_actual) || 0), 0),
+            diferenciaTotal: lista.reduce((s, c) => s + (Number(c.diferencia) || 0), 0),
+        };
+    }, [comparativa_clientes]);
 
     const submit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -615,6 +984,7 @@ export default function Create({
                 console.error('Errores en el cierre:', err);
                 sileo.error({ title: 'Error al cerrar', description: 'Revisa los datos e inténtalo de nuevo' });
             },
+            onFinish: () => setShowConfirmModal(false),
         });
     };
 
@@ -793,16 +1163,22 @@ export default function Create({
                 )}
 
                 {/* Tabla Ventas: todos los productos del turno */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Receipt className="h-5 w-5" />
-                            Ventas
-                        </CardTitle>
-                        <CardDescription>Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).</CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-teal-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Ventas</CardTitle>
+                                <CardDescription className="text-teal-100">
+                                    Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto rounded-lg border">
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-muted text-muted-foreground">
                                     <tr>
@@ -846,11 +1222,17 @@ export default function Create({
                                                 <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
                                                 <td className="px-4 py-2 text-center">
-                                                    <span className="text-primary font-bold">{linea.cantidad}</span>
+                                                    <Badge className="border border-teal-400/30 bg-teal-500/10 px-2.5 py-0.5 font-bold text-teal-700 backdrop-blur-sm dark:text-teal-300">
+                                                        {linea.cantidad}
+                                                    </Badge>
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
                                                 <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right font-mono text-green-600">${Number(linea.comision).toFixed(2)}</td>
+                                                <td className="px-4 py-2 text-right">
+                                                    <Badge className="border border-emerald-400/30 bg-emerald-500/10 font-mono text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                        ${Number(linea.comision).toFixed(2)}
+                                                    </Badge>
+                                                </td>
                                             </tr>
                                         ))
                                     ) : (
@@ -866,12 +1248,16 @@ export default function Create({
                                         <td colSpan={4} className="px-4 py-3 text-right font-bold">
                                             Total
                                         </td>
-                                        <td className="px-4 py-3 text-center font-bold">{lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <Badge className="border-0 bg-gradient-to-r from-teal-500 to-teal-600 px-3 py-0.5 font-black text-white shadow-md shadow-teal-500/30">
+                                                {lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}
+                                            </Badge>
+                                        </td>
                                         <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-teal-700 dark:text-teal-300">
                                             ${totalVentasProductos.toFixed(2)}
                                         </td>
-                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-emerald-600">
                                             ${totalComisionProductos.toFixed(2)}
                                         </td>
                                     </tr>
@@ -882,17 +1268,21 @@ export default function Create({
                 </Card>
 
                 {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Banknote className="h-5 w-5" />
-                            Por dónde entraron
-                        </CardTitle>
-                        <CardDescription>
-                            Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
-                        </CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-emerald-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Banknote className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Por dónde entraron</CardTitle>
+                                <CardDescription className="text-emerald-100">
+                                    Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-6 p-6">
                         {monedasConPagos.length > 0 ? (
                             monedasConPagos.map((moneda) => {
                                 const metodos = pagosPorMonedaYMetodo[moneda];
@@ -902,8 +1292,24 @@ export default function Create({
                                 const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
 
                                 return (
-                                    <div key={moneda} className="space-y-2">
-                                        <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
+                                    <div key={moneda} className="space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 px-4 py-3 backdrop-blur-sm dark:bg-emerald-500/10">
+                                            <div className="flex items-center gap-3">
+                                                {detalleMoneda?.moneda_imagen_url ? (
+                                                    <img src={detalleMoneda.moneda_imagen_url} alt={moneda} className="h-9 w-auto object-contain drop-shadow-md" />
+                                                ) : (
+                                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                                        <DollarSign className="h-5 w-5" />
+                                                    </span>
+                                                )}
+                                                <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 px-3 py-0.5 text-sm font-black text-white shadow-md shadow-emerald-500/30">
+                                                    {moneda}
+                                                </Badge>
+                                            </div>
+                                            <Badge className="border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                {cantidadMoneda} {cantidadMoneda === 1 ? 'venta' : 'ventas'} · {Number(totalMoneda).toFixed(2)} {moneda}
+                                            </Badge>
+                                        </div>
                                         <Table>
                                             <TableHeader>
                                                 <TableRow data-state="open:bg-muted/40">
@@ -934,6 +1340,8 @@ export default function Create({
                                                         }
                                                         return etiquetaMetodo === etiqueta;
                                                     });
+                                                    const primeraOperacion = operacionesPorMetodo[0];
+                                                    const esEfectivoMetodo = primeraOperacion?.tipo_pago === 'efectivo';
 
                                                     return (
                                                         <CollapsibleRoot key={`${moneda}-${etiqueta}`} asChild>
@@ -941,17 +1349,73 @@ export default function Create({
                                                                 {/* FILA PRINCIPAL */}
                                                                 <CollapsibleTrigger asChild>
                                                                     <TableRow className="hover:bg-muted/50 cursor-pointer">
-                                                                        <TableCell className="flex items-center gap-2 font-medium">
-                                                                            <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
-                                                                            {etiqueta}
+                                                                        <TableCell className="flex items-center gap-3 font-medium">
+                                                                            <ChevronDown className="collapsible-trigger-icon h-4 w-4 shrink-0 transition-transform" />
+                                                                            {esEfectivoMetodo ? (
+                                                                                primeraOperacion?.banco?.imagen_url || primeraOperacion?.moneda_imagen_url ? (
+                                                                                    <img
+                                                                                        src={primeraOperacion.banco?.imagen_url ?? primeraOperacion.moneda_imagen_url ?? ''}
+                                                                                        alt=""
+                                                                                        aria-hidden="true"
+                                                                                        className="h-8 w-auto max-w-14 object-contain"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                                                                        <Banknote className="h-4 w-4" />
+                                                                                    </span>
+                                                                                )
+                                                                            ) : (
+                                                                                <>
+                                                                                    {primeraOperacion?.via_info && (
+                                                                                        <ViaLogo
+                                                                                            slug={primeraOperacion.via_info.slug}
+                                                                                            nombre={primeraOperacion.via_info.nombre}
+                                                                                            imagenUrl={primeraOperacion.via_info.imagen_url}
+                                                                                            className="h-6"
+                                                                                        />
+                                                                                    )}
+                                                                                    {primeraOperacion?.banco?.imagen_url && primeraOperacion.banco.slug !== primeraOperacion.via_info?.slug ? (
+                                                                                        <img
+                                                                                            src={primeraOperacion.banco.imagen_url}
+                                                                                            alt={primeraOperacion.banco.nombre}
+                                                                                            className="h-8 w-auto max-w-14 rounded-sm object-contain shadow-sm"
+                                                                                        />
+                                                                                    ) : (
+                                                                                        !primeraOperacion?.via_info &&
+                                                                                        !primeraOperacion?.banco && (
+                                                                                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400">
+                                                                                                <CreditCard className="h-4 w-4" />
+                                                                                            </span>
+                                                                                        )
+                                                                                    )}
+                                                                                </>
+                                                                            )}
+                                                                            <span className="flex flex-col gap-1">
+                                                                                <span>{etiqueta}</span>
+                                                                                <Badge
+                                                                                    className={
+                                                                                        esEfectivoMetodo
+                                                                                            ? 'w-fit border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300'
+                                                                                            : 'w-fit border border-sky-400/30 bg-sky-500/10 text-sky-700 backdrop-blur-sm dark:text-sky-300'
+                                                                                    }
+                                                                                >
+                                                                                    {esEfectivoMetodo ? 'Efectivo' : 'Transferencia'}
+                                                                                </Badge>
+                                                                            </span>
                                                                         </TableCell>
 
-                                                                        <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
+                                                                        <TableCell className="text-center">
+                                                                            <Badge className="border border-teal-400/30 bg-teal-500/10 px-2.5 font-mono font-bold text-teal-700 backdrop-blur-sm dark:text-teal-300">
+                                                                                {data.cantidad}
+                                                                            </Badge>
+                                                                        </TableCell>
 
                                                                         <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
 
-                                                                        <TableCell className="text-right font-mono font-medium text-green-600">
-                                                                            ${totalEquivalente.toFixed(2)}
+                                                                        <TableCell className="text-right">
+                                                                            <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 font-mono font-bold text-white shadow-md shadow-emerald-500/30">
+                                                                                ${totalEquivalente.toFixed(2)}
+                                                                            </Badge>
                                                                         </TableCell>
                                                                     </TableRow>
                                                                 </CollapsibleTrigger>
@@ -1003,18 +1467,30 @@ export default function Create({
                                                                                                     </div>
 
                                                                                                     <div className="flex items-center gap-4">
-                                                                                                        <span className="text-muted-foreground text-sm">
-                                                                                                            {operacion.cuenta_nombre
-                                                                                                                ? `Cuenta: ${operacion.cuenta_nombre}`
-                                                                                                                : ''}
-                                                                                                            {operacion.destino_nombre
-                                                                                                                ? ` - ${operacion.destino_nombre}`
-                                                                                                                : ''}
-                                                                                                        </span>
+                                                                                                        {operacion.cuenta_nombre ? (
+                                                                                                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/5 py-1 pr-3 pl-1.5 text-sm backdrop-blur-sm">
+                                                                                                                {operacion.banco?.imagen_url ? (
+                                                                                                                    <img
+                                                                                                                        src={operacion.banco.imagen_url}
+                                                                                                                        alt={operacion.banco.nombre}
+                                                                                                                        className="h-6 w-auto max-w-10 object-contain"
+                                                                                                                    />
+                                                                                                                ) : (
+                                                                                                                    <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                                                                                                )}
+                                                                                                                <span className="font-medium">{operacion.cuenta_nombre}</span>
+                                                                                                            </span>
+                                                                                                        ) : (
+                                                                                                            operacion.destino_nombre && (
+                                                                                                                <Badge className="border border-sky-400/30 bg-sky-500/10 text-sky-700 backdrop-blur-sm dark:text-sky-300">
+                                                                                                                    {operacion.destino_nombre}
+                                                                                                                </Badge>
+                                                                                                            )
+                                                                                                        )}
 
-                                                                                                        <span className="font-mono font-bold text-green-600">
+                                                                                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 font-mono font-bold text-white shadow-md shadow-emerald-500/30">
                                                                                                             ${Number(operacion.monto).toFixed(2)}
-                                                                                                        </span>
+                                                                                                        </Badge>
                                                                                                     </div>
                                                                                                 </div>
 
@@ -1168,12 +1644,18 @@ export default function Create({
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="font-bold">Total {moneda}</TableCell>
-                                                    <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge className="border-0 bg-gradient-to-r from-teal-500 to-teal-600 px-3 font-mono font-black text-white shadow-md shadow-teal-500/30">
+                                                            {cantidadMoneda}
+                                                        </Badge>
+                                                    </TableCell>
                                                     <TableCell className="text-right font-mono font-bold">
                                                         {Number(totalMoneda).toFixed(2)} {moneda}
                                                     </TableCell>
-                                                    <TableCell className="text-right font-mono font-bold text-green-600">
-                                                        ${totalEquivalenteMoneda.toFixed(2)}
+                                                    <TableCell className="text-right">
+                                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 px-3 font-mono text-base font-black text-white shadow-md shadow-emerald-500/30">
+                                                            ${totalEquivalenteMoneda.toFixed(2)}
+                                                        </Badge>
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
@@ -1190,67 +1672,211 @@ export default function Create({
                 {/* Movimientos Financieros */}
                 <div className="space-y-2">
                     <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
-                    <div className="grid grid-cols-4 gap-2">
-                        <Card className="border-red-200 bg-red-500/5">
-                            <CardContent className="p-3 text-center">
-                                <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
-                                <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)} USD</p>
-                                <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                    <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${verOperacionesMultiples ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}>
+                        <SpotlightCard
+                            estado="agotado"
+                            className="rounded-xl border border-red-400/30 bg-red-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-red-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-md shadow-red-500/30">
+                                    <ArrowUp className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Gastos</p>
+                                    <p className="text-2xl font-black text-red-600 dark:text-red-400">${Number(totalGastos).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-red-400/30 bg-red-500/10 text-red-700 backdrop-blur-sm dark:text-red-300">USD</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-red-500 to-rose-600 shadow-md shadow-red-500/30">{todosGastos.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
 
-                        <Card className="border-green-200 bg-green-500/5">
-                            <CardContent className="p-3 text-center">
-                                <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
-                                <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)} USD</p>
-                                <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                        <SpotlightCard
+                            estado="disponible"
+                            className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-emerald-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-md shadow-emerald-500/30">
+                                    <ArrowDown className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Ingresos</p>
+                                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${Number(totalIngresos).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">USD</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 shadow-md shadow-emerald-500/30">{todosIngresos.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
 
-                        <Card className="border-blue-200 bg-blue-500/5">
-                            <CardContent className="p-3 text-center">
-                                <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
-                                <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)} USD</p>
-                                <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                        <SpotlightCard
+                            estado="tarjeta"
+                            className="rounded-xl border border-blue-400/30 bg-blue-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-blue-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/30">
+                                    <TrendingUp className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Transferencias</p>
+                                    <p className="text-2xl font-black text-blue-600 dark:text-blue-400">${Number(totalTransferencias).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-blue-400/30 bg-blue-500/10 text-blue-700 backdrop-blur-sm dark:text-blue-300">USD</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md shadow-blue-500/30">{todasTransferencias.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
 
-                        <Card className="border-purple-200 bg-purple-500/5">
-                            <CardContent className="p-3 text-center">
-                                <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
-                                <div className="space-y-0.5">
+                        <SpotlightCard
+                            estado="global"
+                            className="rounded-xl border border-purple-400/30 bg-purple-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-purple-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-violet-600 text-white shadow-md shadow-purple-500/30">
+                                    <Briefcase className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Gestores</p>
                                     {comisionesGestorDetalles.length > 0 ? (
                                         Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
-                                            <p key={moneda} className="text-lg font-bold text-purple-700">
-                                                -${Number(data.total).toFixed(2)} {moneda}
+                                            <p key={moneda} className="text-2xl leading-tight font-black text-purple-600 dark:text-purple-400">
+                                                -${Number(data.total).toFixed(2)} <span className="text-sm font-bold">{moneda}</span>
                                             </p>
                                         ))
                                     ) : (
-                                        <p className="text-lg font-bold text-purple-700">$0.00</p>
+                                        <p className="text-2xl font-black text-purple-600 dark:text-purple-400">$0.00</p>
                                     )}
                                 </div>
-                                <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-purple-400/30 bg-purple-500/10 text-purple-700 backdrop-blur-sm dark:text-purple-300">Comisión</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-purple-500 to-violet-600 shadow-md shadow-purple-500/30">{comisionesGestorDetalles.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
+
+                        <Link href={route('transacciones.envios.index', { estado: 'en_transito' })} className="block">
+                            <SpotlightCard
+                                estado="especial"
+                                className="h-full rounded-xl border border-amber-400/30 bg-amber-500/5 p-4 shadow-sm backdrop-blur-sm transition-shadow hover:shadow-md dark:bg-amber-500/10"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/30">
+                                        <Truck className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">En tránsito</p>
+                                        {enviosEnTransito.montos.length > 0 ? (
+                                            enviosEnTransito.montos.map(({ moneda, monto }) => (
+                                                <p key={moneda} className="text-2xl leading-tight font-black text-amber-600 dark:text-amber-400">
+                                                    ${Number(monto).toFixed(2)} <span className="text-sm font-bold">{moneda}</span>
+                                                </p>
+                                            ))
+                                        ) : (
+                                            <p className="text-2xl font-black text-amber-600 dark:text-amber-400">$0.00</p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                    {enviosEnTransito.por_confirmar > 0 ? (
+                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30">
+                                            {enviosEnTransito.por_confirmar} por confirmar por ti
+                                        </Badge>
+                                    ) : (
+                                        <Badge className="border border-amber-400/30 bg-amber-500/10 text-amber-700 backdrop-blur-sm dark:text-amber-300">
+                                            Sin confirmar
+                                        </Badge>
+                                    )}
+                                    <Badge className="border-0 bg-gradient-to-r from-amber-500 to-orange-600 shadow-md shadow-amber-500/30">
+                                        {enviosEnTransito.total} {enviosEnTransito.total === 1 ? 'envío' : 'envíos'}
+                                    </Badge>
+                                </div>
+                            </SpotlightCard>
+                        </Link>
+
+                        {verOperacionesMultiples && operacionesMultiples && (
+                            <SpotlightCard
+                                estado="indigo"
+                                className="rounded-xl border border-cyan-400/30 bg-cyan-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-cyan-500/10"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-sky-600 text-white shadow-md shadow-cyan-500/30">
+                                        <Shuffle className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Op. Múltiples</p>
+                                        <p className="text-2xl font-black text-cyan-600 dark:text-cyan-400">{operacionesMultiples.resumen.total}</p>
+                                    </div>
+                                </div>
+                                <div className="mt-3 space-y-1 text-xs">
+                                    {operacionesMultiples.resumen.entradas.map(({ moneda, monto }) => (
+                                        <p key={`e-${moneda}`} className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                            Entró +${Number(monto).toFixed(2)} {moneda}
+                                        </p>
+                                    ))}
+                                    {operacionesMultiples.resumen.salidas.map(({ moneda, monto }) => (
+                                        <p key={`s-${moneda}`} className="font-mono font-bold text-red-600 dark:text-red-400">
+                                            Salió -${Number(monto).toFixed(2)} {moneda}
+                                        </p>
+                                    ))}
+                                    <div className="flex justify-end pt-1">
+                                        <Badge className="border-0 bg-gradient-to-r from-cyan-500 to-sky-600 shadow-md shadow-cyan-500/30">
+                                            {operacionesMultiples.resumen.total} oper.
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </SpotlightCard>
+                        )}
+
+                        <SpotlightCard
+                            estado="sin-comision"
+                            className="rounded-xl border border-pink-400/30 bg-pink-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-pink-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/30">
+                                    <Undo2 className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Devueltas</p>
+                                    <p className="text-2xl font-black text-pink-600 dark:text-pink-400">
+                                        ${Number(calculos.ventas_devueltas_total_usd ?? 0).toFixed(2)} <span className="text-sm font-bold">USD</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                <Badge className="border border-pink-400/30 bg-pink-500/10 font-mono text-pink-700 dark:text-pink-300">
+                                    {(calculos.ventas_devueltas_detalles ?? [])
+                                        .slice(0, 3)
+                                        .map((v) => `#${v.venta_id}`)
+                                        .join(' ') || 'Ninguna'}
+                                    {(calculos.ventas_devueltas_detalles?.length ?? 0) > 3 ? ' …' : ''}
+                                </Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-pink-500 to-rose-600 shadow-md shadow-pink-500/30">
+                                    {calculos.ventas_devueltas_count ?? 0} {(calculos.ventas_devueltas_count ?? 0) === 1 ? 'venta' : 'ventas'}
+                                </Badge>
+                            </div>
+                        </SpotlightCard>
                     </div>
                 </div>
 
                 {/* Transacciones del Turno: Gastos, Ingresos, Transferencias — propias y externas, unificado */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Transacciones del Turno
-                        </CardTitle>
-                        <CardDescription>
-                            Gastos, ingresos y transferencias del turno — propias y de otros usuarios sobre tus cuentas. Las filas resaltadas son de otros usuarios.
-                        </CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-violet-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <TrendingUp className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Transacciones del Turno</CardTitle>
+                                <CardDescription className="text-violet-100">
+                                    Gastos, ingresos y transferencias del turno — propias y de otros usuarios sobre tus cuentas. Las filas resaltadas son de otros usuarios.
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 p-6">
                         <div className="relative">
                             <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                             <Input
@@ -1292,10 +1918,69 @@ export default function Create({
                         </div>
 
                         <Tabs defaultValue="gastos" className="w-full">
-                            <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="gastos">Gastos ({gastosFiltrados.length})</TabsTrigger>
-                                <TabsTrigger value="ingresos">Ingresos ({ingresosFiltrados.length})</TabsTrigger>
-                                <TabsTrigger value="transferencias">Transferencias ({transferenciasFiltradas.length})</TabsTrigger>
+                            <TabsList className={`grid h-auto w-full grid-cols-2 ${verOperacionesMultiples ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
+                                <TabsTrigger
+                                    value="gastos"
+                                    className="gap-2 data-[state=active]:bg-red-500/15 data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400"
+                                >
+                                    <ArrowUp className="h-4 w-4" />
+                                    Gastos
+                                    <Badge className="border border-red-400/30 bg-red-500/10 px-2 text-red-700 backdrop-blur-sm dark:text-red-300">
+                                        {gastosFiltrados.length}
+                                    </Badge>
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="ingresos"
+                                    className="gap-2 data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-600 dark:data-[state=active]:text-emerald-400"
+                                >
+                                    <ArrowDown className="h-4 w-4" />
+                                    Ingresos
+                                    <Badge className="border border-emerald-400/30 bg-emerald-500/10 px-2 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                        {ingresosFiltrados.length}
+                                    </Badge>
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="transferencias"
+                                    className="gap-2 data-[state=active]:bg-blue-500/15 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                                >
+                                    <ArrowRightLeft className="h-4 w-4" />
+                                    Transferencias
+                                    <Badge className="border border-blue-400/30 bg-blue-500/10 px-2 text-blue-700 backdrop-blur-sm dark:text-blue-300">
+                                        {transferenciasFiltradas.length}
+                                    </Badge>
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="enviados"
+                                    className="gap-2 data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400"
+                                >
+                                    <Truck className="h-4 w-4" />
+                                    Enviados sin confirmar
+                                    <Badge className="border border-amber-400/30 bg-amber-500/10 px-2 text-amber-700 backdrop-blur-sm dark:text-amber-300">
+                                        {enviosEnviadosFiltrados.length}
+                                    </Badge>
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="por-recibir"
+                                    className="gap-2 data-[state=active]:bg-sky-500/15 data-[state=active]:text-sky-600 dark:data-[state=active]:text-sky-400"
+                                >
+                                    <HandCoins className="h-4 w-4" />
+                                    Por recibir
+                                    <Badge className="border border-sky-400/30 bg-sky-500/10 px-2 text-sky-700 backdrop-blur-sm dark:text-sky-300">
+                                        {enviosPorRecibirFiltrados.length}
+                                    </Badge>
+                                </TabsTrigger>
+                                {verOperacionesMultiples && (
+                                    <TabsTrigger
+                                        value="operaciones-multiples"
+                                        className="gap-2 data-[state=active]:bg-cyan-500/15 data-[state=active]:text-cyan-600 dark:data-[state=active]:text-cyan-400"
+                                    >
+                                        <Shuffle className="h-4 w-4" />
+                                        Op. Múltiples
+                                        <Badge className="border border-cyan-400/30 bg-cyan-500/10 px-2 text-cyan-700 backdrop-blur-sm dark:text-cyan-300">
+                                            {operacionesFiltradas.length}
+                                        </Badge>
+                                    </TabsTrigger>
+                                )}
                             </TabsList>
 
                             <TabsContent value="gastos" className="mt-4">
@@ -1307,7 +1992,7 @@ export default function Create({
                                                 <TableHead>Descripción</TableHead>
                                                 <TableHead>Cuenta de Operación</TableHead>
                                                 <TableHead className="w-28">Creado por</TableHead>
-                                                <TableHead className="w-28 text-right">Monto</TableHead>
+                                                <TableHead className="w-48 text-right">Monto</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1316,12 +2001,21 @@ export default function Create({
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
                                                         <TableCell className="text-xs">
-                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
+                                                            <EntidadFila {...partirEntidad(item.origen || '-')} banco={item.banco ?? null} />
                                                         </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
+                                                        <TableCell className="text-xs">
+                                                            {item.es_propio ? (
+                                                                <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
+                                                            ) : (
+                                                                item.usuario_nombre || 'Sistema'
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Badge className="gap-1.5 border border-red-400/30 whitespace-nowrap bg-red-500/10 font-mono font-bold text-red-700 backdrop-blur-sm dark:text-red-300">
+                                                                {item.moneda_imagen_url && <img src={item.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto" />}
+                                                                -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
+                                                            </Badge>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -1348,7 +2042,7 @@ export default function Create({
                                                 <TableHead>Descripción</TableHead>
                                                 <TableHead>Cuenta de Operación</TableHead>
                                                 <TableHead className="w-28">Creado por</TableHead>
-                                                <TableHead className="w-28 text-right">Monto</TableHead>
+                                                <TableHead className="w-48 text-right">Monto</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1357,12 +2051,21 @@ export default function Create({
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-xs">
-                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
+                                                            <EntidadFila {...partirEntidad(item.destino || '-')} banco={item.banco ?? null} />
                                                         </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-green-600">
-                                                            +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
+                                                        <TableCell className="text-xs">
+                                                            {item.es_propio ? (
+                                                                <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
+                                                            ) : (
+                                                                item.usuario_nombre || 'Sistema'
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Badge className="gap-1.5 border border-emerald-400/30 whitespace-nowrap bg-emerald-500/10 font-mono font-bold text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                                {item.moneda_imagen_url && <img src={item.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto" />}
+                                                                +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
+                                                            </Badge>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -1401,25 +2104,39 @@ export default function Create({
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="max-w-[160px] truncate text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[170px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
-                                                                <span className="capitalize">{item.origen_tipo}:</span> {item.origen_nombre}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[170px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
-                                                                <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
-                                                            </div>
+                                                        <TableCell className="text-xs">
+                                                            <EntidadFila
+                                                                tipo={tipoEntidadDe(item.origen_tipo)}
+                                                                nombre={item.origen_nombre}
+                                                                banco={item.banco_origen ?? null}
+                                                            />
                                                         </TableCell>
                                                         <TableCell className="text-xs">
-                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
+                                                            <EntidadFila
+                                                                tipo={tipoEntidadDe(item.destino_tipo)}
+                                                                nombre={item.destino_nombre}
+                                                                banco={item.banco_destino ?? null}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell className="text-xs">
+                                                            {item.es_propio ? (
+                                                                <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
+                                                            ) : (
+                                                                item.usuario_nombre || 'Sistema'
+                                                            )}
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
                                                             <div>
-                                                                <span className={tEfectivo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
+                                                                <Badge
+                                                                    className={
+                                                                        tEfectivo === 'entrante'
+                                                                            ? 'border border-emerald-400/30 bg-emerald-500/10 font-mono font-bold text-emerald-700 backdrop-blur-sm dark:text-emerald-300'
+                                                                            : 'border border-blue-400/30 bg-blue-500/10 font-mono font-bold text-blue-700 backdrop-blur-sm dark:text-blue-300'
+                                                                    }
+                                                                >
                                                                     {tEfectivo === 'entrante' ? '+' : '-'}${Number(tEfectivo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
                                                                     {tEfectivo === 'entrante' ? item.moneda_destino : item.moneda_origen}
-                                                                </span>
+                                                                </Badge>
                                                                 {(item.moneda_origen ?? item.moneda_destino) && item.moneda_origen !== item.moneda_destino && (
                                                                     <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
                                                                         ≈ ${Number(tEfectivo === 'entrante' ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
@@ -1445,173 +2162,397 @@ export default function Create({
                                     </Table>
                                 </div>
                             </TabsContent>
+
+                            <TabsContent value="enviados" className="mt-4">
+                                <TablaEnviosAbiertos
+                                    envios={enviosEnviadosFiltrados}
+                                    porRecibir={false}
+                                    mensajeVacio={
+                                        enviosEnviados.length > 0
+                                            ? 'No se encontraron resultados con los filtros aplicados'
+                                            : 'No hay envíos tuyos esperando confirmación.'
+                                    }
+                                />
+                            </TabsContent>
+
+                            <TabsContent value="por-recibir" className="mt-4">
+                                <TablaEnviosAbiertos
+                                    envios={enviosPorRecibirFiltrados}
+                                    porRecibir
+                                    mensajeVacio={
+                                        enviosPorRecibir.length > 0
+                                            ? 'No se encontraron resultados con los filtros aplicados'
+                                            : 'No tienes envíos por recibir.'
+                                    }
+                                />
+                            </TabsContent>
+
+                            {verOperacionesMultiples && (
+                                <TabsContent value="operaciones-multiples" className="mt-4">
+                                    <TablaOperacionesMultiples
+                                        operaciones={operacionesFiltradas}
+                                        mensajeVacio={
+                                            (operacionesMultiples?.items.length ?? 0) > 0
+                                                ? 'No se encontraron resultados con los filtros aplicados'
+                                                : 'No hay operaciones múltiples registradas en este turno.'
+                                        }
+                                    />
+                                </TabsContent>
+                            )}
                         </Tabs>
                     </CardContent>
                 </Card>
 
                 {/* Comparativa con Cierre Anterior */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Comparativa con Cierre Anterior
-                        </CardTitle>
-                        <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-indigo-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Scale className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Comparativa con Cierre Anterior</CardTitle>
+                                <CardDescription className="text-indigo-100">Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-6 p-6">
                         {/* Pestañas Cuentas / Clientes */}
                         <Tabs defaultValue="cuentas" className="w-full">
-                            <TabsList className={`grid w-full ${auth.user.role !== 'vendedor' ? 'grid-cols-2' : ''}`}>
-                                <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas?.length ?? 0})</TabsTrigger>
+                            <TabsList className={`grid h-auto w-full ${auth.user.role !== 'vendedor' ? 'grid-cols-2' : ''}`}>
+                                <TabsTrigger
+                                    value="cuentas"
+                                    className="gap-2 data-[state=active]:bg-indigo-500/15 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400"
+                                >
+                                    <Wallet className="h-4 w-4" />
+                                    Cuentas
+                                    <Badge className="border border-indigo-400/30 bg-indigo-500/10 px-2 text-indigo-700 backdrop-blur-sm dark:text-indigo-300">
+                                        {comparativa_cuentas?.length ?? 0}
+                                    </Badge>
+                                </TabsTrigger>
                                 {auth.user.role !== 'vendedor' && (
-                                    <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                    <TabsTrigger
+                                        value="clientes"
+                                        className="gap-2 data-[state=active]:bg-indigo-500/15 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400"
+                                    >
+                                        <Users className="h-4 w-4" />
+                                        Clientes
+                                        <Badge className="border border-indigo-400/30 bg-indigo-500/10 px-2 text-indigo-700 backdrop-blur-sm dark:text-indigo-300">
+                                            {comparativa_clientes?.length ?? 0}
+                                        </Badge>
+                                    </TabsTrigger>
                                 )}
                             </TabsList>
 
                             {/* Tab Cuentas */}
-                            <TabsContent value="cuentas" className="mt-4">
-                                {!tiene_cierre_anterior && comparativa_cuentas.length > 0 && (
-                                    <p className="text-muted-foreground mb-2 text-xs italic">
-                                        Primer cierre: estos son los saldos iniciales actuales.
-                                    </p>
-                                )}
-                                <Accordion type="single" collapsible>
-                                    <AccordionItem value="cuentas">
-                                        <AccordionTrigger className="text-sm font-semibold">
-                                            Cuentas ({cuentasFiltradas.length})
-                                        </AccordionTrigger>
-                                        <AccordionContent>
-                                            <div className="space-y-3">
-                                                <div className="relative">
-                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                                    <Input
-                                                        placeholder="Buscar cuenta..."
-                                                        value={busquedaCuentas}
-                                                        onChange={(e) => setBusquedaCuentas(e.target.value)}
-                                                        className="pl-9"
-                                                    />
-                                                </div>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {tiposUnicos.map(tipo => (
-                                                        <Button
-                                                            key={tipo}
-                                                            variant={filtroTipoCuentas === tipo ? 'default' : 'outline'}
-                                                            size="sm"
-                                                            onClick={() => setFiltroTipoCuentas(tipo)}
-                                                            className="text-xs capitalize"
-                                                        >
-                                                            {tipo === 'todos' ? 'Todos' : tipo}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Cuenta</TableHead>
-                                                                <TableHead>Tipo</TableHead>
-                                                                <TableHead>Moneda</TableHead>
-                                                                <TableHead className="text-right">Cierre Anterior</TableHead>
-                                                                <TableHead className="text-right">Cierre Hoy</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {cuentasFiltradas.length > 0 ? (
-                                                                cuentasFiltradas.map((item: ComparativaItem) => (
-                                                                    <TableRow key={item.id}>
-                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                                        <TableCell>
-                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                                                                                {item.tipo === 'efectivo' ? 'Efectivo' : item.tipo === 'tarjeta' ? 'Tarjeta' : item.tipo || '-'}
-                                                                            </span>
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right font-mono">
-                                                                            ${Number(item.saldo_anterior).toFixed(2)}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right font-mono font-medium">
-                                                                            ${Number(item.saldo_actual).toFixed(2)}
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                ))
-                                                            ) : (
-                                                                <TableRow>
-                                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
-                                                                        {busquedaCuentas || filtroTipoCuentas !== 'todos'
-                                                                            ? 'No se encontraron cuentas con los filtros aplicados'
-                                                                            : !tiene_cierre_anterior
-                                                                              ? 'No hay cierre anterior para comparar'
-                                                                              : 'No hay cuentas para mostrar'}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            )}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
+                            <TabsContent value="cuentas" className="mt-4 space-y-4">
+                                {tiene_cierre_anterior ? (
+                                    <>
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                            <WidgetCambio estado="disponible" color="emerald" icono={ArrowUp} titulo="Subieron" valor={resumenCuentas.subieron} />
+                                            <WidgetCambio estado="agotado" color="red" icono={ArrowDown} titulo="Bajaron" valor={resumenCuentas.bajaron} />
+                                            <WidgetCambio estado="indigo" color="indigo" icono={CheckCircle2} titulo="Sin cambio" valor={resumenCuentas.iguales} />
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-muted-foreground text-xs font-medium">Movimiento neto:</span>
+                                            {resumenCuentas.porMoneda.map(([moneda, { diferencia }]) => (
+                                                <BadgeDiferencia key={moneda} diferencia={diferencia} moneda={moneda} bueno={diferencia > 0 ? true : diferencia < 0 ? false : null} />
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    comparativa_cuentas.length > 0 && (
+                                        <div className="space-y-2 rounded-lg border border-indigo-400/30 bg-indigo-500/5 p-4 backdrop-blur-sm dark:bg-indigo-500/10">
+                                            <p className="text-sm font-semibold">Primer cierre</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                Todavía no hay un cierre anterior con qué comparar. Estos son los saldos actuales; desde el próximo cierre verás aquí lo que cambió.
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-muted-foreground text-xs font-medium">Saldo actual:</span>
+                                                {resumenCuentas.porMoneda.map(([moneda, { saldo }]) => (
+                                                    <Badge key={moneda} className="border-0 bg-gradient-to-r from-indigo-500 to-violet-600 font-mono font-bold text-white shadow-md shadow-indigo-500/30">
+                                                        ${saldo.toFixed(2)} {moneda}
+                                                    </Badge>
+                                                ))}
                                             </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
+                                        </div>
+                                    )
+                                )}
+
+                                <div className="relative">
+                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                    <Input
+                                        placeholder="Buscar cuenta..."
+                                        value={busquedaCuentas}
+                                        onChange={(e) => setBusquedaCuentas(e.target.value)}
+                                        className="pl-9"
+                                    />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1">
+                                    <span className="text-muted-foreground mr-1 text-xs font-medium">Tipo:</span>
+                                    {tiposUnicos.map(tipo => (
+                                        <Button
+                                            key={tipo}
+                                            variant={filtroTipoCuentas === tipo ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setFiltroTipoCuentas(tipo)}
+                                            className="h-7 text-xs capitalize"
+                                        >
+                                            {tipo === 'todos' ? 'Todos' : tipo}
+                                        </Button>
+                                    ))}
+                                    {tiene_cierre_anterior && (
+                                        <Button
+                                            variant={soloConCambios ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setSoloConCambios((v) => !v)}
+                                            className="ml-2 h-7 text-xs"
+                                        >
+                                            Solo con cambios
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {/* El contenedor interno de <Table> tiene overflow-x-auto y rompe el sticky: se anula aquí para que el encabezado se fije dentro de este scroll. */}
+                                <div className="max-h-[520px] overflow-y-auto rounded-md border [&_[data-slot=table-container]]:overflow-visible">
+                                    <Table>
+                                        <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
+                                            <TableRow>
+                                                <TableHead>Cuenta</TableHead>
+                                                <TableHead>Tipo</TableHead>
+                                                <TableHead>Moneda</TableHead>
+                                                <TableHead className="text-right">Saldo anterior</TableHead>
+                                                <TableHead className="text-right">Saldo actual</TableHead>
+                                                <TableHead className="w-44 text-right">En tránsito</TableHead>
+                                                {tiene_cierre_anterior && <TableHead className="w-44 text-right">Diferencia</TableHead>}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {cuentasFiltradas.length > 0 ? (
+                                                cuentasFiltradas.map((item: ComparativaItem) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="text-sm font-medium">
+                                                            <EntidadFila tipo="cuenta" nombre={item.nombre} banco={item.banco ?? null} />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge
+                                                                className={
+                                                                    item.tipo === 'efectivo'
+                                                                        ? 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                                                        : 'border border-sky-400/30 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                                                                }
+                                                            >
+                                                                {item.tipo === 'efectivo' ? 'Efectivo' : item.tipo === 'tarjeta' ? 'Tarjeta' : item.tipo || '-'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge className="border border-indigo-400/30 bg-indigo-500/10 font-mono text-indigo-700 dark:text-indigo-300">
+                                                                {item.moneda}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground text-right font-mono">
+                                                            {item.es_nueva ? '—' : `$${Number(item.saldo_anterior).toFixed(2)}`}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium">
+                                                            ${Number(item.saldo_actual).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {Number(item.en_transito_salida) > 0 || Number(item.en_transito_entrada) > 0 ? (
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    {Number(item.en_transito_salida) > 0 && (
+                                                                        <Badge
+                                                                            className="gap-1 border border-amber-400/30 bg-amber-500/10 font-mono whitespace-nowrap text-amber-700 dark:text-amber-300"
+                                                                            title="Ya salió de esta cuenta y todavía no se confirma que llegó"
+                                                                        >
+                                                                            <Truck className="h-3 w-3" />-${Number(item.en_transito_salida).toFixed(2)} {item.moneda}
+                                                                        </Badge>
+                                                                    )}
+                                                                    {Number(item.en_transito_entrada) > 0 && (
+                                                                        <Badge
+                                                                            className="gap-1 border border-sky-400/30 bg-sky-500/10 font-mono whitespace-nowrap text-sky-700 dark:text-sky-300"
+                                                                            title="Viene en camino a esta cuenta y todavía no se acredita"
+                                                                        >
+                                                                            <HandCoins className="h-3 w-3" />+${Number(item.en_transito_entrada).toFixed(2)} {item.moneda}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">—</span>
+                                                            )}
+                                                        </TableCell>
+                                                        {tiene_cierre_anterior && (
+                                                            <TableCell className="text-right">
+                                                                {item.es_nueva ? (
+                                                                    <Badge className="border border-indigo-400/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300">Nueva</Badge>
+                                                                ) : (
+                                                                    <BadgeDiferencia
+                                                                        diferencia={Number(item.diferencia)}
+                                                                        moneda={item.moneda}
+                                                                        bueno={item.estado === 'subio' ? true : item.estado === 'bajo' ? false : null}
+                                                                    />
+                                                                )}
+                                                            </TableCell>
+                                                        )}
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={tiene_cierre_anterior ? 7 : 6} className="text-muted-foreground py-8 text-center italic">
+                                                        {busquedaCuentas || filtroTipoCuentas !== 'todos' || soloConCambios
+                                                            ? 'No se encontraron cuentas con los filtros aplicados'
+                                                            : 'No hay cuentas para mostrar'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {comparativa_cuentas_cobro.length > 0 && (
+                                    <div className="space-y-3 rounded-lg border border-amber-400/30 bg-amber-500/5 p-4 dark:bg-amber-500/10">
+                                        <div>
+                                            <p className="text-sm font-semibold">Cuentas de cobro</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                Solo sirven para recibir pagos: no se muestra su saldo general ni se comparan con el cierre anterior, únicamente lo que cobraste en este turno.
+                                            </p>
+                                        </div>
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Cuenta</TableHead>
+                                                        <TableHead>Moneda</TableHead>
+                                                        <TableHead className="text-right">Cobrado en el turno</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {comparativa_cuentas_cobro.map((cuenta) => (
+                                                        <TableRow key={cuenta.id}>
+                                                            <TableCell className="text-sm font-medium">
+                                                                <EntidadFila tipo="cuenta" nombre={cuenta.nombre} banco={cuenta.banco} />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge className="border border-indigo-400/30 bg-indigo-500/10 font-mono text-indigo-700 dark:text-indigo-300">
+                                                                    {cuenta.moneda}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Badge className="border-0 bg-gradient-to-r from-amber-500 to-orange-600 font-mono font-bold text-white shadow-md shadow-amber-500/30">
+                                                                    ${Number(cuenta.operado_turno).toFixed(2)} {cuenta.moneda}
+                                                                </Badge>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                )}
                             </TabsContent>
 
                             {auth.user.role !== 'vendedor' && (
-                            <TabsContent value="clientes" className="mt-4">
-                                <Accordion type="single" collapsible>
-                                    <AccordionItem value="clientes">
-                                        <AccordionTrigger className="text-sm font-semibold">
-                                            Clientes ({clientesFiltrados.length})
-                                        </AccordionTrigger>
-                                        <AccordionContent>
-                                            <div className="space-y-3">
-                                                <div className="relative">
-                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                                    <Input
-                                                        placeholder="Buscar cliente..."
-                                                        value={busquedaClientes}
-                                                        onChange={(e) => setBusquedaClientes(e.target.value)}
-                                                        className="pl-9"
-                                                    />
-                                                </div>
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Cliente</TableHead>
-                                                                <TableHead className="text-right">Deuda Anterior</TableHead>
-                                                                <TableHead className="text-right">Deuda Actual</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {clientesFiltrados.length > 0 ? (
-                                                                clientesFiltrados.map((item: ComparativaClienteItem) => (
-                                                                    <TableRow key={item.id}>
-                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                                        <TableCell className="text-right font-mono">
-                                                                            ${Number(item.deuda_anterior).toFixed(2)}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right font-mono font-medium">
-                                                                            ${Number(item.deuda_actual).toFixed(2)}
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                ))
-                                                            ) : (
-                                                                <TableRow>
-                                                                    <TableCell colSpan={3} className="text-muted-foreground py-8 text-center italic">
-                                                                        {busquedaClientes
-                                                                            ? 'No se encontraron clientes con los filtros aplicados'
-                                                                            : 'No hay clientes con deuda registrada.'}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            )}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
+                            <TabsContent value="clientes" className="mt-4 space-y-4">
+                                {tiene_cierre_anterior ? (
+                                    <>
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                            <WidgetCambio estado="disponible" color="emerald" icono={ArrowDown} titulo="Deuda bajó" valor={resumenClientes.mejoraron} />
+                                            <WidgetCambio estado="agotado" color="red" icono={ArrowUp} titulo="Deuda subió" valor={resumenClientes.empeoraron} />
+                                            <WidgetCambio estado="indigo" color="indigo" icono={CheckCircle2} titulo="Sin cambio" valor={resumenClientes.iguales} />
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-muted-foreground text-xs font-medium">Cambio neto de la deuda:</span>
+                                            <BadgeDiferencia
+                                                diferencia={resumenClientes.diferenciaTotal}
+                                                moneda="USD"
+                                                bueno={resumenClientes.diferenciaTotal < 0 ? true : resumenClientes.diferenciaTotal > 0 ? false : null}
+                                            />
+                                        </div>
+                                    </>
+                                ) : (
+                                    comparativa_clientes.length > 0 && (
+                                        <div className="space-y-2 rounded-lg border border-indigo-400/30 bg-indigo-500/5 p-4 backdrop-blur-sm dark:bg-indigo-500/10">
+                                            <p className="text-sm font-semibold">Primer cierre</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                Todavía no hay un cierre anterior con qué comparar. Estas son las deudas actuales.
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-muted-foreground text-xs font-medium">Deuda total:</span>
+                                                <Badge className="border-0 bg-gradient-to-r from-indigo-500 to-violet-600 font-mono font-bold text-white shadow-md shadow-indigo-500/30">
+                                                    ${resumenClientes.deudaTotal.toFixed(2)} USD
+                                                </Badge>
                                             </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
+                                        </div>
+                                    )
+                                )}
+
+                                <div className="relative">
+                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                    <Input
+                                        placeholder="Buscar cliente..."
+                                        value={busquedaClientes}
+                                        onChange={(e) => setBusquedaClientes(e.target.value)}
+                                        className="pl-9"
+                                    />
+                                </div>
+                                {tiene_cierre_anterior && (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                        <Button
+                                            variant={soloConCambios ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setSoloConCambios((v) => !v)}
+                                            className="h-7 text-xs"
+                                        >
+                                            Solo con cambios
+                                        </Button>
+                                    </div>
+                                )}
+
+                                <div className="max-h-[520px] overflow-y-auto rounded-md border [&_[data-slot=table-container]]:overflow-visible">
+                                    <Table>
+                                        <TableHeader className="bg-muted sticky top-0 z-10 shadow-sm">
+                                            <TableRow>
+                                                <TableHead>Cliente</TableHead>
+                                                <TableHead className="text-right">Deuda anterior</TableHead>
+                                                <TableHead className="text-right">Deuda actual</TableHead>
+                                                {tiene_cierre_anterior && <TableHead className="w-44 text-right">Diferencia</TableHead>}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {clientesFiltrados.length > 0 ? (
+                                                clientesFiltrados.map((item: ComparativaClienteItem) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="text-sm font-medium">
+                                                            <EntidadFila tipo="cliente" nombre={item.nombre} banco={null} />
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground text-right font-mono">
+                                                            ${Number(item.deuda_anterior).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium">
+                                                            ${Number(item.deuda_actual).toFixed(2)}
+                                                        </TableCell>
+                                                        {tiene_cierre_anterior && (
+                                                            <TableCell className="text-right">
+                                                                <BadgeDiferencia
+                                                                    diferencia={Number(item.diferencia)}
+                                                                    moneda="USD"
+                                                                    bueno={item.estado === 'mejoro' ? true : item.estado === 'empeoro' ? false : null}
+                                                                />
+                                                            </TableCell>
+                                                        )}
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={tiene_cierre_anterior ? 4 : 3} className="text-muted-foreground py-8 text-center italic">
+                                                        {busquedaClientes || soloConCambios
+                                                            ? 'No se encontraron clientes con los filtros aplicados'
+                                                            : 'No hay clientes con deuda registrada.'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </TabsContent>
                             )}
                         </Tabs>
@@ -2301,7 +3242,7 @@ export default function Create({
                         </div>
 
                         <div className="flex flex-col gap-2 pt-2">
-                            <Button type="button" className="h-12 w-full text-base font-bold" disabled={processing} onClick={() => submit()}>
+                            <Button type="button" className="h-12 w-full text-base font-bold" disabled={processing} onClick={() => setShowConfirmModal(true)}>
                                 <CheckCircle2 className="mr-2 h-5 w-5" /> FINALIZAR CIERRE
                             </Button>
                             <p className="text-muted-foreground px-4 text-center text-[10px] leading-tight italic">
@@ -2312,25 +3253,54 @@ export default function Create({
                 </Card>
 
                 {/* Modal de Confirmación */}
-                <AlertDialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>¿Finalizar Cierre?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Al finalizar se registrará el cierre con los datos calculados del sistema.
-                                <br />
-                                <br />
-                                <span className="font-bold text-emerald-600">¿Estás seguro de que deseas finalizar el cierre?</span>
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-                            <AlertDialogAction type="button" onClick={() => submit()} className="bg-primary cursor-pointer">
-                                Sí, Finalizar Cierre
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                <Dialog open={showConfirmModal} onOpenChange={(abierto) => !processing && setShowConfirmModal(abierto)}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader className="items-center text-center sm:text-center">
+                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                                <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <DialogTitle className="text-xl">¿Finalizar Cierre?</DialogTitle>
+                            <DialogDescription>Revisa el resumen: al confirmar se registra el cierre con los datos calculados del sistema.</DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm dark:border-emerald-800 dark:bg-emerald-900/20">
+                            <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Total de ventas del turno</span>
+                                <span className="font-bold text-emerald-700 dark:text-emerald-300">${Number(totalVentasProductos).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Saldo esperado</span>
+                                <span className="font-bold">
+                                    {Number(calculos.saldo_esperado_global || 0) < 0 ? '-' : ''}${Math.abs(Number(calculos.saldo_esperado_global || 0)).toFixed(2)}
+                                </span>
+                            </div>
+                            {data.observaciones.trim() !== '' && (
+                                <div className="border-t border-emerald-200 pt-2 text-left dark:border-emerald-800">
+                                    <span className="text-muted-foreground text-xs font-bold uppercase">Observaciones</span>
+                                    <p className="break-words">{data.observaciones}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+                            <h4 className="mb-2 text-sm font-medium text-amber-800 dark:text-amber-200">Qué va a pasar</h4>
+                            <ul className="space-y-1 text-left text-sm text-amber-700 dark:text-amber-300">
+                                <li>• Se notificará a los administradores.</li>
+                                <li>• Se cerrará tu sesión de venta.</li>
+                            </ul>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:justify-center">
+                            <Button type="button" variant="outline" onClick={() => setShowConfirmModal(false)} disabled={processing} className="cursor-pointer">
+                                Cancelar
+                            </Button>
+                            <Button type="button" onClick={() => submit()} disabled={processing} className="cursor-pointer gap-2 bg-emerald-600 hover:bg-emerald-700">
+                                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                {processing ? 'Finalizando...' : 'Sí, Finalizar Cierre'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 {/* Modal de Detalles de la Venta Completa */}
                 <AlertDialog

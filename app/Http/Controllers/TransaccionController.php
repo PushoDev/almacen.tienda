@@ -40,8 +40,8 @@ class TransaccionController extends Controller
     {
         // Origen: vendedor solo ve sus cuentas personales de acceso `completo` (una de `cobro` solo
         // recibe pagos de ventas: ni se lista ni viaja su saldo); admin/moderador, todas sin filtrar
-        // por titular — cuentasUsables() ya les da Cuenta::query() completo. Destino: cuentas
-        // asignadas a cualquier usuario.
+        // por titular — cuentasUsables() ya les da Cuenta::query() completo. Los destinos los
+        // pide cada formulario por su cuenta (Gasto/Ingreso/Transferencia).
         $esVendedor = auth()->user()->role === 'vendedor';
         $origenQuery = auth()->user()->cuentasUsables();
         if ($esVendedor) {
@@ -50,10 +50,6 @@ class TransaccionController extends Controller
         // `banco`: logo real del banco/tarjeta (o insignia de efectivo) para el selector visual
         $cuentasOrigen = $origenQuery->with('moneda')->get()
             ->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
-        $cuentasDestino = $esVendedor
-            ? Cuenta::with('moneda')->whereHas('users')->get()
-            : Cuenta::with('moneda')->get();
-
         // Un vendedor no tiene acceso a los clientes en Gastos ni en Ingresos
         $clientes = $esVendedor ? collect() : Cliente::all();
         $proveedores = Proveedor::all();
@@ -64,7 +60,6 @@ class TransaccionController extends Controller
         return Inertia::render('Transacciones/Index', [
             'totalesTransito' => TransferenciaPendiente::totalesPara(auth()->user()),
             'cuentasOrigen' => $cuentasOrigen,
-            'cuentasDestino' => $cuentasDestino,
             'clientes' => $clientes,
             'proveedores' => $proveedores,
             'monedasActivas' => $monedasActivas,

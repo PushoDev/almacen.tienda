@@ -36,6 +36,8 @@ Route::middleware(['auth', 'verified'])->group(
         // de `transacciones/{movimiento}` para que "envios" no se tome como el id de un movimiento.
         Route::get('transacciones/envios', [TransferenciaPendienteController::class, 'index'])
             ->name('transacciones.envios.index');
+        Route::get('transacciones/envios/{transferenciaPendiente}/imprimir', [TransferenciaPendienteController::class, 'imprimir'])
+            ->name('transacciones.envios.imprimir');
         Route::post('transacciones/envios/{transferenciaPendiente}/confirmar', [TransferenciaPendienteController::class, 'confirmar'])
             ->name('transacciones.envios.confirmar');
         Route::post('transacciones/envios/{transferenciaPendiente}/rechazar', [TransferenciaPendienteController::class, 'rechazar'])

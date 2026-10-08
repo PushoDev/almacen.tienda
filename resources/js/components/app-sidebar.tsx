@@ -92,6 +92,7 @@ const allNavItems: NavItem[] = [
         href: '/transacciones/envios',
         icon: Truck,
         roles: ['admin', 'moderador', 'vendedor'],
+        
     },
     {
         title: 'Proveedores',

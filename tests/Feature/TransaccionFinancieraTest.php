@@ -277,7 +277,30 @@ test('la pantalla de Transacciones no lista al vendedor sus cuentas de cobro ni 
         ->has('cuentasOrigen', 1)
         ->where('cuentasOrigen.0.id', $completa->id)
         ->has('cuentasOrigen.0.banco.imagen_url')
+        ->missing('cuentasDestino')
     );
+});
+
+test('un vendedor no puede ingresar dinero a una cuenta asignada con acceso de solo cobro', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $cuenta->update(['tipo_titular' => 'personal']);
+    $vendedor->cuentas()->attach($cuenta->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'cuenta',
+        'destino_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ])->assertSessionHasErrors('message');
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 500]);
+    expect(MovimientoFinanciero::count())->toBe(0);
 });
 
 test('la pantalla de Transacciones entrega todas las cuentas de origen a un admin, con banco en null si no tienen logo', function () {
