@@ -7,6 +7,7 @@ use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
+use App\Models\Remesa;
 use App\Models\User;
 use App\Models\Venta;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,18 @@ function crearVentaCompletadaConPago(User $user, Almacen $almacen, Moneda $moned
     ]);
 
     return $venta;
+}
+
+function crearRemesaDirecta(User $autor, Cuenta $entrada, Cuenta $salida, float $montoEntrada, float $montoSalida, string $estado = 'completado'): Remesa
+{
+    return Remesa::create([
+        'user_id' => $autor->id,
+        'entrada_tipo' => 'cuenta', 'entrada_cuenta_id' => $entrada->id, 'entrada_monto' => $montoEntrada, 'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 0, 'entrada_saldo_posterior' => $montoEntrada,
+        'salida_tipo' => 'cuenta', 'salida_cuenta_id' => $salida->id, 'salida_monto' => $montoSalida, 'salida_moneda' => 'USD',
+        'salida_saldo_anterior' => $montoSalida, 'salida_saldo_posterior' => 0,
+        'fecha_operacion' => now(), 'estado' => $estado,
+    ]);
 }
 
 function payloadStoreCierre(array $overrides = []): array
@@ -558,6 +571,181 @@ test('el cierre en curso entrega el logo de la cuenta y la insignia de la moneda
         ->where('calculos.detalles.0.items_ventas.0.banco.slug', 'zelle')
         ->where('calculos.detalles.0.items_ventas.0.moneda_imagen_url', asset('projects/monedas/usd.webp'))
         ->where('calculos.detalles.0.operaciones_detalle.0.banco.slug', 'zelle'));
+});
+
+test('los gastos, ingresos y transferencias del turno traen el logo de sus cuentas', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMonedaUsd();
+    $monedaUsd->update(['imagen' => 'usd']);
+    $cuentaPropia = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedor);
+    $cuentaPropia->update(['imagen' => 'zelle']);
+    $cuentaSinLogo = crearCuentaEnMoneda($monedaUsd, saldo: 0);
+
+    $base = ['user_id' => $vendedor->id, 'monto' => 10, 'moneda' => 'USD', 'fecha_operacion' => now(), 'estado' => 'completado', 'created_at' => now(), 'updated_at' => now()];
+    DB::table('movimientos_financieros')->insert($base + ['tipo_movimiento_id' => 1, 'cuenta_origen_id' => $cuentaPropia->id, 'descripcion' => 'Gasto']);
+    DB::table('movimientos_financieros')->insert($base + ['tipo_movimiento_id' => 2, 'cuenta_destino_id' => $cuentaPropia->id, 'descripcion' => 'Ingreso']);
+    DB::table('movimientos_financieros')->insert($base + ['tipo_movimiento_id' => 3, 'cuenta_origen_id' => $cuentaPropia->id, 'cuenta_destino_id' => $cuentaSinLogo->id, 'tasa_cambio_aplicada' => 1, 'descripcion' => 'Transferencia']);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.detalles.0.items_gastos.0.banco.slug', 'zelle')
+        ->where('calculos.detalles.0.items_gastos.0.moneda_imagen_url', asset('projects/monedas/usd.webp'))
+        ->where('calculos.detalles.0.items_ingresos.0.banco.slug', 'zelle')
+        ->where('calculos.detalles.0.items_transferencias_salientes.0.banco_origen.slug', 'zelle')
+        ->where('calculos.detalles.0.items_transferencias_salientes.0.banco_destino', null));
+});
+
+test('el cierre de un admin lista las operaciones múltiples del turno con su resumen y deja fuera las anuladas del total', function () {
+    $admin = User::factory()->admin()->create();
+    $otroAdmin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $usd = crearMonedaUsd();
+    $entrada = crearCuentaEnMoneda($usd, saldo: 100);
+    $entrada->update(['imagen' => 'zelle']);
+    $salida = crearCuentaEnMoneda($usd, saldo: 500);
+    $mensajero = crearCuentaEnMoneda($usd, saldo: 50);
+
+    $this->post(route('transacciones.remesa.store'), [
+        'entrada_tipo' => 'cuenta', 'entrada_id' => $entrada->id, 'entrada_monto' => 1000,
+        'salida_tipo' => 'cuenta', 'salida_id' => $salida->id, 'salida_monto' => 950,
+        'mensajero_cuenta_id' => $mensajero->id, 'mensajero_monto' => 20,
+        'notas' => 'Remesa de la mañana',
+    ]);
+    $anulada = crearRemesaDirecta($otroAdmin, $entrada, $salida, 300, 290, 'anulada');
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.operaciones_multiples.visible', true)
+        ->has('calculos.operaciones_multiples.items', 2)
+        ->where('calculos.operaciones_multiples.items.1.notas', 'Remesa de la mañana')
+        ->where('calculos.operaciones_multiples.items.1.es_propio', true)
+        ->where('calculos.operaciones_multiples.items.1.entrada.banco.slug', 'zelle')
+        ->where('calculos.operaciones_multiples.items.1.mensajero.monto', 20)
+        ->where('calculos.operaciones_multiples.items.0.id', $anulada->id)
+        ->where('calculos.operaciones_multiples.items.0.es_propio', false)
+        ->where('calculos.operaciones_multiples.items.0.anulada', true)
+        ->where('calculos.operaciones_multiples.resumen.total', 1)
+        ->where('calculos.operaciones_multiples.resumen.entradas', [['moneda' => 'USD', 'monto' => 1000]])
+        ->where('calculos.operaciones_multiples.resumen.salidas', [['moneda' => 'USD', 'monto' => 970]]));
+});
+
+test('la comparativa con el cierre anterior trae el logo de cada cuenta y marca la diferencia', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $usd = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($usd, saldo: 80, propietario: $vendedor);
+    $cuenta->update(['imagen' => 'zelle']);
+
+    CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_cierre' => now()->subDay(),
+        'snapshot_cuentas' => [['id' => $cuenta->id, 'nombre' => $cuenta->nombre_cuenta, 'tipo' => 'banco', 'moneda' => 'USD', 'saldo' => 100]],
+    ]);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('tiene_cierre_anterior', true)
+        ->where('comparativa_cuentas.0.banco.slug', 'zelle')
+        ->where('comparativa_cuentas.0.saldo_anterior', 100)
+        ->where('comparativa_cuentas.0.saldo_actual', 80)
+        ->where('comparativa_cuentas.0.diferencia', -20)
+        ->where('comparativa_cuentas.0.estado', 'bajo'));
+});
+
+test('la comparativa marca como nueva la cuenta que no estaba en el cierre anterior', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $usd = crearMonedaUsd();
+    $conocida = crearCuentaEnMoneda($usd, saldo: 100, propietario: $vendedor);
+    $nueva = crearCuentaEnMoneda($usd, saldo: 250, propietario: $vendedor);
+
+    CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_cierre' => now()->subDay(),
+        'snapshot_cuentas' => [['id' => $conocida->id, 'nombre' => $conocida->nombre_cuenta, 'tipo' => 'banco', 'moneda' => 'USD', 'saldo' => 100]],
+    ]);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas', fn ($cuentas) => collect($cuentas)->firstWhere('id', $conocida->id)['es_nueva'] === false
+            && collect($cuentas)->firstWhere('id', $nueva->id)['es_nueva'] === true));
+
+    // Sin cierre anterior nadie es "nueva": todo es el saldo inicial.
+    CierreCaja::query()->delete();
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas', fn ($cuentas) => collect($cuentas)->every(fn ($c) => $c['es_nueva'] === false)));
+});
+
+test('el vendedor compara solo sus cuentas completas y de las de cobro ve únicamente lo cobrado en el turno', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $usd = crearMonedaUsd();
+
+    $completa = crearCuentaEnMoneda($usd, saldo: 500, propietario: $vendedor);
+    $cobro = crearCuentaEnMoneda($usd, saldo: 7777);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => 'cobro']);
+    $cobro->update(['imagen' => 'zelle']);
+
+    crearVentaCompletadaConPago($vendedor, $almacen, $usd, total: 60, cuenta: $cobro);
+    crearVentaCompletadaConPago($vendedor, $almacen, $usd, total: 40, cuenta: $cobro);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('comparativa_cuentas', 1)
+        ->where('comparativa_cuentas.0.id', $completa->id)
+        ->has('comparativa_cuentas_cobro', 1)
+        ->where('comparativa_cuentas_cobro.0.id', $cobro->id)
+        ->where('comparativa_cuentas_cobro.0.operado_turno', 100)
+        ->where('comparativa_cuentas_cobro.0.banco.slug', 'zelle')
+        ->missing('comparativa_cuentas_cobro.0.saldo_actual')
+        ->missing('comparativa_cuentas_cobro.0.saldo_anterior'));
+});
+
+test('el cierre de un admin compara todas las cuentas y no tiene cuentas de cobro', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+    $usd = crearMonedaUsd();
+    crearCuentaEnMoneda($usd, saldo: 10);
+    crearCuentaEnMoneda($usd, saldo: 20);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('comparativa_cuentas', 2)
+        ->has('comparativa_cuentas_cobro', 0));
+});
+
+test('al cerrar, el snapshot del vendedor no guarda el saldo de sus cuentas de cobro', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $usd = crearMonedaUsd();
+
+    $completa = crearCuentaEnMoneda($usd, saldo: 500, propietario: $vendedor);
+    $cobro = crearCuentaEnMoneda($usd, saldo: 7777);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => 'cobro']);
+
+    $this->post(route('ventas.cierres.store'), payloadStoreCierre())->assertRedirect(route('ventas.cierres'));
+
+    $snapshot = collect(CierreCaja::firstOrFail()->snapshot_cuentas);
+    expect($snapshot->pluck('id')->all())->toBe([$completa->id])
+        ->and($snapshot->pluck('saldo')->all())->not->toContain(7777.0);
+});
+
+test('el cierre de un vendedor no recibe las operaciones múltiples', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $usd = crearMonedaUsd();
+    crearRemesaDirecta($admin, crearCuentaEnMoneda($usd), crearCuentaEnMoneda($usd), 10, 9);
+
+    $this->actingAs($vendedor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.operaciones_multiples.visible', false)
+        ->has('calculos.operaciones_multiples.items', 0));
 });
 
 test('un pago a una cuenta sin logo asignado llega con banco nulo', function () {

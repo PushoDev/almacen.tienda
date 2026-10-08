@@ -407,6 +407,88 @@ test('el aviso de dinero en tránsito viaja en las pantallas del dinero con el m
     );
 });
 
+test('el cierre de caja en curso informa los envíos en tránsito que cada usuario puede ver', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'envio' => $envio] = prepararEnvioEnTransito(); // 100 USD
+    $ajeno = User::factory()->vendedor()->create();
+    crearTurnoActivo($ajeno);
+
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito', ['total' => 1, 'por_confirmar' => 0, 'montos' => [['moneda' => 'USD', 'monto' => 100]]])
+    );
+    $this->actingAs($receptor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito.por_confirmar', 1)
+    );
+    $this->actingAs($ajeno)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito', ['total' => 0, 'por_confirmar' => 0, 'montos' => []])
+    );
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito.total', 0)
+    );
+});
+
+test('el cierre de caja reparte los envíos abiertos entre los que envió el usuario y los que le toca recibir', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'origen' => $origen, 'destino' => $destino, 'envio' => $envio] = prepararEnvioEnTransito(); // 100 USD
+    $origen->update(['imagen' => 'zelle']);
+    $ajeno = User::factory()->vendedor()->create();
+    crearTurnoActivo($ajeno);
+
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('calculos.envios_en_transito_detalle.enviados', 1)
+        ->has('calculos.envios_en_transito_detalle.por_recibir', 0)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.id', $envio->id)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.es_propio', true)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.origen_nombre', $origen->nombre_cuenta)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.banco_origen.slug', 'zelle')
+        ->where('calculos.envios_en_transito_detalle.enviados.0.banco_destino', null)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.monto', 100)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.comentario', 'Préstamo para vueltos')
+    );
+
+    $this->actingAs($receptor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('calculos.envios_en_transito_detalle.enviados', 0)
+        ->has('calculos.envios_en_transito_detalle.por_recibir', 1)
+        ->where('calculos.envios_en_transito_detalle.por_recibir.0.destino_nombre', $destino->nombre_cuenta)
+        ->where('calculos.envios_en_transito_detalle.por_recibir.0.es_propio', false)
+        ->where('calculos.envios_en_transito_detalle.por_recibir.0.usuario_nombre', $emisor->name)
+    );
+
+    $this->actingAs($ajeno)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('calculos.envios_en_transito_detalle.enviados', 0)
+        ->has('calculos.envios_en_transito_detalle.por_recibir', 0)
+    );
+
+    // Un admin ve el envío de otro como algo que puede confirmar: va en "por recibir", no en "enviados".
+    $this->actingAs(User::factory()->admin()->create())->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('calculos.envios_en_transito_detalle.enviados', 0)
+        ->has('calculos.envios_en_transito_detalle.por_recibir', 1)
+    );
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->has('calculos.envios_en_transito_detalle.enviados', 0)
+    );
+});
+
+test('la comparativa del cierre marca el dinero en tránsito en la cuenta que envió y en la que va a recibir', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'origen' => $origen, 'destino' => $destino, 'envio' => $envio] = prepararEnvioEnTransito(); // 100 USD
+
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas.0.id', $origen->id)
+        ->where('comparativa_cuentas.0.en_transito_salida', 100)
+        ->where('comparativa_cuentas.0.en_transito_entrada', 0));
+
+    $this->actingAs($receptor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas.0.id', $destino->id)
+        ->where('comparativa_cuentas.0.en_transito_entrada', 100)
+        ->where('comparativa_cuentas.0.en_transito_salida', 0));
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+    $this->actingAs($receptor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas.0.en_transito_entrada', 0));
+});
+
 test('el aviso no se calcula ni viaja en pantallas que no son del dinero', function () {
     prepararEnvioEnTransito();
 
