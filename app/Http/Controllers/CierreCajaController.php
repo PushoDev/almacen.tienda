@@ -12,6 +12,7 @@ use App\Models\PagoVenta;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\CierreCajaNotification;
+use App\Services\CatalogoTarjetasService;
 use App\Services\MetodosPagoService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
@@ -1030,6 +1031,7 @@ class CierreCajaController extends Controller
             $resumenPorMoneda[$moneda->codigo_moneda] = [
                 'moneda' => $moneda->codigo_moneda,
                 'tasa_cambio' => $moneda->tasa_cambio > 0 ? $moneda->tasa_cambio : 1,
+                'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda->imagen)['imagen_url'] ?? null,
                 // Pagos que entraron a CUENTAS del vendedor (afectan saldo)
                 'ventas_efectivo_cuentas' => 0,
                 'ventas_transferencia_cuentas' => 0,
@@ -1135,6 +1137,8 @@ class CierreCajaController extends Controller
             $destinoNombre = $pago->cuenta
                 ? $pago->cuenta->nombre_cuenta
                 : ($pago->cliente ? $pago->cliente->nombre_cliente : null);
+            $bancoCuenta = CatalogoTarjetasService::porSlug($pago->cuenta?->imagen);
+            $monedaImagenUrl = CatalogoTarjetasService::monedaImagenPorSlug($pago->moneda?->imagen)['imagen_url'] ?? null;
             $itemVenta = [
                 'id' => 'p_'.$pago->id,
                 'venta_id' => $pago->venta_id,
@@ -1153,6 +1157,8 @@ class CierreCajaController extends Controller
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
                 'cliente_nombre' => $pago->cliente ? $pago->cliente->nombre_cliente : null,
                 'destino_nombre' => $destinoNombre,
+                'banco' => $bancoCuenta,
+                'moneda_imagen_url' => $monedaImagenUrl,
             ];
 
             // ===== CLASIFICAR PAGO POR DESTINO Y MÉTODO =====
@@ -1210,6 +1216,8 @@ class CierreCajaController extends Controller
                 'via_info' => $this->metodosPago->viaPorSlug($pago->via_pago),
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
                 'destino_nombre' => $destinoNombre,
+                'banco' => $bancoCuenta,
+                'moneda_imagen_url' => $monedaImagenUrl,
                 'productos' => $detallesProductos,
             ];
 

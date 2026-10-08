@@ -540,6 +540,42 @@ test('el cierre del turno en curso cuenta y totaliza las ventas sin comisión', 
         ->where('calculos.ventas_sin_comision_detalles.0.venta_id', $venta->id));
 });
 
+test('el cierre en curso entrega el logo de la cuenta y la insignia de la moneda de cada pago', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = crearMonedaUsd();
+    $monedaUsd->update(['imagen' => 'usd']);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, propietario: $vendedor);
+    $cuenta->update(['imagen' => 'zelle']);
+
+    crearVentaCompletadaConPago($vendedor, $almacen, $monedaUsd, total: 100, cuenta: $cuenta);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.detalles.0.moneda_imagen_url', asset('projects/monedas/usd.webp'))
+        ->where('calculos.detalles.0.items_ventas.0.banco.slug', 'zelle')
+        ->where('calculos.detalles.0.items_ventas.0.moneda_imagen_url', asset('projects/monedas/usd.webp'))
+        ->where('calculos.detalles.0.operaciones_detalle.0.banco.slug', 'zelle'));
+});
+
+test('un pago a una cuenta sin logo asignado llega con banco nulo', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = crearMonedaUsd();
+    $cuenta = crearCuentaEnMoneda($monedaUsd, propietario: $vendedor);
+
+    crearVentaCompletadaConPago($vendedor, $almacen, $monedaUsd, total: 100, cuenta: $cuenta);
+
+    $this->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.detalles.0.items_ventas.0.banco', null)
+        ->where('calculos.detalles.0.items_ventas.0.moneda_imagen_url', null));
+});
+
 test('un cierre guardado muestra las ventas sin comisión del período, con costo e impacto para admin', function () {
     $vendedor = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedor);

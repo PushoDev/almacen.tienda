@@ -39,7 +39,7 @@ import {
     Globe,
     HandCoins,
     Loader2,
-    Receipt,
+    Package,
     Search,
     ShoppingCart,
     Store,
@@ -105,11 +105,15 @@ interface OperacionDetaile {
     via_info?: { slug: string; nombre: string; imagen_url: string | null } | null;
     cuenta_nombre?: string | null;
     destino_nombre?: string | null;
+    /** Logo de la cuenta destino; null si no tiene uno asignado (y en cierres viejos, que no lo traen). */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
+    moneda_imagen_url?: string | null;
     productos: ProductItem[];
 }
 
 interface DetalleMoneda {
     moneda: string;
+    moneda_imagen_url?: string | null;
     tasa_cambio: number;
     ventas_efectivo: number;
     ventas_transferencia: number;
@@ -793,16 +797,22 @@ export default function Create({
                 )}
 
                 {/* Tabla Ventas: todos los productos del turno */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Receipt className="h-5 w-5" />
-                            Ventas
-                        </CardTitle>
-                        <CardDescription>Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).</CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-teal-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Ventas</CardTitle>
+                                <CardDescription className="text-teal-100">
+                                    Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto rounded-lg border">
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-muted text-muted-foreground">
                                     <tr>
@@ -846,11 +856,17 @@ export default function Create({
                                                 <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
                                                 <td className="px-4 py-2 text-center">
-                                                    <span className="text-primary font-bold">{linea.cantidad}</span>
+                                                    <Badge className="border border-teal-400/30 bg-teal-500/10 px-2.5 py-0.5 font-bold text-teal-700 backdrop-blur-sm dark:text-teal-300">
+                                                        {linea.cantidad}
+                                                    </Badge>
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
                                                 <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right font-mono text-green-600">${Number(linea.comision).toFixed(2)}</td>
+                                                <td className="px-4 py-2 text-right">
+                                                    <Badge className="border border-emerald-400/30 bg-emerald-500/10 font-mono text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                        ${Number(linea.comision).toFixed(2)}
+                                                    </Badge>
+                                                </td>
                                             </tr>
                                         ))
                                     ) : (
@@ -866,12 +882,16 @@ export default function Create({
                                         <td colSpan={4} className="px-4 py-3 text-right font-bold">
                                             Total
                                         </td>
-                                        <td className="px-4 py-3 text-center font-bold">{lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <Badge className="border-0 bg-gradient-to-r from-teal-500 to-teal-600 px-3 py-0.5 font-black text-white shadow-md shadow-teal-500/30">
+                                                {lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}
+                                            </Badge>
+                                        </td>
                                         <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-teal-700 dark:text-teal-300">
                                             ${totalVentasProductos.toFixed(2)}
                                         </td>
-                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-emerald-600">
                                             ${totalComisionProductos.toFixed(2)}
                                         </td>
                                     </tr>
@@ -882,17 +902,21 @@ export default function Create({
                 </Card>
 
                 {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Banknote className="h-5 w-5" />
-                            Por dónde entraron
-                        </CardTitle>
-                        <CardDescription>
-                            Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
-                        </CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-emerald-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Banknote className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Por dónde entraron</CardTitle>
+                                <CardDescription className="text-emerald-100">
+                                    Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-6 p-6">
                         {monedasConPagos.length > 0 ? (
                             monedasConPagos.map((moneda) => {
                                 const metodos = pagosPorMonedaYMetodo[moneda];
@@ -902,8 +926,24 @@ export default function Create({
                                 const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
 
                                 return (
-                                    <div key={moneda} className="space-y-2">
-                                        <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
+                                    <div key={moneda} className="space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 px-4 py-3 backdrop-blur-sm dark:bg-emerald-500/10">
+                                            <div className="flex items-center gap-3">
+                                                {detalleMoneda?.moneda_imagen_url ? (
+                                                    <img src={detalleMoneda.moneda_imagen_url} alt={moneda} className="h-9 w-auto object-contain drop-shadow-md" />
+                                                ) : (
+                                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                                        <DollarSign className="h-5 w-5" />
+                                                    </span>
+                                                )}
+                                                <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 px-3 py-0.5 text-sm font-black text-white shadow-md shadow-emerald-500/30">
+                                                    {moneda}
+                                                </Badge>
+                                            </div>
+                                            <Badge className="border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                {cantidadMoneda} {cantidadMoneda === 1 ? 'venta' : 'ventas'} · {Number(totalMoneda).toFixed(2)} {moneda}
+                                            </Badge>
+                                        </div>
                                         <Table>
                                             <TableHeader>
                                                 <TableRow data-state="open:bg-muted/40">
@@ -934,6 +974,8 @@ export default function Create({
                                                         }
                                                         return etiquetaMetodo === etiqueta;
                                                     });
+                                                    const primeraOperacion = operacionesPorMetodo[0];
+                                                    const esEfectivoMetodo = primeraOperacion?.tipo_pago === 'efectivo';
 
                                                     return (
                                                         <CollapsibleRoot key={`${moneda}-${etiqueta}`} asChild>
@@ -941,17 +983,73 @@ export default function Create({
                                                                 {/* FILA PRINCIPAL */}
                                                                 <CollapsibleTrigger asChild>
                                                                     <TableRow className="hover:bg-muted/50 cursor-pointer">
-                                                                        <TableCell className="flex items-center gap-2 font-medium">
-                                                                            <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
-                                                                            {etiqueta}
+                                                                        <TableCell className="flex items-center gap-3 font-medium">
+                                                                            <ChevronDown className="collapsible-trigger-icon h-4 w-4 shrink-0 transition-transform" />
+                                                                            {esEfectivoMetodo ? (
+                                                                                primeraOperacion?.banco?.imagen_url || primeraOperacion?.moneda_imagen_url ? (
+                                                                                    <img
+                                                                                        src={primeraOperacion.banco?.imagen_url ?? primeraOperacion.moneda_imagen_url ?? ''}
+                                                                                        alt=""
+                                                                                        aria-hidden="true"
+                                                                                        className="h-8 w-auto max-w-14 object-contain"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                                                                        <Banknote className="h-4 w-4" />
+                                                                                    </span>
+                                                                                )
+                                                                            ) : (
+                                                                                <>
+                                                                                    {primeraOperacion?.via_info && (
+                                                                                        <ViaLogo
+                                                                                            slug={primeraOperacion.via_info.slug}
+                                                                                            nombre={primeraOperacion.via_info.nombre}
+                                                                                            imagenUrl={primeraOperacion.via_info.imagen_url}
+                                                                                            className="h-6"
+                                                                                        />
+                                                                                    )}
+                                                                                    {primeraOperacion?.banco?.imagen_url && primeraOperacion.banco.slug !== primeraOperacion.via_info?.slug ? (
+                                                                                        <img
+                                                                                            src={primeraOperacion.banco.imagen_url}
+                                                                                            alt={primeraOperacion.banco.nombre}
+                                                                                            className="h-8 w-auto max-w-14 rounded-sm object-contain shadow-sm"
+                                                                                        />
+                                                                                    ) : (
+                                                                                        !primeraOperacion?.via_info &&
+                                                                                        !primeraOperacion?.banco && (
+                                                                                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400">
+                                                                                                <CreditCard className="h-4 w-4" />
+                                                                                            </span>
+                                                                                        )
+                                                                                    )}
+                                                                                </>
+                                                                            )}
+                                                                            <span className="flex flex-col gap-1">
+                                                                                <span>{etiqueta}</span>
+                                                                                <Badge
+                                                                                    className={
+                                                                                        esEfectivoMetodo
+                                                                                            ? 'w-fit border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300'
+                                                                                            : 'w-fit border border-sky-400/30 bg-sky-500/10 text-sky-700 backdrop-blur-sm dark:text-sky-300'
+                                                                                    }
+                                                                                >
+                                                                                    {esEfectivoMetodo ? 'Efectivo' : 'Transferencia'}
+                                                                                </Badge>
+                                                                            </span>
                                                                         </TableCell>
 
-                                                                        <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
+                                                                        <TableCell className="text-center">
+                                                                            <Badge className="border border-teal-400/30 bg-teal-500/10 px-2.5 font-mono font-bold text-teal-700 backdrop-blur-sm dark:text-teal-300">
+                                                                                {data.cantidad}
+                                                                            </Badge>
+                                                                        </TableCell>
 
                                                                         <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
 
-                                                                        <TableCell className="text-right font-mono font-medium text-green-600">
-                                                                            ${totalEquivalente.toFixed(2)}
+                                                                        <TableCell className="text-right">
+                                                                            <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 font-mono font-bold text-white shadow-md shadow-emerald-500/30">
+                                                                                ${totalEquivalente.toFixed(2)}
+                                                                            </Badge>
                                                                         </TableCell>
                                                                     </TableRow>
                                                                 </CollapsibleTrigger>
@@ -1003,18 +1101,30 @@ export default function Create({
                                                                                                     </div>
 
                                                                                                     <div className="flex items-center gap-4">
-                                                                                                        <span className="text-muted-foreground text-sm">
-                                                                                                            {operacion.cuenta_nombre
-                                                                                                                ? `Cuenta: ${operacion.cuenta_nombre}`
-                                                                                                                : ''}
-                                                                                                            {operacion.destino_nombre
-                                                                                                                ? ` - ${operacion.destino_nombre}`
-                                                                                                                : ''}
-                                                                                                        </span>
+                                                                                                        {operacion.cuenta_nombre ? (
+                                                                                                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/5 py-1 pr-3 pl-1.5 text-sm backdrop-blur-sm">
+                                                                                                                {operacion.banco?.imagen_url ? (
+                                                                                                                    <img
+                                                                                                                        src={operacion.banco.imagen_url}
+                                                                                                                        alt={operacion.banco.nombre}
+                                                                                                                        className="h-6 w-auto max-w-10 object-contain"
+                                                                                                                    />
+                                                                                                                ) : (
+                                                                                                                    <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                                                                                                )}
+                                                                                                                <span className="font-medium">{operacion.cuenta_nombre}</span>
+                                                                                                            </span>
+                                                                                                        ) : (
+                                                                                                            operacion.destino_nombre && (
+                                                                                                                <Badge className="border border-sky-400/30 bg-sky-500/10 text-sky-700 backdrop-blur-sm dark:text-sky-300">
+                                                                                                                    {operacion.destino_nombre}
+                                                                                                                </Badge>
+                                                                                                            )
+                                                                                                        )}
 
-                                                                                                        <span className="font-mono font-bold text-green-600">
+                                                                                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 font-mono font-bold text-white shadow-md shadow-emerald-500/30">
                                                                                                             ${Number(operacion.monto).toFixed(2)}
-                                                                                                        </span>
+                                                                                                        </Badge>
                                                                                                     </div>
                                                                                                 </div>
 
@@ -1168,12 +1278,18 @@ export default function Create({
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="font-bold">Total {moneda}</TableCell>
-                                                    <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge className="border-0 bg-gradient-to-r from-teal-500 to-teal-600 px-3 font-mono font-black text-white shadow-md shadow-teal-500/30">
+                                                            {cantidadMoneda}
+                                                        </Badge>
+                                                    </TableCell>
                                                     <TableCell className="text-right font-mono font-bold">
                                                         {Number(totalMoneda).toFixed(2)} {moneda}
                                                     </TableCell>
-                                                    <TableCell className="text-right font-mono font-bold text-green-600">
-                                                        ${totalEquivalenteMoneda.toFixed(2)}
+                                                    <TableCell className="text-right">
+                                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 px-3 font-mono text-base font-black text-white shadow-md shadow-emerald-500/30">
+                                                            ${totalEquivalenteMoneda.toFixed(2)}
+                                                        </Badge>
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
