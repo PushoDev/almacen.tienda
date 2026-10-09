@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import AvisoEnvios from '@/components/transacciones/aviso-envios';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
@@ -56,12 +57,26 @@ export default function LogisticaPage({
     comprasPorProveedor,
     productosPorAlmacen,
     canViewFinance = true,
+    enTransito,
     resumenCuentas,
     resumenClientes,
     resumenProveedores,
     resumenProductos,
     almacenesLista = [],
 }: LogisticaProps) {
+    // El dinero en tránsito ya salió de su cuenta de origen y ninguna cuenta lo cuenta: se suma al capital (que no
+    // cambia al confirmar el envío) y cada tarjeta avisa cuánto de su cifra viaja.
+    const formatearMonto = (valor: number) => valor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const transitoUsd = enTransito?.total_usd ?? 0;
+    const transitoDe = (codigo: string) => enTransito?.por_codigo?.[codigo];
+    const notaTransito = (monto: number | undefined) =>
+        monto && monto > 0 ? (
+            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                <Truck className="h-3 w-3" />
+                incluye {formatearMonto(monto)} en tránsito
+            </p>
+        ) : null;
+
     // Vista Cliente
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -84,6 +99,9 @@ export default function LogisticaPage({
                 </div>
                 <Separator className="col-span-4" />
 
+                {/* El Resumen Financiero no es para el vendedor: el aviso sigue a canViewFinance */}
+                <AvisoEnvios visible={canViewFinance} />
+
                 <div className="grid auto-rows-min gap-4 md:grid-cols-4">
                     {/* Capitales Financieros */}
                     {canViewFinance && (
@@ -99,14 +117,12 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                        {((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0)) === 0
-                                            ? '0.00'
-                                            : ((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                        }
+                                        {formatearMonto((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + transitoUsd)}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-xs text-muted-foreground">Capital Financiero Total del Negocio</p>
+                                    {notaTransito(transitoUsd)}
                                 </CardContent>
                             </Card>
 
@@ -121,14 +137,12 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                                        {((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)) === 0
-                                            ? '0.00'
-                                            : ((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                        }
+                                        {formatearMonto((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0) + (transitoDe('USD')?.monto ?? 0))}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-xs text-muted-foreground">Capital en Dólares Americanos</p>
+                                    {notaTransito(transitoDe('USD')?.monto)}
                                 </CardContent>
                             </Card>
 
@@ -143,11 +157,12 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
-                                        {resumenCuentas?.por_moneda_perm?.['CUP']?.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
+                                        {formatearMonto((resumenCuentas?.por_moneda_perm?.['CUP']?.original ?? 0) + (transitoDe('CUP')?.monto ?? 0))}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-xs text-muted-foreground">Capital en Pesos Cubanos (CUP)</p>
+                                    {notaTransito(transitoDe('CUP')?.monto)}
                                 </CardContent>
                             </Card>
 
@@ -162,11 +177,12 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-                                        {resumenCuentas?.por_moneda_perm?.['EUR']?.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
+                                        {formatearMonto((resumenCuentas?.por_moneda_perm?.['EUR']?.original ?? 0) + (transitoDe('EUR')?.monto ?? 0))}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-xs text-muted-foreground">Capital en Euros (EUR)</p>
+                                    {notaTransito(transitoDe('EUR')?.monto)}
                                 </CardContent>
                             </Card>
                         </>

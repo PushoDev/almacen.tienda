@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import AvisoEnvios from '@/components/transacciones/aviso-envios';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
@@ -94,6 +95,8 @@ export default function Dashboard({
                         className="pointer-events-none absolute right-24 bottom-0 h-32 w-32 select-none"
                     />
                 </div>
+
+                <AvisoEnvios />
 
                 <OpcionesRapidas userRole={userRole} />
 

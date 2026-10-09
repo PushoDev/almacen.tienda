@@ -5,6 +5,7 @@ use App\Http\Controllers\IngresoController;
 use App\Http\Controllers\RemesaController;
 use App\Http\Controllers\TransaccionController;
 use App\Http\Controllers\TransferenciaController;
+use App\Http\Controllers\TransferenciaPendienteController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(
@@ -30,6 +31,21 @@ Route::middleware(['auth', 'verified'])->group(
             ->name('transacciones.transferencia.data');
         Route::post('transacciones/transferir', [TransferenciaController::class, 'store'])
             ->name('transacciones.transferir');
+
+        // Envíos de dinero en tránsito (transferencias a cuentas ajenas que esperan confirmación). Van antes
+        // de `transacciones/{movimiento}` para que "envios" no se tome como el id de un movimiento.
+        Route::get('transacciones/envios', [TransferenciaPendienteController::class, 'index'])
+            ->name('transacciones.envios.index');
+        Route::get('transacciones/envios/{transferenciaPendiente}/imprimir', [TransferenciaPendienteController::class, 'imprimir'])
+            ->name('transacciones.envios.imprimir');
+        Route::post('transacciones/envios/{transferenciaPendiente}/confirmar', [TransferenciaPendienteController::class, 'confirmar'])
+            ->name('transacciones.envios.confirmar');
+        Route::post('transacciones/envios/{transferenciaPendiente}/rechazar', [TransferenciaPendienteController::class, 'rechazar'])
+            ->name('transacciones.envios.rechazar');
+        Route::post('transacciones/envios/{transferenciaPendiente}/anular', [TransferenciaPendienteController::class, 'anular'])
+            ->name('transacciones.envios.anular');
+        Route::post('transacciones/envios/{transferenciaPendiente}/resolver-diferencia', [TransferenciaPendienteController::class, 'resolverDiferencia'])
+            ->name('transacciones.envios.resolver-diferencia');
 
         // ✅ Detalles de transacción
         Route::get('transacciones/{movimiento}', [TransaccionController::class, 'show'])

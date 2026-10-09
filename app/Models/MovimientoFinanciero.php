@@ -22,6 +22,7 @@ class MovimientoFinanciero extends Model
         'cliente_destino_id',
         'proveedor_destino_id',
         'monto',
+        'monto_usd',
         'moneda',
         'tasa_cambio_aplicada',
         'tasa_oficial_en_momento',
@@ -42,6 +43,7 @@ class MovimientoFinanciero extends Model
     protected $casts = [
         'fecha_operacion' => 'datetime',
         'monto' => 'double',
+        'monto_usd' => 'double',
         'tasa_cambio_aplicada' => 'double',
         'tasa_oficial_en_momento' => 'double',
         'ganancia_perdida_cambiaria' => 'double',
@@ -50,6 +52,19 @@ class MovimientoFinanciero extends Model
         'saldo_anterior_destino' => 'double',
         'saldo_posterior_destino' => 'double',
     ];
+
+    protected static function booted(): void
+    {
+        // Lo que valía la operación en USD cuando se hizo: el Cierre de Caja suma esto y no vuelve a convertir con
+        // la tasa de hoy. Quien ya lo conoce (un envío en tránsito que se confirma) lo manda y no se recalcula.
+        static::creating(function (self $movimiento) {
+            $movimiento->monto_usd ??= Moneda::equivalenteUsd(
+                (float) $movimiento->monto,
+                $movimiento->cuenta_origen_id ?? $movimiento->cuenta_destino_id,
+                $movimiento->moneda,
+            );
+        });
+    }
 
     // -------------------------
     // --- Relaciones con Usuario ---

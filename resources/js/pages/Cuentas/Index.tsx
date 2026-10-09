@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import AvisoEnvios from '@/components/transacciones/aviso-envios';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -297,6 +298,8 @@ export default function CuentasPage({
                         className="pointer-events-none absolute right-4 bottom-0 h-28 w-auto select-none"
                     />
                 </div>
+
+                <AvisoEnvios />
 
                 {/* Row 1: KPIs */}
                 <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">

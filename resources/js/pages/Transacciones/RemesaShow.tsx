@@ -1,29 +1,20 @@
 import { AnularOperacionDialog } from '@/components/anular-operacion-dialog';
 import { labelMotivoAnulacion } from '@/components/detalle-operacion';
 import HeadingSmall from '@/components/heading-small';
+import { claseBadge, formatear, ResumenCard, ResumenDato } from '@/components/transacciones/entidad';
+import LadoOperacion, { type DetallesSaldo } from '@/components/transacciones/lado-operacion';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import AppLayout from '@/layouts/app-layout';
 import { sileo } from '@/lib/sileo';
+import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, Building, Calendar, Info, Send, TrendingDown, TrendingUp, User } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Handshake, Plus, Receipt, Send, Shuffle, XCircle } from 'lucide-react';
 import { useEffect } from 'react';
-
-interface DetallesSaldo {
-    tipo: 'cuenta' | 'cliente' | 'proveedor';
-    nombre: string | null;
-    moneda: string | null;
-    monto_operacion: number;
-    saldo_anterior: number | null;
-    saldo_posterior: number | null;
-    saldo_actual: number | null;
-}
 
 interface Remesa {
     id: number;
@@ -33,15 +24,8 @@ interface Remesa {
     motivo_anulacion: string | null;
     detalle_anulacion: string | null;
     created_at: string;
-    user?: {
-        id: number;
-        name: string;
-        email: string;
-        role: string;
-    };
-    turno_vendedor?: {
-        nombre_vendedor: string;
-    } | null;
+    user?: { id: number; name: string; email: string; role: string };
+    turno_vendedor?: { nombre_vendedor: string } | null;
 }
 
 interface Props {
@@ -52,76 +36,13 @@ interface Props {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Resumen General',
-        href: '/dashboard',
-    },
-    {
-        title: 'Transacciones',
-        href: '/transacciones',
-    },
-    {
-        title: 'Detalle de Operación Múltiple',
-        href: '#',
-    },
+    { title: 'Resumen General', href: '/dashboard' },
+    { title: 'Transacciones', href: '/transacciones' },
+    { title: 'Detalle de Operación Múltiple', href: '#' },
 ];
 
-const iconoPorTipo = {
-    cuenta: <TrendingUp className="h-4 w-4" />,
-    cliente: <User className="h-4 w-4" />,
-    proveedor: <Building className="h-4 w-4" />,
-};
-
-function FlujoSaldo({ detalles, titulo, colorClass, iconColorClass, Icon }: { detalles: DetallesSaldo; titulo: string; colorClass: string; iconColorClass: string; Icon: typeof TrendingUp }) {
-    const esNegativo = detalles.monto_operacion < 0;
-
-    return (
-        <div className={`rounded-lg border-2 p-4 ${colorClass}`}>
-            <div className="mb-3 flex items-center gap-2">
-                <Icon className={`h-5 w-5 ${iconColorClass}`} />
-                <h4 className="font-semibold">{titulo}</h4>
-                {iconoPorTipo[detalles.tipo]}
-                <span className="text-sm text-muted-foreground">{detalles.nombre ?? 'No especificado'}</span>
-            </div>
-
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-sm">Saldo Anterior:</span>
-                    <span className="font-mono font-semibold">
-                        {detalles.moneda} {detalles.saldo_anterior?.toFixed(2) ?? '0.00'}
-                    </span>
-                </div>
-
-                <div className="flex items-center justify-between border-y py-2">
-                    <span className="text-muted-foreground text-sm">Monto:</span>
-                    <span className={`font-mono font-bold ${esNegativo ? 'text-red-600' : 'text-green-600'}`}>
-                        {esNegativo ? '-' : '+'} {detalles.moneda} {Math.abs(detalles.monto_operacion).toFixed(2)}
-                    </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-sm">Saldo Posterior:</span>
-                    <span className="font-mono text-lg font-bold">
-                        {detalles.moneda} {detalles.saldo_posterior?.toFixed(2) ?? '0.00'}
-                    </span>
-                </div>
-
-                {detalles.saldo_actual !== null && Math.abs(detalles.saldo_actual - (detalles.saldo_posterior ?? 0)) > 0.01 && (
-                    <div className="border-t pt-2">
-                        <Alert className="py-2">
-                            <Info className="h-4 w-4" />
-                            <AlertDescription className="text-xs">
-                                <strong>Saldo actual:</strong> {detalles.moneda} {detalles.saldo_actual.toFixed(2)}
-                                <br />
-                                <span className="text-gray-500">(Han ocurrido otras operaciones después de esta)</span>
-                            </AlertDescription>
-                        </Alert>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
+const formatearFecha = (fecha: string) =>
+    new Date(fecha).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 export default function RemesaShow({ remesa, detallesEntrada, detallesSalida, detallesMensajero }: Props) {
     const page = usePage();
@@ -137,24 +58,56 @@ export default function RemesaShow({ remesa, detallesEntrada, detallesSalida, de
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const anulada = remesa.estado === 'anulada';
+    const montoEntrada = Math.abs(detallesEntrada.monto_operacion);
+    const montoSalida = Math.abs(detallesSalida.monto_operacion);
+    // Referencia informativa, igual que en el formulario: cuánto salió por cada unidad que entró cuando las monedas difieren
+    const tasaImplicita =
+        detallesEntrada.moneda && detallesSalida.moneda && detallesEntrada.moneda !== detallesSalida.moneda && montoEntrada > 0 && montoSalida > 0
+            ? montoSalida / montoEntrada
+            : null;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Operación Múltiple #${remesa.id}`} />
+            <Toaster position="top-center" />
             <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall title={`Operación Múltiple #${remesa.id}`} description="Detalle completo de la Operación Múltiple" />
-                    <Send
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-                    />
+                    <Send size={70} color="#d6d3d1" className="pointer-events-none absolute right-2 bottom-0 animate-pulse opacity-40" />
                 </div>
 
-                <Separator />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Badge className={cn('gap-2 border-0 px-3 py-1 text-sm font-bold text-white shadow-md', claseBadge('violet'))}>
+                            <Shuffle className="h-4 w-4" />
+                            Operación Múltiple
+                        </Badge>
+                        <Badge
+                            className={cn(
+                                'gap-2 border-0 px-3 py-1 text-sm font-bold text-white shadow-md',
+                                anulada ? 'bg-gradient-to-r from-red-600 to-rose-700' : 'bg-gradient-to-r from-emerald-500 to-green-600',
+                            )}
+                        >
+                            {anulada ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                            {anulada ? 'Anulada' : 'Completada'}
+                        </Badge>
+                    </div>
 
-                {remesa.estado === 'anulada' && (
+                    <div className="flex items-center gap-2">
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={route('transacciones')}>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Nueva transacción
+                            </Link>
+                        </Button>
+                        {!anulada && <AnularOperacionDialog url={route('transacciones.remesa.anular', remesa.id)} />}
+                    </div>
+                </div>
+
+                {anulada && (
                     <Alert className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/10">
                         <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
                         <AlertDescription className="text-red-800 dark:text-red-300">
@@ -164,112 +117,98 @@ export default function RemesaShow({ remesa, detallesEntrada, detallesSalida, de
                     </Alert>
                 )}
 
-                <div className="flex items-center justify-between">
-                    <Link href={route('transacciones')}>
-                        <Button variant="ghost" className="cursor-pointer bg-primary hover:bg-emerald-400" size="sm">
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Realizar Nueva Transacción
-                        </Button>
-                    </Link>
-                    {remesa.estado !== 'anulada' && <AnularOperacionDialog url={route('transacciones.remesa.anular', remesa.id)} />}
-                </div>
+                <div className="grid gap-6 lg:grid-cols-5">
+                    <div className="space-y-8 lg:col-span-3">
+                        <LadoOperacion
+                            id="lado-entrada"
+                            titulo="Entrada: el dinero que entró"
+                            icono={ArrowDownToLine}
+                            acento="emerald"
+                            detalles={detallesEntrada}
+                        />
+                        <LadoOperacion
+                            id="lado-salida"
+                            titulo="Salida: el dinero que salió"
+                            icono={ArrowUpFromLine}
+                            acento="rose"
+                            detalles={detallesSalida}
+                        />
+                        {detallesMensajero && (
+                            <LadoOperacion id="lado-mensajero" titulo="Mensajero" icono={Handshake} acento="blue" detalles={detallesMensajero} />
+                        )}
+                    </div>
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Entrada */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <TrendingUp className="h-5 w-5 text-green-600" />
-                                Entrada
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <FlujoSaldo detalles={detallesEntrada} titulo="Entrada" colorClass="border-green-600" iconColorClass="text-green-600" Icon={TrendingUp} />
-                        </CardContent>
-                    </Card>
-
-                    {/* Salida */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <TrendingDown className="h-5 w-5 text-red-600" />
-                                Salida
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <FlujoSaldo detalles={detallesSalida} titulo="Salida" colorClass="border-red-600" iconColorClass="text-red-600" Icon={TrendingDown} />
-                        </CardContent>
-                    </Card>
-
-                    {/* Mensajero (opcional) */}
-                    {detallesMensajero && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Send className="h-5 w-5 text-amber-600" />
-                                    Mensajero
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <FlujoSaldo detalles={detallesMensajero} titulo="Mensajero" colorClass="border-amber-600" iconColorClass="text-amber-600" Icon={TrendingDown} />
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Información del Sistema */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <User className="h-5 w-5" />
-                                Información del Sistema
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div>
-                                <p className="text-muted-foreground text-sm font-medium">Usuario</p>
-                                <p className="font-medium">{remesa.user?.name || 'No especificado'}</p>
-                                <p className="text-muted-foreground text-sm">{remesa.user?.email || 'No disponible'}</p>
-                            </div>
-
-                            <div>
-                                <p className="text-muted-foreground text-sm font-medium">Atendido por</p>
-                                <p className="font-medium">{remesa.turno_vendedor?.nombre_vendedor ?? remesa.user?.name ?? 'No especificado'}</p>
-                            </div>
-
-                            <div>
-                                <p className="text-muted-foreground text-sm font-medium">Rol</p>
-                                <Badge variant="secondary" className="capitalize">
-                                    {remesa.user?.role || 'Desconocido'}
-                                </Badge>
-                            </div>
-
-                            <Separator />
-
-                            <div>
-                                <p className="text-muted-foreground text-sm font-medium">Fecha de Operación</p>
-                                <p className="flex items-center gap-2 text-sm">
-                                    <Calendar className="h-4 w-4" />
-                                    {new Date(remesa.fecha_operacion).toLocaleString('es-ES', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                    })}
+                    <aside className="lg:col-span-2">
+                        <ResumenCard acento="violet" titulo="Resumen de la operación" icono={Receipt}>
+                            <ResumenDato titulo="Entrada">
+                                <p className="truncate text-sm font-semibold">{detallesEntrada.nombre ?? 'No especificado'}</p>
+                                <p className="text-3xl font-black text-emerald-600 tabular-nums dark:text-emerald-400">
+                                    + {detallesEntrada.simbolo} {formatear(montoEntrada)}
                                 </p>
-                            </div>
+                            </ResumenDato>
+
+                            <ResumenDato titulo="Salida">
+                                <p className="truncate text-sm font-semibold">{detallesSalida.nombre ?? 'No especificado'}</p>
+                                <p className="text-3xl font-black text-rose-600 tabular-nums dark:text-rose-400">
+                                    − {detallesSalida.simbolo} {formatear(montoSalida)}
+                                </p>
+                            </ResumenDato>
+
+                            {detallesMensajero && (
+                                <ResumenDato titulo="Mensajero">
+                                    <p className="truncate text-sm font-semibold">{detallesMensajero.nombre ?? 'No especificado'}</p>
+                                    <p className="text-2xl font-black text-blue-600 tabular-nums dark:text-blue-400">
+                                        − {detallesMensajero.simbolo} {formatear(Math.abs(detallesMensajero.monto_operacion))}
+                                    </p>
+                                </ResumenDato>
+                            )}
+
+                            {tasaImplicita !== null && (
+                                <ResumenDato titulo="Tasa implícita" separado>
+                                    <p className="text-lg font-bold tabular-nums">
+                                        1 {detallesEntrada.moneda} ={' '}
+                                        {tasaImplicita.toLocaleString('es-ES', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: tasaImplicita >= 1 ? 2 : 6,
+                                        })}{' '}
+                                        {detallesSalida.moneda}
+                                    </p>
+                                    <p className="text-muted-foreground text-xs">Solo de referencia, sale de los dos montos.</p>
+                                </ResumenDato>
+                            )}
 
                             {remesa.notas && (
-                                <div>
-                                    <p className="text-muted-foreground text-sm font-medium">Notas</p>
-                                    <p className="bg-muted rounded-md p-3 text-sm">{remesa.notas}</p>
-                                </div>
+                                <ResumenDato titulo="Notas" separado>
+                                    <p className="text-sm">{remesa.notas}</p>
+                                </ResumenDato>
                             )}
-                        </CardContent>
-                    </Card>
+
+                            <ResumenDato titulo="Fecha y hora" separado>
+                                <p className="text-sm font-medium">{formatearFecha(remesa.fecha_operacion)}</p>
+                            </ResumenDato>
+
+                            <ResumenDato titulo="Registrada por" separado>
+                                <p className="text-sm font-medium">{remesa.user?.name ?? 'No especificado'}</p>
+                                {remesa.user?.role && (
+                                    <Badge variant="secondary" className="capitalize">
+                                        {remesa.user.role}
+                                    </Badge>
+                                )}
+                            </ResumenDato>
+
+                            <ResumenDato titulo="Atendido por">
+                                <p className="text-sm font-medium">
+                                    {remesa.turno_vendedor?.nombre_vendedor ?? remesa.user?.name ?? 'No especificado'}
+                                </p>
+                            </ResumenDato>
+
+                            <p className="text-muted-foreground border-t pt-3 text-xs">
+                                Operación Múltiple #{remesa.id} · registrada el {new Date(remesa.created_at).toLocaleString('es-ES')}
+                            </p>
+                        </ResumenCard>
+                    </aside>
                 </div>
             </div>
-            <Toaster position="top-center" />
         </AppLayout>
     );
 }

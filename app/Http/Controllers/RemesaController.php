@@ -9,6 +9,7 @@ use App\Models\Proveedor;
 use App\Models\Remesa;
 use App\Models\User;
 use App\Notifications\RemesaNotification;
+use App\Services\CatalogoTarjetasService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -32,8 +33,12 @@ class RemesaController extends Controller
      */
     public function formData()
     {
+        // `banco`: logo real del banco/tarjeta (o insignia de efectivo) para el selector visual
+        $cuentas = Cuenta::with('moneda')->get()
+            ->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
+
         return response()->json([
-            'cuentas' => Cuenta::with('moneda')->get(),
+            'cuentas' => $cuentas,
             'clientes' => Cliente::all(),
             'proveedores' => Proveedor::all(),
         ]);
@@ -53,10 +58,15 @@ class RemesaController extends Controller
             'mensajeroCuenta.moneda',
         ]);
 
+        // Solo admin y moderador llegan aquí (la ruta lo exige), así que todos los saldos son visibles.
         $detallesEntrada = [
             'tipo' => $remesa->entrada_tipo,
             'nombre' => $remesa->nombre_entrada,
             'moneda' => $remesa->entrada_moneda,
+            'simbolo' => $remesa->entradaCuenta?->moneda?->simbolo_moneda ?? '$',
+            'banco' => $remesa->entradaCuenta ? CatalogoTarjetasService::porSlug($remesa->entradaCuenta->imagen) : null,
+            'saldos_visibles' => true,
+            'tiene_datos_historicos' => $remesa->entrada_saldo_anterior !== null,
             'monto_operacion' => (float) $remesa->entrada_monto,
             'saldo_anterior' => (float) $remesa->entrada_saldo_anterior,
             'saldo_posterior' => (float) $remesa->entrada_saldo_posterior,
@@ -67,6 +77,10 @@ class RemesaController extends Controller
             'tipo' => $remesa->salida_tipo,
             'nombre' => $remesa->nombre_salida,
             'moneda' => $remesa->salida_moneda,
+            'simbolo' => $remesa->salidaCuenta?->moneda?->simbolo_moneda ?? '$',
+            'banco' => $remesa->salidaCuenta ? CatalogoTarjetasService::porSlug($remesa->salidaCuenta->imagen) : null,
+            'saldos_visibles' => true,
+            'tiene_datos_historicos' => $remesa->salida_saldo_anterior !== null,
             'monto_operacion' => -1 * abs((float) $remesa->salida_monto),
             'saldo_anterior' => (float) $remesa->salida_saldo_anterior,
             'saldo_posterior' => (float) $remesa->salida_saldo_posterior,
@@ -79,6 +93,10 @@ class RemesaController extends Controller
                 'tipo' => 'cuenta',
                 'nombre' => $remesa->mensajeroCuenta?->nombre_cuenta,
                 'moneda' => $remesa->mensajero_moneda,
+                'simbolo' => $remesa->mensajeroCuenta?->moneda?->simbolo_moneda ?? '$',
+                'banco' => $remesa->mensajeroCuenta ? CatalogoTarjetasService::porSlug($remesa->mensajeroCuenta->imagen) : null,
+                'saldos_visibles' => true,
+                'tiene_datos_historicos' => $remesa->mensajero_saldo_anterior !== null,
                 'monto_operacion' => -1 * abs((float) $remesa->mensajero_monto),
                 'saldo_anterior' => (float) $remesa->mensajero_saldo_anterior,
                 'saldo_posterior' => (float) $remesa->mensajero_saldo_posterior,
@@ -194,6 +212,13 @@ class RemesaController extends Controller
             'mensajero_monto' => 'nullable|numeric|min:0.01|required_with:mensajero_cuenta_id',
             'notas' => 'nullable|string|max:500',
         ]);
+
+        // La entrada y la salida no pueden ser la misma entidad: el dinero entraría y saldría de ella misma
+        if ($request->entrada_tipo === $request->salida_tipo && (int) $request->entrada_id === (int) $request->salida_id) {
+            return Redirect::back()->withErrors([
+                'salida_id' => 'La entrada y la salida no pueden ser la misma entidad.',
+            ])->withInput();
+        }
 
         DB::beginTransaction();
 

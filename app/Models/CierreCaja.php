@@ -15,6 +15,7 @@ class CierreCaja extends Model
     protected $fillable = [
         'user_id',
         'revisor_id',
+        'turno_vendedor_id',
         'fecha_apertura',
         'fecha_cierre',
         'saldo_inicial',
@@ -38,9 +39,13 @@ class CierreCaja extends Model
         'mensajero_total_cup',
         'mensajero_count',
         'mensajero_detalles',
+        'resumen_turnos',
+        'envios_en_transito',
     ];
 
     protected $casts = [
+        'resumen_turnos' => 'array',
+        'envios_en_transito' => 'array',
         'fecha_apertura' => 'datetime',
         'fecha_cierre' => 'datetime',
         // Usar floats para que JSON entregue números y el frontend pueda usar toFixed sin conversiones
@@ -73,6 +78,12 @@ class CierreCaja extends Model
     public function revisor()
     {
         return $this->belongsTo(User::class, 'revisor_id');
+    }
+
+    /** Turno ("Atendido por") activo de quien cerró; null en los cierres anteriores a guardarlo. */
+    public function turnoVendedor()
+    {
+        return $this->belongsTo(TurnoVendedor::class);
     }
 
     public function tieneDiferencia(): bool

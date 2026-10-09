@@ -65,18 +65,21 @@ test('index() de Distribución de Costos entrega todas las cuentas a un moderado
         ->where('cuentas.0.id', $cuenta->id));
 });
 
-test('un vendedor solo ve sus cuentas asignadas en formData() de Ingreso, sin distinguir el nivel de acceso todavía', function () {
+test('un vendedor solo ve en formData() de Ingreso sus cuentas de acceso completo, con el logo del banco, y no las de cobro', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);
 
     $propia = crearCuentaEnMoneda(crearMonedaUsd(), propietario: $vendedor);
+    $propia->update(['imagen' => 'visa']);
     $cuentaCobro = crearCuentaEnMoneda(crearMonedaUsd());
     $vendedor->cuentas()->attach($cuentaCobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
     crearCuentaEnMoneda(crearMonedaUsd()); // no asignada, no debe salir
 
     $this->getJson(route('transacciones.ingreso.data'))
         ->assertOk()
-        ->assertJsonCount(2, 'cuentasDestino');
+        ->assertJsonCount(1, 'cuentasDestino')
+        ->assertJsonPath('cuentasDestino.0.id', $propia->id)
+        ->assertJsonStructure(['cuentasDestino' => [['banco' => ['slug', 'nombre', 'imagen_url']]]]);
 });
 
 // ==========================================================================
@@ -210,6 +213,158 @@ test('un vendedor sí puede gastar desde su cuenta personal asignada', function 
     $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 450]);
 });
 
+test('un vendedor no puede gastar desde una cuenta personal asignada con acceso de solo cobro', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $cuenta->update(['tipo_titular' => 'personal']);
+    $vendedor->cuentas()->attach($cuenta->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->post(route('transacciones.gastar'), [
+        'origen_tipo' => 'cuenta',
+        'origen_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ]);
+
+    $response->assertSessionHasErrors('message');
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 500]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('un vendedor sí puede gastar desde una cuenta personal asignada con acceso completo explícito', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $cuenta->update(['tipo_titular' => 'personal']);
+    $vendedor->cuentas()->attach($cuenta->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+
+    $this->post(route('transacciones.gastar'), [
+        'origen_tipo' => 'cuenta',
+        'origen_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 450]);
+});
+
+test('la pantalla de Transacciones no lista al vendedor sus cuentas de cobro ni las externas, y manda el logo del banco', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $completa = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $completa->update(['tipo_titular' => 'personal', 'imagen' => 'visa']);
+    $cobro = crearCuentaEnMoneda($monedaUsd, saldo: 900);
+    $cobro->update(['tipo_titular' => 'personal']);
+    $externa = crearCuentaEnMoneda($monedaUsd, saldo: 700);
+    $externa->update(['tipo_titular' => 'externa']);
+    $vendedor->cuentas()->attach($completa->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+    $vendedor->cuentas()->attach($externa->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+
+    $this->get(route('transacciones'))->assertInertia(fn ($page) => $page
+        ->has('cuentasOrigen', 1)
+        ->where('cuentasOrigen.0.id', $completa->id)
+        ->has('cuentasOrigen.0.banco.imagen_url')
+        ->missing('cuentasDestino')
+    );
+});
+
+test('un vendedor no puede ingresar dinero a una cuenta asignada con acceso de solo cobro', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $cuenta->update(['tipo_titular' => 'personal']);
+    $vendedor->cuentas()->attach($cuenta->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'cuenta',
+        'destino_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ])->assertSessionHasErrors('message');
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 500]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('la pantalla de Transacciones entrega todas las cuentas de origen a un admin, con banco en null si no tienen logo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    crearCuentaEnMoneda($monedaUsd);
+    crearCuentaEnMoneda($monedaUsd);
+
+    $this->get(route('transacciones'))->assertInertia(fn ($page) => $page
+        ->has('cuentasOrigen', 2)
+        ->where('cuentasOrigen.0.banco', null)
+    );
+});
+
+test('un vendedor no puede gastar desde un cliente: no tiene acceso a clientes en Gastos', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    crearMoneda('USD', 1, true);
+    $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 200]);
+
+    $this->post(route('transacciones.gastar'), [
+        'origen_tipo' => 'cliente',
+        'origen_id' => $cliente->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ])->assertSessionHasErrors('origen_tipo');
+
+    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 200]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('la pantalla de Transacciones no entrega clientes al vendedor pero sí al admin', function () {
+    Cliente::factory()->count(2)->create();
+
+    $this->actingAs(User::factory()->vendedor()->create());
+    $this->get(route('transacciones'))->assertInertia(fn ($page) => $page->has('clientes', 0));
+
+    $this->actingAs(User::factory()->admin()->create());
+    $this->get(route('transacciones'))->assertInertia(fn ($page) => $page->has('clientes', 2));
+});
+
+test('un moderador puede gastar desde cualquier cuenta aunque no la tenga asignada', function () {
+    crearTiposMovimientoFinanciero();
+    $moderador = User::factory()->moderador()->create();
+    crearTurnoActivo($moderador);
+    $this->actingAs($moderador);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+
+    $this->post(route('transacciones.gastar'), [
+        'origen_tipo' => 'cuenta',
+        'origen_id' => $cuenta->id,
+        'monto' => 50,
+        'moneda' => 'USD',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 450]);
+});
+
 // ==========================================================================
 // INGRESO
 // ==========================================================================
@@ -289,6 +444,98 @@ test('un vendedor no puede ingresar a una cuenta que no tiene asignada', functio
 
     $response->assertSessionHasErrors('message');
     $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 100]);
+});
+
+test('un vendedor no puede ingresar a una cuenta asignada con acceso de solo cobro', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 100);
+    $vendedor->cuentas()->attach($cuenta->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $response = $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'cuenta',
+        'destino_id' => $cuenta->id,
+        'monto' => 30,
+        'moneda' => 'USD',
+    ]);
+
+    $response->assertSessionHasErrors('message');
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 100]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('un vendedor no puede ingresar a un cliente: no tiene acceso a clientes en Ingresos', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    crearMoneda('USD', 1, true);
+    $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 20]);
+
+    $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'cliente',
+        'destino_id' => $cliente->id,
+        'monto' => 30,
+        'moneda' => 'USD',
+    ])->assertSessionHasErrors('destino_tipo');
+
+    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 20]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('un vendedor no puede ingresar a un proveedor: no tiene acceso a proveedores en Ingresos', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    crearMoneda('USD', 1, true);
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
+
+    $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'proveedor',
+        'destino_id' => $proveedor->id,
+        'monto' => 75,
+        'moneda' => 'USD',
+    ])->assertSessionHasErrors('destino_tipo');
+
+    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 0]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('formData() de Ingreso no entrega clientes ni proveedores al vendedor pero sí al admin', function () {
+    Cliente::factory()->count(2)->create();
+    Proveedor::factory()->count(3)->create();
+
+    $this->actingAs(User::factory()->vendedor()->create());
+    $this->getJson(route('transacciones.ingreso.data'))->assertOk()->assertJsonCount(0, 'clientes')->assertJsonCount(0, 'proveedores');
+
+    $this->actingAs(User::factory()->admin()->create());
+    $this->getJson(route('transacciones.ingreso.data'))->assertOk()->assertJsonCount(2, 'clientes')->assertJsonCount(3, 'proveedores');
+});
+
+test('un vendedor sí puede ingresar a una cuenta asignada con acceso completo', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 100, propietario: $vendedor);
+
+    $this->post(route('transacciones.ingresar'), [
+        'destino_tipo' => 'cuenta',
+        'destino_id' => $cuenta->id,
+        'monto' => 30,
+        'moneda' => 'USD',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 130]);
 });
 
 // ==========================================================================
@@ -408,7 +655,7 @@ test('un vendedor no puede transferir desde una cuenta que no tiene asignada', f
     $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 500]);
 });
 
-test('un vendedor no puede transferir a una cuenta asignada a otro vendedor', function () {
+test('un vendedor que transfiere efectivo a la cuenta de efectivo de otro vendedor no la acredita al instante: el dinero sale del origen y queda en tránsito', function () {
     crearTiposMovimientoFinanciero();
     $vendedorA = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedorA);
@@ -418,8 +665,9 @@ test('un vendedor no puede transferir a una cuenta asignada a otro vendedor', fu
 
     $monedaUsd = crearMoneda('USD', 1, true);
     $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedorA);
-    $origen->update(['tipo_titular' => 'personal']);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
     $destinoDeOtro = crearCuentaEnMoneda($monedaUsd, saldo: 0, propietario: $vendedorB); // asignada a OTRO vendedor, no a A
+    $destinoDeOtro->update(['tipo' => 'efectivo']);
 
     $response = $this->post(route('transacciones.transferir'), [
         'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
@@ -427,9 +675,155 @@ test('un vendedor no puede transferir a una cuenta asignada a otro vendedor', fu
         'monto' => 50, 'moneda' => 'USD',
     ]);
 
+    $response->assertRedirect(route('transacciones.envios.index'));
+    $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 450]); // el dinero ya salió
+    $this->assertDatabaseHas('cuentas', ['id' => $destinoDeOtro->id, 'saldo_cuenta' => 0]); // y todavía no llegó
+    $this->assertDatabaseHas('transferencias_pendientes', [
+        'user_id' => $vendedorA->id, 'cuenta_origen_id' => $origen->id, 'cuenta_destino_id' => $destinoDeOtro->id,
+        'monto' => 50, 'estado' => 'en_transito',
+    ]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('un vendedor no puede transferir desde una cuenta personal asignada con acceso de solo cobro', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $origen->update(['tipo_titular' => 'personal']);
+    $vendedor->cuentas()->attach($origen->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+    $destino = crearCuentaEnMoneda($monedaUsd, saldo: 0, propietario: $vendedor);
+
+    $response = $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => 50, 'moneda' => 'USD',
+    ]);
+
     $response->assertSessionHasErrors('message');
     $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 500]);
-    $this->assertDatabaseHas('cuentas', ['id' => $destinoDeOtro->id, 'saldo_cuenta' => 0]);
+    $this->assertDatabaseHas('cuentas', ['id' => $destino->id, 'saldo_cuenta' => 0]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('un vendedor sí puede transferir desde una cuenta completa a una de sus cuentas de cobro', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedor);
+    $origen->update(['tipo_titular' => 'personal']);
+    $destino = crearCuentaEnMoneda($monedaUsd, saldo: 10);
+    $vendedor->cuentas()->attach($destino->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => 50, 'moneda' => 'USD',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 450]);
+    $this->assertDatabaseHas('cuentas', ['id' => $destino->id, 'saldo_cuenta' => 60]);
+});
+
+test('formData() de Transferencia da al vendedor de origen solo sus cuentas personales completas y de destino todas las del sistema, con saldo solo en las suyas completas', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMonedaUsd();
+    $completa = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedor);
+    $completa->update(['tipo_titular' => 'personal', 'imagen' => 'visa']);
+    $externa = crearCuentaEnMoneda($monedaUsd, saldo: 700, propietario: $vendedor);
+    $externa->update(['tipo_titular' => 'externa']);
+    $cobro = crearCuentaEnMoneda($monedaUsd, saldo: 900);
+    $cobro->update(['tipo_titular' => 'personal']);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+    $deOtro = crearCuentaEnMoneda($monedaUsd, saldo: 100, propietario: User::factory()->vendedor()->create(['name' => 'Otro Vendedor']));
+
+    $respuesta = $this->getJson(route('transacciones.transferencia.data'))->assertOk();
+
+    // Origen: solo la completa y personal. Destino: TODAS las cuentas del sistema (4).
+    $respuesta->assertJsonCount(1, 'cuentasOrigen')
+        ->assertJsonPath('cuentasOrigen.0.id', $completa->id)
+        ->assertJsonStructure(['cuentasOrigen' => [['banco' => ['slug', 'nombre', 'imagen_url']]]])
+        ->assertJsonCount(4, 'cuentasDestino');
+
+    $destinos = collect($respuesta->json('cuentasDestino'))->keyBy('id');
+    expect((float) $destinos[$completa->id]['saldo_cuenta'])->toBe(500.0);
+    expect((float) $destinos[$externa->id]['saldo_cuenta'])->toBe(700.0);
+    // Sin saldo: la suya de cobro y la de otra persona
+    expect($destinos[$cobro->id]['saldo_cuenta'])->toBeNull();
+    expect($destinos[$deOtro->id]['saldo_cuenta'])->toBeNull();
+    // `propia` decide si la transferencia es inmediata o queda pendiente; `responsables` dice a quién se envía
+    expect($destinos[$completa->id]['propia'])->toBeTrue();
+    expect($destinos[$cobro->id]['propia'])->toBeTrue();
+    expect($destinos[$deOtro->id]['propia'])->toBeFalse();
+    expect($destinos[$deOtro->id]['responsables'])->toBe(['Otro Vendedor']);
+});
+
+test('un vendedor transfiere solo entre cuentas: se rechaza un cliente de origen y un cliente o proveedor de destino', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedor);
+    $cuenta->update(['tipo_titular' => 'personal']);
+    $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 100]);
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cliente', 'origen_id' => $cliente->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $cuenta->id,
+        'monto' => 10, 'moneda' => 'USD',
+    ])->assertSessionHasErrors('origen_tipo');
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $cuenta->id,
+        'destino_tipo' => 'cliente', 'destino_id' => $cliente->id,
+        'monto' => 10, 'moneda' => 'USD',
+    ])->assertSessionHasErrors('destino_tipo');
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $cuenta->id,
+        'destino_tipo' => 'proveedor', 'destino_id' => $proveedor->id,
+        'monto' => 10, 'moneda' => 'USD',
+    ])->assertSessionHasErrors('destino_tipo');
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 500]);
+    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 100]);
+    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 0]);
+    expect(MovimientoFinanciero::count())->toBe(0);
+});
+
+test('formData() de Transferencia no entrega clientes ni proveedores al vendedor pero sí al admin', function () {
+    Cliente::factory()->count(2)->create();
+    Proveedor::factory()->count(3)->create();
+
+    $this->actingAs(User::factory()->vendedor()->create());
+    $this->getJson(route('transacciones.transferencia.data'))->assertOk()->assertJsonCount(0, 'clientes')->assertJsonCount(0, 'proveedores');
+
+    $this->actingAs(User::factory()->admin()->create());
+    $this->getJson(route('transacciones.transferencia.data'))->assertOk()->assertJsonCount(2, 'clientes')->assertJsonCount(3, 'proveedores');
+});
+
+test('formData() de Transferencia entrega a un admin todas las cuentas con su saldo', function () {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $monedaUsd = crearMonedaUsd();
+    crearCuentaEnMoneda($monedaUsd, saldo: 250);
+    crearCuentaEnMoneda($monedaUsd, saldo: 300);
+
+    $respuesta = $this->getJson(route('transacciones.transferencia.data'))->assertOk();
+
+    $respuesta->assertJsonCount(2, 'cuentasOrigen')->assertJsonCount(2, 'cuentasDestino');
+    expect(collect($respuesta->json('cuentasDestino'))->pluck('saldo_cuenta')->map(fn ($saldo) => (float) $saldo)->sort()->values()->all())->toBe([250.0, 300.0]);
 });
 
 // ==========================================================================
@@ -524,4 +918,51 @@ test('show() muestra el detalle de un movimiento financiero existente', function
     $response = $this->get(route('transacciones.show', $movimiento));
 
     $response->assertOk();
+});
+
+test('show() de una transferencia entre monedas distintas muestra lo que realmente recibió el destino', function () {
+    crearTiposMovimientoFinanciero();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $usd = crearMoneda('USD', 1, true);
+    $cup = crearMoneda('CUP', 500);
+    $origen = crearCuentaEnMoneda($usd, saldo: 100);
+    $destino = crearCuentaEnMoneda($cup, saldo: 1000);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => 10, 'moneda' => 'USD',
+    ])->assertRedirect();
+
+    $this->get(route('transacciones.show', MovimientoFinanciero::firstOrFail()))->assertInertia(fn ($page) => $page
+        ->where('detallesOrigen.monto_operacion', -10)
+        ->where('detallesDestino.moneda', 'CUP')
+        ->where('detallesDestino.monto_operacion', 5000)
+        ->where('detallesDestino.saldo_posterior', 6000)
+    );
+});
+
+test('un vendedor que transfiere a la cuenta de otro vendedor con una tarjeta de por medio la acredita al instante', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedorA = User::factory()->vendedor()->create();
+    $vendedorB = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedorA);
+    $this->actingAs($vendedorA);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedorA);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
+    $destinoDeOtro = crearCuentaEnMoneda($monedaUsd, saldo: 0, propietario: $vendedorB);
+    $destinoDeOtro->update(['tipo' => 'tarjeta']);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destinoDeOtro->id,
+        'monto' => 50, 'moneda' => 'USD',
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseCount('transferencias_pendientes', 0);
+    $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 450]);
+    $this->assertDatabaseHas('cuentas', ['id' => $destinoDeOtro->id, 'saldo_cuenta' => 50]);
 });

@@ -8,6 +8,7 @@ use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
 use App\Notifications\MovimientoFinancieroNotification;
+use App\Services\CatalogoTarjetasService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,9 +21,14 @@ class IngresoController extends Controller
 {
     public function formData()
     {
-        $cuentasDestino = auth()->user()->cuentasPropias()->with('moneda')->get();
-        $clientes = Cliente::all();
-        $proveedores = Proveedor::all();
+        // Vendedor: solo sus cuentas de acceso `completo` (una de `cobro` solo recibe pagos de ventas, no se
+        // lista ni viaja su saldo); admin/moderador, todas. `banco` es el logo real para el selector visual.
+        $cuentasDestino = auth()->user()->cuentasUsables()->with('moneda')->get()
+            ->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
+        // Un vendedor no tiene acceso a clientes ni a proveedores en Ingresos: ni se listan ni se aceptan
+        $esVendedor = auth()->user()->role === 'vendedor';
+        $clientes = $esVendedor ? collect() : Cliente::all();
+        $proveedores = $esVendedor ? collect() : Proveedor::all();
 
         return response()->json([
             'cuentasDestino' => $cuentasDestino,
@@ -35,12 +41,17 @@ class IngresoController extends Controller
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
+        // Un vendedor solo ingresa a cuentas: ni clientes ni proveedores
+        $tiposDestinoPermitidos = auth()->user()->role === 'vendedor' ? 'cuenta' : 'cuenta,cliente,proveedor';
+
         $request->validate([
-            'destino_tipo' => 'required|string|in:cuenta,cliente,proveedor',
+            'destino_tipo' => 'required|string|in:'.$tiposDestinoPermitidos,
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
+        ], [
+            'destino_tipo.in' => 'No tiene permiso para ingresar a clientes ni a proveedores.',
         ]);
 
         DB::beginTransaction();
@@ -66,11 +77,9 @@ class IngresoController extends Controller
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->destino_id);
 
-                if (auth()->user()->role === 'vendedor') {
-                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                    if (! in_array($destino->id, $cuentasAsignadas)) {
-                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
-                    }
+                // Un vendedor solo opera cuentas de acceso `completo` (ver User::cuentasUsables())
+                if (auth()->user()->role === 'vendedor' && ! auth()->user()->puedeUsarCuenta($destino->id)) {
+                    throw new \Exception('No tiene permiso para operar con esta cuenta.');
                 }
 
                 if ($destino->moneda->codigo_moneda !== $request->moneda) {

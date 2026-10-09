@@ -8,7 +8,9 @@ use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\Proveedor;
 use App\Notifications\MovimientoFinancieroNotification;
+use App\Services\CatalogoTarjetasService;
 use App\Services\NotificationService;
+use App\Services\TransferenciaPendienteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,10 +22,42 @@ class TransferenciaController extends Controller
 {
     public function formData()
     {
-        $cuentasOrigen = auth()->user()->cuentasPropias()->with('moneda')->get();
-        $cuentasDestino = $cuentasOrigen;
-        $clientes = Cliente::all();
-        $proveedores = Proveedor::all();
+        $usuario = auth()->user();
+        $esVendedor = $usuario->role === 'vendedor';
+
+        // Origen: el vendedor solo opera cuentas personales de acceso `completo` (una de `cobro` solo
+        // recibe pagos de ventas); admin/moderador, todas.
+        $origenQuery = $usuario->cuentasUsables();
+        if ($esVendedor) {
+            $origenQuery->where('cuentas.tipo_titular', 'personal');
+        }
+        $cuentasOrigen = $origenQuery->with('moneda')->get();
+
+        // Destino: TODAS las cuentas del sistema. El vendedor solo ve el saldo de sus cuentas de acceso
+        // `completo`; `propia` marca las suyas (cualquier nivel): a esas la transferencia es inmediata, a las
+        // demás queda pendiente de confirmación. `responsables` dice a quién se envía.
+        $cuentasDestino = Cuenta::with(['moneda', 'users:id,name'])->get();
+        $propias = $esVendedor ? $usuario->cuentas()->pluck('cuentas.id') : collect();
+        $conSaldoVisible = $esVendedor ? $usuario->cuentasCompletas()->pluck('cuentas.id') : null;
+
+        $cuentasDestino->each(function (Cuenta $cuenta) use ($propias, $conSaldoVisible) {
+            $cuenta->setAttribute('responsables', $cuenta->users->pluck('name')->values()->all());
+            $cuenta->setAttribute('propia', $propias->contains($cuenta->id));
+            $cuenta->unsetRelation('users');
+
+            if ($conSaldoVisible !== null && ! $conSaldoVisible->contains($cuenta->id)) {
+                $cuenta->setAttribute('saldo_cuenta', null);
+            }
+        });
+
+        // `banco`: logo real del banco/tarjeta (o insignia de efectivo) para el selector visual
+        foreach ([$cuentasOrigen, $cuentasDestino] as $cuentas) {
+            $cuentas->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
+        }
+
+        // Un vendedor transfiere solo entre cuentas: no tiene acceso a clientes ni a proveedores
+        $clientes = $esVendedor ? collect() : Cliente::all();
+        $proveedores = $esVendedor ? collect() : Proveedor::all();
         $monedasActivas = Moneda::where('estado', true)->get();
 
         return response()->json([
@@ -39,15 +73,21 @@ class TransferenciaController extends Controller
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
+        // Un vendedor transfiere solo entre cuentas: ni clientes ni proveedores, ni de origen ni de destino
+        $esVendedor = auth()->user()->role === 'vendedor';
+
         $request->validate([
-            'origen_tipo' => 'required|string|in:cuenta,cliente',
+            'origen_tipo' => 'required|string|in:'.($esVendedor ? 'cuenta' : 'cuenta,cliente'),
             'origen_id' => 'required|integer',
-            'destino_tipo' => 'required|string|in:cuenta,cliente,proveedor',
+            'destino_tipo' => 'required|string|in:'.($esVendedor ? 'cuenta' : 'cuenta,cliente,proveedor'),
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
             'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
+        ], [
+            'origen_tipo.in' => 'No tiene permiso para transferir desde clientes.',
+            'destino_tipo.in' => 'No tiene permiso para transferir a clientes ni a proveedores.',
         ]);
 
         if ($request->origen_tipo === $request->destino_tipo && (int) $request->origen_id === (int) $request->destino_id) {
@@ -64,12 +104,14 @@ class TransferenciaController extends Controller
 
             $this->validarAccesoVendedor($origen, $request->origen_tipo);
 
-            if (auth()->user()->role === 'vendedor' && $request->destino_tipo === 'cuenta') {
-                $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                if (! in_array((int) $request->destino_id, $cuentasAsignadas)) {
-                    throw new \Exception('No tiene permiso para transferir a esta cuenta.');
-                }
-            }
+            // Misma regla para todos los roles: el efectivo es lo que viaja (puede cambiar de provincia y llegar días
+            // después), así que una transferencia de cuenta de efectivo a cuenta de efectivo sale del origen y queda
+            // en tránsito hasta que se confirme. Con una tarjeta de por medio, o hacia un cliente o proveedor, es
+            // inmediata. Sin campo de provincia en las cuentas: lo decide el tipo de cuenta.
+            $quedaEnTransito = $request->origen_tipo === 'cuenta'
+                && $request->destino_tipo === 'cuenta'
+                && $origen->tipo === 'efectivo'
+                && $destino->tipo === 'efectivo';
 
             $monedaOrigen = $this->obtenerMonedaEntidad($origen, $request->origen_tipo);
             $monedaDestino = $this->obtenerMonedaEntidad($destino, $request->destino_tipo);
@@ -97,6 +139,23 @@ class TransferenciaController extends Controller
             $gananciaPerdidaCambiaria = $tasaUsdMonedaDestino > 0
                 ? round($diferenciaMonedaDestino / $tasaUsdMonedaDestino, 2)
                 : 0.0;
+
+            if ($quedaEnTransito) {
+                app(TransferenciaPendienteService::class)->enviar(auth()->user(), $origen, $destino, [
+                    'monto' => $montoOrigen,
+                    'moneda' => $request->moneda,
+                    'monto_destino' => $montoDestino,
+                    'moneda_destino' => $monedaDestino->codigo_moneda,
+                    'tasa_cambio_aplicada' => $tasaCambioAplicada,
+                    'tasa_oficial_en_momento' => $tasaOficialEnMomento,
+                    'ganancia_perdida_cambiaria' => $gananciaPerdidaCambiaria,
+                ], $request->comentario);
+
+                DB::commit();
+
+                return Redirect::route('transacciones.envios.index')
+                    ->with('success', "Envío de {$montoOrigen} {$request->moneda} registrado: queda pendiente de que lo confirmen en {$destino->nombre_cuenta}.");
+            }
 
             $saldoAnteriorOrigen = $this->obtenerSaldoEntidad($origen, $request->origen_tipo);
             $saldoAnteriorDestino = $this->obtenerSaldoEntidad($destino, $request->destino_tipo);
@@ -249,8 +308,8 @@ class TransferenciaController extends Controller
     private function validarAccesoVendedor($entidad, string $tipo): void
     {
         if (auth()->user()->role === 'vendedor' && $tipo === 'cuenta') {
-            $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-            if (! in_array($entidad->id, $cuentasAsignadas)) {
+            // Solo cuentas de acceso `completo`: una de `cobro` solo recibe pagos de ventas (User::cuentasUsables())
+            if (! auth()->user()->puedeUsarCuenta($entidad->id)) {
                 throw new \Exception('No tiene permiso para operar con esta cuenta.');
             }
             if (($entidad->tipo_titular ?? '__sin_asignar__') !== 'personal') {

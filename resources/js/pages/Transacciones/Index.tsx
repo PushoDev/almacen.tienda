@@ -1,9 +1,12 @@
 import HeadingSmall from '@/components/heading-small';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
+import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
 import Movimientos from './layouts/Movimientos';
 
 // ✅ INTERFACES ACTUALIZADAS con el sistema de monedas
@@ -47,11 +50,11 @@ interface Proveedor {
 
 interface Props {
     cuentasOrigen: Cuenta[];
-    cuentasDestino: Cuenta[];
     clientes: Cliente[];
     proveedores: Proveedor[];
     monedasActivas: Moneda[];
     userRole: 'admin' | 'moderador' | 'vendedor';
+    totalesTransito: { en_transito: number; por_confirmar: number; con_diferencia: number };
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -73,7 +76,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas, userRole }: Props) {
+export default function Transacciones({ cuentasOrigen, clientes, proveedores, monedasActivas, userRole, totalesTransito }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -95,10 +98,70 @@ export default function Transacciones({ cuentasOrigen, cuentasDestino, clientes,
                 </div>
                 <Separator className="col-span-4" />
 
+                {/* Widgets de los envíos de dinero: cada uno lleva a la vista "Envíos de dinero" ya filtrada */}
+                <div className="grid gap-4 md:grid-cols-3">
+                    <Link href={route('transacciones.envios.index', { estado: 'en_transito' })} className="block">
+                        <SpotlightCard
+                            estado="especial"
+                            className="h-full rounded-lg border border-amber-400/30 bg-amber-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-amber-500/10"
+                        >
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                    <Truck className="h-4 w-4" />
+                                </span>
+                                <p className="text-muted-foreground text-sm font-medium">Envíos en tránsito</p>
+                            </div>
+                            <Badge className="gap-1 border-0 bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1 text-xl font-black text-white shadow-md shadow-amber-500/30">
+                                {totalesTransito.en_transito}
+                            </Badge>
+                        </SpotlightCard>
+                    </Link>
+
+                    <Link href={route('transacciones.envios.index', { estado: 'por_confirmar' })} className="block">
+                        <SpotlightCard
+                            estado="disponible"
+                            className="h-full rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-emerald-500/10"
+                        >
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                    <PackageCheck className="h-4 w-4" />
+                                </span>
+                                <p className="text-muted-foreground text-sm font-medium">Por confirmar por ti</p>
+                            </div>
+                            <Badge className="gap-1 border-0 bg-gradient-to-r from-emerald-500 to-emerald-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-emerald-500/30">
+                                {totalesTransito.por_confirmar}
+                            </Badge>
+                        </SpotlightCard>
+                    </Link>
+
+                    <Link href={route('transacciones.envios.index', { estado: 'diferencia' })} className="block">
+                        <SpotlightCard
+                            estado="agotado"
+                            className="h-full rounded-lg border border-red-400/30 bg-red-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-red-500/10"
+                        >
+                            <div className="mb-2 flex items-center gap-2">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-600 dark:text-red-400">
+                                    <AlertTriangle className="h-4 w-4" />
+                                </span>
+                                <p className="text-muted-foreground text-sm font-medium">Diferencias por resolver</p>
+                            </div>
+                            <Badge className="gap-1 border-0 bg-gradient-to-r from-red-500 to-red-600 px-3 py-1 text-xl font-black text-white shadow-md shadow-red-500/30">
+                                {totalesTransito.con_diferencia}
+                            </Badge>
+                        </SpotlightCard>
+                    </Link>
+                </div>
+
                 {/* El Tabs externo de una sola pestaña ("Movimientos Financieros") se quitó
                     2026-09-14: dejó de tener sentido cuando "Distribuir Costos" se eliminó
                     (2026-08-28) y quedó como única opción sin nada entre qué elegir. */}
-                <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} userRole={userRole} />
+                <Movimientos
+                    cuentasOrigen={cuentasOrigen}
+                    clientes={clientes}
+                    proveedores={proveedores}
+                    monedasActivas={monedasActivas}
+                    userRole={userRole}
+                />
             </div>
             <Toaster position="top-center" />
         </AppLayout>
