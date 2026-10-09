@@ -19,7 +19,9 @@ use App\Services\CatalogoTarjetasService;
 use App\Services\MetodosPagoService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -42,7 +44,7 @@ class CierreCajaController extends Controller
         $user = Auth::user();
         $esAdminOModerador = $user->isAdmin() || $user->isModerator();
 
-        $query = CierreCaja::with(['usuario', 'revisor'])
+        $query = CierreCaja::with(['usuario', 'turnoVendedor'])
             ->orderBy('fecha_cierre', 'desc');
 
         // Si no es admin/moderador, solo ve sus propios cierres
@@ -76,39 +78,107 @@ class CierreCajaController extends Controller
             }
         }
 
+        // Resumen de TODO lo que cumple el filtro (no solo de la página): se calcula antes de paginar.
+        $resumen = $this->resumenDelListado(clone $query);
+
         $cierres = $query->paginate(20);
 
         // Un cierre cubre un rango de tiempo (fecha_apertura → fecha_cierre) en una cuenta
-        // compartida por punto de venta — con la feature de Turnos (re-captura en cada login,
-        // ver App\Models\User::requiereCapturaTurno()) ese rango puede incluir varias personas
-        // distintas relevándose antes de que alguien cierre la caja. Se listan todas, no solo
-        // quien cerró — mismo criterio de "responsable real" que ya usa DetalleOperacionService.
+        // compartida por punto de venta: puede incluir varias personas relevándose antes de que
+        // alguien cierre la caja. Se listan todas, no solo quien cerró. Los cierres nuevos traen
+        // los turnos y los envíos en tránsito guardados; los anteriores se recalculan o quedan
+        // sin ese dato (null), nunca inventado.
         $cierres->getCollection()->transform(function (CierreCaja $cierre) {
-            $nombresVenta = Venta::where('user_id', $cierre->user_id)
-                ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
-                ->with('turnoVendedor:id,nombre_vendedor')
-                ->get()
-                ->pluck('turnoVendedor.nombre_vendedor');
+            $turnos = is_array($cierre->resumen_turnos) ? $cierre->resumen_turnos : null;
+            $envios = is_array($cierre->envios_en_transito) ? $cierre->envios_en_transito : null;
+            $enviosLista = $envios ? array_merge($envios['enviados'] ?? [], $envios['por_recibir'] ?? []) : [];
 
-            $nombresMovimiento = MovimientoFinanciero::where('user_id', $cierre->user_id)
-                ->whereBetween('fecha_operacion', [$cierre->fecha_apertura, $cierre->fecha_cierre])
-                ->with('turnoVendedor:id,nombre_vendedor')
-                ->get()
-                ->pluck('turnoVendedor.nombre_vendedor');
+            $cierre->setAttribute('responsables_turno', $turnos !== null
+                ? collect($turnos)->pluck('nombre')->filter()->unique()->values()
+                : $this->responsablesDeTurnoDeUnCierreAnterior($cierre));
+            $cierre->setAttribute('turno_cierre', $cierre->turnoVendedor?->nombre_vendedor);
+            $cierre->setAttribute('ventas_total_usd', round((float) $cierre->ventas_efectivo + (float) $cierre->ventas_otros, 2));
+            $cierre->setAttribute('ventas_count', $turnos !== null ? (int) array_sum(array_column($turnos, 'ventas_count')) : null);
+            $cierre->setAttribute('envios_guardados', $envios !== null);
+            $cierre->setAttribute('envios_en_transito_total', (int) ($envios['resumen']['total'] ?? 0));
+            $cierre->setAttribute('envios_atrasados', count(array_filter($enviosLista, fn ($envio) => ! empty($envio['atrasado']))));
 
-            $cierre->responsables_turno = $nombresVenta->merge($nombresMovimiento)->filter()->unique()->values();
-
-            return $cierre;
+            // El listado no necesita los JSON pesados del cierre: viajaban enteros por cada fila.
+            return $cierre->makeHidden([
+                'detalles', 'arqueo_detalles', 'confirmacion_transferencias', 'snapshot_cuentas', 'snapshot_clientes',
+                'mensajero_detalles', 'comisiones_gestor_detalles', 'resumen_turnos', 'envios_en_transito',
+            ]);
         });
 
         return Inertia::render('Cierres/Index', [
             'cierres' => $cierres,
+            'resumen' => $resumen,
             'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'user_id', 'cuadre']),
             'vendedores' => $esAdminOModerador
                 ? User::whereIn('id', CierreCaja::select('user_id')->distinct())->orderBy('name')->get(['id', 'name'])
                 : [],
             'es_admin_o_moderador' => $esAdminOModerador,
         ]);
+    }
+
+    /**
+     * Quiénes atendieron en un cierre guardado antes de registrar los turnos: se recalcula con las ventas y los
+     * movimientos de su periodo (lo único que existe para esos cierres).
+     *
+     * @return Collection<int, string>
+     */
+    private function responsablesDeTurnoDeUnCierreAnterior(CierreCaja $cierre): Collection
+    {
+        $nombresVenta = Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->with('turnoVendedor:id,nombre_vendedor')
+            ->get()
+            ->pluck('turnoVendedor.nombre_vendedor');
+
+        $nombresMovimiento = MovimientoFinanciero::where('user_id', $cierre->user_id)
+            ->whereBetween('fecha_operacion', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->with('turnoVendedor:id,nombre_vendedor')
+            ->get()
+            ->pluck('turnoVendedor.nombre_vendedor');
+
+        return $nombresVenta->merge($nombresMovimiento)->filter()->unique()->values();
+    }
+
+    /**
+     * Números de arriba del listado, sobre todos los cierres que cumplen el filtro: cuántos son, cuánto se vendió,
+     * cuántos cerraron con saldo esperado negativo y cuántos dejaron dinero en tránsito (y cuántos envíos iban
+     * atrasados). Los cierres anteriores a guardar el tránsito no cuentan en esos dos últimos.
+     *
+     * @param  Builder<CierreCaja>  $consulta
+     * @return array{total: int, ventas_total_usd: float, saldo_negativo: int, con_transito: int, envios_atrasados: int}
+     */
+    private function resumenDelListado($consulta): array
+    {
+        $cierres = $consulta->reorder()->without(['usuario', 'turnoVendedor'])
+            ->get(['id', 'saldo_esperado', 'ventas_efectivo', 'ventas_otros', 'envios_en_transito']);
+
+        $conTransito = 0;
+        $atrasados = 0;
+        foreach ($cierres as $cierre) {
+            $envios = is_array($cierre->envios_en_transito) ? $cierre->envios_en_transito : null;
+            if ($envios === null) {
+                continue;
+            }
+            if ((int) ($envios['resumen']['total'] ?? 0) > 0) {
+                $conTransito++;
+            }
+            foreach (array_merge($envios['enviados'] ?? [], $envios['por_recibir'] ?? []) as $envio) {
+                $atrasados += empty($envio['atrasado']) ? 0 : 1;
+            }
+        }
+
+        return [
+            'total' => $cierres->count(),
+            'ventas_total_usd' => round((float) $cierres->sum(fn ($cierre) => (float) $cierre->ventas_efectivo + (float) $cierre->ventas_otros), 2),
+            'saldo_negativo' => $cierres->filter(fn ($cierre) => (float) $cierre->saldo_esperado < 0)->count(),
+            'con_transito' => $conTransito,
+            'envios_atrasados' => $atrasados,
+        ];
     }
 
     /**
@@ -569,7 +639,7 @@ class CierreCajaController extends Controller
 
     public function show($id)
     {
-        $cierre = CierreCaja::with(['usuario', 'revisor'])->findOrFail($id);
+        $cierre = CierreCaja::with(['usuario', 'revisor', 'turnoVendedor'])->findOrFail($id);
 
         // Seguridad: solo dueño o admin
         $currentUser = Auth::user();
@@ -874,20 +944,45 @@ class CierreCajaController extends Controller
             }
         }
 
+        // El saldo de una cuenta de cobro no lo ve quien solo cobra en ella. Los cierres guardados antes de ese permiso
+        // pueden traerlo en el snapshot (y viaja también dentro de `cierre`), así que se filtra aquí al mostrarlo.
+        if ($currentUser->role === 'vendedor') {
+            $cuentasVisibles = $currentUser->cuentasCompletas()->pluck('cuentas.id')->map(fn ($valor) => (int) $valor)->all();
+            $actualCuentasPorId = array_intersect_key($actualCuentasPorId, array_flip($cuentasVisibles));
+            $cierre->snapshot_cuentas = array_values(array_filter(
+                $snapActualCuentas,
+                fn ($item) => in_array((int) ($item['id'] ?? 0), $cuentasVisibles, true)
+            ));
+        }
+
+        // Dinero que seguía en tránsito al cerrar (guardado en el cierre; los cierres anteriores no lo tienen)
+        $enviosGuardados = is_array($cierre->envios_en_transito)
+            ? collect(array_merge($cierre->envios_en_transito['enviados'] ?? [], $cierre->envios_en_transito['por_recibir'] ?? []))
+            : collect();
+        $enTransitoSalida = $enviosGuardados->groupBy('cuenta_origen_id')->map(fn ($grupo) => round((float) $grupo->sum('monto'), 2));
+        $enTransitoEntrada = $enviosGuardados->groupBy('cuenta_destino_id')->map(fn ($grupo) => round((float) $grupo->sum('monto_destino'), 2));
+
+        $cuentasDelSnapshot = Cuenta::with('moneda')->whereIn('id', array_keys($actualCuentasPorId))->get()->keyBy('id');
+
         // Construir comparativa de cuentas
         foreach ($actualCuentasPorId as $id => $data) {
             $saldoActual = (float) $data['saldo'];
             $saldoAnterior = (float) ($anteriorCuentasPorId[$id] ?? 0);
-            $diferencia = $saldoActual - $saldoAnterior;
+            // Redondeada ANTES de decidir el estado: la resta de dos decimales deja residuos que se mostraban como -$0.00
+            $diferencia = round($saldoActual - $saldoAnterior, 2);
 
             $comparativaCuentas[] = [
+                'es_nueva' => $tieneCierreAnterior && ! array_key_exists($id, $anteriorCuentasPorId),
+                'en_transito_salida' => $enTransitoSalida[$id] ?? 0,
+                'en_transito_entrada' => $enTransitoEntrada[$id] ?? 0,
                 'id' => $id,
                 'nombre' => $data['nombre'],
                 'tipo' => $data['tipo'],
+                'banco' => $this->logoDeCuenta($cuentasDelSnapshot->get($id)),
                 'moneda' => $data['moneda'],
                 'saldo_anterior' => round($saldoAnterior, 2),
                 'saldo_actual' => round($saldoActual, 2),
-                'diferencia' => round($diferencia, 2),
+                'diferencia' => $diferencia,
                 'estado' => $diferencia > 0 ? 'subio' : ($diferencia < 0 ? 'bajo' : 'igual'),
             ];
         }
@@ -896,7 +991,7 @@ class CierreCajaController extends Controller
         foreach ($actualClientesPorId as $id => $data) {
             $deudaActual = (float) $data['deuda'];
             $deudaAnterior = (float) ($anteriorClientesPorId[$id] ?? 0);
-            $diferencia = $deudaActual - $deudaAnterior;
+            $diferencia = round($deudaActual - $deudaAnterior, 2);
 
             $comparativaClientes[] = [
                 'id' => $id,
@@ -1009,8 +1104,16 @@ class CierreCajaController extends Controller
             'mensajero_detalles' => $mensajeroDetallesList,
             // Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
+            'comparativa_cuentas_cobro' => $cierreUser ? $this->cuentasDeCobroDelTurno($cierreUser, $cierre->fecha_apertura, $cierre->fecha_cierre) : [],
             'comparativa_clientes' => $comparativaClientes,
             'tiene_cierre_anterior' => $tieneCierreAnterior,
+            // Lo que el cierre guarda desde el 10-09; los cierres anteriores no lo tienen (null / false)
+            'turno_cierre' => $cierre->turnoVendedor?->nombre_vendedor,
+            'turnos' => $cierre->resumen_turnos,
+            'envios_guardados' => is_array($cierre->envios_en_transito),
+            'envios_en_transito' => $cierre->envios_en_transito,
+            // Se recalculan por las fechas del cierre, como las ventas especiales
+            'operaciones_multiples' => $this->detalleOperacionesMultiples($currentUser, $cierre->fecha_apertura, $cierre->fecha_cierre),
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -2037,7 +2140,7 @@ class CierreCajaController extends Controller
      *
      * @return array<int, array{id: int, nombre: string, tipo: string|null, banco: array{slug: string, nombre: string, imagen_url: string}|null, moneda: string|null, operado_turno: float}>
      */
-    private function cuentasDeCobroDelTurno(User $user, mixed $inicioTurno): array
+    private function cuentasDeCobroDelTurno(User $user, mixed $inicioTurno, mixed $finTurno = null): array
     {
         if (in_array($user->role, ['admin', 'moderador'], true)) {
             return [];
@@ -2052,6 +2155,7 @@ class CierreCajaController extends Controller
         $cobradoPorCuenta = PagoVenta::whereIn('cuenta_id', $cuentasCobro->pluck('id'))
             ->whereHas('venta', fn ($q) => $q->where('user_id', $user->id)
                 ->where('created_at', '>=', $inicioTurno)
+                ->when($finTurno, fn ($consulta) => $consulta->where('created_at', '<=', $finTurno))
                 ->where('estado', 'completada'))
             ->selectRaw('cuenta_id, SUM(monto) as total')
             ->groupBy('cuenta_id')
@@ -2075,7 +2179,7 @@ class CierreCajaController extends Controller
      *
      * @return array{visible: bool, items: array<int, array<string, mixed>>, resumen: array{total: int, entradas: array<int, array{moneda: string, monto: float}>, salidas: array<int, array{moneda: string, monto: float}>}}
      */
-    private function detalleOperacionesMultiples(User $user, mixed $inicioTurno): array
+    private function detalleOperacionesMultiples(User $user, mixed $inicioTurno, mixed $finTurno = null): array
     {
         $vacio = ['visible' => false, 'items' => [], 'resumen' => ['total' => 0, 'entradas' => [], 'salidas' => []]];
 
@@ -2084,7 +2188,8 @@ class CierreCajaController extends Controller
         }
 
         $remesas = Remesa::with(['user:id,name', 'entradaCuenta', 'entradaCliente', 'entradaProveedor', 'salidaCuenta', 'salidaCliente', 'salidaProveedor', 'mensajeroCuenta'])
-            ->where('fecha_operacion', '>=', $inicioTurno)
+            ->when($inicioTurno, fn ($consulta) => $consulta->where('fecha_operacion', '>=', $inicioTurno))
+            ->when($finTurno, fn ($consulta) => $consulta->where('fecha_operacion', '<=', $finTurno))
             ->orderByDesc('id')
             ->get();
 
@@ -2165,6 +2270,8 @@ class CierreCajaController extends Controller
 
             return [
                 'id' => $envio->id,
+                'cuenta_origen_id' => $envio->cuenta_origen_id,
+                'cuenta_destino_id' => $envio->cuenta_destino_id,
                 'dias_en_transito' => $diasEnTransito,
                 'atrasado' => $diasEnTransito >= self::DIAS_PARA_ATRASADO,
                 'fecha' => $envio->created_at->format('d/m H:i'),

@@ -8,6 +8,27 @@ import { colorMoneda } from '../utils';
 
 const formatearMonto = (valor: number) => valor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Insignia real de la moneda, o un círculo con su símbolo mientras no tenga una asignada. */
+function InsigniaMoneda({
+    imagenUrl,
+    nombre,
+    simbolo,
+    codigo,
+    indice,
+}: {
+    imagenUrl: string | null | undefined;
+    nombre: string;
+    simbolo: string;
+    codigo: string;
+    indice: number;
+}) {
+    if (imagenUrl) {
+        return <img src={imagenUrl} alt={nombre} className="h-9 w-auto max-w-16 shrink-0 object-contain drop-shadow-md" />;
+    }
+    const c = colorMoneda(codigo, indice);
+    return <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black ${c.bg} ${c.text}`}>{simbolo.slice(0, 3)}</span>;
+}
+
 export default function ResumenFinanciero({
     resumenFinanciero,
     montosPorMoneda,
@@ -51,22 +72,30 @@ export default function ResumenFinanciero({
                                             >
                                                 <TableCell className="font-medium">
                                                     <div className="flex items-center gap-3">
-                                                        <Badge variant="outline" className={`${c.bg} ${c.text} ${c.border}`}>
-                                                            {item.codigo}
-                                                        </Badge>
-                                                        {item.incluye_clientes_proveedores_inventario && (
-                                                            <span className="text-muted-foreground text-xs italic">
-                                                                incluye clientes, proveedores e inventario
-                                                            </span>
-                                                        )}
+                                                        <InsigniaMoneda imagenUrl={item.imagen_url} nombre={item.nombre} simbolo={item.simbolo} codigo={item.codigo} indice={index} />
+                                                        <div className="min-w-0 space-y-1">
+                                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                                <Badge variant="outline" className={`font-black ${c.bg} ${c.text} ${c.border}`}>
+                                                                    {item.codigo}
+                                                                </Badge>
+                                                                {item.principal && (
+                                                                    <Badge className="border border-amber-200 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-300 text-amber-950 shadow-md shadow-amber-500/40">
+                                                                        Principal
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-muted-foreground truncate text-xs">{item.nombre}</p>
+                                                            {item.incluye_clientes_proveedores_inventario && (
+                                                                <p className="text-muted-foreground text-xs italic">incluye clientes, proveedores e inventario</p>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right font-medium">
-                                                    {item.monto.toLocaleString('es-ES', {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 2,
-                                                    })}{' '}
-                                                    {item.simbolo}
+                                                <TableCell className="text-right">
+                                                    <h3 className={`text-xl font-bold tabular-nums ${item.monto < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
+                                                        {item.monto < 0 ? '−' : ''}
+                                                        {formatearMonto(Math.abs(item.monto))} {item.simbolo}
+                                                    </h3>
                                                     {item.en_transito > 0 && (
                                                         <span className="mt-0.5 flex items-center justify-end gap-1 text-xs font-normal text-amber-600 dark:text-amber-400">
                                                             <Truck className="h-3 w-3" />
@@ -86,17 +115,19 @@ export default function ResumenFinanciero({
                                 )}
                             </TableBody>
                         </Table>
-                        <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex justify-between border-t pt-2 font-semibold">
-                            <span>Capital Financiero Total:</span>
-                            <span className="text-right">
-                                {resumenFinanciero.moneda_principal.simbolo} {formatearMonto(resumenFinanciero.capital_financiero)}
+                        <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex items-center justify-between border-t pt-3">
+                            <span className="font-semibold">Capital Financiero Total:</span>
+                            <div className="text-right">
+                                <h3 className="text-2xl font-black tabular-nums">
+                                    {resumenFinanciero.moneda_principal.simbolo} {formatearMonto(resumenFinanciero.capital_financiero)}
+                                </h3>
                                 {resumenFinanciero.en_transito_usd > 0 && (
                                     <span className="mt-0.5 flex items-center justify-end gap-1 text-xs font-normal text-amber-600 dark:text-amber-400">
                                         <Truck className="h-3 w-3" />
                                         incluye {resumenFinanciero.moneda_principal.simbolo} {formatearMonto(resumenFinanciero.en_transito_usd)} en tránsito
                                     </span>
                                 )}
-                            </span>
+                            </div>
                         </div>
                         <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
                             <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -127,28 +158,34 @@ export default function ResumenFinanciero({
                             </TableHeader>
                             <TableBody>
                                 {montosPorMoneda && montosPorMoneda.length > 0 ? (
-                                    montosPorMoneda.map((item, index) => (
-                                        <TableRow
-                                            key={index}
-                                            className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
-                                        >
-                                            <TableCell className="font-medium">
-                                                <div className="flex items-center gap-3">
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {item.descripcion}
-                                                    </Badge>
-                                                    <span className="text-muted-foreground font-mono text-sm">{item.simbolo}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right font-medium">
-                                                {item.monto.toLocaleString('es-ES', {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 6,
-                                                })}{' '}
-                                                {item.simbolo}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    montosPorMoneda.map((item, index) => {
+                                        const codigo = item.codigo ?? item.simbolo;
+                                        const c = colorMoneda(codigo, index);
+                                        return (
+                                            <TableRow
+                                                key={codigo}
+                                                className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                            >
+                                                <TableCell className="font-medium">
+                                                    <div className="flex items-center gap-3">
+                                                        <InsigniaMoneda imagenUrl={item.imagen_url} nombre={item.descripcion} simbolo={item.simbolo} codigo={codigo} indice={index} />
+                                                        <div className="min-w-0 space-y-1">
+                                                            <Badge variant="outline" className={`font-black ${c.bg} ${c.text} ${c.border}`}>
+                                                                {codigo}
+                                                            </Badge>
+                                                            <p className="text-muted-foreground truncate text-xs">{item.descripcion}</p>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <h3 className={`text-xl font-bold tabular-nums ${item.monto < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
+                                                        {item.monto < 0 ? '−' : ''}
+                                                        {formatearMonto(Math.abs(item.monto))} {item.simbolo}
+                                                    </h3>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
                                 ) : (
                                     <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
                                         <TableCell colSpan={2} className="py-8 text-center text-gray-500 dark:text-gray-400">
@@ -159,15 +196,9 @@ export default function ResumenFinanciero({
                             </TableBody>
                         </Table>
                         {totalCapital !== undefined && montosPorMoneda && montosPorMoneda.length > 0 && (
-                            <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex justify-between border-t pt-2 font-semibold">
-                                <span>Total Capital (USD):</span>
-                                <span>
-                                    {totalCapital.toLocaleString('es-ES', {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                    })}{' '}
-                                    USD
-                                </span>
+                            <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex items-center justify-between border-t pt-3">
+                                <span className="font-semibold">Total Capital (USD):</span>
+                                <h3 className="text-2xl font-black tabular-nums">{formatearMonto(totalCapital)} USD</h3>
                             </div>
                         )}
                     </CardContent>

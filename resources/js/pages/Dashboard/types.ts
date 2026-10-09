@@ -17,6 +17,9 @@ export interface Moneda {
 }
 
 export interface MontoPorMoneda {
+    codigo?: string;
+    /** Insignia de la moneda; null si todavía no tiene una asignada. */
+    imagen_url?: string | null;
     descripcion: string;
     simbolo: string;
     monto: number;
@@ -41,6 +44,8 @@ export interface ComparacionMensual {
     diferencia: number;
     porcentaje_cambio: number;
     es_positivo: boolean;
+    /** Parte de `monto_actual` que viaja en envíos de dinero sin confirmar (ya está sumada). */
+    en_transito?: number;
     tasa_cambio: number;
     // Más de 1 elemento cuando este código combina 2+ monedas reales distintas con tasas
     // propias (ej. CUP efectivo/tarjeta) — se usa para ofrecer un desglose expandible.
@@ -112,7 +117,11 @@ export interface StatsCostoPrecio {
 
 export interface CapitalPorMoneda {
     codigo: string;
+    nombre: string;
+    /** Insignia de la moneda; null si todavía no tiene una asignada. */
+    imagen_url: string | null;
     simbolo: string;
+    principal: boolean;
     monto: number;
     /** Parte de `monto` que viaja en envíos de dinero sin confirmar (ya está sumada). */
     en_transito: number;

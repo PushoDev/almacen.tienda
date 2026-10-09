@@ -2,6 +2,7 @@
 
 use App\Models\Cliente;
 use App\Models\Cuenta;
+use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
 use App\Models\TransferenciaPendiente;
 use App\Models\User;
@@ -756,4 +757,63 @@ test('el aviso del vendedor solo se muestra si tiene algo por confirmar', functi
         ->where('enviosAbiertos.por_confirmar', 0));
     $this->actingAs($receptor)->get(route('dashboard'))->assertInertia(fn ($page) => $page
         ->where('enviosAbiertos.por_confirmar', 1));
+});
+
+test('el total de la Comparación Mensual coincide con el Capital Financiero del Resumen e incluye lo que viaja', function () {
+    ['envio' => $envio, 'receptor' => $receptor] = prepararEnvioEnTransito(); // 100 USD: origen 400, destino 100, 100 viajando
+    $admin = User::factory()->admin()->create();
+
+    $props = [];
+    $this->actingAs($admin)->get(route('dashboard'))->assertInertia(function ($page) use (&$props) {
+        $props = $page->toArray()['props'];
+
+        return $page;
+    });
+
+    $totalComparacion = collect($props['comparaciones'])->sum(fn ($fila) => $fila['monto_actual'] / ($fila['tasa_cambio'] ?: 1));
+    $filaUsd = collect($props['comparaciones'])->firstWhere('moneda', 'USD');
+
+    expect(round($totalComparacion, 2))->toBe(round((float) $props['resumenFinanciero']['capital_financiero'], 2))
+        ->and(round($totalComparacion, 2))->toBe(600.0)
+        ->and($filaUsd['monto_actual'])->toEqual(600)
+        ->and($filaUsd['en_transito'])->toEqual(100);
+
+    // Al confirmarse el dinero pasa a la cuenta destino: el total no cambia y ya no hay nada en tránsito
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+
+    $this->actingAs($admin)->get(route('dashboard'))->assertInertia(fn ($page) => $page
+        ->where('comparaciones.0.monto_actual', 600)
+        ->where('comparaciones.0.en_transito', 0));
+});
+
+test('el Resumen Financiero manda por moneda su nombre, su insignia y si es la principal', function () {
+    prepararEnvioEnTransito(); // 100 USD viajando; origen 400 + destino 100 en cuentas
+    Moneda::where('codigo_moneda', 'USD')->update(['nombre_moneda' => 'Dólar Estadounidense', 'imagen' => 'usd']);
+    $admin = User::factory()->admin()->create();
+
+    $props = [];
+    $this->actingAs($admin)->get(route('dashboard'))->assertInertia(function ($page) use (&$props) {
+        $props = $page->toArray()['props'];
+
+        return $page;
+    });
+
+    $resumen = $props['resumenFinanciero'];
+    $usd = collect($resumen['capital_por_moneda'])->firstWhere('codigo', 'USD');
+
+    expect($usd['nombre'])->toBe('Dólar Estadounidense')
+        ->and($usd['imagen_url'])->toEndWith('projects/monedas/usd.webp')
+        ->and($usd['principal'])->toBeTrue()
+        // 500 en cuentas más los 100 que viajan
+        ->and($usd['monto'])->toEqual(600)
+        ->and($usd['en_transito'])->toEqual(100);
+});
+
+test('el vendedor recibe la insignia de cada moneda en sus montos', function () {
+    ['emisor' => $emisor] = prepararEnvioEnTransito();
+    Moneda::where('codigo_moneda', 'USD')->update(['imagen' => 'usd']);
+
+    $this->actingAs($emisor)->get(route('dashboard'))->assertInertia(fn ($page) => $page
+        ->where('montosPorMoneda.0.codigo', 'USD')
+        ->where('montosPorMoneda.0.imagen_url', fn ($url) => str_ends_with((string) $url, 'projects/monedas/usd.webp')));
 });

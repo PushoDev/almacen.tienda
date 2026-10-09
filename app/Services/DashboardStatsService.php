@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Compra;
 use App\Models\HistorialComparacionMensual;
+use App\Models\Moneda;
 use App\Models\TransferenciaPendiente;
 use App\Models\User;
 use App\Models\Venta;
@@ -120,14 +121,21 @@ class DashboardStatsService
         // (que no cambia al confirmar) y se informa aparte cuánto de esa cifra viaja.
         $enTransito = TransferenciaPendiente::resumenEnTransitoGlobal();
 
+        // Nombre e insignia de cada moneda (por código: la primera que lo tenga, igual que el resto del Dashboard)
+        $monedasPorCodigo = Moneda::orderBy('id')->get()->unique('codigo_moneda')->keyBy('codigo_moneda');
+
         $capitalPorMoneda = collect($resumenCuentas['por_moneda_perm'])
-            ->map(function ($info, $codigo) use ($extrasMonedaPrincipal, $codigoPrincipal, $enTransito) {
+            ->map(function ($info, $codigo) use ($extrasMonedaPrincipal, $codigoPrincipal, $enTransito, $monedasPorCodigo) {
                 $esPrincipal = $codigo === $codigoPrincipal;
                 $transitoMoneda = $enTransito['por_codigo'][$codigo]['monto'] ?? 0.0;
+                $moneda = $monedasPorCodigo->get($codigo);
 
                 return [
                     'codigo' => $codigo,
+                    'nombre' => $moneda?->nombre_moneda ?? $codigo,
+                    'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($moneda?->imagen)['imagen_url'] ?? null,
                     'simbolo' => $info['simbolo'],
+                    'principal' => $esPrincipal,
                     'monto' => round(($esPrincipal ? $extrasMonedaPrincipal : 0) + $info['original'] + $transitoMoneda, 2),
                     'en_transito' => $transitoMoneda,
                     'incluye_clientes_proveedores_inventario' => $esPrincipal,
@@ -188,6 +196,19 @@ class DashboardStatsService
             'original' => $this->getResumenProveedores()['balance_neto'],
             'simbolo' => '$',
         ];
+        // El dinero en tránsito ya salió de su cuenta de origen y aún no está en la de destino: se suma al saldo de su
+        // moneda (igual que el Resumen Financiero) para que Totales y Capital Financiero sean el mismo número. Se
+        // guarda dentro de `monto_actual`, así el "Mes Anterior" del próximo mes también lo incluye.
+        $enTransito = TransferenciaPendiente::resumenEnTransitoGlobal();
+        $transitoPorCodigo = [];
+        foreach ($enTransito['por_codigo'] as $codigoTransito => $datosTransito) {
+            if (isset($porMoneda[$codigoTransito])) {
+                $transitoPorCodigo[$codigoTransito] = $datosTransito['monto'];
+                $porMoneda[$codigoTransito]['original'] += $datosTransito['monto'];
+                $porMoneda[$codigoTransito]['equivalente'] = ($porMoneda[$codigoTransito]['equivalente'] ?? 0) + $datosTransito['equivalente_usd'];
+            }
+        }
+
         $monedasInfo = DB::table('monedas')->get()->groupBy('codigo_moneda');
 
         $resultado = [];
@@ -261,6 +282,8 @@ class DashboardStatsService
                 'diferencia' => round($diferencia, 2),
                 'porcentaje_cambio' => $porcentajeCambio,
                 'es_positivo' => $diferencia >= 0,
+                // Parte de `monto_actual` que viaja en envíos sin confirmar (ya está sumada)
+                'en_transito' => $transitoPorCodigo[$codigo] ?? 0.0,
                 'tasa_cambio' => $tasaEfectiva,
                 // Solo viene poblado (>1 elemento) cuando este código combina 2+ monedas reales
                 // distintas (ej. CUP efectivo/tarjeta) — el frontend lo usa para ofrecer un

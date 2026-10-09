@@ -1112,3 +1112,194 @@ test('un envío en tránsito se marca atrasado a los 2 días y sigue apareciendo
         ->where('calculos.envios_en_transito_detalle.enviados.0.dias_en_transito', 3)
         ->where('calculos.envios_en_transito_detalle.enviados.0.atrasado', true));
 });
+
+// ==========================================================================
+// SHOW — lo que el cierre guarda, tolerancia a cierres viejos y permisos sobre cuentas de cobro
+// ==========================================================================
+
+test('el cierre muestra quién lo cerró, los turnos y los envíos que seguían en tránsito, y marca la salida en la cuenta de origen', function () {
+    ['emisor' => $emisor, 'origen' => $origen, 'envio' => $envio] = enviarEfectivoEnTransito();
+    $turno = $emisor->turnoActivo();
+    crearVentaCompletadaConPago($emisor, Almacen::factory()->puntoVenta()->create(), Moneda::first(), total: 40, cuenta: $origen);
+    Venta::where('user_id', $emisor->id)->update(['turno_vendedor_id' => $turno->id]);
+
+    $this->travel(2)->seconds();
+    $this->actingAs($emisor)->post(route('ventas.cierres.store'), payloadStoreCierre())->assertRedirect(route('ventas.cierres'));
+    $cierre = CierreCaja::where('user_id', $emisor->id)->firstOrFail();
+
+    $this->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->where('turno_cierre', $turno->nombre_vendedor)
+        ->where('turnos.0.nombre', $turno->nombre_vendedor)
+        ->where('turnos.0.ventas_count', 1)
+        ->where('envios_guardados', true)
+        ->where('envios_en_transito.resumen.total', 1)
+        ->where('envios_en_transito.enviados.0.id', $envio->id)
+        ->where('comparativa_cuentas', fn ($cuentas) => collect($cuentas)->firstWhere('id', $origen->id)['en_transito_salida'] === 100));
+});
+
+test('un cierre anterior a guardar turnos y envíos se muestra sin fallar y sin inventar datos', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $cierre = CierreCaja::create(['user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subHour(), 'fecha_cierre' => now()]);
+
+    $this->get(route('ventas.cierres.show', $cierre->id))->assertOk()->assertInertia(fn ($page) => $page
+        ->where('turno_cierre', null)
+        ->where('turnos', null)
+        ->where('envios_guardados', false)
+        ->where('envios_en_transito', null));
+});
+
+test('un vendedor no ve el saldo de una cuenta de cobro aunque un cierre viejo lo traiga en su snapshot', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $usd = crearMonedaUsd();
+    $completa = crearCuentaEnMoneda($usd, saldo: 100, propietario: $vendedor);
+    $cobro = crearCuentaEnMoneda($usd, saldo: 999);
+    $vendedor->cuentas()->attach($cobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $cierre = CierreCaja::create([
+        'user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subHour(), 'fecha_cierre' => now(),
+        'snapshot_cuentas' => [
+            ['id' => $completa->id, 'nombre' => 'Completa', 'tipo' => 'efectivo', 'moneda' => 'USD', 'saldo' => 100],
+            ['id' => $cobro->id, 'nombre' => 'Cobro', 'tipo' => 'efectivo', 'moneda' => 'USD', 'saldo' => 999],
+        ],
+    ]);
+
+    $this->actingAs($vendedor)->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->has('comparativa_cuentas', 1)
+        ->where('comparativa_cuentas.0.id', $completa->id)
+        ->has('cierre.snapshot_cuentas', 1)
+        ->where('cierre.snapshot_cuentas.0.id', $completa->id));
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->has('comparativa_cuentas', 2));
+});
+
+test('la comparativa del cierre ignora los residuos de redondeo y marca las cuentas nuevas', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $usd = crearMonedaUsd();
+    $vieja = crearCuentaEnMoneda($usd, saldo: 100.1, propietario: $vendedor);
+    $nueva = crearCuentaEnMoneda($usd, saldo: 5, propietario: $vendedor);
+
+    CierreCaja::create([
+        'user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subHours(3), 'fecha_cierre' => now()->subHours(2),
+        'snapshot_cuentas' => [['id' => $vieja->id, 'nombre' => 'V', 'tipo' => 'efectivo', 'moneda' => 'USD', 'saldo' => 100.1]],
+    ]);
+    $actual = CierreCaja::create([
+        'user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subHours(2), 'fecha_cierre' => now()->subHour(),
+        'snapshot_cuentas' => [
+            ['id' => $vieja->id, 'nombre' => 'V', 'tipo' => 'efectivo', 'moneda' => 'USD', 'saldo' => 100.10000000000001],
+            ['id' => $nueva->id, 'nombre' => 'N', 'tipo' => 'efectivo', 'moneda' => 'USD', 'saldo' => 5],
+        ],
+    ]);
+
+    $this->actingAs($vendedor)->get(route('ventas.cierres.show', $actual->id))->assertInertia(fn ($page) => $page
+        ->where('comparativa_cuentas', function ($cuentas) use ($vieja, $nueva) {
+            $cuentas = collect($cuentas);
+
+            return $cuentas->firstWhere('id', $vieja->id)['estado'] === 'igual'
+                && (float) $cuentas->firstWhere('id', $vieja->id)['diferencia'] === 0.0
+                && $cuentas->firstWhere('id', $vieja->id)['es_nueva'] === false
+                && $cuentas->firstWhere('id', $nueva->id)['es_nueva'] === true;
+        }));
+});
+
+test('las operaciones múltiples del cierre solo las ve admin o moderador y solo las de su periodo', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $admin = User::factory()->admin()->create();
+    $usd = crearMonedaUsd();
+    $entrada = crearCuentaEnMoneda($usd, saldo: 0);
+    $salida = crearCuentaEnMoneda($usd, saldo: 100);
+
+    $dentro = crearRemesaDirecta($admin, $entrada, $salida, 50, 50);
+    $fuera = crearRemesaDirecta($admin, $entrada, $salida, 70, 70);
+    $fuera->update(['fecha_operacion' => now()->subDays(3)]);
+
+    $cierre = CierreCaja::create([
+        'user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subHour(), 'fecha_cierre' => now()->addMinute(),
+    ]);
+
+    $this->actingAs($admin)->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->where('operaciones_multiples.visible', true)
+        ->has('operaciones_multiples.items', 1)
+        ->where('operaciones_multiples.items.0.id', $dentro->id));
+
+    $this->actingAs($vendedor)->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->where('operaciones_multiples.visible', false));
+});
+
+// ==========================================================================
+// LISTADO — lo guardado en cada cierre, el resumen del filtro y lo que ya no viaja de más
+// ==========================================================================
+
+test('el listado muestra quién cerró, las ventas y el tránsito que quedó guardado, sin mandar los JSON pesados', function () {
+    ['emisor' => $emisor, 'origen' => $origen] = enviarEfectivoEnTransito();
+    crearVentaCompletadaConPago($emisor, Almacen::factory()->puntoVenta()->create(), Moneda::first(), total: 40, cuenta: $origen);
+    $turno = $emisor->turnoActivo();
+    Venta::where('user_id', $emisor->id)->update(['turno_vendedor_id' => $turno->id]);
+
+    $this->travel(2)->seconds();
+    $this->actingAs($emisor)->post(route('ventas.cierres.store'), payloadStoreCierre())->assertRedirect(route('ventas.cierres'));
+
+    $this->get(route('ventas.cierres'))->assertInertia(fn ($page) => $page
+        ->where('cierres.data.0.turno_cierre', $turno->nombre_vendedor)
+        ->where('cierres.data.0.responsables_turno', [$turno->nombre_vendedor])
+        ->where('cierres.data.0.ventas_count', 1)
+        ->where('cierres.data.0.ventas_total_usd', 40)
+        ->where('cierres.data.0.envios_guardados', true)
+        ->where('cierres.data.0.envios_en_transito_total', 1)
+        ->where('cierres.data.0.envios_atrasados', 0)
+        ->missing('cierres.data.0.detalles')
+        ->missing('cierres.data.0.snapshot_cuentas')
+        ->missing('cierres.data.0.envios_en_transito')
+        ->missing('cierres.data.0.resumen_turnos')
+        // 40 de venta menos 100 enviados en efectivo a otra persona: el saldo esperado queda en -60
+        ->where('resumen', ['total' => 1, 'ventas_total_usd' => 40, 'saldo_negativo' => 1, 'con_transito' => 1, 'envios_atrasados' => 0]));
+});
+
+test('un cierre anterior a guardar turnos y envíos se lista sin inventar esos datos', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $turno = $vendedor->turnoActivo();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $venta = crearVentaCompletadaConPago($vendedor, $almacen, crearMonedaUsd(), total: 30);
+    $venta->update(['turno_vendedor_id' => $turno->id]);
+    CierreCaja::create([
+        'user_id' => $vendedor->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subHour(), 'fecha_cierre' => now()->addMinute(),
+        'ventas_efectivo' => 30, 'saldo_esperado' => -5,
+    ]);
+
+    $this->actingAs($vendedor)->get(route('ventas.cierres'))->assertInertia(fn ($page) => $page
+        ->where('cierres.data.0.responsables_turno', [$turno->nombre_vendedor])
+        ->where('cierres.data.0.turno_cierre', null)
+        ->where('cierres.data.0.ventas_count', null)
+        ->where('cierres.data.0.ventas_total_usd', 30)
+        ->where('cierres.data.0.envios_guardados', false)
+        ->where('resumen.saldo_negativo', 1)
+        ->where('resumen.con_transito', 0));
+});
+
+test('el resumen del listado cuenta todo lo que cumple el filtro y un vendedor solo ve lo suyo', function () {
+    $uno = User::factory()->vendedor()->create();
+    $otro = User::factory()->vendedor()->create();
+    CierreCaja::create(['user_id' => $uno->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subDays(2), 'fecha_cierre' => now()->subDay(), 'ventas_efectivo' => 10, 'ventas_otros' => 5, 'saldo_esperado' => 15]);
+    CierreCaja::create(['user_id' => $uno->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subDay(), 'fecha_cierre' => now(), 'ventas_efectivo' => 20, 'saldo_esperado' => -3]);
+    CierreCaja::create(['user_id' => $otro->id, 'estado' => 'aprobado', 'fecha_apertura' => now()->subDay(), 'fecha_cierre' => now(), 'ventas_efectivo' => 99, 'saldo_esperado' => 99]);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->get(route('ventas.cierres', ['user_id' => $uno->id]))->assertInertia(fn ($page) => $page
+        ->where('resumen.total', 2)
+        ->where('resumen.ventas_total_usd', 35)
+        ->where('resumen.saldo_negativo', 1));
+
+    $this->actingAs($admin)->get(route('ventas.cierres'))->assertInertia(fn ($page) => $page->where('resumen.total', 3));
+
+    crearTurnoActivo($uno);
+    $this->actingAs($uno)->get(route('ventas.cierres'))->assertInertia(fn ($page) => $page
+        ->where('resumen.total', 2)
+        ->where('resumen.ventas_total_usd', 35));
+});

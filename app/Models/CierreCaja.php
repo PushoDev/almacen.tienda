@@ -80,6 +80,12 @@ class CierreCaja extends Model
         return $this->belongsTo(User::class, 'revisor_id');
     }
 
+    /** Turno ("Atendido por") activo de quien cerró; null en los cierres anteriores a guardarlo. */
+    public function turnoVendedor()
+    {
+        return $this->belongsTo(TurnoVendedor::class);
+    }
+
     public function tieneDiferencia(): bool
     {
         return abs($this->diferencia) > 0.01;
