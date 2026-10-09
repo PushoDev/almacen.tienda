@@ -11,6 +11,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\PagoVenta;
 use App\Models\Remesa;
 use App\Models\TransferenciaPendiente;
+use App\Models\TurnoVendedor;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\CierreCajaNotification;
@@ -27,6 +28,9 @@ use Inertia\Inertia;
 
 class CierreCajaController extends Controller
 {
+    /** Días en tránsito a partir de los cuales un envío de dinero se marca como atrasado. */
+    private const DIAS_PARA_ATRASADO = 2;
+
     public function __construct(private MetodosPagoService $metodosPago) {}
 
     /**
@@ -308,6 +312,10 @@ class CierreCajaController extends Controller
                 // Envíos de dinero abiertos que el usuario puede ver (informativo: no entra en ningún saldo)
                 'envios_en_transito' => TransferenciaPendiente::resumenAbiertosPara($user),
                 'envios_en_transito_detalle' => $this->detalleEnviosAbiertos($user),
+                'turnos' => $this->resumenTurnos($user, $inicioTurno),
+                'turno_actual' => $user->turnoActivo()?->nombre_vendedor,
+                'total_gastos' => $calculos['total_gastos_usd'] ?? 0,
+                'total_devoluciones' => $calculos['ventas_devueltas_total_usd'] ?? 0,
                 'operaciones_multiples' => $this->detalleOperacionesMultiples($user, $inicioTurno),
                 // Resumen financiero
                 'ventas_brutas_usd' => $calculos['ventas_brutas_usd'] ?? 0,
@@ -379,24 +387,44 @@ class CierreCajaController extends Controller
     {
         Log::info('CierreCaja store iniciado', ['user_id' => Auth::id()]);
 
-        $data = $request->all();
+        // Solo se aceptan del navegador el inicio del periodo que está cerrando (para detectar un cierre repetido), lo
+        // contado, las observaciones y el arqueo: el resto (ventas, gastos, devoluciones, saldo esperado) lo calcula el
+        // servidor.
+        $data = $request->validate([
+            'fecha_apertura' => ['nullable', 'date'],
+            'saldo_contado' => ['nullable', 'numeric'],
+            'observaciones' => ['nullable', 'string', 'max:2000'],
+            'arqueo_detalles' => ['nullable', 'array'],
+            'confirmacion_transferencias' => ['nullable', 'array'],
+        ]);
         $user = Auth::user();
 
-        // Determinar inicio del turno (misma lógica que create)
-        $ultimoCierre = CierreCaja::where('user_id', $user->id)
-            ->orderBy('fecha_cierre', 'desc')
-            ->first();
-
-        $inicioTurno = $this->calcularInicioTurno($user, $ultimoCierre);
-
-        // Obtener cálculos del backend como FUENTE DE VERDAD
+        DB::beginTransaction();
         try {
+            // Un solo cierre a la vez por usuario: un segundo envío (doble clic, dos pestañas) espera aquí y ya
+            // encuentra el cierre nuevo.
+            User::whereKey($user->id)->lockForUpdate()->first();
+
+            // Determinar inicio del turno (misma lógica que create)
+            $ultimoCierre = CierreCaja::where('user_id', $user->id)
+                ->orderBy('fecha_cierre', 'desc')
+                ->first();
+
+            $inicioTurno = $this->calcularInicioTurno($user, $ultimoCierre);
+
+            // La pantalla lleva el inicio del periodo que se está cerrando: si ya cambió, ese cierre ya se hizo
+            if (! empty($data['fecha_apertura']) && Carbon::parse($data['fecha_apertura'])->toDateTimeString() !== Carbon::parse($inicioTurno)->toDateTimeString()) {
+                DB::rollBack();
+                Log::warning('CierreCaja repetido o periodo cambiado', ['user_id' => $user->id]);
+
+                return back()->withErrors(['cierre' => 'Este cierre ya se realizó o el periodo cambió. Recarga la página para ver el estado actual.']);
+            }
+
+            // Cálculos del servidor como FUENTE DE VERDAD; si fallan no se guarda un cierre en ceros
             $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
             $detallesJson = $calculos['detalles'];
             $comisionesGestorDetalles = $calculos['comisiones_gestor_detalles'] ?? [];
             $comisionesGestorTotal = $calculos['comisiones_gestor_total'] ?? 0;
-
-            // Usar cálculos del backend como fuente de verdad
             $ventasEfectivo = $calculos['ventas_efectivo'];
             $ventasOtros = $calculos['ventas_otros'];
             $saldoEsperado = $calculos['saldo_esperado_global'];
@@ -404,56 +432,52 @@ class CierreCajaController extends Controller
             $mensajeroSnapshotTotCUP = $calculos['mensajero_total_cup'] ?? 0;
             $mensajeroSnapshotCount = $calculos['mensajero_count'] ?? 0;
             $mensajeroSnapshotDetalles = $calculos['mensajero_detalles'] ?? [];
-        } catch (\Exception $e) {
-            // Fallback defensivo solo si falla el cálculo backend
-            Log::error('Fallo obtenerDetallesCierre: '.$e->getMessage());
-            $ventasEfectivo = $data['ventas_efectivo'] ?? 0;
-            $ventasOtros = $data['ventas_otros'] ?? 0;
-            $comisionesGestorTotal = 0;
-            $comisionesGestorDetalles = [];
-            $detallesJson = [];
-            $saldoEsperado = 0;
-            $mensajeroSnapshotTotUSD = 0;
-            $mensajeroSnapshotTotCUP = 0;
-            $mensajeroSnapshotCount = 0;
-            $mensajeroSnapshotDetalles = [];
-        }
 
-        $saldoInicial = $data['saldo_inicial'] ?? 0;
-        $totalGastos = $data['total_gastos'] ?? 0;
-        $totalDevoluciones = $data['total_devoluciones'] ?? 0;
-        $saldoContado = $data['saldo_contado'] ?? 0;
+            $saldoInicial = 0;
+            $totalGastos = $calculos['total_gastos_usd'] ?? 0;
+            $totalDevoluciones = $calculos['ventas_devueltas_total_usd'] ?? 0;
+            // Sin conteo físico (decisión del cliente), lo contado es lo esperado
+            $saldoContado = (float) ($data['saldo_contado'] ?? $saldoEsperado);
 
-        // Calcular diferencia usando el saldo esperado del backend
-        $diferencia = round($saldoContado - $saldoEsperado, 2);
+            // Calcular diferencia usando el saldo esperado del backend
+            $diferencia = round($saldoContado - $saldoEsperado, 2);
 
-        // Snapshot de las cuentas cuyo saldo puede ver el usuario (a un vendedor, solo las de acceso `completo`:
-        // el saldo de una cuenta de cobro no debe quedar guardado en el cierre).
-        $cuentasSnapshot = $user->cuentasUsables()->with('moneda')->get()->map(function ($cuenta) {
-            return [
-                'id' => $cuenta->id,
-                'nombre' => $cuenta->nombre_cuenta,
-                'tipo' => $cuenta->tipo,
-                'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
-                'saldo' => round((float) $cuenta->saldo_cuenta, 2),
+            // Snapshot de las cuentas cuyo saldo puede ver el usuario (a un vendedor, solo las de acceso `completo`:
+            // el saldo de una cuenta de cobro no debe quedar guardado en el cierre).
+            $cuentasSnapshot = $user->cuentasUsables()->with('moneda')->get()->map(function ($cuenta) {
+                return [
+                    'id' => $cuenta->id,
+                    'nombre' => $cuenta->nombre_cuenta,
+                    'tipo' => $cuenta->tipo,
+                    'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                    'saldo' => round((float) $cuenta->saldo_cuenta, 2),
+                ];
+            })->values()->all();
+
+            // Snapshot real de clientes
+            $clientesSnapshot = Cliente::all()->map(function ($cliente) {
+                return [
+                    'id' => $cliente->id,
+                    'nombre' => $cliente->nombre_cliente,
+                    'deuda' => round((float) $cliente->deuda_pago_cliente, 2),
+                ];
+            })->values()->all();
+
+            // Lo que el cierre dejaba sin guardar: quién cerró, qué turnos hubo y qué viajaba al cerrar
+            $enviosAbiertos = $this->detalleEnviosAbiertos($user);
+            $enviosAlCerrar = [
+                'resumen' => TransferenciaPendiente::resumenAbiertosPara($user),
+                'enviados' => $enviosAbiertos['enviados'],
+                'por_recibir' => $enviosAbiertos['por_recibir'],
             ];
-        })->values()->all();
 
-        // Snapshot real de clientes
-        $clientesSnapshot = Cliente::all()->map(function ($cliente) {
-            return [
-                'id' => $cliente->id,
-                'nombre' => $cliente->nombre_cliente,
-                'deuda' => round((float) $cliente->deuda_pago_cliente, 2),
-            ];
-        })->values()->all();
-
-        DB::beginTransaction();
-        try {
             $cierre = CierreCaja::create([
                 'user_id' => Auth::id(),
                 'revisor_id' => Auth::id(),
-                'fecha_apertura' => $data['fecha_apertura'] ?? now(),
+                'turno_vendedor_id' => $user->turnoActivo()?->id,
+                'resumen_turnos' => $this->resumenTurnos($user, $inicioTurno),
+                'envios_en_transito' => $enviosAlCerrar,
+                'fecha_apertura' => $inicioTurno,
                 'fecha_cierre' => now(),
                 'saldo_inicial' => $saldoInicial,
                 'ventas_efectivo' => $ventasEfectivo,
@@ -497,8 +521,50 @@ class CierreCajaController extends Controller
             DB::rollBack();
             Log::error('CierreCaja error al guardar: '.$e->getMessage());
 
-            return back()->with('error', 'Error crítico: '.$e->getMessage());
+            return back()->withErrors(['cierre' => 'No se pudo guardar el cierre. Inténtalo de nuevo; si sigue fallando avisa al administrador.']);
         }
+    }
+
+    /**
+     * Quién atendió en el periodo (turnos "Atendido por") y qué movió cada uno: ventas completadas y movimientos
+     * financieros propios, agrupados por `turno_vendedor_id`. Un punto de venta (un usuario) puede tener varias
+     * personas en el mismo periodo; las operaciones sin turno (admin, o anteriores a la función) van juntas.
+     *
+     * @return array<int, array{turno_id: int|null, nombre: string|null, desde: string|null, ventas_count: int, ventas_total_usd: float, gastos_count: int, ingresos_count: int, transferencias_count: int}>
+     */
+    private function resumenTurnos(User $user, mixed $inicioTurno): array
+    {
+        $ventas = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
+            ->get(['id', 'turno_vendedor_id', 'total']);
+
+        $movimientos = MovimientoFinanciero::where('user_id', $user->id)
+            ->where('fecha_operacion', '>=', $inicioTurno)
+            ->get(['id', 'turno_vendedor_id', 'tipo_movimiento_id']);
+
+        $turnos = TurnoVendedor::whereIn('id', $ventas->pluck('turno_vendedor_id')->merge($movimientos->pluck('turno_vendedor_id'))->filter()->unique())
+            ->get()
+            ->keyBy('id');
+
+        $claves = $ventas->pluck('turno_vendedor_id')->merge($movimientos->pluck('turno_vendedor_id'))->unique()->values();
+
+        return $claves->map(function ($turnoId) use ($ventas, $movimientos, $turnos) {
+            $ventasDelTurno = $ventas->where('turno_vendedor_id', $turnoId);
+            $movimientosDelTurno = $movimientos->where('turno_vendedor_id', $turnoId);
+            $turno = $turnos->get($turnoId);
+
+            return [
+                'turno_id' => $turnoId,
+                'nombre' => $turno?->nombre_vendedor,
+                'desde' => $turno?->iniciado_en?->format('Y-m-d H:i'),
+                'ventas_count' => $ventasDelTurno->count(),
+                'ventas_total_usd' => round((float) $ventasDelTurno->sum('total'), 2),
+                'gastos_count' => $movimientosDelTurno->where('tipo_movimiento_id', 1)->count(),
+                'ingresos_count' => $movimientosDelTurno->where('tipo_movimiento_id', 2)->count(),
+                'transferencias_count' => $movimientosDelTurno->where('tipo_movimiento_id', 3)->count(),
+            ];
+        })->sortBy(fn (array $fila) => $fila['desde'] ?? '')->values()->all();
     }
 
     public function show($id)
@@ -973,6 +1039,9 @@ class CierreCajaController extends Controller
 
     public function aprobar(Request $request, $id)
     {
+        // Solo quien revisa los cierres (admin o moderador); antes cualquier usuario autenticado podía aprobar cualquiera
+        abort_unless(in_array(Auth::user()->role, ['admin', 'moderador'], true), 403);
+
         $cierre = CierreCaja::findOrFail($id);
         $cierre->update([
             'estado' => 'aprobado',
@@ -993,7 +1062,7 @@ class CierreCajaController extends Controller
             $q->where('user_id', $user->id)
                 ->where('created_at', '>=', $inicioTurno)
                 ->where('estado', 'completada');
-        })->with(['moneda', 'cuenta', 'cliente', 'venta.detalles.producto.categoria'])->get();
+        })->with(['moneda', 'cuenta', 'cliente', 'venta.detalles.producto.categoria', 'venta.turnoVendedor'])->get();
 
         // Acumular mensajero del turno (solo ventas completadas con mensajero)
         $ventasConMensajero = Venta::where('user_id', $user->id)
@@ -1006,6 +1075,15 @@ class CierreCajaController extends Controller
 
         // 2. Obtener IDs de cuentas del usuario para buscar transferencias entrantes
         $cuentaIds = $user->cuentas()->pluck('id')->toArray();
+
+        // Cuentas que maneja este usuario (admin y moderador, todas): un movimiento entre dos cuentas suyas no cambia lo
+        // que maneja, así que no entra en el saldo esperado; solo cuenta lo que sale hacia fuera o entra desde fuera.
+        $propiasIds = $user->cuentasPropias()->pluck('cuentas.id')->map(fn ($id) => (int) $id)->all();
+
+        // Saldo esperado global en USD: se suma cada operación con lo que valía el día que se hizo (`monto_usd`,
+        // `monto_equivalente`), nunca con la tasa de hoy, para que un cambio de tasa no altere el cierre.
+        $saldoEsperadoUsd = 0.0;
+        $gastosUsd = 0.0; // gastos que salieron de una cuenta, con la tasa de cada uno
 
         // 2. Obtener Movimientos Financieros (Gastos, Ingresos, Transferencias) del usuario
         // Incluye cualquier movimiento que afecte las cuentas del usuario, sin importar quién lo creó
@@ -1036,8 +1114,14 @@ class CierreCajaController extends Controller
             }
         })
             ->where('fecha_operacion', '>=', $inicioTurno)
-            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino', 'user'])
+            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino', 'user', 'turnoVendedor'])
             ->get();
+
+        // Transferencias que nacieron de un envío en tránsito: su salida ya se contó el día del envío, así que al
+        // confirmarse solo cuenta la entrada (con lo que de verdad se acreditó).
+        $enviosPorMovimiento = TransferenciaPendiente::whereIn('movimiento_financiero_id', $movimientos->where('tipo_movimiento_id', 3)->pluck('id'))
+            ->get()
+            ->keyBy('movimiento_financiero_id');
 
         // Estructura para agrupar por Moneda
         $resumenPorMoneda = [];
@@ -1176,6 +1260,7 @@ class CierreCajaController extends Controller
                 'destino_nombre' => $destinoNombre,
                 'banco' => $bancoCuenta,
                 'moneda_imagen_url' => $monedaImagenUrl,
+                'turno_nombre' => $pago->venta?->turnoVendedor?->nombre_vendedor,
             ];
 
             // ===== CLASIFICAR PAGO POR DESTINO Y MÉTODO =====
@@ -1204,6 +1289,9 @@ class CierreCajaController extends Controller
                 }
                 $resumenPorMoneda[$codigo]['ventas_a_cuentas_total'] += $monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] += $monto; // Sí suma al saldo
+                $saldoEsperadoUsd += $pago->monto_equivalente !== null
+                    ? (float) $pago->monto_equivalente
+                    : $monto / max((float) ($resumenPorMoneda[$codigo]['tasa_cambio'] ?? 1), 0.0001);
                 $resumenPorMoneda[$codigo]['items_ventas_cuentas'][] = $itemVenta;
             } elseif ($esPagoACliente) {
                 // Pago a CLIENTE - NO afecta el saldo (es deuda del cliente)
@@ -1319,8 +1407,15 @@ class CierreCajaController extends Controller
                 $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
             }
 
+            // Lo que valía la operación en USD el día que se hizo (los movimientos viejos se congelaron en la migración)
+            $montoUsdOperacion = $mov->monto_usd !== null
+                ? (float) $mov->monto_usd
+                : Moneda::equivalenteUsd((float) $mov->monto, $mov->cuenta_origen_id ?? $mov->cuenta_destino_id, $mov->moneda);
+
             // TIPO 1: GASTO
             if ($mov->tipo_movimiento_id == 1) {
+                // Solo cambia la caja si sale de una cuenta; el gasto de un cliente es informativo (su deuda, no una cuenta).
+                $afectaCaja = $mov->cuenta_origen_id !== null;
                 $item = [
                     'id' => 'm_'.$mov->id,
                     'desc' => $mov->descripcion,
@@ -1333,15 +1428,25 @@ class CierreCajaController extends Controller
                     'banco' => $this->logoDeCuenta($mov->cuentaOrigen),
                     'usuario_nombre' => $mov->user?->name ?? 'Sistema',
                     'es_propio' => $mov->user_id == $user->id,
+                    'afecta_caja' => $afectaCaja,
+                    'turno_nombre' => $mov->turnoVendedor?->nombre_vendedor,
                 ];
 
-                // Resta a la caja
-                $resumenPorMoneda[$codigo]['gastos'] += $mov->monto;
-                $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto; // Gasto sale de caja
+                if ($afectaCaja) {
+                    // Resta a la caja
+                    $resumenPorMoneda[$codigo]['gastos'] += $mov->monto;
+                    $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto; // Gasto sale de caja
+                    $saldoEsperadoUsd -= $montoUsdOperacion;
+                    $gastosUsd += $montoUsdOperacion;
+                } else {
+                    $resumenPorMoneda[$codigo]['gastos_clientes'] = ($resumenPorMoneda[$codigo]['gastos_clientes'] ?? 0) + $mov->monto;
+                }
                 $resumenPorMoneda[$codigo]['items_gastos'][] = $item;
             }
             // TIPO 2: INGRESO
             elseif ($mov->tipo_movimiento_id == 2) {
+                // Solo cambia la caja si entra a una cuenta; el ingreso a un cliente es informativo.
+                $afectaCaja = $mov->cuenta_destino_id !== null;
                 $item = [
                     'id' => 'm_'.$mov->id,
                     'desc' => $mov->descripcion,
@@ -1354,33 +1459,96 @@ class CierreCajaController extends Controller
                     'banco' => $this->logoDeCuenta($mov->cuentaDestino),
                     'usuario_nombre' => $mov->user?->name ?? 'Sistema',
                     'es_propio' => $mov->user_id == $user->id,
+                    'afecta_caja' => $afectaCaja,
+                    'turno_nombre' => $mov->turnoVendedor?->nombre_vendedor,
                 ];
 
-                // Suma a la caja
-                $resumenPorMoneda[$codigo]['ingresos_extra'] += $mov->monto;
-                $resumenPorMoneda[$codigo]['saldo_calculado'] += $mov->monto;
+                if ($afectaCaja) {
+                    // Suma a la caja
+                    $resumenPorMoneda[$codigo]['ingresos_extra'] += $mov->monto;
+                    $resumenPorMoneda[$codigo]['saldo_calculado'] += $mov->monto;
+                    $saldoEsperadoUsd += $montoUsdOperacion;
+                } else {
+                    $resumenPorMoneda[$codigo]['ingresos_clientes'] = ($resumenPorMoneda[$codigo]['ingresos_clientes'] ?? 0) + $mov->monto;
+                }
                 $resumenPorMoneda[$codigo]['items_ingresos'][] = $item;
             }
             // TIPO 3: TRANSFERENCIA
             elseif ($mov->tipo_movimiento_id == 3) {
-                // Determinar si el usuario es el emisor o el receptor de la transferencia
-                $esReceptor = ! empty($mov->cuenta_destino_id) &&
-                    in_array($mov->cuenta_destino_id, $cuentaIds);
+                // Solo cuenta lo que cambia lo que maneja el usuario: sale cuando va a algo que no es suyo (otra persona,
+                // un cliente, un proveedor) y entra cuando viene de algo que no es suyo; entre cuentas suyas es neutral.
+                $origenEsPropio = $mov->cuenta_origen_id !== null && in_array((int) $mov->cuenta_origen_id, $propiasIds, true);
+                $destinoEsPropio = $mov->cuenta_destino_id !== null && in_array((int) $mov->cuenta_destino_id, $propiasIds, true);
+                $envioDeOrigen = $enviosPorMovimiento->get($mov->id);
+
+                $salidaCuenta = $origenEsPropio && ! $destinoEsPropio && $envioDeOrigen === null;
+                $entradaCuenta = $destinoEsPropio && ! $origenEsPropio;
+
+                // Entrada de un envío que llegó incompleto: vale lo acreditado, no lo enviado
+                $montoAcreditado = $envioDeOrigen?->monto_acreditado;
+                $usdEntrada = $montoUsdOperacion;
+                if ($envioDeOrigen && $envioDeOrigen->monto_destino > 0 && $montoAcreditado !== null) {
+                    $usdEntrada = round($montoUsdOperacion * ($montoAcreditado / $envioDeOrigen->monto_destino), 2);
+                }
 
                 // Procesar transferencia con detalles bidireccionales
-                $detallesTransferencia = $this->procesarTransferenciaBidireccional($mov, $resumenPorMoneda, $user, $cuentaIds, $esReceptor);
+                $detallesTransferencia = $this->procesarTransferenciaBidireccional($mov, $resumenPorMoneda, $user, $salidaCuenta, $entradaCuenta, $montoAcreditado);
 
                 // Actualizar saldos según corresponda
-                if ($detallesTransferencia['afecta_saldo_origen']) {
+                if ($salidaCuenta) {
                     $resumenPorMoneda[$codigo]['transferencias_salientes'] += $mov->monto;
                     $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto;
+                    $saldoEsperadoUsd -= $montoUsdOperacion;
                 }
+                if ($entradaCuenta) {
+                    $saldoEsperadoUsd += $usdEntrada;
+                }
+
+                $esReceptor = $entradaCuenta;
 
                 // Solo agregar a salientes si el usuario es el EMISOR (no receptor)
                 if (! $esReceptor) {
                     $resumenPorMoneda[$codigo]['items_transferencias_salientes'][] = $detallesTransferencia['item_salida'];
                 }
             }
+        }
+
+        // --- ENVÍOS DE DINERO EN TRÁNSITO ---
+        // El efectivo puede tardar días en llegar. La salida cuenta el día del ENVÍO (el dinero ya salió de la cuenta de
+        // origen), con lo que valía ese día; la entrada cuenta al confirmarse, como transferencia (arriba), con lo
+        // acreditado. Un envío entre cuentas del propio usuario no cambia lo que maneja y no cuenta.
+        $enviosHaciaFuera = fn () => TransferenciaPendiente::query()
+            ->whereIn('cuenta_origen_id', $propiasIds)
+            ->whereNotIn('cuenta_destino_id', $propiasIds);
+        $estadosSinDinero = [TransferenciaPendiente::ESTADO_RECHAZADO, TransferenciaPendiente::ESTADO_ANULADO];
+
+        // Salidas del turno: enviadas en el periodo y no rechazadas ni anuladas (si se devolvió dentro del mismo
+        // periodo, la salida y el retorno se compensan y no hay nada que contar).
+        foreach ($enviosHaciaFuera()->where('created_at', '>=', $inicioTurno)->whereNotIn('estado', $estadosSinDinero)->get() as $envio) {
+            $codigoEnvio = $envio->moneda ?? 'USD';
+            if (! isset($resumenPorMoneda[$codigoEnvio])) {
+                $resumenPorMoneda[$codigoEnvio] = $this->initMonedaStruct($codigoEnvio);
+            }
+            $resumenPorMoneda[$codigoEnvio]['saldo_calculado'] -= $envio->monto;
+            $resumenPorMoneda[$codigoEnvio]['envios_salida'] = ($resumenPorMoneda[$codigoEnvio]['envios_salida'] ?? 0) + $envio->monto;
+            $saldoEsperadoUsd -= $envio->monto_usd ?? Moneda::equivalenteUsd((float) $envio->monto, $envio->cuenta_origen_id, $envio->moneda);
+        }
+
+        // Retornos: envíos de un cierre anterior que se rechazaron o anularon en este periodo; el dinero volvió al origen
+        // y esa salida ya se había contado antes.
+        $enviosDevueltos = $enviosHaciaFuera()
+            ->where('created_at', '<', $inicioTurno)
+            ->whereIn('estado', $estadosSinDinero)
+            ->whereHas('seguimientos', fn ($q) => $q->whereIn('estado', $estadosSinDinero)->where('created_at', '>=', $inicioTurno))
+            ->get();
+        foreach ($enviosDevueltos as $envio) {
+            $codigoEnvio = $envio->moneda ?? 'USD';
+            if (! isset($resumenPorMoneda[$codigoEnvio])) {
+                $resumenPorMoneda[$codigoEnvio] = $this->initMonedaStruct($codigoEnvio);
+            }
+            $resumenPorMoneda[$codigoEnvio]['saldo_calculado'] += $envio->monto;
+            $resumenPorMoneda[$codigoEnvio]['envios_retorno'] = ($resumenPorMoneda[$codigoEnvio]['envios_retorno'] ?? 0) + $envio->monto;
+            $saldoEsperadoUsd += $envio->monto_usd ?? Moneda::equivalenteUsd((float) $envio->monto, $envio->cuenta_origen_id, $envio->moneda);
         }
 
         // --- PROCESAR COMISIONES A GESTORES (Ventas con es_venta_gestor = true) ---
@@ -1442,6 +1610,7 @@ class CierreCajaController extends Controller
             if (isset($resumenPorMoneda[$monedaCodigo])) {
                 $resumenPorMoneda[$monedaCodigo]['comisiones_gestor'] = ($resumenPorMoneda[$monedaCodigo]['comisiones_gestor'] ?? 0) + $montoComision;
                 $resumenPorMoneda[$monedaCodigo]['saldo_calculado'] -= $montoComision; // Comisión sale de caja
+                $saldoEsperadoUsd -= $montoEnUSD; // ya con la tasa negociada en la venta
             }
         }
 
@@ -1480,7 +1649,6 @@ class CierreCajaController extends Controller
             $ventasTransferenciaCuentas = $monedaData['ventas_transferencia_cuentas'] ?? 0;
             $ventasEfectivoClientes = $monedaData['ventas_efectivo_clientes'] ?? 0;
             $ventasTransferenciaClientes = $monedaData['ventas_transferencia_clientes'] ?? 0;
-            $saldoCalculado = $monedaData['saldo_calculado'] ?? 0;
 
             // Convertir a USD (Moneda Base)
             $ventasEfectivoTotalUSD += ($ventasEfectivo / $tasa);
@@ -1494,9 +1662,11 @@ class CierreCajaController extends Controller
             $ventasAClientesEfectivoUSD += ($ventasEfectivoClientes / $tasa);
             $ventasAClientesTransferenciaUSD += ($ventasTransferenciaClientes / $tasa);
 
-            // Saldo esperado incluye INGRESOS EXTRA y resta GASTOS y TRANSFERENCIAS
-            $saldoEsperadoTotalUSD += ($saldoCalculado / $tasa);
         }
+
+        // El saldo esperado global ya viene acumulado con la tasa de cada operación (ver `$saldoEsperadoUsd`); por
+        // moneda sigue siendo `saldo_calculado`, en unidades de esa moneda.
+        $saldoEsperadoTotalUSD = $saldoEsperadoUsd;
 
         // --- WIDGETS: Totales por moneda para cuentas ---
         $usdEfectivoRaw = $resumenPorMoneda['USD']['ventas_efectivo_cuentas'] ?? 0;
@@ -1742,6 +1912,7 @@ class CierreCajaController extends Controller
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
             'saldo_esperado_global' => $saldoEsperadoSinMensajero,
+            'total_gastos_usd' => round($gastosUsd, 2),
             // Mensajero del turno — informativo y ya descontado del saldo esperado
             'mensajero_total_usd' => $mensajeroTotalUSD,
             'mensajero_total_cup' => $mensajeroTotalCUP,
@@ -1989,8 +2160,13 @@ class CierreCajaController extends Controller
         $items = $envios->map(function (TransferenciaPendiente $envio) use ($user) {
             $esPropio = $envio->user_id === $user->id;
 
+            // Un envío de efectivo puede tardar días; pasados DIAS_PARA_ATRASADO se marca para que no se olvide
+            $diasEnTransito = (int) $envio->created_at->diffInDays(now());
+
             return [
                 'id' => $envio->id,
+                'dias_en_transito' => $diasEnTransito,
+                'atrasado' => $diasEnTransito >= self::DIAS_PARA_ATRASADO,
                 'fecha' => $envio->created_at->format('d/m H:i'),
                 'origen_nombre' => $envio->cuentaOrigen?->nombre_cuenta ?? 'No especificado',
                 'banco_origen' => $this->logoDeCuenta($envio->cuentaOrigen),
@@ -2010,6 +2186,7 @@ class CierreCajaController extends Controller
         });
 
         return [
+            'atrasados' => $items->where('atrasado', true)->count(),
             'enviados' => $items->where('por_recibir', false)->values()->all(),
             'por_recibir' => $items->where('por_recibir', true)->values()->all(),
         ];
@@ -2058,7 +2235,7 @@ class CierreCajaController extends Controller
     /**
      * Procesa una transferencia para mostrar detalles bidireccionales completos
      */
-    private function procesarTransferenciaBidireccional($movimiento, &$resumenPorMoneda, $user, array $cuentaIds = [], bool $esReceptor = false): array
+    private function procesarTransferenciaBidireccional($movimiento, &$resumenPorMoneda, $user, bool $salidaCuenta = false, bool $esReceptor = false, ?float $montoAcreditado = null): array
     {
         $codigoOrigen = $movimiento->moneda ?? 'USD';
         $tasaCambio = $movimiento->tasa_cambio_aplicada ?? 1;
@@ -2067,13 +2244,8 @@ class CierreCajaController extends Controller
         $origenInfo = $this->obtenerInfoEntidad($movimiento, 'origen');
         $destinoInfo = $this->obtenerInfoEntidad($movimiento, 'destino');
 
-        // Determinar si afecta el saldo del usuario (solo si el origen es una cuenta suya)
-        $afectaSaldoOrigen = false;
-
-        if ($movimiento->cuentaOrigen && $user !== null) {
-            $afectaSaldoOrigen = in_array($user->role, ['admin', 'moderador']) ||
-                $user->cuentas()->where('id', $movimiento->cuentaOrigen->id)->exists();
-        }
+        // Afecta el saldo del usuario solo si el dinero sale hacia algo que no es suyo (lo decide quien llama)
+        $afectaSaldoOrigen = $salidaCuenta;
 
         // Crear item de salida con detalles completos
         $itemSalida = [
@@ -2095,6 +2267,7 @@ class CierreCajaController extends Controller
             'banco_destino' => $this->logoDeCuenta($movimiento->cuentaDestino),
             'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
             'es_propio' => $movimiento->user_id == $user->id,
+            'turno_nombre' => $movimiento->turnoVendedor?->nombre_vendedor,
         ];
 
         // Si el destino está en una moneda diferente, agregar también a la lista de esa moneda
@@ -2139,6 +2312,12 @@ class CierreCajaController extends Controller
                 'es_propio' => $movimiento->user_id == $user->id,
             ];
             $montoEntrada = $movimiento->monto;
+        }
+
+        // Un envío que llegó incompleto acredita menos de lo enviado: la entrada vale lo acreditado
+        if ($montoAcreditado !== null) {
+            $montoEntrada = $montoAcreditado;
+            $itemEntrada['monto_destino'] = $montoAcreditado;
         }
 
         $itemEntrada['banco_origen'] = $itemSalida['banco_origen'];

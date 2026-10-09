@@ -35,6 +35,7 @@ class TransferenciaPendiente extends Model
         'cuenta_origen_id',
         'cuenta_destino_id',
         'monto',
+        'monto_usd',
         'moneda',
         'monto_destino',
         'moneda_destino',
@@ -58,6 +59,7 @@ class TransferenciaPendiente extends Model
 
     protected $casts = [
         'monto' => 'double',
+        'monto_usd' => 'double',
         'monto_destino' => 'double',
         'tasa_cambio_aplicada' => 'double',
         'tasa_oficial_en_momento' => 'double',
@@ -70,6 +72,15 @@ class TransferenciaPendiente extends Model
         'fecha_confirmacion' => 'datetime',
         'diferencia_resuelta_en' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        // Lo que valía el envío en USD el día que salió: la salida del Cierre de Caja cuenta ese día y con esa tasa,
+        // aunque el envío se confirme días después.
+        static::creating(function (self $envio) {
+            $envio->monto_usd ??= Moneda::equivalenteUsd((float) $envio->monto, $envio->cuenta_origen_id, $envio->moneda);
+        });
+    }
 
     public function usuario(): BelongsTo
     {

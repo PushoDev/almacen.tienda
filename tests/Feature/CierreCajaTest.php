@@ -5,9 +5,11 @@ use App\Models\CierreCaja;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\Moneda;
+use App\Models\MovimientoFinanciero;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\Remesa;
+use App\Models\TransferenciaPendiente;
 use App\Models\User;
 use App\Models\Venta;
 use Illuminate\Support\Facades\DB;
@@ -834,4 +836,279 @@ test('un vendedor no ve el costo ni el impacto de las ventas sin comisión en el
         ->missing('ventas_sin_comision_costo_usd')
         ->missing('ventas_sin_comision_impacto_usd')
         ->where('ventas_sin_comision_detalles.0', fn ($detalle) => ! isset($detalle['costo']) && ! isset($detalle['impacto'])));
+});
+
+// ==========================================================================
+// SALDO ESPERADO — solo lo que cambia una cuenta, con la tasa de cada operación y el tránsito por días
+// ==========================================================================
+
+function saldoEsperadoEnPantalla(User $usuario): float
+{
+    $saldo = null;
+    test()->actingAs($usuario)->get(route('ventas.cierres.create'))->assertInertia(function ($page) use (&$saldo) {
+        $saldo = $page->toArray()['props']['calculos']['saldo_esperado_global'];
+
+        return $page;
+    });
+
+    return (float) $saldo;
+}
+
+/**
+ * Un vendedor emisor con una cuenta de efectivo (500 USD) y otro receptor con la suya (100 USD); el emisor envía
+ * `$monto` USD y queda en tránsito.
+ *
+ * @return array{emisor: User, receptor: User, origen: Cuenta, destino: Cuenta, envio: TransferenciaPendiente}
+ */
+function enviarEfectivoEnTransito(float $monto = 100): array
+{
+    crearTiposMovimientoFinanciero();
+    $emisor = User::factory()->vendedor()->create();
+    $receptor = User::factory()->vendedor()->create();
+    crearTurnoActivo($emisor);
+    crearTurnoActivo($receptor);
+    $usd = crearMonedaUsd();
+    $origen = crearCuentaEnMoneda($usd, saldo: 500, propietario: $emisor);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
+    $destino = crearCuentaEnMoneda($usd, saldo: 100, propietario: $receptor);
+    $destino->update(['tipo' => 'efectivo']);
+
+    test()->actingAs($emisor)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => $monto, 'moneda' => 'USD',
+    ])->assertRedirect(route('transacciones.envios.index'));
+
+    return ['emisor' => $emisor, 'receptor' => $receptor, 'origen' => $origen, 'destino' => $destino, 'envio' => TransferenciaPendiente::firstOrFail()];
+}
+
+test('los gastos e ingresos de un cliente no entran en el saldo esperado, solo los de una cuenta', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 500);
+    $cliente = Cliente::factory()->create();
+
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $admin->id, 'cuenta_origen_id' => $cuenta->id, 'monto' => 20]);
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $admin->id, 'cuenta_origen_id' => null, 'cliente_origen_id' => $cliente->id, 'monto' => 60]);
+    MovimientoFinanciero::factory()->ingreso()->create(['user_id' => $admin->id, 'cuenta_destino_id' => null, 'cliente_destino_id' => $cliente->id, 'monto' => 571]);
+
+    expect(saldoEsperadoEnPantalla($admin))->toBe(-20.0);
+
+    // Los de cliente se siguen viendo en las listas, marcados como informativos
+    $this->actingAs($admin)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.detalles.0.items_gastos.1.afecta_caja', false)
+        ->where('calculos.detalles.0.items_ingresos.0.afecta_caja', false));
+});
+
+test('el saldo esperado usa la tasa del día de cada operación aunque la tasa de la moneda cambie después', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    crearMonedaUsd();
+    $cup = crearMoneda('CUP', 120);
+    $cuenta = crearCuentaEnMoneda($cup, saldo: 5000, propietario: $vendedor);
+
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $vendedor->id, 'cuenta_origen_id' => $cuenta->id, 'monto' => 1200, 'moneda' => 'CUP']);
+    expect(saldoEsperadoEnPantalla($vendedor))->toBe(-10.0);
+
+    $cup->update(['tasa_cambio' => 240]);
+
+    expect(saldoEsperadoEnPantalla($vendedor))->toBe(-10.0);
+});
+
+test('un envío en tránsito resta de la caja del emisor el día que sale y confirmarlo no lo resta otra vez', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'envio' => $envio] = enviarEfectivoEnTransito();
+
+    expect(saldoEsperadoEnPantalla($emisor))->toBe(-100.0)
+        ->and(saldoEsperadoEnPantalla($receptor))->toBe(0.0);
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+
+    expect(saldoEsperadoEnPantalla($emisor))->toBe(-100.0)
+        ->and(saldoEsperadoEnPantalla($receptor))->toBe(100.0);
+});
+
+test('si el envío llegó incompleto la entrada del receptor vale lo acreditado y la salida del emisor lo enviado', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'envio' => $envio] = enviarEfectivoEnTransito();
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 80])->assertOk();
+
+    expect(saldoEsperadoEnPantalla($emisor))->toBe(-100.0)
+        ->and(saldoEsperadoEnPantalla($receptor))->toBe(80.0);
+});
+
+test('un envío rechazado en un periodo posterior devuelve el dinero al cierre en que se rechaza', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'envio' => $envio] = enviarEfectivoEnTransito();
+
+    // El emisor cierra con el envío todavía en tránsito: la salida queda contada en ese cierre
+    $this->travel(2)->seconds(); // la fecha del cierre se guarda sin fracciones de segundo
+    $this->actingAs($emisor)->post(route('ventas.cierres.store'), payloadStoreCierre())->assertRedirect(route('ventas.cierres'));
+    $this->assertDatabaseHas('cierre_cajas', ['user_id' => $emisor->id, 'saldo_esperado' => -100]);
+    $this->travel(2)->seconds();
+    expect(saldoEsperadoEnPantalla($emisor))->toBe(0.0);
+
+    // Días después el receptor lo rechaza: el dinero vuelve y entra como retorno en el cierre siguiente
+    $this->travel(2)->days();
+    crearTurnoActivo($receptor); // cada día exige confirmar el turno
+    crearTurnoActivo($emisor);
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.rechazar', $envio), ['observaciones' => 'No llegó'])->assertOk();
+
+    expect(saldoEsperadoEnPantalla($emisor))->toBe(100.0);
+});
+
+test('un envío rechazado dentro del mismo periodo no deja nada en el saldo esperado', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor, 'envio' => $envio] = enviarEfectivoEnTransito();
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.rechazar', $envio), ['observaciones' => 'No llegó'])->assertOk();
+
+    expect(saldoEsperadoEnPantalla($emisor))->toBe(0.0);
+});
+
+test('una transferencia entre cuentas del mismo usuario no cambia su saldo esperado', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $usd = crearMonedaUsd();
+    $primera = crearCuentaEnMoneda($usd, saldo: 500, propietario: $vendedor);
+    $primera->update(['tipo_titular' => 'personal', 'tipo' => 'tarjeta']);
+    $segunda = crearCuentaEnMoneda($usd, saldo: 0, propietario: $vendedor);
+    $segunda->update(['tipo' => 'tarjeta']);
+
+    $this->actingAs($vendedor)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $primera->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $segunda->id,
+        'monto' => 100, 'moneda' => 'USD',
+    ])->assertRedirect();
+
+    expect(saldoEsperadoEnPantalla($vendedor))->toBe(0.0);
+});
+
+test('para admin una transferencia entre cuentas es neutral y una a un cliente resta de la caja', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $usd = crearMonedaUsd();
+    $primera = crearCuentaEnMoneda($usd, saldo: 500);
+    $segunda = crearCuentaEnMoneda($usd, saldo: 0);
+    $cliente = Cliente::factory()->create();
+
+    $this->actingAs($admin)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $primera->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $segunda->id,
+        'monto' => 100, 'moneda' => 'USD',
+    ])->assertRedirect();
+    expect(saldoEsperadoEnPantalla($admin))->toBe(0.0);
+
+    $this->actingAs($admin)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $primera->id,
+        'destino_tipo' => 'cliente', 'destino_id' => $cliente->id,
+        'monto' => 30, 'moneda' => 'USD',
+    ])->assertRedirect();
+    expect(saldoEsperadoEnPantalla($admin))->toBe(-30.0);
+});
+
+// ==========================================================================
+// STORE — el servidor decide los totales, un cierre no se repite y se guarda lo que antes se perdía
+// ==========================================================================
+
+function inicioDelPeriodoEnPantalla(User $usuario): string
+{
+    $inicio = null;
+    test()->actingAs($usuario)->get(route('ventas.cierres.create'))->assertInertia(function ($page) use (&$inicio) {
+        $inicio = $page->toArray()['props']['fecha_apertura'];
+
+        return $page;
+    });
+
+    return (string) $inicio;
+}
+
+test('al guardar, los gastos y devoluciones salen del servidor y no de lo que mande el navegador', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 500);
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $admin->id, 'cuenta_origen_id' => $cuenta->id, 'monto' => 20]);
+
+    $this->actingAs($admin)->post(route('ventas.cierres.store'), payloadStoreCierre([
+        'saldo_inicial' => 999, 'total_gastos' => 1, 'total_devoluciones' => 777, 'saldo_contado' => -20,
+    ]))->assertRedirect(route('ventas.cierres'));
+
+    $this->assertDatabaseHas('cierre_cajas', [
+        'user_id' => $admin->id, 'saldo_inicial' => 0, 'total_gastos' => 20, 'total_devoluciones' => 0,
+        'saldo_esperado' => -20, 'saldo_contado' => -20, 'diferencia' => 0,
+    ]);
+});
+
+test('un cierre que ya se hizo no se puede repetir con la misma pantalla', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 100, propietario: $vendedor);
+    crearVentaCompletadaConPago($vendedor, Almacen::factory()->puntoVenta()->create(), Moneda::first(), total: 50, cuenta: $cuenta);
+
+    $inicio = inicioDelPeriodoEnPantalla($vendedor);
+    $this->travel(2)->seconds();
+
+    $this->actingAs($vendedor)->post(route('ventas.cierres.store'), payloadStoreCierre(['fecha_apertura' => $inicio]))->assertRedirect(route('ventas.cierres'));
+    $this->travel(2)->seconds();
+    $this->actingAs($vendedor)->post(route('ventas.cierres.store'), payloadStoreCierre(['fecha_apertura' => $inicio]))->assertSessionHasErrors('cierre');
+
+    expect(CierreCaja::where('user_id', $vendedor->id)->count())->toBe(1);
+});
+
+test('el cierre valida lo que recibe del navegador', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+
+    $this->actingAs($vendedor)->post(route('ventas.cierres.store'), payloadStoreCierre(['observaciones' => str_repeat('a', 2001)]))
+        ->assertSessionHasErrors('observaciones');
+    $this->actingAs($vendedor)->post(route('ventas.cierres.store'), payloadStoreCierre(['saldo_contado' => 'mucho']))
+        ->assertSessionHasErrors('saldo_contado');
+
+    expect(CierreCaja::count())->toBe(0);
+});
+
+test('un vendedor no puede aprobar un cierre', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $cierre = CierreCaja::create(['user_id' => $vendedor->id, 'estado' => 'pendiente', 'fecha_cierre' => now()]);
+
+    $this->actingAs($vendedor)->post(route('ventas.cierres.aprobar', $cierre->id))->assertForbidden();
+
+    expect($cierre->fresh()->estado)->toBe('pendiente');
+});
+
+test('el cierre guarda quién lo cerró, los turnos del periodo y los envíos que seguían en tránsito', function () {
+    ['emisor' => $emisor, 'envio' => $envio] = enviarEfectivoEnTransito();
+    crearVentaCompletadaConPago($emisor, Almacen::factory()->puntoVenta()->create(), Moneda::first(), total: 40, cuenta: Cuenta::find($envio->cuenta_origen_id));
+    $turno = $emisor->turnoActivo();
+    Venta::where('user_id', $emisor->id)->update(['turno_vendedor_id' => $turno->id]);
+
+    $this->actingAs($emisor)->post(route('ventas.cierres.store'), payloadStoreCierre())->assertRedirect(route('ventas.cierres'));
+
+    $cierre = CierreCaja::where('user_id', $emisor->id)->firstOrFail();
+    expect($cierre->turno_vendedor_id)->toBe($turno->id)
+        ->and($cierre->resumen_turnos)->toHaveCount(1)
+        ->and($cierre->resumen_turnos[0])->toMatchArray(['turno_id' => $turno->id, 'nombre' => $turno->nombre_vendedor, 'ventas_count' => 1])
+        ->and($cierre->envios_en_transito['resumen']['total'])->toBe(1)
+        ->and($cierre->envios_en_transito['enviados'])->toHaveCount(1)
+        ->and($cierre->envios_en_transito['enviados'][0]['id'])->toBe($envio->id);
+});
+
+test('un envío en tránsito se marca atrasado a los 2 días y sigue apareciendo en el cierre', function () {
+    ['emisor' => $emisor] = enviarEfectivoEnTransito();
+
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito_detalle.atrasados', 0)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.atrasado', false));
+
+    $this->travel(1)->days();
+    crearTurnoActivo($emisor);
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito_detalle.enviados.0.dias_en_transito', 1)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.atrasado', false));
+
+    $this->travel(2)->days();
+    $this->actingAs($emisor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.envios_en_transito_detalle.atrasados', 1)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.dias_en_transito', 3)
+        ->where('calculos.envios_en_transito_detalle.enviados.0.atrasado', true));
 });
