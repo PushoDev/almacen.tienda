@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Compra;
 use App\Models\HistorialComparacionMensual;
+use App\Models\TransferenciaPendiente;
 use App\Models\User;
 use App\Models\Venta;
 use Carbon\Carbon;
@@ -86,6 +87,7 @@ class DashboardStatsService
             'comprasPorProveedor' => $canViewFinance ? $this->getComprasPorProveedor() : [],
             'productosPorAlmacen' => $canViewFinance ? $this->getProductosPorAlmacen() : [],
             'resumenCuentas' => $resumenCuentas,
+            'enTransito' => $canViewFinance ? TransferenciaPendiente::resumenEnTransitoGlobal() : null,
             'resumenClientes' => $resumenClientes,
             'resumenProveedores' => $resumenProveedores,
             'resumenProductos' => $resumenProductos,
@@ -114,14 +116,20 @@ class DashboardStatsService
 
         $codigoPrincipal = $resumenCuentas['moneda_principal']['codigo'] ?? null;
 
+        // El dinero en tránsito ya salió de la cuenta de origen y aún no está en la de destino: se suma al capital
+        // (que no cambia al confirmar) y se informa aparte cuánto de esa cifra viaja.
+        $enTransito = TransferenciaPendiente::resumenEnTransitoGlobal();
+
         $capitalPorMoneda = collect($resumenCuentas['por_moneda_perm'])
-            ->map(function ($info, $codigo) use ($extrasMonedaPrincipal, $codigoPrincipal) {
+            ->map(function ($info, $codigo) use ($extrasMonedaPrincipal, $codigoPrincipal, $enTransito) {
                 $esPrincipal = $codigo === $codigoPrincipal;
+                $transitoMoneda = $enTransito['por_codigo'][$codigo]['monto'] ?? 0.0;
 
                 return [
                     'codigo' => $codigo,
                     'simbolo' => $info['simbolo'],
-                    'monto' => round(($esPrincipal ? $extrasMonedaPrincipal : 0) + $info['original'], 2),
+                    'monto' => round(($esPrincipal ? $extrasMonedaPrincipal : 0) + $info['original'] + $transitoMoneda, 2),
+                    'en_transito' => $transitoMoneda,
                     'incluye_clientes_proveedores_inventario' => $esPrincipal,
                 ];
             })
@@ -129,7 +137,8 @@ class DashboardStatsService
             ->toArray();
 
         return [
-            'capital_financiero' => round($resumenCuentas['total_saldo'] + $extrasMonedaPrincipal, 2),
+            'capital_financiero' => round($resumenCuentas['total_saldo'] + $extrasMonedaPrincipal + $enTransito['total_usd'], 2),
+            'en_transito_usd' => $enTransito['total_usd'],
             'capital_por_moneda' => $capitalPorMoneda,
             'moneda_principal' => $resumenCuentas['moneda_principal'],
         ];

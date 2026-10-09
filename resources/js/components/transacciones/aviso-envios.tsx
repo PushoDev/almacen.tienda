@@ -17,9 +17,14 @@ interface ResumenEnvios {
  * ocultarlo según el rol (por ejemplo, el Resumen Financiero no es para el vendedor).
  */
 export default function AvisoEnvios({ visible = true }: { visible?: boolean }) {
-    const { enviosAbiertos } = usePage().props as { enviosAbiertos?: ResumenEnvios | null };
+    const { enviosAbiertos, auth } = usePage().props as { enviosAbiertos?: ResumenEnvios | null; auth?: { user?: { role?: string } } };
 
     if (!visible || !enviosAbiertos || enviosAbiertos.total === 0) {
+        return null;
+    }
+
+    // Al vendedor solo le sirve lo que tiene que confirmar: el resto es dinero de otros y lo confunde.
+    if (auth?.user?.role === 'vendedor' && enviosAbiertos.por_confirmar === 0) {
         return null;
     }
 

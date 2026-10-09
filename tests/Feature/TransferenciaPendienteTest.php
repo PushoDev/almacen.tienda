@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\MovimientoFinanciero;
 use App\Models\TransferenciaPendiente;
@@ -26,8 +27,9 @@ function prepararEnvioEnTransito(float $monto = 100): array
 
     $usd = crearMoneda('USD', 1, true);
     $origen = crearCuentaEnMoneda($usd, saldo: 500, propietario: $emisor);
-    $origen->update(['tipo_titular' => 'personal']);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
     $destino = crearCuentaEnMoneda($usd, saldo: 100, propietario: $receptor);
+    $destino->update(['tipo' => 'efectivo']);
 
     test()->actingAs($emisor)->post(route('transacciones.transferir'), [
         'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
@@ -165,8 +167,9 @@ test('con monedas distintas se acredita en proporción a lo que llegó, con la t
     $usd = crearMoneda('USD', 1, true);
     $cup = crearMoneda('CUP', 400);
     $origen = crearCuentaEnMoneda($usd, saldo: 500, propietario: $emisor);
-    $origen->update(['tipo_titular' => 'personal']);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
     $destino = crearCuentaEnMoneda($cup, saldo: 0, propietario: $receptor);
+    $destino->update(['tipo' => 'efectivo']);
 
     $this->actingAs($emisor)->post(route('transacciones.transferir'), [
         'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
@@ -362,7 +365,7 @@ test('los widgets filtran la vista: en tránsito, por confirmar por ti y diferen
     // Un segundo envío, ya confirmado a medias (diferencia por resolver)
     $usd = crearMoneda('USD');
     $segundoOrigen = crearCuentaEnMoneda($usd, saldo: 300, propietario: $emisor);
-    $segundoOrigen->update(['tipo_titular' => 'personal']);
+    $segundoOrigen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
     $segundoDestino = $receptor->cuentas()->first();
     $this->actingAs($emisor)->post(route('transacciones.transferir'), [
         'origen_tipo' => 'cuenta', 'origen_id' => $segundoOrigen->id,
@@ -666,4 +669,91 @@ test('la hoja de un envío ya confirmado es la evidencia con lo recibido y quié
         ->where('envio.diferencia', 20)
         ->where('envio.confirmado_por', $receptor->name)
     );
+});
+
+// ==========================================================================
+// DINERO EN TRÁNSITO EN EL CAPITAL — admin y moderador lo ven sumado, el vendedor no
+// ==========================================================================
+
+test('el dinero en tránsito se resume por moneda y en USD con la tasa de la moneda de la cuenta de origen', function () {
+    crearTiposMovimientoFinanciero();
+    $emisor = User::factory()->vendedor()->create();
+    $receptor = User::factory()->vendedor()->create();
+    crearTurnoActivo($emisor);
+    crearTurnoActivo($receptor);
+    crearMoneda('USD', 1, true);
+    $cup = crearMoneda('CUP', 120);
+    $origen = crearCuentaEnMoneda($cup, saldo: 5000, propietario: $emisor);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
+    $destino = crearCuentaEnMoneda($cup, saldo: 0, propietario: $receptor);
+    $destino->update(['tipo' => 'efectivo']);
+
+    $this->actingAs($emisor)->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destino->id,
+        'monto' => 1200, 'moneda' => 'CUP',
+    ])->assertRedirect(route('transacciones.envios.index'));
+
+    expect(TransferenciaPendiente::resumenEnTransitoGlobal())->toBe([
+        'total_usd' => 10.0,
+        'cantidad' => 1,
+        'por_codigo' => ['CUP' => ['monto' => 1200.0, 'equivalente_usd' => 10.0]],
+    ]);
+});
+
+test('el capital de admin y moderador suma lo que viaja y no cambia al confirmar el envío', function (string $rol) {
+    ['receptor' => $receptor, 'envio' => $envio] = prepararEnvioEnTransito(); // 100 USD: origen 400, destino 100
+    $usuario = User::factory()->{$rol}()->create();
+    if ($rol === 'moderador') {
+        crearTurnoActivo($usuario);
+    }
+
+    $this->actingAs($usuario)->get(route('dashboard'))->assertInertia(fn ($page) => $page
+        ->where('resumenFinanciero.capital_financiero', 600)
+        ->where('resumenFinanciero.en_transito_usd', 100)
+        ->where('resumenFinanciero.capital_por_moneda.0.monto', 600)
+        ->where('resumenFinanciero.capital_por_moneda.0.en_transito', 100));
+
+    $this->actingAs($receptor)->postJson(route('transacciones.envios.confirmar', $envio), ['monto_recibido' => 100])->assertOk();
+
+    $this->actingAs($usuario)->get(route('dashboard'))->assertInertia(fn ($page) => $page
+        ->where('resumenFinanciero.capital_financiero', 600)
+        ->where('resumenFinanciero.en_transito_usd', 0)
+        ->where('resumenFinanciero.capital_por_moneda.0.en_transito', 0));
+})->with(['admin', 'moderador']);
+
+test('el vendedor no recibe el dinero en tránsito en ningún total', function () {
+    ['emisor' => $emisor] = prepararEnvioEnTransito();
+
+    $this->actingAs($emisor)->get(route('dashboard'))->assertInertia(fn ($page) => $page->where('resumenFinanciero', null));
+});
+
+test('una transferencia de cuenta a cliente o de cliente a cliente es siempre inmediata, aunque la cuenta sea de efectivo', function (string $origenTipo) {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $usd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($usd, saldo: 500);
+    $cuenta->update(['tipo' => 'efectivo']);
+    $origenCliente = Cliente::factory()->create();
+    $destinoCliente = Cliente::factory()->create();
+    $origenId = $origenTipo === 'cuenta' ? $cuenta->id : $origenCliente->id;
+
+    $this->actingAs($admin)->post(route('transacciones.transferir'), [
+        'origen_tipo' => $origenTipo, 'origen_id' => $origenId,
+        'destino_tipo' => 'cliente', 'destino_id' => $destinoCliente->id,
+        'monto' => 50, 'moneda' => 'USD',
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseCount('transferencias_pendientes', 0);
+    $this->assertDatabaseCount('movimientos_financieros', 1);
+})->with(['cuenta', 'cliente']);
+
+test('el aviso del vendedor solo se muestra si tiene algo por confirmar', function () {
+    ['emisor' => $emisor, 'receptor' => $receptor] = prepararEnvioEnTransito();
+
+    // El dato sigue viajando; es el componente quien oculta el aviso al emisor (sin nada por confirmar).
+    $this->actingAs($emisor)->get(route('dashboard'))->assertInertia(fn ($page) => $page
+        ->where('enviosAbiertos.por_confirmar', 0));
+    $this->actingAs($receptor)->get(route('dashboard'))->assertInertia(fn ($page) => $page
+        ->where('enviosAbiertos.por_confirmar', 1));
 });

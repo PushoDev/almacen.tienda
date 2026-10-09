@@ -163,6 +163,42 @@ class TransferenciaPendiente extends Model
         ];
     }
 
+    /**
+     * Dinero que viaja ahora mismo en todo el sistema, por código de moneda y en USD (monto de origen entre la tasa
+     * de la moneda de la cuenta de origen). Es el único cálculo del "en tránsito" que se suma al capital de admin y
+     * moderador en Dashboard, Logística y Cuentas: ese dinero ya salió del origen y todavía no está en el destino,
+     * así que ninguna cuenta lo cuenta.
+     *
+     * @return array{total_usd: float, cantidad: int, por_codigo: array<string, array{monto: float, equivalente_usd: float}>}
+     */
+    public static function resumenEnTransitoGlobal(): array
+    {
+        $filas = static::query()
+            ->where('transferencias_pendientes.estado', self::ESTADO_EN_TRANSITO)
+            ->join('cuentas', 'cuentas.id', '=', 'transferencias_pendientes.cuenta_origen_id')
+            ->join('monedas', 'monedas.id', '=', 'cuentas.moneda_id')
+            ->get(['transferencias_pendientes.monto', 'monedas.codigo_moneda', 'monedas.tasa_cambio']);
+
+        $porCodigo = [];
+        foreach ($filas as $fila) {
+            $tasa = (float) $fila->tasa_cambio;
+            $codigo = (string) $fila->codigo_moneda;
+            $porCodigo[$codigo]['monto'] = ($porCodigo[$codigo]['monto'] ?? 0.0) + $fila->monto;
+            $porCodigo[$codigo]['equivalente_usd'] = ($porCodigo[$codigo]['equivalente_usd'] ?? 0.0) + ($tasa > 0 ? $fila->monto / $tasa : 0.0);
+        }
+
+        $porCodigo = array_map(fn (array $moneda) => [
+            'monto' => round($moneda['monto'], 2),
+            'equivalente_usd' => round($moneda['equivalente_usd'], 2),
+        ], $porCodigo);
+
+        return [
+            'total_usd' => round(array_sum(array_column($porCodigo, 'equivalente_usd')), 2),
+            'cantidad' => $filas->count(),
+            'por_codigo' => $porCodigo,
+        ];
+    }
+
     public function estaEnTransito(): bool
     {
         return $this->estado === self::ESTADO_EN_TRANSITO;

@@ -1,10 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DollarSign, Info, Landmark } from 'lucide-react';
+import { DollarSign, Info, Landmark, Truck } from 'lucide-react';
 
 import type { MontoPorMoneda, ResumenFinanciero as ResumenFinancieroData } from '../types';
 import { colorMoneda } from '../utils';
+
+const formatearMonto = (valor: number) => valor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function ResumenFinanciero({
     resumenFinanciero,
@@ -65,6 +67,12 @@ export default function ResumenFinanciero({
                                                         maximumFractionDigits: 2,
                                                     })}{' '}
                                                     {item.simbolo}
+                                                    {item.en_transito > 0 && (
+                                                        <span className="mt-0.5 flex items-center justify-end gap-1 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                                            <Truck className="h-3 w-3" />
+                                                            incluye {formatearMonto(item.en_transito)} {item.simbolo} en tránsito
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -80,12 +88,14 @@ export default function ResumenFinanciero({
                         </Table>
                         <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex justify-between border-t pt-2 font-semibold">
                             <span>Capital Financiero Total:</span>
-                            <span>
-                                {resumenFinanciero.moneda_principal.simbolo}{' '}
-                                {resumenFinanciero.capital_financiero.toLocaleString('es-ES', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                })}
+                            <span className="text-right">
+                                {resumenFinanciero.moneda_principal.simbolo} {formatearMonto(resumenFinanciero.capital_financiero)}
+                                {resumenFinanciero.en_transito_usd > 0 && (
+                                    <span className="mt-0.5 flex items-center justify-end gap-1 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                        <Truck className="h-3 w-3" />
+                                        incluye {resumenFinanciero.moneda_principal.simbolo} {formatearMonto(resumenFinanciero.en_transito_usd)} en tránsito
+                                    </span>
+                                )}
                             </span>
                         </div>
                         <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">

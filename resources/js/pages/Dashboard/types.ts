@@ -114,11 +114,15 @@ export interface CapitalPorMoneda {
     codigo: string;
     simbolo: string;
     monto: number;
+    /** Parte de `monto` que viaja en envíos de dinero sin confirmar (ya está sumada). */
+    en_transito: number;
     incluye_clientes_proveedores_inventario: boolean;
 }
 
 export interface ResumenFinanciero {
     capital_financiero: number;
+    /** Parte de `capital_financiero` (USD) que viaja en envíos sin confirmar (ya está sumada). */
+    en_transito_usd: number;
     capital_por_moneda: CapitalPorMoneda[];
     moneda_principal: { simbolo: string; codigo: string };
 }

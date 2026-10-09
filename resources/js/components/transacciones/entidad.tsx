@@ -317,14 +317,9 @@ export function SelectorEntidad({
     placeholder: string;
 }) {
     const [busqueda, setBusqueda] = useState('');
-    // Se busca por el nombre de la cuenta y también por su responsable (a quién se le envía)
+    // Se busca solo por el nombre: al escribir, la lista se va acotando a lo que coincide
     const termino = busqueda.toLowerCase();
-    const visibles = entidades.filter(
-        (e) =>
-            !busqueda ||
-            e.nombre.toLowerCase().includes(termino) ||
-            (e.responsables ?? []).some((responsable) => responsable.toLowerCase().includes(termino)),
-    );
+    const visibles = entidades.filter((e) => !busqueda || e.nombre.toLowerCase().includes(termino));
 
     return (
         <Combobox

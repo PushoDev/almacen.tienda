@@ -655,7 +655,7 @@ test('un vendedor no puede transferir desde una cuenta que no tiene asignada', f
     $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 500]);
 });
 
-test('un vendedor que transfiere a una cuenta de otro vendedor no la acredita al instante: el dinero sale del origen y queda en tránsito', function () {
+test('un vendedor que transfiere efectivo a la cuenta de efectivo de otro vendedor no la acredita al instante: el dinero sale del origen y queda en tránsito', function () {
     crearTiposMovimientoFinanciero();
     $vendedorA = User::factory()->vendedor()->create();
     crearTurnoActivo($vendedorA);
@@ -665,8 +665,9 @@ test('un vendedor que transfiere a una cuenta de otro vendedor no la acredita al
 
     $monedaUsd = crearMoneda('USD', 1, true);
     $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedorA);
-    $origen->update(['tipo_titular' => 'personal']);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
     $destinoDeOtro = crearCuentaEnMoneda($monedaUsd, saldo: 0, propietario: $vendedorB); // asignada a OTRO vendedor, no a A
+    $destinoDeOtro->update(['tipo' => 'efectivo']);
 
     $response = $this->post(route('transacciones.transferir'), [
         'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
@@ -940,4 +941,28 @@ test('show() de una transferencia entre monedas distintas muestra lo que realmen
         ->where('detallesDestino.monto_operacion', 5000)
         ->where('detallesDestino.saldo_posterior', 6000)
     );
+});
+
+test('un vendedor que transfiere a la cuenta de otro vendedor con una tarjeta de por medio la acredita al instante', function () {
+    crearTiposMovimientoFinanciero();
+    $vendedorA = User::factory()->vendedor()->create();
+    $vendedorB = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedorA);
+    $this->actingAs($vendedorA);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $origen = crearCuentaEnMoneda($monedaUsd, saldo: 500, propietario: $vendedorA);
+    $origen->update(['tipo_titular' => 'personal', 'tipo' => 'efectivo']);
+    $destinoDeOtro = crearCuentaEnMoneda($monedaUsd, saldo: 0, propietario: $vendedorB);
+    $destinoDeOtro->update(['tipo' => 'tarjeta']);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $origen->id,
+        'destino_tipo' => 'cuenta', 'destino_id' => $destinoDeOtro->id,
+        'monto' => 50, 'moneda' => 'USD',
+    ])->assertSessionHasNoErrors();
+
+    $this->assertDatabaseCount('transferencias_pendientes', 0);
+    $this->assertDatabaseHas('cuentas', ['id' => $origen->id, 'saldo_cuenta' => 450]);
+    $this->assertDatabaseHas('cuentas', ['id' => $destinoDeOtro->id, 'saldo_cuenta' => 50]);
 });

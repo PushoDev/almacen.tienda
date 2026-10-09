@@ -104,20 +104,14 @@ class TransferenciaController extends Controller
 
             $this->validarAccesoVendedor($origen, $request->origen_tipo);
 
-            // Un vendedor puede transferir a cualquier cuenta del sistema. Si el destino es una cuenta suya (de
-            // cualquier nivel de acceso: acreditar a una de `cobro` es recibir, no operarla) la transferencia es
-            // inmediata; si es de otra persona, el dinero sale del origen y espera la confirmación del destino.
-            // Admin y moderador no tienen cuentas propias: para ellos el efectivo es lo que viaja (puede cambiar de
-            // provincia y llegar días después), así que una transferencia de cuenta de efectivo a cuenta de efectivo
-            // también queda en tránsito hasta confirmarse; con una tarjeta de por medio es inmediata. Sin campo de
-            // provincia en las cuentas: lo decide el tipo de cuenta.
-            $quedaEnTransito = $esVendedor
-                ? $request->destino_tipo === 'cuenta'
-                    && ! auth()->user()->cuentas()->where('cuentas.id', $destino->id)->exists()
-                : $request->origen_tipo === 'cuenta'
-                    && $request->destino_tipo === 'cuenta'
-                    && $origen->tipo === 'efectivo'
-                    && $destino->tipo === 'efectivo';
+            // Misma regla para todos los roles: el efectivo es lo que viaja (puede cambiar de provincia y llegar días
+            // después), así que una transferencia de cuenta de efectivo a cuenta de efectivo sale del origen y queda
+            // en tránsito hasta que se confirme. Con una tarjeta de por medio, o hacia un cliente o proveedor, es
+            // inmediata. Sin campo de provincia en las cuentas: lo decide el tipo de cuenta.
+            $quedaEnTransito = $request->origen_tipo === 'cuenta'
+                && $request->destino_tipo === 'cuenta'
+                && $origen->tipo === 'efectivo'
+                && $destino->tipo === 'efectivo';
 
             $monedaOrigen = $this->obtenerMonedaEntidad($origen, $request->origen_tipo);
             $monedaDestino = $this->obtenerMonedaEntidad($destino, $request->destino_tipo);

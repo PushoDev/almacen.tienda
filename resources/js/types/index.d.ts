@@ -471,6 +471,13 @@ export interface LogisticaProps {
     // Permissions
     canViewFinance?: boolean;
 
+    /** Dinero en tránsito (solo admin/moderador): ya salió del origen y ninguna cuenta lo cuenta, se suma al capital. */
+    enTransito?: {
+        total_usd: number;
+        cantidad: number;
+        por_codigo: Record<string, { monto: number; equivalente_usd: number }>;
+    } | null;
+
     // Resumen de Cuentas (incorporado desde CuentaController)
     resumenCuentas?: {
         total_saldo: number;
