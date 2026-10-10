@@ -8,6 +8,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { ListaProductosResumen, type ProductoResumen } from '@/components/especificaciones-producto';
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,10 @@ interface Producto {
     id: number;
     nombre_producto: string;
     precio_compra_producto: number;
+    marca_producto?: string | null;
+    modelo_producto?: string | null;
+    capacidad_producto?: string | null;
+    color_producto?: string | null;
 }
 
 interface Compra {
@@ -117,6 +122,7 @@ interface MovimientoPendiente {
     almacen_destino: string | null;
     usuario: string | null;
     cantidad_lineas: number;
+    productos: ProductoResumen[];
 }
 
 interface MovimientosPaginados {
@@ -752,6 +758,15 @@ export default function DistribucionCostosIndex({
                                                     <Package className="h-3 w-3" />
                                                     {compra.productos.length} {compra.productos.length === 1 ? 'producto' : 'productos'}
                                                 </Badge>
+                                                <ListaProductosResumen
+                                                    productos={compra.productos.map((p) => ({
+                                                        nombre: p.nombre_producto,
+                                                        marca: p.marca_producto,
+                                                        modelo: p.modelo_producto,
+                                                        capacidad: p.capacidad_producto,
+                                                        color: p.color_producto,
+                                                    }))}
+                                                />
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
@@ -1027,6 +1042,7 @@ export default function DistribucionCostosIndex({
                                                                 <Package className="h-3 w-3" />
                                                                 {movimiento.cantidad_lineas} {movimiento.cantidad_lineas === 1 ? 'línea' : 'líneas'}
                                                             </Badge>
+                                                            <ListaProductosResumen productos={movimiento.productos} />
                                                         </TableCell>
                                                         <TableCell className="space-x-1 text-right whitespace-nowrap">
                                                             <Tooltip>

@@ -179,6 +179,13 @@ class DistribucionCostosController extends Controller
             'almacen_destino' => $movimiento->almacenDestino->nombre_almacen ?? null,
             'usuario' => $movimiento->usuario->name ?? null,
             'cantidad_lineas' => $movimiento->detalles->count(),
+            'productos' => $movimiento->detalles->map(fn ($detalle) => [
+                'nombre' => $detalle->producto->nombre_producto ?? "Producto #{$detalle->producto_id}",
+                'marca' => $detalle->producto->marca_producto ?? null,
+                'modelo' => $detalle->producto->modelo_producto ?? null,
+                'capacidad' => $detalle->producto->capacidad_producto ?? null,
+                'color' => $detalle->producto->color_producto ?? null,
+            ])->values(),
         ]);
 
         return [
@@ -625,9 +632,8 @@ class DistribucionCostosController extends Controller
                 return $this->respuestaError($previsualizar, 'Solo se pueden usar cuentas en moneda CUP o USD para esta operación.');
             }
 
-            if ($cuenta->saldo_cuenta < $item['monto']) {
-                return $this->respuestaError($previsualizar, "El saldo de la cuenta {$cuenta->nombre_cuenta} es insuficiente.");
-            }
+            // Sin chequeo de saldo: decisión del cliente. Si la cuenta no alcanza queda en saldo negativo,
+            // que es la deuda con la agencia y se va pagando con transacciones de entrada a esa cuenta.
         }
 
         $totalUsdDisponible = $cuentasSeleccionadas->sum('monto_usd');
@@ -989,7 +995,7 @@ class DistribucionCostosController extends Controller
         $tipo = $request->input('tipo', '');
         $fecha = $request->input('fecha', '');
 
-        $distribuciones = CostDistribution::with(['compras.compra', 'movimientos.movimiento', 'cuentas.cuenta.moneda', 'user', 'items'])
+        $distribuciones = CostDistribution::with(['compras.compra', 'movimientos.movimiento', 'cuentas.cuenta.moneda', 'user', 'items.product'])
             ->when($compraId !== '', fn ($query) => $query->whereHas('compras', fn ($q) => $q->where('compra_id', $compraId)))
             ->when($movimientoId !== '', fn ($query) => $query->whereHas('movimientos', fn ($q) => $q->where('movimiento_id', $movimientoId)))
             ->when($tipo === 'compras', fn ($query) => $query->whereHas('compras'))
@@ -1013,6 +1019,13 @@ class DistribucionCostosController extends Controller
                 ]),
                 'monto_total_usd' => $distribucion->amount_usd,
                 'productos_afectados' => $distribucion->items->count(),
+                'productos' => $distribucion->items->map(fn ($item) => [
+                    'nombre' => $item->product->nombre_producto ?? "Producto #{$item->product_id}",
+                    'marca' => $item->product->marca_producto ?? null,
+                    'modelo' => $item->product->modelo_producto ?? null,
+                    'capacidad' => $item->product->capacidad_producto ?? null,
+                    'color' => $item->product->color_producto ?? null,
+                ])->values(),
                 'comentario' => $distribucion->details,
             ];
         });
@@ -1069,6 +1082,11 @@ class DistribucionCostosController extends Controller
                 return [
                     'producto_id' => $item->product_id,
                     'nombre' => $item->product->nombre_producto ?? "Producto #{$item->product_id}",
+                    'codigo' => $item->product->codigo_producto ?? null,
+                    'marca' => $item->product->marca_producto ?? null,
+                    'modelo' => $item->product->modelo_producto ?? null,
+                    'capacidad' => $item->product->capacidad_producto ?? null,
+                    'color' => $item->product->color_producto ?? null,
                     'cantidad' => $cantidad,
                     'costo_anterior' => $item->old_cost_usd,
                     'monto_asignado' => $item->distributed_amount_usd,

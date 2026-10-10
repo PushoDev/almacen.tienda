@@ -9,6 +9,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { mensajeDeError, postJson } from '@/components/fusion-fichas-dialog';
+import { EspecificacionesProducto } from '@/components/especificaciones-producto';
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,11 @@ interface Cuenta {
 interface ProductoCompra {
     id: number;
     nombre_producto: string;
+    marca_producto?: string | null;
+    modelo_producto?: string | null;
+    capacidad_producto?: string | null;
+    color_producto?: string | null;
+    codigo_producto?: string | null;
     precio_compra_producto: number;
     pivot: {
         cantidad: number;
@@ -392,6 +398,15 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
                                                                 Saldo:{' '}
                                                                 {esCup ? formatCupCurrency(cuenta.saldo_cuenta) : formatCurrency(cuenta.saldo_cuenta)}
                                                             </p>
+                                                            {(parseFloat(item?.monto ?? '') || 0) > cuenta.saldo_cuenta && (
+                                                                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                                                    Quedará en{' '}
+                                                                    {esCup
+                                                                        ? formatCupCurrency(cuenta.saldo_cuenta - (parseFloat(item?.monto ?? '') || 0))
+                                                                        : formatCurrency(cuenta.saldo_cuenta - (parseFloat(item?.monto ?? '') || 0))}
+                                                                    : genera deuda con la agencia.
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         <InputGroup className="w-32 shrink-0">
                                                             <InputGroupAddon>{cuenta.moneda.simbolo_moneda || '$'}</InputGroupAddon>
@@ -553,7 +568,18 @@ export default function CambiarCostoManual({ tipo, compraIds, movimientoIds, pro
                                     {distribucion.map(
                                         ({ producto, costoActual, cantidad, totalLinea, peso, monto, nuevoCosto, porcentajeAumento }) => (
                                             <TableRow key={producto.id}>
-                                                <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
+                                                <TableCell>
+                                                    <div className="font-medium">{producto.nombre_producto}</div>
+                                                    {producto.codigo_producto && (
+                                                        <div className="text-muted-foreground font-mono text-xs">{producto.codigo_producto}</div>
+                                                    )}
+                                                    <EspecificacionesProducto
+                                                        marca={producto.marca_producto}
+                                                        modelo={producto.modelo_producto}
+                                                        capacidad={producto.capacidad_producto}
+                                                        color={producto.color_producto}
+                                                    />
+                                                </TableCell>
                                                 <TableCell className="text-right">{formatCurrency(costoActual)}</TableCell>
                                                 <TableCell className="text-right">{cantidad}</TableCell>
                                                 <TableCell className="text-right font-medium">{formatCurrency(totalLinea)}</TableCell>
