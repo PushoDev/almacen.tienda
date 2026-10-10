@@ -42,10 +42,6 @@ Route::middleware(['auth', 'verified', 'admin'])->group(
             // ✅ NUEVA: Ruta para crear almacén durante compra
             Route::post('/almacenes', [CompraController::class, 'storeAlmacenForCompra'])->name('almacen.store');
 
-            Route::get('/proveedores', [CompraController::class, 'getProveedor'])->name('proveedores');
-            // ✅ NUEVA: Ruta para crear proveedor durante compra
-            Route::post('/proveedores', [CompraController::class, 'storeProveedor'])->name('proveedor.store');
-
             Route::get('/categorias', [CompraController::class, 'getCategorias'])->name('categorias');
             // ✅ NUEVA: Ruta para crear categoría durante compra
             Route::post('/categorias', [CompraController::class, 'storeCategoria'])->name('categoria.store');

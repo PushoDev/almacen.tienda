@@ -611,6 +611,7 @@ class CierreCajaController extends Controller
 
         $movimientos = MovimientoFinanciero::where('user_id', $user->id)
             ->where('fecha_operacion', '>=', $inicioTurno)
+            ->where('estado', 'completado')
             ->get(['id', 'turno_vendedor_id', 'tipo_movimiento_id']);
 
         $turnos = TurnoVendedor::whereIn('id', $ventas->pluck('turno_vendedor_id')->merge($movimientos->pluck('turno_vendedor_id'))->filter()->unique())
@@ -1026,6 +1027,7 @@ class CierreCajaController extends Controller
                 });
             })
                 ->whereBetween('fecha_operacion', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+                ->where('estado', 'completado')
                 ->with(['user', 'cuentaOrigen', 'cuentaDestino'])
                 ->get();
 
@@ -1217,6 +1219,7 @@ class CierreCajaController extends Controller
             }
         })
             ->where('fecha_operacion', '>=', $inicioTurno)
+            ->where('estado', 'completado')
             ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino', 'user', 'turnoVendedor'])
             ->get();
 

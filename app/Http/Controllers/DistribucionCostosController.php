@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\DistribuirCostosManualRequest;
 use App\Models\AjusteValorInventario;
 use App\Models\Almacen;
+use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CostDistribution;
 use App\Models\CostDistributionCompra;
@@ -19,7 +20,6 @@ use App\Models\Movimiento;
 use App\Models\MovimientoFinanciero;
 use App\Models\MovimientoSeguimiento;
 use App\Models\Producto;
-use App\Models\Proveedor;
 use App\Services\FusionLotesService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -42,15 +42,15 @@ class DistribucionCostosController extends Controller
         $almacenId = $request->input('almacen_id', '');
         $fecha = $request->input('fecha', '');
 
-        $compras = Compra::with(['productos', 'proveedor', 'cliente'])
+        // El proveedor de una compra es un cliente; `proveedor_id` es el id de ese cliente.
+        $compras = Compra::with(['productos', 'cliente'])
             ->when($buscar !== '', function ($query) use ($buscar) {
                 $query->where(function ($sub) use ($buscar) {
                     $sub->where('id', 'like', "%{$buscar}%")
-                        ->orWhereHas('proveedor', fn ($q) => $q->where('nombre_proveedor', 'like', "%{$buscar}%"))
                         ->orWhereHas('cliente', fn ($q) => $q->where('nombre_cliente', 'like', "%{$buscar}%"));
                 });
             })
-            ->when($proveedorId !== '', fn ($query) => $query->where('proveedor_id', $proveedorId))
+            ->when($proveedorId !== '', fn ($query) => $query->where('cliente_id', $proveedorId))
             ->when($almacenId !== '', fn ($query) => $query->whereHas('productos', fn ($q) => $q->wherePivot('almacen_id', $almacenId)))
             ->when($fecha !== '', fn ($query) => $query->whereDate('fecha_compra', $fecha))
             // Las que el usuario eliminó de la lista (sin prorratear) ya no se muestran.
@@ -77,7 +77,7 @@ class DistribucionCostosController extends Controller
 
         $compras->through(function ($compra) use ($nombresAlmacen, $comprasConDistribucion) {
             $compra->tiene_distribucion = $comprasConDistribucion->contains($compra->id);
-            $compra->origen = $compra->proveedor->nombre_proveedor ?? $compra->cliente->nombre_cliente ?? null;
+            $compra->origen = $compra->cliente->nombre_cliente ?? null;
             $compra->almacenes = $compra->productos
                 ->pluck('pivot.almacen_id')
                 ->filter()
@@ -114,7 +114,7 @@ class DistribucionCostosController extends Controller
             'puedeEliminarPendientes' => in_array(Auth::user()->role, ['admin', 'moderador']),
             // Solo proveedores/almacenes que realmente participan en alguna compra — no la lista
             // completa del sistema, para no ofrecer filtros que siempre den cero resultados.
-            'proveedores' => Proveedor::whereHas('compras')->orderBy('nombre_proveedor')->get(['id', 'nombre_proveedor']),
+            'proveedores' => Cliente::whereHas('comprasComoProveedor')->orderBy('nombre_cliente')->get(['id', 'nombre_cliente as nombre_proveedor']),
             'almacenes' => Almacen::whereIn('id', DB::table('compra_producto')->whereNotNull('almacen_id')->distinct()->pluck('almacen_id'))
                 ->orderBy('nombre_almacen')
                 ->get(['id', 'nombre_almacen']),
@@ -179,6 +179,13 @@ class DistribucionCostosController extends Controller
             'almacen_destino' => $movimiento->almacenDestino->nombre_almacen ?? null,
             'usuario' => $movimiento->usuario->name ?? null,
             'cantidad_lineas' => $movimiento->detalles->count(),
+            'productos' => $movimiento->detalles->map(fn ($detalle) => [
+                'nombre' => $detalle->producto->nombre_producto ?? "Producto #{$detalle->producto_id}",
+                'marca' => $detalle->producto->marca_producto ?? null,
+                'modelo' => $detalle->producto->modelo_producto ?? null,
+                'capacidad' => $detalle->producto->capacidad_producto ?? null,
+                'color' => $detalle->producto->color_producto ?? null,
+            ])->values(),
         ]);
 
         return [
@@ -625,9 +632,8 @@ class DistribucionCostosController extends Controller
                 return $this->respuestaError($previsualizar, 'Solo se pueden usar cuentas en moneda CUP o USD para esta operación.');
             }
 
-            if ($cuenta->saldo_cuenta < $item['monto']) {
-                return $this->respuestaError($previsualizar, "El saldo de la cuenta {$cuenta->nombre_cuenta} es insuficiente.");
-            }
+            // Sin chequeo de saldo: decisión del cliente. Si la cuenta no alcanza queda en saldo negativo,
+            // que es la deuda con la agencia y se va pagando con transacciones de entrada a esa cuenta.
         }
 
         $totalUsdDisponible = $cuentasSeleccionadas->sum('monto_usd');
@@ -989,7 +995,7 @@ class DistribucionCostosController extends Controller
         $tipo = $request->input('tipo', '');
         $fecha = $request->input('fecha', '');
 
-        $distribuciones = CostDistribution::with(['compras.compra', 'movimientos.movimiento', 'cuentas.cuenta.moneda', 'user', 'items'])
+        $distribuciones = CostDistribution::with(['compras.compra', 'movimientos.movimiento', 'cuentas.cuenta.moneda', 'user', 'items.product'])
             ->when($compraId !== '', fn ($query) => $query->whereHas('compras', fn ($q) => $q->where('compra_id', $compraId)))
             ->when($movimientoId !== '', fn ($query) => $query->whereHas('movimientos', fn ($q) => $q->where('movimiento_id', $movimientoId)))
             ->when($tipo === 'compras', fn ($query) => $query->whereHas('compras'))
@@ -1013,6 +1019,13 @@ class DistribucionCostosController extends Controller
                 ]),
                 'monto_total_usd' => $distribucion->amount_usd,
                 'productos_afectados' => $distribucion->items->count(),
+                'productos' => $distribucion->items->map(fn ($item) => [
+                    'nombre' => $item->product->nombre_producto ?? "Producto #{$item->product_id}",
+                    'marca' => $item->product->marca_producto ?? null,
+                    'modelo' => $item->product->modelo_producto ?? null,
+                    'capacidad' => $item->product->capacidad_producto ?? null,
+                    'color' => $item->product->color_producto ?? null,
+                ])->values(),
                 'comentario' => $distribucion->details,
             ];
         });
@@ -1069,6 +1082,11 @@ class DistribucionCostosController extends Controller
                 return [
                     'producto_id' => $item->product_id,
                     'nombre' => $item->product->nombre_producto ?? "Producto #{$item->product_id}",
+                    'codigo' => $item->product->codigo_producto ?? null,
+                    'marca' => $item->product->marca_producto ?? null,
+                    'modelo' => $item->product->modelo_producto ?? null,
+                    'capacidad' => $item->product->capacidad_producto ?? null,
+                    'color' => $item->product->color_producto ?? null,
                     'cantidad' => $cantidad,
                     'costo_anterior' => $item->old_cost_usd,
                     'monto_asignado' => $item->distributed_amount_usd,

@@ -240,7 +240,8 @@ test('previsualizar un prorrateo sin pérdida no avisa nada y tampoco persiste',
     $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => null]);
 });
 
-test('previsualizar con saldo insuficiente devuelve el error como JSON, no como redirect', function () {
+test('una cuenta sin saldo suficiente (o ya en negativo) puede financiar el prorrateo y queda en deuda', function () {
+    asegurarTipoMovimientoFinancieroGasto();
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -249,18 +250,23 @@ test('previsualizar con saldo insuficiente devuelve el error como JSON, no como 
     $producto = Producto::factory()->create(['precio_compra_producto' => 100]);
     $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
     crearLoteStockRecibido($movimiento, $producto, $destino, 10);
-    $cuenta = crearCuentaUsdParaProrrateo(10); // saldo menor al monto pedido
+    $cuenta = crearCuentaUsdParaProrrateo(-20); // ya en negativo y menor al monto pedido
 
-    $response = $this->postJson(route('distribucion-costos.previsualizar'), [
+    $datos = [
         'movimiento_ids' => [$movimiento->id],
         'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
         'exchange_rate' => 400,
-        'details' => 'Vista previa con saldo insuficiente',
-    ]);
+        'details' => 'Cuenta sin saldo',
+    ];
 
-    $response->assertStatus(422);
-    expect($response->json('error'))->toContain('insuficiente');
+    // La vista previa ya no devuelve error de saldo
+    $this->postJson(route('distribucion-costos.previsualizar'), $datos)->assertOk();
     $this->assertDatabaseCount('cost_distributions', 0);
+
+    $this->post(route('distribucion-costos.distribuir'), $datos)->assertRedirect(route('distribucion-costos.index'));
+
+    $this->assertDatabaseCount('cost_distributions', 1);
+    expect((float) $cuenta->fresh()->saldo_cuenta)->toBe(-70.0);
 });
 
 test('lote de varios movimientos reparte proporcionalmente: mismo % de aumento para cada producto', function () {
@@ -588,4 +594,73 @@ test('un vendedor no puede omitir el prorrateo de un movimiento (403)', function
     ])->assertForbidden();
 
     $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'prorrateo_decision' => null]);
+});
+
+test('el detalle de una distribución trae marca, modelo, capacidad, color y código de cada producto', function () {
+    asegurarTipoMovimientoFinancieroGasto();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create([
+        'precio_compra_producto' => 100,
+        'marca_producto' => 'ECOFLOW',
+        'modelo_producto' => 'DELTA 3',
+        'capacidad_producto' => '1024WH',
+        'color_producto' => 'NEGRO',
+    ]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+    $cuenta = crearCuentaUsdParaProrrateo(1000);
+
+    $this->post(route('distribucion-costos.distribuir'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Con especificaciones',
+    ])->assertRedirect(route('distribucion-costos.index'));
+
+    $distribucion = CostDistribution::firstOrFail();
+    $respuesta = $this->get(route('distribucion-costos.show', $distribucion), ['X-Inertia' => 'true']);
+
+    expect($respuesta->json('props.productos.0'))->toMatchArray([
+        'marca' => 'ECOFLOW',
+        'modelo' => 'DELTA 3',
+        'capacidad' => '1024WH',
+        'color' => 'NEGRO',
+        'codigo' => $producto->codigo_producto,
+    ]);
+});
+
+test('los listados de distribución (pendientes e historial) traen marca y modelo de cada producto', function () {
+    asegurarTipoMovimientoFinancieroGasto();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create([
+        'precio_compra_producto' => 100,
+        'marca_producto' => 'EKO',
+        'modelo_producto' => 'FULL AD-P20',
+    ]);
+    $movimiento = crearMovimientoConDetalle($origen, $destino, $admin, $producto, cantidadDespachada: 10);
+    crearLoteStockRecibido($movimiento, $producto, $destino, 10);
+    $cuenta = crearCuentaUsdParaProrrateo(1000);
+
+    $pendientes = $this->get(route('distribucion-costos.index', ['tab' => 'movimientos']), ['X-Inertia' => 'true']);
+    expect($pendientes->json('props.movimientosPendientes.data.0.productos.0'))
+        ->toMatchArray(['nombre' => $producto->nombre_producto, 'marca' => 'EKO', 'modelo' => 'FULL AD-P20']);
+
+    $this->post(route('distribucion-costos.distribuir'), [
+        'movimiento_ids' => [$movimiento->id],
+        'cuentas' => [['account_id' => $cuenta->id, 'monto' => 50]],
+        'exchange_rate' => 400,
+        'details' => 'Listados',
+    ])->assertRedirect(route('distribucion-costos.index'));
+
+    $historial = $this->get(route('distribucion-costos.historial'), ['X-Inertia' => 'true']);
+    expect($historial->json('props.distribuciones.data.0.productos.0'))
+        ->toMatchArray(['nombre' => $producto->nombre_producto, 'marca' => 'EKO', 'modelo' => 'FULL AD-P20']);
 });

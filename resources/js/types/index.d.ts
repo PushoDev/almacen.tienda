@@ -137,12 +137,6 @@ export interface ResumenProveedorData {
     por_estado: Record<string, { cantidad: number; saldo: number }>;
 }
 
-// Interface para Proveedor/Cliente combinado (para el select de compra)
-export interface ProveedorClienteProps {
-    id: number;
-    nombre: string;
-    tipo: 'proveedor' | 'cliente';
-}
 
 // Interface para Cuentas
 export interface CuentaProps {

@@ -12,7 +12,6 @@ class Compra extends Model
     protected $fillable = [
         'user_id',
         'turno_vendedor_id',
-        'proveedor_id',
         'cuenta_id',
         'cliente_id',
         'fecha_compra',
@@ -48,19 +47,13 @@ class Compra extends Model
         return $this->belongsTo(TurnoVendedor::class);
     }
 
-    // Relación con proveedor
-    public function proveedor()
-    {
-        return $this->belongsTo(Proveedor::class);
-    }
-
     // Relación con cuenta (la cuenta principal de la compra)
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
     }
 
-    // Relación con cliente (si aplica)
+    // Relación con el cliente al que se le compró (el proveedor de la compra es un cliente)
     public function cliente()
     {
         return $this->belongsTo(Cliente::class);

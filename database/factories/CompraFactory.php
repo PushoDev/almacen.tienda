@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\Cliente;
 use App\Models\Cuenta;
-use App\Models\Proveedor;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class CompraFactory extends Factory
@@ -11,7 +11,8 @@ class CompraFactory extends Factory
     public function definition(): array
     {
         return [
-            'proveedor_id' => Proveedor::factory(),
+            // El proveedor de una compra es un cliente
+            'cliente_id' => Cliente::factory(),
             'cuenta_id' => Cuenta::factory(),
             'fecha_compra' => fake()->date(),
             'total_compra' => fake()->randomFloat(2, 100, 10000),

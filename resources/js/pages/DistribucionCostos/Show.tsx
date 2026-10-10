@@ -1,3 +1,4 @@
+import { EspecificacionesProducto } from '@/components/especificaciones-producto';
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,11 @@ interface HistorialEntry {
 interface ProductoDistribuido {
     producto_id: number;
     nombre: string;
+    codigo: string | null;
+    marca: string | null;
+    modelo: string | null;
+    capacidad: string | null;
+    color: string | null;
     cantidad: number;
     costo_anterior: number | string;
     monto_asignado: number | string;
@@ -237,7 +243,16 @@ export default function DistribucionCostosShow({ distribucion, productos }: Prop
                             <TableBody>
                                 {productos.map((producto) => (
                                     <TableRow key={producto.producto_id}>
-                                        <TableCell className="font-medium">{producto.nombre}</TableCell>
+                                        <TableCell>
+                                            <div className="font-medium">{producto.nombre}</div>
+                                            {producto.codigo && <div className="text-muted-foreground font-mono text-xs">{producto.codigo}</div>}
+                                            <EspecificacionesProducto
+                                                marca={producto.marca}
+                                                modelo={producto.modelo}
+                                                capacidad={producto.capacidad}
+                                                color={producto.color}
+                                            />
+                                        </TableCell>
                                         <TableCell className="text-right">{producto.cantidad}</TableCell>
                                         <TableCell className="text-right">{formatCurrency(producto.costo_anterior)}</TableCell>
                                         <TableCell className="text-right">{formatCurrency(producto.monto_asignado)}</TableCell>
@@ -291,6 +306,14 @@ export default function DistribucionCostosShow({ distribucion, productos }: Prop
                                         </Badge>
                                     )}
                                 </h4>
+                                <div className="-mt-1 mb-2">
+                                    <EspecificacionesProducto
+                                        marca={producto.marca}
+                                        modelo={producto.modelo}
+                                        capacidad={producto.capacidad}
+                                        color={producto.color}
+                                    />
+                                </div>
                                 <div className="overflow-x-auto rounded-lg border">
                                     <Table>
                                         <TableHeader>

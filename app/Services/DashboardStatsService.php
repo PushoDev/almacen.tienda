@@ -674,10 +674,11 @@ class DashboardStatsService
 
     private function getComprasPorProveedor(): array
     {
+        // El proveedor de una compra es un cliente; se conserva el alias `nombre_proveedor` para el gráfico.
         return DB::table('compras')
-            ->join('proveedors', 'compras.proveedor_id', '=', 'proveedors.id')
-            ->selectRaw('proveedors.nombre_proveedor, COUNT(compras.id) as cantidad_compras, SUM(compras.total_compra) as total_gastado')
-            ->groupBy('proveedors.id', 'proveedors.nombre_proveedor')
+            ->join('clientes', 'compras.cliente_id', '=', 'clientes.id')
+            ->selectRaw('clientes.nombre_cliente as nombre_proveedor, COUNT(compras.id) as cantidad_compras, SUM(compras.total_compra) as total_gastado')
+            ->groupBy('clientes.id', 'clientes.nombre_cliente')
             ->orderByDesc('total_gastado')
             ->get()
             ->toArray();

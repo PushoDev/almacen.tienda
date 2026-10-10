@@ -4,11 +4,82 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from '@inertiajs/react';
 import { ArrowDown, ArrowRightLeft, ArrowUp, HandCoins, Search, Shuffle, TrendingUp, Truck } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+/** Filas por página en cada pestaña: una lista larga pinta cientos de badges y la GPU deja celdas en blanco. */
+const FILAS_POR_PAGINA = 15;
+
+type PestanaPaginada = 'gastos' | 'ingresos' | 'transferencias' | 'enviados' | 'por-recibir' | 'operaciones-multiples';
+
+/** Páginas a mostrar con puntos suspensivos (misma lógica que el listado de Cuentas). */
+const numerosDePagina = (actual: number, total: number): (number | 'ellipsis')[] => {
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const resultado: (number | 'ellipsis')[] = [1];
+    if (actual > 3) {
+        resultado.push('ellipsis');
+    }
+    for (let i = Math.max(2, actual - 1); i <= Math.min(total - 1, actual + 1); i++) {
+        resultado.push(i);
+    }
+    if (actual < total - 2) {
+        resultado.push('ellipsis');
+    }
+    resultado.push(total);
+    return resultado;
+};
+
+/** Pie de una tabla: "a - b de N" y los botones de página. No se pinta si todo cabe en una sola página. */
+function PaginadorTabla({ total, pagina, onCambiar }: { total: number; pagina: number; onCambiar: (pagina: number) => void }) {
+    const totalPaginas = Math.ceil(total / FILAS_POR_PAGINA);
+    if (totalPaginas <= 1) {
+        return null;
+    }
+    const desde = (pagina - 1) * FILAS_POR_PAGINA;
+
+    return (
+        <div className="mt-3 flex flex-col items-center justify-between gap-2 sm:flex-row">
+            <div className="text-muted-foreground text-sm">
+                {desde + 1} - {Math.min(desde + FILAS_POR_PAGINA, total)} de {total}
+            </div>
+            <Pagination className="mx-0 w-auto">
+                <PaginationContent>
+                    <PaginationItem>
+                        <PaginationPrevious
+                            onClick={() => onCambiar(Math.max(1, pagina - 1))}
+                            className={pagina === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                    </PaginationItem>
+                    {numerosDePagina(pagina, totalPaginas).map((numero, i) =>
+                        numero === 'ellipsis' ? (
+                            <PaginationItem key={`e-${i}`}>
+                                <PaginationEllipsis />
+                            </PaginationItem>
+                        ) : (
+                            <PaginationItem key={numero}>
+                                <PaginationLink isActive={pagina === numero} onClick={() => onCambiar(numero)} className="cursor-pointer">
+                                    {numero}
+                                </PaginationLink>
+                            </PaginationItem>
+                        ),
+                    )}
+                    <PaginationItem>
+                        <PaginationNext
+                            onClick={() => onCambiar(Math.min(totalPaginas, pagina + 1))}
+                            className={pagina === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                    </PaginationItem>
+                </PaginationContent>
+            </Pagination>
+        </div>
+    );
+}
 
 export interface ItemMovimiento {
     id?: string;
@@ -134,7 +205,7 @@ function TablaOperacionesMultiples({ operaciones, mensajeVacio, etiquetaPropio }
     const pata = (p: PataOperacionMultiple, clase: string, signo: string, anulada: boolean) => (
         <div className={anulada ? 'space-y-1 line-through opacity-60' : 'space-y-1'}>
             <EntidadFila tipo={tipoEntidadDe(p.tipo)} nombre={p.nombre} banco={p.banco} />
-            <Badge className={`font-mono font-bold whitespace-nowrap backdrop-blur-sm ${clase}`}>
+            <Badge className={`font-mono font-bold whitespace-nowrap ${clase}`}>
                 {signo}${Number(p.monto).toFixed(2)} {p.moneda}
             </Badge>
         </div>
@@ -177,9 +248,9 @@ function TablaOperacionesMultiples({ operaciones, mensajeVacio, etiquetaPropio }
                                 <TableCell className="text-center">
                                     <Link href={route('transacciones.remesa.show', op.id)}>
                                         {op.anulada ? (
-                                            <Badge className="border border-red-400/30 bg-red-500/10 text-red-700 backdrop-blur-sm dark:text-red-300">Anulada</Badge>
+                                            <Badge className="border border-red-400/30 bg-red-500/10 text-red-700 dark:text-red-300">Anulada</Badge>
                                         ) : (
-                                            <Badge className="border border-cyan-400/30 bg-cyan-500/10 text-cyan-700 backdrop-blur-sm dark:text-cyan-300">Ver detalle</Badge>
+                                            <Badge className="border border-cyan-400/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300">Ver detalle</Badge>
                                         )}
                                     </Link>
                                 </TableCell>
@@ -235,7 +306,7 @@ function TablaEnviosAbiertos({
                             const estado = porRecibir ? (
                                 <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30">Confirma tú</Badge>
                             ) : (
-                                <Badge className="border border-amber-400/30 bg-amber-500/10 text-amber-700 backdrop-blur-sm dark:text-amber-300">Sin confirmar</Badge>
+                                <Badge className="border border-amber-400/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">Sin confirmar</Badge>
                             );
 
                             return (
@@ -256,7 +327,7 @@ function TablaEnviosAbiertos({
                                         <CreadoPor esPropio={envio.es_propio} usuario={envio.usuario_nombre} etiquetaPropio={etiquetaPropio} />
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Badge className="gap-1.5 border border-amber-400/30 bg-amber-500/10 font-mono font-bold whitespace-nowrap text-amber-700 backdrop-blur-sm dark:text-amber-300">
+                                        <Badge className="gap-1.5 border border-amber-400/30 bg-amber-500/10 font-mono font-bold whitespace-nowrap text-amber-700 dark:text-amber-300">
                                             {envio.moneda_imagen_url && <img src={envio.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto" />}
                                             ${Number(envio.monto).toFixed(2)} {envio.moneda}
                                         </Badge>
@@ -269,7 +340,7 @@ function TablaEnviosAbiertos({
                                     </TableCell>
                                     <TableCell className="space-y-1 text-center">
                                         {envio.atrasado && (
-                                            <Badge className="border border-red-400/40 bg-red-500/15 text-red-700 backdrop-blur-sm dark:text-red-300">
+                                            <Badge className="border border-red-400/40 bg-red-500/15 text-red-700 dark:text-red-300">
                                                 Atrasado · {envio.dias_en_transito} días
                                             </Badge>
                                         )}
@@ -385,6 +456,26 @@ export function TarjetaTransaccionesTurno({
         return item.tipo;
     };
 
+    // Página de cada pestaña; al cambiar la búsqueda o un filtro todas vuelven a la primera.
+    const [paginas, setPaginas] = useState<Partial<Record<PestanaPaginada, number>>>({});
+    useEffect(() => {
+        setPaginas({});
+    }, [busqueda, filtroOrigen, filtroMoneda]);
+
+    const paginaDe = (pestana: PestanaPaginada, total: number) => Math.min(paginas[pestana] ?? 1, Math.max(1, Math.ceil(total / FILAS_POR_PAGINA)));
+    const cortar = <T,>(pestana: PestanaPaginada, items: T[]) => {
+        const desde = (paginaDe(pestana, items.length) - 1) * FILAS_POR_PAGINA;
+        return items.slice(desde, desde + FILAS_POR_PAGINA);
+    };
+    const cambiarPagina = (pestana: PestanaPaginada) => (pagina: number) => setPaginas((actual) => ({ ...actual, [pestana]: pagina }));
+
+    const gastosPagina = cortar('gastos', gastosFiltrados);
+    const ingresosPagina = cortar('ingresos', ingresosFiltrados);
+    const transferenciasPagina = cortar('transferencias', transferenciasFiltradas);
+    const enviadosPagina = cortar('enviados', enviosEnviadosFiltrados);
+    const porRecibirPagina = cortar('por-recibir', enviosPorRecibirFiltrados);
+    const operacionesPagina = cortar('operaciones-multiples', operacionesFiltradas);
+
     const hayFiltros = busqueda || filtroOrigen !== 'todas' || filtroMoneda !== 'todas';
     const sinResultados = 'No se encontraron resultados con los filtros aplicados';
     const sinEnviosGuardados = 'Este cierre se guardó antes de registrar los envíos en tránsito.';
@@ -431,7 +522,7 @@ export function TarjetaTransaccionesTurno({
                         <TabsTrigger value="gastos" className="gap-2 data-[state=active]:bg-red-500/15 data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">
                             <ArrowUp className="h-4 w-4" />
                             Gastos
-                            <Badge className="border border-red-400/30 bg-red-500/10 px-2 text-red-700 backdrop-blur-sm dark:text-red-300">{gastosFiltrados.length}</Badge>
+                            <Badge className="border border-red-400/30 bg-red-500/10 px-2 text-red-700 dark:text-red-300">{gastosFiltrados.length}</Badge>
                         </TabsTrigger>
                         <TabsTrigger
                             value="ingresos"
@@ -439,7 +530,7 @@ export function TarjetaTransaccionesTurno({
                         >
                             <ArrowDown className="h-4 w-4" />
                             Ingresos
-                            <Badge className="border border-emerald-400/30 bg-emerald-500/10 px-2 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                            <Badge className="border border-emerald-400/30 bg-emerald-500/10 px-2 text-emerald-700 dark:text-emerald-300">
                                 {ingresosFiltrados.length}
                             </Badge>
                         </TabsTrigger>
@@ -449,7 +540,7 @@ export function TarjetaTransaccionesTurno({
                         >
                             <ArrowRightLeft className="h-4 w-4" />
                             Transferencias
-                            <Badge className="border border-blue-400/30 bg-blue-500/10 px-2 text-blue-700 backdrop-blur-sm dark:text-blue-300">
+                            <Badge className="border border-blue-400/30 bg-blue-500/10 px-2 text-blue-700 dark:text-blue-300">
                                 {transferenciasFiltradas.length}
                             </Badge>
                         </TabsTrigger>
@@ -459,7 +550,7 @@ export function TarjetaTransaccionesTurno({
                         >
                             <Truck className="h-4 w-4" />
                             Enviados sin confirmar
-                            <Badge className="border border-amber-400/30 bg-amber-500/10 px-2 text-amber-700 backdrop-blur-sm dark:text-amber-300">
+                            <Badge className="border border-amber-400/30 bg-amber-500/10 px-2 text-amber-700 dark:text-amber-300">
                                 {enviosEnviadosFiltrados.length}
                             </Badge>
                         </TabsTrigger>
@@ -469,7 +560,7 @@ export function TarjetaTransaccionesTurno({
                         >
                             <HandCoins className="h-4 w-4" />
                             Por recibir
-                            <Badge className="border border-sky-400/30 bg-sky-500/10 px-2 text-sky-700 backdrop-blur-sm dark:text-sky-300">
+                            <Badge className="border border-sky-400/30 bg-sky-500/10 px-2 text-sky-700 dark:text-sky-300">
                                 {enviosPorRecibirFiltrados.length}
                             </Badge>
                         </TabsTrigger>
@@ -480,7 +571,7 @@ export function TarjetaTransaccionesTurno({
                             >
                                 <Shuffle className="h-4 w-4" />
                                 Op. Múltiples
-                                <Badge className="border border-cyan-400/30 bg-cyan-500/10 px-2 text-cyan-700 backdrop-blur-sm dark:text-cyan-300">
+                                <Badge className="border border-cyan-400/30 bg-cyan-500/10 px-2 text-cyan-700 dark:text-cyan-300">
                                     {operacionesFiltradas.length}
                                 </Badge>
                             </TabsTrigger>
@@ -501,7 +592,7 @@ export function TarjetaTransaccionesTurno({
                                 </TableHeader>
                                 <TableBody>
                                     {gastosFiltrados.length > 0 ? (
-                                        gastosFiltrados.map((item, idx) => (
+                                        gastosPagina.map((item, idx) => (
                                             <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                 <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                 <TableCell className="text-sm">
@@ -515,7 +606,7 @@ export function TarjetaTransaccionesTurno({
                                                     <CreadoPor esPropio={item.es_propio} usuario={item.usuario_nombre} turno={item.turno_nombre} etiquetaPropio={etiquetaPropio} />
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Badge className="gap-1.5 border border-red-400/30 whitespace-nowrap bg-red-500/10 font-mono font-bold text-red-700 backdrop-blur-sm dark:text-red-300">
+                                                    <Badge className="gap-1.5 border border-red-400/30 whitespace-nowrap bg-red-500/10 font-mono font-bold text-red-700 dark:text-red-300">
                                                         {item.moneda_imagen_url && <img src={item.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto" />}
                                                         -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                     </Badge>
@@ -532,6 +623,7 @@ export function TarjetaTransaccionesTurno({
                                 </TableBody>
                             </Table>
                         </div>
+                        <PaginadorTabla total={gastosFiltrados.length} pagina={paginaDe('gastos', gastosFiltrados.length)} onCambiar={cambiarPagina('gastos')} />
                     </TabsContent>
 
                     <TabsContent value="ingresos" className="mt-4">
@@ -548,7 +640,7 @@ export function TarjetaTransaccionesTurno({
                                 </TableHeader>
                                 <TableBody>
                                     {ingresosFiltrados.length > 0 ? (
-                                        ingresosFiltrados.map((item, idx) => (
+                                        ingresosPagina.map((item, idx) => (
                                             <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                 <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                 <TableCell className="text-sm">
@@ -562,7 +654,7 @@ export function TarjetaTransaccionesTurno({
                                                     <CreadoPor esPropio={item.es_propio} usuario={item.usuario_nombre} turno={item.turno_nombre} etiquetaPropio={etiquetaPropio} />
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Badge className="gap-1.5 border border-emerald-400/30 whitespace-nowrap bg-emerald-500/10 font-mono font-bold text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                    <Badge className="gap-1.5 border border-emerald-400/30 whitespace-nowrap bg-emerald-500/10 font-mono font-bold text-emerald-700 dark:text-emerald-300">
                                                         {item.moneda_imagen_url && <img src={item.moneda_imagen_url} alt="" aria-hidden="true" className="h-4 w-auto" />}
                                                         +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                     </Badge>
@@ -579,6 +671,11 @@ export function TarjetaTransaccionesTurno({
                                 </TableBody>
                             </Table>
                         </div>
+                        <PaginadorTabla
+                            total={ingresosFiltrados.length}
+                            pagina={paginaDe('ingresos', ingresosFiltrados.length)}
+                            onCambiar={cambiarPagina('ingresos')}
+                        />
                     </TabsContent>
 
                     <TabsContent value="transferencias" className="mt-4">
@@ -596,7 +693,7 @@ export function TarjetaTransaccionesTurno({
                                 </TableHeader>
                                 <TableBody>
                                     {transferenciasFiltradas.length > 0 ? (
-                                        transferenciasFiltradas.map((item, idx) => {
+                                        transferenciasPagina.map((item, idx) => {
                                             const tEfectivo = tipoEfectivoTransferencia(item);
                                             return (
                                                 <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
@@ -616,8 +713,8 @@ export function TarjetaTransaccionesTurno({
                                                             <Badge
                                                                 className={
                                                                     tEfectivo === 'entrante'
-                                                                        ? 'border border-emerald-400/30 bg-emerald-500/10 font-mono font-bold text-emerald-700 backdrop-blur-sm dark:text-emerald-300'
-                                                                        : 'border border-blue-400/30 bg-blue-500/10 font-mono font-bold text-blue-700 backdrop-blur-sm dark:text-blue-300'
+                                                                        ? 'border border-emerald-400/30 bg-emerald-500/10 font-mono font-bold text-emerald-700 dark:text-emerald-300'
+                                                                        : 'border border-blue-400/30 bg-blue-500/10 font-mono font-bold text-blue-700 dark:text-blue-300'
                                                                 }
                                                             >
                                                                 {tEfectivo === 'entrante' ? '+' : '-'}${Number(tEfectivo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
@@ -645,11 +742,16 @@ export function TarjetaTransaccionesTurno({
                                 </TableBody>
                             </Table>
                         </div>
+                        <PaginadorTabla
+                            total={transferenciasFiltradas.length}
+                            pagina={paginaDe('transferencias', transferenciasFiltradas.length)}
+                            onCambiar={cambiarPagina('transferencias')}
+                        />
                     </TabsContent>
 
                     <TabsContent value="enviados" className="mt-4">
                         <TablaEnviosAbiertos
-                            envios={enviosEnviadosFiltrados}
+                            envios={enviadosPagina}
                             porRecibir={false}
                             enlazar={!cierreGuardado}
                             etiquetaPropio={etiquetaPropio}
@@ -663,11 +765,16 @@ export function TarjetaTransaccionesTurno({
                                         : 'No hay envíos tuyos esperando confirmación.'
                             }
                         />
+                        <PaginadorTabla
+                            total={enviosEnviadosFiltrados.length}
+                            pagina={paginaDe('enviados', enviosEnviadosFiltrados.length)}
+                            onCambiar={cambiarPagina('enviados')}
+                        />
                     </TabsContent>
 
                     <TabsContent value="por-recibir" className="mt-4">
                         <TablaEnviosAbiertos
-                            envios={enviosPorRecibirFiltrados}
+                            envios={porRecibirPagina}
                             porRecibir
                             enlazar={!cierreGuardado}
                             etiquetaPropio={etiquetaPropio}
@@ -681,16 +788,26 @@ export function TarjetaTransaccionesTurno({
                                         : 'No tienes envíos por recibir.'
                             }
                         />
+                        <PaginadorTabla
+                            total={enviosPorRecibirFiltrados.length}
+                            pagina={paginaDe('por-recibir', enviosPorRecibirFiltrados.length)}
+                            onCambiar={cambiarPagina('por-recibir')}
+                        />
                     </TabsContent>
 
                     {verOperacionesMultiples && (
                         <TabsContent value="operaciones-multiples" className="mt-4">
                             <TablaOperacionesMultiples
-                                operaciones={operacionesFiltradas}
+                                operaciones={operacionesPagina}
                                 etiquetaPropio={etiquetaPropio}
                                 mensajeVacio={
                                     (operacionesMultiples?.items.length ?? 0) > 0 ? sinResultados : 'No hay operaciones múltiples registradas en este turno.'
                                 }
+                            />
+                            <PaginadorTabla
+                                total={operacionesFiltradas.length}
+                                pagina={paginaDe('operaciones-multiples', operacionesFiltradas.length)}
+                                onCambiar={cambiarPagina('operaciones-multiples')}
                             />
                         </TabsContent>
                     )}

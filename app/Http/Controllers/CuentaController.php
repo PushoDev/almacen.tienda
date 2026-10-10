@@ -524,15 +524,11 @@ class CuentaController extends Controller
 
         $query = DB::table('compra_pago as cp')
             ->join('compras as c', 'cp.compra_id', '=', 'c.id')
-            ->leftJoin('proveedors as p', 'c.proveedor_id', '=', 'p.id')
             ->leftJoin('clientes as cl', 'c.cliente_id', '=', 'cl.id')
             ->where('cp.cuenta_id', $cuentaId);
 
         if ($busqueda = $request->query('q_compras')) {
-            $query->where(function ($q) use ($busqueda) {
-                $q->where('p.nombre_proveedor', 'like', "%{$busqueda}%")
-                    ->orWhere('cl.nombre_cliente', 'like', "%{$busqueda}%");
-            });
+            $query->where('cl.nombre_cliente', 'like', "%{$busqueda}%");
         }
         if ($desde = $request->query('desde_compras')) {
             $query->whereDate('c.fecha_compra', '>=', $desde);
@@ -548,7 +544,7 @@ class CuentaController extends Controller
             DB::raw('-cp.monto as monto'),
             DB::raw("'USD' as moneda"),
             DB::raw('NULL as descripcion'),
-            DB::raw("COALESCE(p.nombre_proveedor, cl.nombre_cliente, 'Proveedor') as contraparte"),
+            DB::raw("COALESCE(cl.nombre_cliente, 'Proveedor') as contraparte"),
             DB::raw("'Sistema' as usuario"),
             DB::raw("'compra_pago' as fuente"),
             'cp.saldo_anterior as saldo_anterior',
@@ -560,7 +556,7 @@ class CuentaController extends Controller
 
         // Varios pagos (compra_pago) pueden apuntar a la misma compra — se carga una
         // sola vez por id, no una vez por fila.
-        $compras = Compra::with(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente', 'productos'])
+        $compras = Compra::with(['cliente', 'pagos.cuenta', 'pagos.cliente', 'productos'])
             ->whereIn('id', $historial->pluck('referencia_id')->unique())
             ->get()
             ->keyBy('id');

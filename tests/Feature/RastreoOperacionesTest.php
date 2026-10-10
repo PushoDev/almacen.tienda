@@ -812,13 +812,12 @@ test('el reporte incluye Compra en el listado combinado, con proveedor, pagos y 
 
     crearTiposMovimientoFinanciero();
 
-    $proveedor = Proveedor::factory()->create(['nombre_proveedor' => 'Distribuidora El Sol']);
+    $proveedor = Cliente::factory()->create(['nombre_cliente' => 'Distribuidora El Sol']);
     $producto = Producto::factory()->create(['nombre_producto' => 'Panel Solar 620W']);
 
     $compra = Compra::factory()->create([
         'user_id' => $admin->id,
-        'proveedor_id' => $proveedor->id,
-        'cliente_id' => null,
+        'cliente_id' => $proveedor->id,
         'cuenta_id' => null,
         'tipo_compra' => 'deuda_proveedor',
         'total_compra' => 1500,
@@ -846,7 +845,7 @@ test('el reporte incluye Compra en el listado combinado, con proveedor, pagos y 
     expect($fila['detalle_venta'])->toBeNull();
     expect($fila['detalle_movimiento'])->toBeNull();
     expect($fila['detalle_compra'])->not->toBeNull();
-    expect($fila['detalle_compra']['proveedor'])->toBe('Distribuidora El Sol');
+    expect($fila['detalle_compra']['cliente'])->toBe('Distribuidora El Sol');
     expect($fila['detalle_compra']['info_general']['tipo_compra'])->toBe('deuda_proveedor');
     expect($fila['detalle_compra']['productos'][0]['producto'])->toBe('Panel Solar 620W');
     expect($fila['detalle_compra']['productos'][0]['cantidad'])->toBe(5);
@@ -865,8 +864,7 @@ test('una Compra pago_cash con varios métodos de pago muestra cada uno con su c
 
     $compra = Compra::factory()->create([
         'user_id' => $admin->id,
-        'proveedor_id' => Proveedor::factory()->create()->id,
-        'cliente_id' => null,
+        'cliente_id' => Cliente::factory()->create()->id,
         'cuenta_id' => $cuenta->id,
         'tipo_compra' => 'pago_cash',
         'total_compra' => 100,
@@ -903,13 +901,12 @@ test('el detalle colapsable de una Compra trae saldo antes/después del receptor
 
     crearTiposMovimientoFinanciero();
 
-    $proveedor = Proveedor::factory()->create(['nombre_proveedor' => 'Proveedor Con Saldo']);
+    $proveedor = Cliente::factory()->create(['nombre_cliente' => 'Proveedor Con Saldo']);
     $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
 
     $compra = Compra::factory()->create([
         'user_id' => $admin->id,
-        'proveedor_id' => $proveedor->id,
-        'cliente_id' => null,
+        'cliente_id' => $proveedor->id,
         'cuenta_id' => $cuenta->id,
         'tipo_compra' => 'pago_cash',
         'total_compra' => 100,
@@ -933,7 +930,7 @@ test('el detalle colapsable de una Compra trae saldo antes/después del receptor
     expect($movimientos)->toHaveCount(2);
 
     $receptor = $movimientos->firstWhere('etiqueta', 'Receptor');
-    expect($receptor['tipo'])->toBe('proveedor');
+    expect($receptor['tipo'])->toBe('cliente');
     expect($receptor['nombre'])->toBe('Proveedor Con Saldo');
     expect($receptor['saldo_anterior'])->toEqual(500.0);
     expect($receptor['saldo_posterior'])->toEqual(400.0);
@@ -1027,21 +1024,20 @@ test('el filtro por cliente_ids encuentra una Venta por su cliente directo y por
     expect($ids)->not->toContain($ventaSinRelacion->id);
 });
 
-test('el filtro por proveedor_ids nunca incluye Venta (no tiene proveedor) y sí incluye Compra', function () {
+test('el filtro por cliente_ids encuentra una Compra hecha a ese cliente (su proveedor) y no otras', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
     crearTiposMovimientoFinanciero();
 
-    $proveedor = Proveedor::factory()->create();
-    $compra = Compra::factory()->create(['proveedor_id' => $proveedor->id, 'tipo_compra' => 'deuda_proveedor']);
-    Venta::factory()->create();
+    $proveedor = Cliente::factory()->create();
+    $compra = Compra::factory()->create(['cliente_id' => $proveedor->id, 'tipo_compra' => 'deuda_proveedor']);
+    $otra = Compra::factory()->create(['tipo_compra' => 'deuda_proveedor']);
 
-    $response = $this->get(route('reportes.rastreo_operaciones', ['proveedor_ids' => [$proveedor->id]]), ['X-Inertia' => 'true']);
-    $operaciones = collect($response->json('props.operaciones.data'));
+    $response = $this->get(route('reportes.rastreo_operaciones', ['cliente_ids' => [$proveedor->id]]), ['X-Inertia' => 'true']);
+    $ids = collect($response->json('props.operaciones.data'))->pluck('id');
 
-    expect($operaciones->pluck('id'))->toContain($compra->id);
-    expect($operaciones->pluck('tipo')->unique()->all())->not->toContain('Venta');
+    expect($ids)->toContain($compra->id)->and($ids)->not->toContain($otra->id);
 });
 
 test('el filtro por cuenta_ids encuentra una Venta pagada con esa cuenta (vía pago_ventas)', function () {

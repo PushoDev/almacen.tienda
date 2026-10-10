@@ -1,3 +1,4 @@
+import { ListaProductosResumen, type ProductoResumen } from '@/components/especificaciones-producto';
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ interface Distribucion {
     cuentas: CuentaResumen[];
     monto_total_usd: number | string;
     productos_afectados: number;
+    productos: ProductoResumen[];
     comentario: string | null;
 }
 
@@ -290,6 +292,7 @@ export default function DistribucionCostosHistorial({ distribuciones, filtros }:
                                                     <Package className="h-3 w-3" />
                                                     {distribucion.productos_afectados}
                                                 </Badge>
+                                                <ListaProductosResumen productos={distribucion.productos} />
                                             </TableCell>
                                             <TableCell className="text-sm">{distribucion.usuario ?? '—'}</TableCell>
                                             <TableCell className="text-right">
