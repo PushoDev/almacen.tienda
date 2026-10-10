@@ -1006,6 +1006,29 @@ test('para admin una transferencia entre cuentas es neutral y una a un cliente r
     expect(saldoEsperadoEnPantalla($admin))->toBe(-30.0);
 });
 
+test('un movimiento anulado no entra en el saldo esperado ni se lista en el cierre', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd(), saldo: 500);
+    $cliente = Cliente::factory()->create();
+
+    // El caso real del cierre #153: una entrada de cliente a cuenta anulada por "error de monto" y la salida vigente
+    MovimientoFinanciero::factory()->transferencia()->create([
+        'user_id' => $admin->id, 'cuenta_origen_id' => null, 'cliente_origen_id' => $cliente->id,
+        'cuenta_destino_id' => $cuenta->id, 'monto' => 3000, 'estado' => 'cancelado', 'motivo_anulacion' => 'error_monto',
+    ]);
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $admin->id, 'cuenta_origen_id' => $cuenta->id, 'monto' => 20, 'estado' => 'cancelado']);
+    MovimientoFinanciero::factory()->ingreso()->create(['user_id' => $admin->id, 'cuenta_destino_id' => $cuenta->id, 'monto' => 50]);
+
+    expect(saldoEsperadoEnPantalla($admin))->toBe(50.0);
+
+    $this->actingAs($admin)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.detalles.0.transferencias_entrantes', 0)
+        ->where('calculos.detalles.0.gastos', 0)
+        ->has('calculos.detalles.0.items_gastos', 0)
+        ->has('calculos.detalles.0.items_transferencias_entrantes', 0));
+});
+
 // ==========================================================================
 // STORE — el servidor decide los totales, un cierre no se repite y se guarda lo que antes se perdía
 // ==========================================================================
