@@ -309,12 +309,15 @@ export function SelectorEntidad({
     valor,
     onChange,
     placeholder,
+    pie,
 }: {
     id: string;
     entidades: Entidad[];
     valor: string;
     onChange: (entidad: Entidad | null) => void;
     placeholder: string;
+    /** Acción fija al final de la lista (ej. "Crear nuevo"). */
+    pie?: React.ReactNode;
 }) {
     const [busqueda, setBusqueda] = useState('');
     // Se busca solo por el nombre: al escribir, la lista se va acotando a lo que coincide
@@ -370,6 +373,7 @@ export function SelectorEntidad({
                         </ComboboxItem>
                     ))}
                 </ComboboxList>
+                {pie}
             </ComboboxContent>
         </Combobox>
     );

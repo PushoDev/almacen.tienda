@@ -58,7 +58,8 @@ interface CompraCliente {
     fecha_compra: string;
     total_compra: number;
     tipo_compra: string;
-    proveedor: { id: number; nombre_proveedor: string } | null;
+    // A quien se le compró: el proveedor de una compra es un cliente
+    cliente: { id: number; nombre_cliente: string } | null;
     productos: Array<{
         id: number;
         nombre_producto: string;
@@ -74,6 +75,17 @@ interface CompraCliente {
     }>;
     pivot: { monto: number; tipo_pago: string; saldo_anterior: number | null; saldo_posterior: number | null };
     detalle: DetalleCompra | null;
+}
+
+/** Una compra hecha a este cliente cuando actúa como proveedor. */
+interface CompraAProveedor {
+    id: number;
+    fecha_compra: string;
+    total_compra: number;
+    tipo_compra: string;
+    estado: string;
+    es_parcial?: boolean;
+    productos: Array<{ id: number; nombre_producto: string }>;
 }
 
 interface TipoMovimientoFinanciero {
@@ -204,6 +216,7 @@ interface RemesaCliente {
 interface ShowClientePageProps {
     cliente: ClienteProps & {
         compras_como_pagador?: CompraCliente[];
+        compras_como_proveedor?: CompraAProveedor[];
         movimientos_como_origen?: MovimientoFinanciero[];
         movimientos_como_destino?: MovimientoFinanciero[];
         ventas?: VentaCliente[];
@@ -791,6 +804,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
         });
 
     const compras = cliente.compras_como_pagador || [];
+    const comprasAProveedor = cliente.compras_como_proveedor || [];
     const ventas = cliente.ventas || [];
     const pagosVenta = cliente.pagos_venta || [];
     const movimientosOrigen = cliente.movimientos_como_origen || [];
@@ -1120,7 +1134,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                         </CardHeader>
                         <CardContent>
                             <Tabs defaultValue="ventas">
-                                <TabsList className={`grid w-full ${puedeVerRemesas ? 'grid-cols-5' : 'grid-cols-4'}`}>
+                                <TabsList className={`grid w-full ${puedeVerRemesas ? 'grid-cols-6' : 'grid-cols-4'}`}>
                                     <TabsTrigger value="ventas" className="flex items-center gap-1.5">
                                         <Receipt size={13} />
                                         Ventas
@@ -1151,6 +1165,17 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                             </Badge>
                                         )}
                                     </TabsTrigger>
+                                    {puedeVerRemesas && (
+                                        <TabsTrigger value="compras-proveedor" className="flex items-center gap-1.5">
+                                            <Package size={13} />
+                                            Como proveedor
+                                            {comprasAProveedor.length > 0 && (
+                                                <Badge variant="secondary" className="h-4 min-w-[18px] px-1 text-[10px]">
+                                                    {comprasAProveedor.length}
+                                                </Badge>
+                                            )}
+                                        </TabsTrigger>
+                                    )}
                                     <TabsTrigger value="transacciones" className="flex items-center gap-1.5">
                                         <ArrowRightLeft size={13} />
                                         Transacciones
@@ -1258,12 +1283,12 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                                 </span>
                                                                             </div>
                                                                             <div>
-                                                                                {compra.proveedor ? (
+                                                                                {compra.cliente ? (
                                                                                     <Link
-                                                                                        href={route('proveedores.show', { proveedor: compra.proveedor.id })}
+                                                                                        href={route('clientes.show', { cliente: compra.cliente.id })}
                                                                                         className="font-semibold hover:text-blue-600 hover:underline"
                                                                                     >
-                                                                                        {compra.proveedor.nombre_proveedor}
+                                                                                        {compra.cliente.nombre_cliente}
                                                                                     </Link>
                                                                                 ) : (
                                                                                     <span className="text-muted-foreground text-sm font-semibold">Sin proveedor</span>
@@ -1364,13 +1389,13 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                                 </div>
                                                                             </TableCell>
                                                                             <TableCell>
-                                                                                {compra.proveedor ? (
+                                                                                {compra.cliente ? (
                                                                                     <Link
-                                                                                        href={route('proveedores.show', { proveedor: compra.proveedor.id })}
+                                                                                        href={route('clientes.show', { cliente: compra.cliente.id })}
                                                                                         onClick={(e) => e.stopPropagation()}
                                                                                     >
                                                                                         <Button variant="link" className="h-auto p-0 text-sm font-medium">
-                                                                                            {compra.proveedor.nombre_proveedor}
+                                                                                            {compra.cliente.nombre_cliente}
                                                                                         </Button>
                                                                                     </Link>
                                                                                 ) : (
@@ -1433,6 +1458,55 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                         </TabsContent>
                                     </Tabs>
                                 </TabsContent>
+
+                                {/* ── Tab: Compras hechas a este cliente (cuando actúa como proveedor) ── */}
+                                {puedeVerRemesas && (
+                                    <TabsContent value="compras-proveedor" className="mt-4 space-y-4">
+                                        {comprasAProveedor.length === 0 ? (
+                                            <div className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-sm">
+                                                <Package size={32} className="opacity-40" />
+                                                No se le han hecho compras a este cliente.
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-md border">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>Compra</TableHead>
+                                                            <TableHead>Fecha</TableHead>
+                                                            <TableHead>Tipo</TableHead>
+                                                            <TableHead>Estado</TableHead>
+                                                            <TableHead>Productos</TableHead>
+                                                            <TableHead className="text-right">Total</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {comprasAProveedor.map((compra) => (
+                                                            <TableRow key={compra.id}>
+                                                                <TableCell>
+                                                                    <Link href={route('comprar.show', { comprar: compra.id })} className="font-medium hover:underline">
+                                                                        #{compra.id}
+                                                                    </Link>
+                                                                </TableCell>
+                                                                <TableCell className="text-sm">{formatearFecha(compra.fecha_compra)}</TableCell>
+                                                                <TableCell className="text-sm">
+                                                                    {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : compra.es_parcial ? 'Parcial' : 'Contado'}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Badge variant="secondary" className="capitalize">
+                                                                        {compra.estado}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                                <TableCell className="text-sm">{compra.productos.length}</TableCell>
+                                                                <TableCell className="text-right font-mono text-sm">{formatearMoneda(compra.total_compra)}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        )}
+                                    </TabsContent>
+                                )}
 
                                 {/* ── Tab: Transacciones ── */}
                                 <TabsContent value="transacciones" className="mt-4 space-y-4">

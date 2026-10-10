@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\DistribuirCostosManualRequest;
 use App\Models\AjusteValorInventario;
 use App\Models\Almacen;
+use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CostDistribution;
 use App\Models\CostDistributionCompra;
@@ -19,7 +20,6 @@ use App\Models\Movimiento;
 use App\Models\MovimientoFinanciero;
 use App\Models\MovimientoSeguimiento;
 use App\Models\Producto;
-use App\Models\Proveedor;
 use App\Services\FusionLotesService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -42,15 +42,15 @@ class DistribucionCostosController extends Controller
         $almacenId = $request->input('almacen_id', '');
         $fecha = $request->input('fecha', '');
 
-        $compras = Compra::with(['productos', 'proveedor', 'cliente'])
+        // El proveedor de una compra es un cliente; `proveedor_id` es el id de ese cliente.
+        $compras = Compra::with(['productos', 'cliente'])
             ->when($buscar !== '', function ($query) use ($buscar) {
                 $query->where(function ($sub) use ($buscar) {
                     $sub->where('id', 'like', "%{$buscar}%")
-                        ->orWhereHas('proveedor', fn ($q) => $q->where('nombre_proveedor', 'like', "%{$buscar}%"))
                         ->orWhereHas('cliente', fn ($q) => $q->where('nombre_cliente', 'like', "%{$buscar}%"));
                 });
             })
-            ->when($proveedorId !== '', fn ($query) => $query->where('proveedor_id', $proveedorId))
+            ->when($proveedorId !== '', fn ($query) => $query->where('cliente_id', $proveedorId))
             ->when($almacenId !== '', fn ($query) => $query->whereHas('productos', fn ($q) => $q->wherePivot('almacen_id', $almacenId)))
             ->when($fecha !== '', fn ($query) => $query->whereDate('fecha_compra', $fecha))
             // Las que el usuario eliminó de la lista (sin prorratear) ya no se muestran.
@@ -77,7 +77,7 @@ class DistribucionCostosController extends Controller
 
         $compras->through(function ($compra) use ($nombresAlmacen, $comprasConDistribucion) {
             $compra->tiene_distribucion = $comprasConDistribucion->contains($compra->id);
-            $compra->origen = $compra->proveedor->nombre_proveedor ?? $compra->cliente->nombre_cliente ?? null;
+            $compra->origen = $compra->cliente->nombre_cliente ?? null;
             $compra->almacenes = $compra->productos
                 ->pluck('pivot.almacen_id')
                 ->filter()
@@ -114,7 +114,7 @@ class DistribucionCostosController extends Controller
             'puedeEliminarPendientes' => in_array(Auth::user()->role, ['admin', 'moderador']),
             // Solo proveedores/almacenes que realmente participan en alguna compra — no la lista
             // completa del sistema, para no ofrecer filtros que siempre den cero resultados.
-            'proveedores' => Proveedor::whereHas('compras')->orderBy('nombre_proveedor')->get(['id', 'nombre_proveedor']),
+            'proveedores' => Cliente::whereHas('comprasComoProveedor')->orderBy('nombre_cliente')->get(['id', 'nombre_cliente as nombre_proveedor']),
             'almacenes' => Almacen::whereIn('id', DB::table('compra_producto')->whereNotNull('almacen_id')->distinct()->pluck('almacen_id'))
                 ->orderBy('nombre_almacen')
                 ->get(['id', 'nombre_almacen']),

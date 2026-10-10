@@ -353,7 +353,7 @@ class DetalleOperacionService
     }
 
     /**
-     * Shape de `detalle_compra`. Requiere `$compra` con `proveedor`, `cliente`,
+     * Shape de `detalle_compra`. Requiere `$compra` con `cliente`,
      * `pagos.cuenta`, `pagos.cliente`, `productos` cargados.
      *
      * Compra no tiene ni el patrón "pagos con tasa/conversión" de Venta ni el patrón
@@ -373,8 +373,9 @@ class DetalleOperacionService
         if ($compra->receptor_saldo_anterior !== null) {
             $movimientosSaldo[] = [
                 'etiqueta' => 'Receptor',
-                'tipo' => $compra->proveedor_id ? 'proveedor' : 'cliente',
-                'nombre' => $compra->proveedor?->nombre_proveedor ?? $compra->cliente?->nombre_cliente ?? '—',
+                // El receptor (proveedor de la compra) es un cliente
+                'tipo' => 'cliente',
+                'nombre' => $compra->cliente?->nombre_cliente ?? '—',
                 'saldo_anterior' => (float) $compra->receptor_saldo_anterior,
                 'saldo_posterior' => (float) $compra->receptor_saldo_posterior,
                 'moneda' => 'USD',
@@ -404,9 +405,9 @@ class DetalleOperacionService
                 // anteriores a esta feature).
                 'atendido_por' => $compra->turnoVendedor?->nombre_vendedor ?? $compra->usuario?->name,
             ],
-            // Quién recibió el pago — siempre uno solo (proveedor O cliente-proveedor),
+            // Quién recibió el pago — siempre uno solo (el cliente al que se le compró),
             // a diferencia de "pagos" abajo que sí puede ser múltiple (varias cuentas).
-            'proveedor' => $compra->proveedor?->nombre_proveedor,
+            'proveedor' => null,
             'cliente' => $compra->cliente?->nombre_cliente,
             // Vacío en deuda_proveedor (no sale dinero de ninguna cuenta); una o varias
             // cuentas/clientes en pago_cash — mismo caso de "varios orígenes en una sola

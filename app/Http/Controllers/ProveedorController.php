@@ -93,8 +93,9 @@ class ProveedorController extends Controller
     public function show(Proveedor $proveedor)
     {
         // Cargar compras del proveedor con relaciones
+        // Las compras ahora se hacen a un cliente (`compras.cliente_id`): las que quedan con este proveedor son las
+        // anteriores a `compras:migrar-proveedores-a-clientes`.
         $compras = Compra::with([
-            'proveedor',
             'cliente',
             'usuario',
             'productos' => function ($query) {

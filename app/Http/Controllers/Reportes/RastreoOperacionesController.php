@@ -250,7 +250,6 @@ class RastreoOperacionesController extends Controller
 
         $comprasPorId = Compra::with([
             'usuario',
-            'proveedor',
             'cliente',
             'productos',
             'pagos.cuenta',
@@ -423,14 +422,12 @@ class RastreoOperacionesController extends Controller
         array $almacenIds = [],
     ) {
         return DB::table('compras')
-            ->leftJoin('proveedors', 'proveedors.id', '=', 'compras.proveedor_id')
             ->leftJoin('clientes', 'clientes.id', '=', 'compras.cliente_id')
             ->select('compras.id', 'compras.fecha_compra as fecha', DB::raw("'Compra' as tipo"))
             ->when($request->filled('fecha'), fn ($q) => $q->whereDate('compras.fecha_compra', $request->input('fecha')))
             ->when($userIdFiltro, fn ($q) => $q->where('compras.user_id', $userIdFiltro))
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
-                $qq->where('proveedors.nombre_proveedor', 'like', "%{$buscar}%")
-                    ->orWhere('clientes.nombre_cliente', 'like', "%{$buscar}%")
+                $qq->where('clientes.nombre_cliente', 'like', "%{$buscar}%")
                     ->orWhere('compras.tipo_compra', 'like', "%{$buscar}%")
                     ->when($buscarId, fn ($q2) => $q2->orWhere('compras.id', $buscarId));
             }))
@@ -453,15 +450,9 @@ class RastreoOperacionesController extends Controller
                     });
                 }
             }))
-            // Proveedor siempre "recibe" en Compra — no existe un proveedor que "envíe".
-            ->when($proveedorIds, function ($q) use ($proveedorIds, $proveedorDireccion) {
-                if ($proveedorDireccion === 'envia') {
-                    $q->whereRaw('1 = 0');
-
-                    return;
-                }
-                $q->whereIn('compras.proveedor_id', $proveedorIds);
-            })
+            // El proveedor de una compra ya es un cliente (lo cubre el filtro de Cliente de arriba): el filtro de la
+            // tabla de proveedores no aplica a Compra, así que si está activo no puede calificar ninguna.
+            ->when($proveedorIds, fn ($q) => $q->whereRaw('1 = 0'))
             // Cuenta solo vive en compra_pago (siempre "envía" — paga la compra, no hay
             // concepto de "cuenta que recibe" en Compra, eso lo cubre Proveedor/Cliente).
             // compras.cuenta_id es un campo legacy (el primer pago nada más) que

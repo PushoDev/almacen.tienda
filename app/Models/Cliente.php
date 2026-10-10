@@ -41,11 +41,14 @@ class Cliente extends Model
             ->withTimestamps();
     }
 
-    // ❌ ELIMINAR o COMENTAR: Esta relación no es correcta
-    // public function compras()
-    // {
-    //     return $this->hasMany(Compra::class);
-    // }
+    /**
+     * Compras hechas a este cliente cuando actúa como proveedor (`compras.cliente_id`). No confundir con
+     * `comprasComoPagador()`, que son las que este cliente financió con su deuda.
+     */
+    public function comprasComoProveedor()
+    {
+        return $this->hasMany(Compra::class, 'cliente_id');
+    }
 
     // ✅ NUEVA: Relación directa con los pagos de compra
     public function pagosCompra()

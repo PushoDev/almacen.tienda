@@ -69,3 +69,23 @@ test('el detalle de un cliente trae saldo anterior/posterior de sus pagos de ven
     expect($compraPagador['detalle'])->not->toBeNull();
     expect($compraPagador['detalle']['pagos'])->toHaveCount(1);
 });
+
+test('el detalle de un cliente trae las compras que se le hicieron como proveedor, solo para admin o moderador', function () {
+    $proveedor = Cliente::factory()->create(['deuda_pago_cliente' => -40]);
+    $compra = Compra::factory()->create(['cliente_id' => $proveedor->id, 'tipo_compra' => 'deuda_proveedor', 'total_compra' => 40]);
+    Compra::factory()->create(); // compra a otro cliente: no debe aparecer
+
+    $this->actingAs(User::factory()->admin()->create());
+    $respuesta = $this->get(route('clientes.show', $proveedor->id), ['X-Inertia' => 'true']);
+
+    $ids = collect($respuesta->json('props.cliente.compras_como_proveedor'))->pluck('id');
+    expect($ids->all())->toBe([$compra->id]);
+
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $this->actingAs($vendedor);
+    $respuestaVendedor = $this->get(route('clientes.show', $proveedor->id), ['X-Inertia' => 'true']);
+
+    $respuestaVendedor->assertOk();
+    expect($respuestaVendedor->json('props.cliente.compras_como_proveedor'))->toBeEmpty();
+});
