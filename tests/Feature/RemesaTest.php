@@ -74,7 +74,7 @@ test('una remesa con mensajero descuenta también la cuenta del mensajero', func
         ->and($remesa->mensajero_moneda)->toBe('USD');
 });
 
-test('una remesa con entrada cliente y salida proveedor afecta deuda_pago_cliente y saldo_proveedor', function () {
+test('una remesa con un proveedor en la entrada o en la salida se rechaza: los proveedores ya no reciben operaciones', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -82,27 +82,34 @@ test('una remesa con entrada cliente y salida proveedor afecta deuda_pago_client
     $cliente = Cliente::factory()->create(['deuda_pago_cliente' => 100]);
     $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 50]);
 
-    $response = $this->post(route('transacciones.remesa.store'), [
+    $this->post(route('transacciones.remesa.store'), [
         'entrada_tipo' => 'cliente',
         'entrada_id' => $cliente->id,
         'entrada_monto' => 300,
         'salida_tipo' => 'proveedor',
         'salida_id' => $proveedor->id,
         'salida_monto' => 280,
-    ]);
+    ])->assertSessionHasErrors('salida_tipo');
 
-    $remesa = Remesa::first();
-    $response->assertRedirect(route('transacciones.remesa.show', $remesa->id));
-    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 400]);
-    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => -230]);
-    $this->assertDatabaseHas('remesas', [
-        'entrada_tipo' => 'cliente',
-        'entrada_cliente_id' => $cliente->id,
-        'entrada_moneda' => 'USD',
-        'salida_tipo' => 'proveedor',
-        'salida_proveedor_id' => $proveedor->id,
-        'salida_moneda' => 'USD',
-    ]);
+    $this->post(route('transacciones.remesa.store'), [
+        'entrada_tipo' => 'proveedor',
+        'entrada_id' => $proveedor->id,
+        'entrada_monto' => 300,
+        'salida_tipo' => 'cliente',
+        'salida_id' => $cliente->id,
+        'salida_monto' => 280,
+    ])->assertSessionHasErrors('entrada_tipo');
+
+    $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 100]);
+    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 50]);
+    expect(Remesa::count())->toBe(0);
+});
+
+test('formData() de la remesa no entrega proveedores', function () {
+    $this->actingAs(User::factory()->admin()->create());
+    Proveedor::factory()->count(2)->create();
+
+    $this->getJson(route('transacciones.remesa.data'))->assertOk()->assertJsonMissingPath('proveedores');
 });
 
 test('un moderador con turno activo registra una remesa y queda guardado el turno_vendedor_id', function () {

@@ -8,12 +8,10 @@ import {
     type CuentaEntidad,
     entidadDeCliente,
     entidadDeCuenta,
-    entidadDeProveedor,
     etiquetaSaldoDe,
     formatear,
     OpcionesTipo,
     type OpcionTipo,
-    type ProveedorEntidad,
     ResumenCard,
     ResumenDato,
     SeccionTitulo,
@@ -26,24 +24,22 @@ import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowUpCircle, Building2, FileText, Loader2, Receipt, UserRound, Wallet } from 'lucide-react';
+import { ArrowUpCircle, FileText, Loader2, Receipt, UserRound, Wallet } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 const TIPOS_DESTINO: OpcionTipo<TipoEntidad>[] = [
     { valor: 'cuenta', titulo: 'Cuenta', descripcion: 'El dinero entra a una de tus cuentas', icono: Wallet },
     { valor: 'cliente', titulo: 'Cliente', descripcion: 'Afecta la deuda o el pago del cliente', icono: UserRound },
-    { valor: 'proveedor', titulo: 'Proveedor', descripcion: 'Suma al saldo del proveedor', icono: Building2 },
 ];
 
 const NOMBRE_TIPO: Record<TipoEntidad, string> = { cuenta: 'cuenta', cliente: 'cliente', proveedor: 'proveedor' };
 
 export default function IngresoForm({ soloCuentas }: { soloCuentas: boolean }) {
-    // El vendedor no tiene acceso a clientes ni a proveedores en Ingresos: solo ingresa a cuentas
+    // El vendedor no tiene acceso a clientes en Ingresos: solo ingresa a cuentas
     const tiposDestino = soloCuentas ? TIPOS_DESTINO.filter((tipo) => tipo.valor === 'cuenta') : TIPOS_DESTINO;
 
     const [cuentasDestino, setCuentasDestino] = useState<CuentaEntidad[]>([]);
     const [clientes, setClientes] = useState<ClienteEntidad[]>([]);
-    const [proveedores, setProveedores] = useState<ProveedorEntidad[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -52,7 +48,6 @@ export default function IngresoForm({ soloCuentas }: { soloCuentas: boolean }) {
             .then((res) => {
                 setCuentasDestino(res.data.cuentasDestino);
                 setClientes(res.data.clientes);
-                setProveedores(res.data.proveedores);
             })
             .catch(() => sileo.error({ title: 'Error al cargar datos del formulario', description: 'Inténtalo nuevamente' }))
             .finally(() => setLoading(false));
@@ -83,12 +78,7 @@ export default function IngresoForm({ soloCuentas }: { soloCuentas: boolean }) {
         );
     }
 
-    const entidades =
-        data.destino_tipo === 'cuenta'
-            ? cuentasDestino.map(entidadDeCuenta)
-            : data.destino_tipo === 'cliente'
-              ? clientes.map(entidadDeCliente)
-              : proveedores.map(entidadDeProveedor);
+    const entidades = data.destino_tipo === 'cuenta' ? cuentasDestino.map(entidadDeCuenta) : clientes.map(entidadDeCliente);
     const seleccionada = entidades.find((e) => e.id === data.destino_id) ?? null;
 
     const monto = parseFloat(data.monto) || 0;
