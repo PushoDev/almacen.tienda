@@ -8,6 +8,7 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\HistorialTasaCambio;
 use App\Models\TasaCambio;
 use App\Models\TasaCambioMLC;
+use App\Services\CatalogoTarjetasService;
 use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -49,7 +50,9 @@ class AdminController extends Controller
 
                 if (! isset($montosPorMoneda[$monedaCodigo])) {
                     $montosPorMoneda[$monedaCodigo] = [
+                        'codigo' => $monedaCodigo,
                         'descripcion' => $cuenta->moneda->nombre_moneda,
+                        'imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($cuenta->moneda->imagen)['imagen_url'] ?? null,
                         'simbolo' => $cuenta->moneda->simbolo_moneda,
                         'monto' => 0,
                         'tasa_cambio' => $tasaCambio,

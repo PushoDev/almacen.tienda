@@ -40,7 +40,6 @@ class RemesaController extends Controller
         return response()->json([
             'cuentas' => $cuentas,
             'clientes' => Cliente::all(),
-            'proveedores' => Proveedor::all(),
         ]);
     }
 
@@ -202,10 +201,10 @@ class RemesaController extends Controller
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
         $request->validate([
-            'entrada_tipo' => 'required|string|in:cuenta,cliente,proveedor',
+            'entrada_tipo' => 'required|string|in:cuenta,cliente',
             'entrada_id' => 'required|integer',
             'entrada_monto' => 'required|numeric|min:0.01',
-            'salida_tipo' => 'required|string|in:cuenta,cliente,proveedor',
+            'salida_tipo' => 'required|string|in:cuenta,cliente',
             'salida_id' => 'required|integer',
             'salida_monto' => 'required|numeric|min:0.01',
             'mensajero_cuenta_id' => 'nullable|integer|exists:cuentas,id|required_with:mensajero_monto',

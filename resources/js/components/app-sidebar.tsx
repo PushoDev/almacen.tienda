@@ -92,14 +92,14 @@ const allNavItems: NavItem[] = [
         href: '/transacciones/envios',
         icon: Truck,
         roles: ['admin', 'moderador', 'vendedor'],
-        
+
     },
-    {
-        title: 'Proveedores',
-        href: '/proveedores',
-        icon: ShoppingCart,
-        roles: ['admin', 'moderador'],
-    },
+    // {
+    //     title: 'Proveedores',
+    //     href: '/proveedores',
+    //     icon: ShoppingCart,
+    //     roles: ['admin', 'moderador'],
+    // },
     {
         title: 'Clientes Asociados',
         href: '/clientes',

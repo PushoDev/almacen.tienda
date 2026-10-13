@@ -6,7 +6,6 @@ use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
-use App\Models\Proveedor;
 use App\Notifications\MovimientoFinancieroNotification;
 use App\Services\CatalogoTarjetasService;
 use App\Services\NotificationService;
@@ -25,15 +24,13 @@ class IngresoController extends Controller
         // lista ni viaja su saldo); admin/moderador, todas. `banco` es el logo real para el selector visual.
         $cuentasDestino = auth()->user()->cuentasUsables()->with('moneda')->get()
             ->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
-        // Un vendedor no tiene acceso a clientes ni a proveedores en Ingresos: ni se listan ni se aceptan
+        // Un vendedor no tiene acceso a clientes en Ingresos: ni se listan ni se aceptan
         $esVendedor = auth()->user()->role === 'vendedor';
         $clientes = $esVendedor ? collect() : Cliente::all();
-        $proveedores = $esVendedor ? collect() : Proveedor::all();
 
         return response()->json([
             'cuentasDestino' => $cuentasDestino,
             'clientes' => $clientes,
-            'proveedores' => $proveedores,
         ]);
     }
 
@@ -41,8 +38,8 @@ class IngresoController extends Controller
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
-        // Un vendedor solo ingresa a cuentas: ni clientes ni proveedores
-        $tiposDestinoPermitidos = auth()->user()->role === 'vendedor' ? 'cuenta' : 'cuenta,cliente,proveedor';
+        // Un vendedor solo ingresa a cuentas; los proveedores ya no reciben operaciones (los clientes toman su función)
+        $tiposDestinoPermitidos = auth()->user()->role === 'vendedor' ? 'cuenta' : 'cuenta,cliente';
 
         $request->validate([
             'destino_tipo' => 'required|string|in:'.$tiposDestinoPermitidos,
@@ -51,7 +48,7 @@ class IngresoController extends Controller
             'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
         ], [
-            'destino_tipo.in' => 'No tiene permiso para ingresar a clientes ni a proveedores.',
+            'destino_tipo.in' => 'No tiene permiso para ingresar a ese tipo de destino.',
         ]);
 
         DB::beginTransaction();
@@ -106,19 +103,6 @@ class IngresoController extends Controller
 
                 $movimientoData['cliente_destino_id'] = $destino->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cliente: {$destino->nombre_cliente}";
-                $movimientoData['saldo_anterior_destino'] = $saldoAnterior;
-                $movimientoData['saldo_posterior_destino'] = $saldoPosterior;
-                $movimientoData['moneda_destino'] = 'USD';
-            } else {
-                $destino = Proveedor::lockForUpdate()->findOrFail($request->destino_id);
-
-                $saldoAnterior = $destino->saldo_proveedor;
-                $saldoPosterior = $saldoAnterior + $request->monto;
-
-                $destino->increment('saldo_proveedor', $request->monto);
-
-                $movimientoData['proveedor_destino_id'] = $destino->id;
-                $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a proveedor: {$destino->nombre_proveedor}";
                 $movimientoData['saldo_anterior_destino'] = $saldoAnterior;
                 $movimientoData['saldo_posterior_destino'] = $saldoPosterior;
                 $movimientoData['moneda_destino'] = 'USD';

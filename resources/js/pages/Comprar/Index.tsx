@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
+import { entidadDeCliente, SelectorEntidad } from '@/components/transacciones/entidad';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -39,7 +40,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import AppLayout from '@/layouts/app-layout';
 import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
-import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorClienteProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -61,7 +62,6 @@ import {
     ShoppingBasket,
     ShoppingCart,
     Trash2Icon,
-    Truck,
     Users,
     Wallet,
     Warehouse,
@@ -81,8 +81,8 @@ interface CompraReciente {
     total_compra: number;
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
     estado: 'pendiente' | 'aprobada' | 'anulada';
+    // Cliente al que se le compró
     proveedor: string | null;
-    cliente: string | null;
     es_parcial: boolean;
 }
 
@@ -247,8 +247,6 @@ export default function ComprarPage() {
     const { errors } = props;
     const comprasRecientes: CompraReciente[] = (props as any).compras_recientes ?? [];
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
-    const [proveedoresList, setProveedoresList] = useState<ProveedorClienteProps[]>([]);
-    const [clientesList, setClientesList] = useState<ProveedorClienteProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
@@ -306,9 +304,6 @@ export default function ComprarPage() {
     // Estado para el modal de crear categoría
     const [isCrearCategoriaDialogOpen, setIsCrearCategoriaDialogOpen] = useState(false);
 
-    // 🆕 Estado para el modal de crear proveedor
-    const [isCrearProveedorDialogOpen, setIsCrearProveedorDialogOpen] = useState(false);
-
     const [tempFormData, setTempFormData] = useState<
         Omit<ProductoComprarProps, 'id' | 'almacen_id' | 'precio' | 'cantidad'> & { almacen_id: string; precio: string; cantidad: string }
     >({
@@ -330,7 +325,6 @@ export default function ComprarPage() {
     const { data, setData, post, processing } = useForm({
         compra: '',
         proveedor: '',
-        tipo_proveedor: 'proveedor' as 'proveedor' | 'cliente',
         fecha: date ? date.toISOString().split('T')[0] : '',
         pagos: [] as { cuenta_id: number; monto: number }[],
         pagos_clientes: [] as { cliente_id: number; monto: number }[],
@@ -340,6 +334,8 @@ export default function ComprarPage() {
 
     // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
+    // true cuando el modal se abrió desde el selector "Cliente" de la compra (y no desde el financiamiento)
+    const [crearComoClienteDeCompra, setCrearComoClienteDeCompra] = useState(false);
 
     // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CLIENTES
     useEffect(() => {
@@ -430,18 +426,14 @@ export default function ComprarPage() {
             try {
                 setLoading(true);
 
-                const [almacenesRes, proveedoresRes, categoriasRes, cuentasRes, clientesRes] = await Promise.all([
+                const [almacenesRes, categoriasRes, cuentasRes, clientesRes] = await Promise.all([
                     axios.get(route('compras.almacenes')),
-                    axios.get(route('compras.proveedores')),
                     axios.get(route('compras.categorias')),
                     axios.get(route('compras.cuentas.pago')),
                     axios.get(route('compras.clientes.fisicos')),
                 ]);
 
                 setAlmacens(almacenesRes.data);
-                // Nuevo formato: { proveedores: [], clientes: [] }
-                setProveedoresList(proveedoresRes.data.proveedores || []);
-                setClientesList(proveedoresRes.data.clientes || []);
                 setCategorias(categoriasRes.data);
                 setCuentas(cuentasRes.data);
                 setClientes(clientesRes.data);
@@ -681,8 +673,11 @@ export default function ComprarPage() {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
-    const allProviders = [...proveedoresList, ...clientesList];
-    const selectedProvider = allProviders.find((p) => p.nombre === data.proveedor) || null;
+    const clienteDeCompra = clientes.find((c) => c.nombre_cliente === data.proveedor) || null;
+    // Cada cliente se muestra como en Transacciones: insignia + badge con su saldo
+    const entidadesCliente = clientes.map((c) =>
+        entidadDeCliente({ id: c.id, nombre_cliente: c.nombre_cliente, deuda_pago_cliente: c.deuda_pago_cliente ?? 0 }),
+    );
     const selectedAlmacen = almacens.find((a) => a.id.toString() === tempFormData.almacen_id) || null;
     const selectedCategoria = categorias.find((c) => c.nombre_categoria === tempFormData.categoria) || null;
 
@@ -693,7 +688,7 @@ export default function ComprarPage() {
         }
 
         if (!data.proveedor || !date) {
-            sileo.warning({ title: 'Por favor, complete la Fecha y el Proveedor.' });
+            sileo.warning({ title: 'Por favor, complete la Fecha y el Asociado.' });
             return;
         }
 
@@ -1122,194 +1117,10 @@ export default function ComprarPage() {
         );
     };
 
-    // Un cliente creado (o encontrado como ya existente) desde cualquiera de los dos flujos de
-    // "crear cliente" de esta página (el combobox superior Proveedor/Cliente, o "Financiamiento
-    // con Clientes" del paso de pago) queda visible en AMBOS selectores de inmediato, sin recargar
-    // la página. Antes cada flujo solo actualizaba su propia lista (`clientesList` o `clientes`).
+    // Un cliente creado (o encontrado como ya existente) queda visible de inmediato en los selectores
+    // de esta página (el de "Cliente" de la compra y el de "Financiamiento con Clientes"), sin recargar.
     const sincronizarClienteEnListas = (cliente: ClienteProps) => {
         setClientes((prev) => (prev.some((c) => c.id === cliente.id) ? prev : [...prev, cliente]));
-        setClientesList((prev) =>
-            prev.some((c) => c.id === cliente.id) ? prev : [...prev, { id: cliente.id, nombre: cliente.nombre_cliente, tipo: 'cliente' }],
-        );
-    };
-
-    // 🆕 COMPONENTE DE CREACIÓN DE PROVEEDOR (VERSIÓN SIMPLE)
-    const CrearProveedorDialogContent = () => {
-        const [nombreProveedor, setNombreProveedor] = useState('');
-        const [telefonoProveedor, setTelefonoProveedor] = useState('+123456789');
-        const [direccionProveedor, setDireccionProveedor] = useState('RESIDENCIA DEL CLIENTE');
-        const [ciudadProveedor, setCiudadProveedor] = useState('CIUDAD DE RESIDENCIA');
-        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
-
-        const crearProveedorLocal = async () => {
-            const nombreMayusculas = nombreProveedor.trim().toUpperCase();
-
-            if (!nombreMayusculas) {
-                sileo.error({ title: 'El nombre es requerido' });
-                return;
-            }
-
-            if (data.tipo_proveedor === 'cliente' && !telefonoProveedor.trim()) {
-                sileo.error({ title: 'El teléfono es requerido para clientes' });
-                return;
-            }
-
-            try {
-                const payload: Record<string, string> = {
-                    nombre_proveedor: nombreMayusculas,
-                    tipo: data.tipo_proveedor,
-                };
-
-                if (data.tipo_proveedor === 'cliente') {
-                    payload.telefono_cliente = telefonoProveedor.trim();
-                    payload.direccion_cliente = direccionProveedor.trim().toUpperCase();
-                    payload.ciudad_cliente = ciudadProveedor.trim().toUpperCase();
-                }
-
-                const response = await axios.post(route('compras.proveedor.store'), payload);
-
-                const { data: nuevoData, message, tipo } = response.data;
-
-                sileo.success({ title: message, description: `Nuevo ${tipo} creado exitosamente.` });
-
-                // Actualizar el estado global de proveedores/clientes segun el tipo
-                if (tipo === 'proveedor') {
-                    setProveedoresList((prev) => [...prev, { id: nuevoData.id, nombre: nuevoData.nombre_proveedor, tipo }]);
-                } else {
-                    // nuevoData ya es un Cliente completo (nuevo o existente) — sincroniza las dos listas a la vez
-                    sincronizarClienteEnListas(nuevoData as ClienteProps);
-                }
-                // Seleccionar automáticamente el nuevo
-                setData('proveedor', nuevoData.nombre_proveedor || nuevoData.nombre_cliente);
-                setData('tipo_proveedor', tipo as 'proveedor' | 'cliente');
-
-                resetDialog();
-            } catch (error: any) {
-                console.error('Error al crear proveedor:', error);
-                if (error.response?.data?.errors) {
-                    setLocalErrors(error.response.data.errors);
-                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
-                } else {
-                    sileo.error({ title: 'Error al crear proveedor', description: error.response?.data?.message || 'Intenta nuevamente.' });
-                }
-            }
-        };
-
-        const resetDialog = () => {
-            setNombreProveedor('');
-            setTelefonoProveedor('+123456789');
-            setDireccionProveedor('RESIDENCIA DEL CLIENTE');
-            setCiudadProveedor('CIUDAD DE RESIDENCIA');
-            setLocalErrors({});
-            setIsCrearProveedorDialogOpen(false);
-        };
-
-        return (
-            <DialogContent className="overflow-hidden p-0 sm:max-w-md">
-                <DialogHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                            <Truck className="h-5 w-5" />
-                        </div>
-                        <div>
-                            <DialogTitle className="text-xl text-white">Crear Nuevo Proveedor/Cliente</DialogTitle>
-                            <DialogDescription className="text-violet-100">
-                                Añade un nuevo proveedor o cliente al sistema de forma rápida.
-                            </DialogDescription>
-                        </div>
-                    </div>
-                </DialogHeader>
-                <div className="grid gap-4 px-6 py-4">
-                    <div className="space-y-2">
-                        <Label>Tipo de Registro</Label>
-                        <div className="flex gap-4">
-                            <label className="flex cursor-pointer items-center gap-2">
-                                <input
-                                    type="radio"
-                                    name="tipo_proveedor"
-                                    value="proveedor"
-                                    checked={data.tipo_proveedor === 'proveedor'}
-                                    onChange={() => setData('tipo_proveedor', 'proveedor')}
-                                />
-                                <Truck className="h-4 w-4" />
-                                Proveedor
-                            </label>
-                            <label className="flex cursor-pointer items-center gap-2">
-                                <input
-                                    type="radio"
-                                    name="tipo_proveedor"
-                                    value="cliente"
-                                    checked={data.tipo_proveedor === 'cliente'}
-                                    onChange={() => setData('tipo_proveedor', 'cliente')}
-                                />
-                                <Users className="h-4 w-4" />
-                                Cliente
-                            </label>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="dialog-nombre-proveedor">
-                            Nombre {data.tipo_proveedor === 'proveedor' ? 'del Proveedor' : 'del Cliente'} <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                            id="dialog-nombre-proveedor"
-                            name="nombre_proveedor"
-                            value={nombreProveedor}
-                            onChange={(e) => setNombreProveedor(e.target.value.toUpperCase())}
-                            placeholder={data.tipo_proveedor === 'proveedor' ? 'Ej: PROVEEDOR DE ELECTRÓNICA S.A.' : 'Ej: JUAN PÉREZ'}
-                            className={localErrors.nombre_proveedor ? 'border-red-500' : ''}
-                            autoFocus
-                        />
-                        {localErrors.nombre_proveedor && <p className="text-sm text-red-500">{localErrors.nombre_proveedor}</p>}
-                    </div>
-                    {data.tipo_proveedor === 'cliente' && (
-                        <div className="space-y-4 border-t pt-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-telefono-proveedor">
-                                    Teléfono <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                    id="dialog-telefono-proveedor"
-                                    name="telefono_cliente"
-                                    value={telefonoProveedor}
-                                    onChange={(e) => setTelefonoProveedor(e.target.value)}
-                                    placeholder="Ej: +123456789"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-direccion-proveedor">Dirección</Label>
-                                <Input
-                                    id="dialog-direccion-proveedor"
-                                    name="direccion_cliente"
-                                    value={direccionProveedor}
-                                    onChange={(e) => setDireccionProveedor(e.target.value.toUpperCase())}
-                                    placeholder="RESIDENCIA DEL CLIENTE"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-ciudad-proveedor">Ciudad</Label>
-                                <Input
-                                    id="dialog-ciudad-proveedor"
-                                    name="ciudad_cliente"
-                                    value={ciudadProveedor}
-                                    onChange={(e) => setCiudadProveedor(e.target.value.toUpperCase())}
-                                    placeholder="CIUDAD DE RESIDENCIA"
-                                />
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <DialogFooter className="gap-2 border-t px-6 py-4">
-                    <Button type="button" variant="outline" onClick={resetDialog}>
-                        Cancelar
-                    </Button>
-                    <Button type="button" onClick={crearProveedorLocal} className="bg-violet-600 hover:bg-violet-700">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Crear {data.tipo_proveedor === 'proveedor' ? 'Proveedor' : 'Cliente'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        );
     };
 
     // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE
@@ -1360,8 +1171,11 @@ export default function ComprarPage() {
                     sincronizarClienteEnListas(cliente);
                 }
 
-                // Agregar automáticamente a pagos_clientes con monto 0
-                if (!data.pagos_clientes.some((p) => p.cliente_id === cliente.id)) {
+                if (crearComoClienteDeCompra) {
+                    // Creado desde el selector "Cliente" de la compra: queda seleccionado
+                    setData('proveedor', cliente.nombre_cliente);
+                } else if (!data.pagos_clientes.some((p) => p.cliente_id === cliente.id)) {
+                    // Creado desde "Financiamiento con Clientes": se agrega a pagos_clientes con monto 0
                     setData('pagos_clientes', [...data.pagos_clientes, { cliente_id: cliente.id, monto: 0 }]);
                 }
 
@@ -1552,7 +1366,7 @@ export default function ComprarPage() {
                             <div>
                                 <CardTitle className="text-base font-semibold text-white">Nuevos Productos</CardTitle>
                                 <CardDescription className="text-xs text-indigo-100">
-                                    A continuación va a realizar una compra de productos, recuerde asignar: fecha y proveedor.
+                                    A continuación va a realizar una compra de productos, recuerde asignar: fecha y asociado.
                                 </CardDescription>
                             </div>
                         </div>
@@ -1582,68 +1396,40 @@ export default function ComprarPage() {
                                     {errors.fecha && <InputError message={errors.fecha} />}
                                 </div>
 
-                                {/* Proveedor / Cliente */}
+                                {/* Cliente al que se le compra */}
                                 <div className="space-y-2">
                                     <Label htmlFor="proveedor" className="text-sm font-medium">
-                                        Proveedor / Cliente
+                                        Asociado
                                     </Label>
-                                    <Combobox
-                                        items={allProviders}
-                                        itemToStringLabel={(item) => item.nombre}
-                                        itemToStringValue={(item) => item.nombre}
-                                        value={selectedProvider}
-                                        onValueChange={(provider) => {
-                                            if (provider) {
-                                                setData('proveedor', provider.nombre);
-                                                setData('tipo_proveedor', provider.tipo);
-                                            } else {
-                                                setData('proveedor', '');
-                                            }
+                                    <SelectorEntidad
+                                        id="proveedor"
+                                        entidades={entidadesCliente}
+                                        valor={clienteDeCompra ? String(clienteDeCompra.id) : ''}
+                                        onChange={(entidad) => {
+                                            setData((prev) => ({
+                                                ...prev,
+                                                proveedor: entidad?.nombre ?? '',
+                                                // El asociado de la compra no puede además financiarla
+                                                pagos_clientes: prev.pagos_clientes.filter((p) => String(p.cliente_id) !== entidad?.id),
+                                            }));
                                         }}
-                                    >
-                                        <ComboboxInput
-                                            placeholder="Buscar proveedor o cliente..."
-                                            showClear={!!data.proveedor}
-                                            className="uppercase"
-                                        />
-                                        <ComboboxContent>
-                                            <ComboboxEmpty>No se encontraron proveedores.</ComboboxEmpty>
-                                            <ComboboxList>
-                                                {(provider) => (
-                                                    <ComboboxItem key={provider.id} value={provider}>
-                                                        <div className="flex w-full items-center justify-between gap-2 uppercase">
-                                                            <span className="flex items-center gap-2">
-                                                                {provider.tipo === 'proveedor' ? (
-                                                                    <Truck className="h-4 w-4 text-blue-600" />
-                                                                ) : (
-                                                                    <Users className="h-4 w-4 text-green-600" />
-                                                                )}
-                                                                <span>{provider.nombre}</span>
-                                                            </span>
-                                                            <Badge
-                                                                variant={provider.tipo === 'proveedor' ? 'default' : 'secondary'}
-                                                                className={
-                                                                    provider.tipo === 'proveedor'
-                                                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                                                        : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                                                }
-                                                            >
-                                                                {provider.tipo === 'proveedor' ? 'Proveedor' : 'Cliente'}
-                                                            </Badge>
-                                                        </div>
-                                                    </ComboboxItem>
-                                                )}
-                                            </ComboboxList>
-                                            <Separator className="my-2" />
-                                            <div
-                                                className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
-                                                onClick={() => setIsCrearProveedorDialogOpen(true)}
-                                            >
-                                                <PlusCircle className="h-4 w-4" />
-                                                Crear Nuevo Proveedor
-                                            </div>
-                                        </ComboboxContent>
-                                    </Combobox>
+                                        placeholder="Buscar asociado..."
+                                        pie={
+                                            <>
+                                                <Separator className="my-2" />
+                                                <div
+                                                    className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
+                                                    onClick={() => {
+                                                        setCrearComoClienteDeCompra(true);
+                                                        setIsCrearClienteDialogOpen(true);
+                                                    }}
+                                                >
+                                                    <PlusCircle className="h-4 w-4" />
+                                                    Crear Nuevo Asociado
+                                                </div>
+                                            </>
+                                        }
+                                    />
                                     {errors.proveedor && <InputError message={errors.proveedor} />}
                                 </div>
                             </div>
@@ -2398,7 +2184,7 @@ export default function ComprarPage() {
                                                             <div>
                                                                 <p className="font-semibold">Generar Deuda</p>
                                                                 <p className="text-muted-foreground text-sm">
-                                                                    Registrar compra a crédito al proveedor
+                                                                    Registrar compra a crédito al asociado
                                                                 </p>
                                                             </div>
                                                         </button>
@@ -2439,7 +2225,7 @@ export default function ComprarPage() {
                                                         <div>
                                                             <AlertDialogTitle className="text-2xl font-bold">Registrar Deuda</AlertDialogTitle>
                                                             <AlertDialogDescription className="text-orange-100">
-                                                                Confirma la creación de deuda con el proveedor
+                                                                Confirma la creación de deuda con el asociado
                                                             </AlertDialogDescription>
                                                         </div>
                                                     </div>
@@ -2455,7 +2241,7 @@ export default function ComprarPage() {
                                                             </div>
                                                             <Separator />
                                                             <p className="text-muted-foreground text-sm">
-                                                                Esta compra se registrará como deuda con el proveedor y será pagadera en el futuro.
+                                                                Esta compra se registrará como deuda con el asociado y será pagadera en el futuro.
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2574,7 +2360,7 @@ export default function ComprarPage() {
                                                                             <Combobox
                                                                                 multiple
                                                                                 items={clientes}
-                                                                                filteredItems={filteredClientes}
+                                                                                filteredItems={filteredClientes.filter((c) => c.id !== clienteDeCompra?.id)}
                                                                                 itemToStringLabel={(c: ClienteProps) => c.nombre_cliente}
                                                                                 value={data.pagos_clientes
                                                                                     .map((p) => clientes.find((c) => c.id === p.cliente_id))
@@ -2631,7 +2417,10 @@ export default function ComprarPage() {
                                                                                     <Separator className="my-2" />
                                                                                     <div
                                                                                         className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
-                                                                                        onClick={() => setIsCrearClienteDialogOpen(true)}
+                                                                                        onClick={() => {
+                                                                                            setCrearComoClienteDeCompra(false);
+                                                                                            setIsCrearClienteDialogOpen(true);
+                                                                                        }}
                                                                                     >
                                                                                         <PlusCircle className="h-4 w-4" />
                                                                                         Crear nuevo cliente
@@ -2872,11 +2661,6 @@ export default function ComprarPage() {
                     <CrearCategoriaDialogContent />
                 </Dialog>
 
-                {/* 🆕 MODAL CREAR PROVEEDOR */}
-                <Dialog open={isCrearProveedorDialogOpen} onOpenChange={setIsCrearProveedorDialogOpen}>
-                    <CrearProveedorDialogContent />
-                </Dialog>
-
                 {/* HISTORIAL DE COMPRAS */}
                 {comprasRecientes.length > 0 && (
                     <Card className="mt-4 overflow-hidden border-0 pt-0 shadow-lg">
@@ -2899,7 +2683,7 @@ export default function ComprarPage() {
                                     <TableRow className="bg-gray-100 dark:bg-gray-800">
                                         <TableHead>#</TableHead>
                                         <TableHead>Fecha</TableHead>
-                                        <TableHead>Proveedor / Cliente</TableHead>
+                                        <TableHead>Asociado</TableHead>
                                         <TableHead>Tipo</TableHead>
                                         <TableHead>Estado</TableHead>
                                         <TableHead className="text-right">Total</TableHead>
@@ -2917,7 +2701,7 @@ export default function ComprarPage() {
                                                     year: 'numeric',
                                                 })}
                                             </TableCell>
-                                            <TableCell className="font-medium">{compra.proveedor ?? compra.cliente ?? 'Sin registro'}</TableCell>
+                                            <TableCell className="font-medium">{compra.proveedor ?? 'Sin registro'}</TableCell>
                                             <TableCell>
                                                 <Badge
                                                     className={cn(

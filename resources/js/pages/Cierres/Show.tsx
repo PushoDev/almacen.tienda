@@ -1,3 +1,13 @@
+import { type ComparativaClienteItem, type ComparativaItem, type CuentaDeCobro, TarjetaComparativa } from '@/components/cierres/comparativa';
+import { TarjetaTurnos, type TurnoResumen } from '@/components/cierres/piezas';
+import {
+    type EnvioAbierto,
+    type ItemMovimiento,
+    type OperacionesMultiplesCierre,
+    TarjetaTransaccionesTurno,
+    type TransferenciaCompleta,
+    type TransferenciaItem,
+} from '@/components/cierres/transacciones-turno';
 import HeadingSmall from '@/components/heading-small';
 import { ViaLogo } from '@/components/monedas/via-logo';
 import {
@@ -8,33 +18,38 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import {
+    AlertTriangle,
     ArrowDown,
     ArrowRightLeft,
     ArrowUp,
     Banknote,
     Briefcase,
+    Building2,
     ChevronDown,
     CreditCard,
     DollarSign,
     Eye,
     Globe,
-    Receipt,
-    Search,
+    HandCoins,
+    Package,
+    Shuffle,
     ShoppingCart,
+    Store,
     TrendingUp,
+    Truck,
+    Undo2,
     Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -42,26 +57,6 @@ import { useMemo, useState } from 'react';
 const CollapsibleRoot = Collapsible.Root;
 const CollapsibleTrigger = Collapsible.CollapsibleTrigger;
 const CollapsibleContent = Collapsible.CollapsibleContent;
-
-interface TransferenciaItem {
-    id: string;
-    desc: string;
-    monto_origen: number;
-    moneda_origen: string;
-    origen_tipo: string;
-    origen_nombre: string;
-    monto_destino: number;
-    moneda_destino: string;
-    destino_tipo: string;
-    destino_nombre: string;
-    tasa_cambio: number;
-    hora: string;
-    afecta_saldo_usuario?: boolean;
-    es_entrada?: boolean;
-    es_receptor?: boolean;
-    usuario_nombre?: string;
-    es_propio?: boolean;
-}
 
 interface ItemVenta {
     id: string;
@@ -107,11 +102,15 @@ interface OperacionDetaile {
     via_info?: { slug: string; nombre: string; imagen_url: string | null } | null;
     cuenta_nombre?: string | null;
     destino_nombre?: string | null;
+    /** Logo de la cuenta destino; null si no tiene uno asignado (y en cierres viejos, que no lo traen). */
+    banco?: { slug: string; nombre: string; imagen_url: string } | null;
+    moneda_imagen_url?: string | null;
     productos: ProductItem[];
 }
 
 interface DetalleMoneda {
     moneda: string;
+    moneda_imagen_url?: string | null;
     tasa_cambio: number;
     ventas_efectivo: number;
     ventas_transferencia: number;
@@ -129,8 +128,8 @@ interface DetalleMoneda {
     comisiones_gestor?: number;
     comisiones_gestor_detalles?: ComisionGestorItem[];
     items_ventas: ItemVenta[];
-    items_gastos: Array<{ id?: string; desc: string; monto: number; moneda?: string; hora: string; origen?: string; destino?: string; usuario_nombre?: string; es_propio?: boolean }>;
-    items_ingresos: Array<{ id?: string; desc: string; monto: number; moneda?: string; hora: string; origen?: string; destino?: string; usuario_nombre?: string; es_propio?: boolean }>;
+    items_gastos: ItemMovimiento[];
+    items_ingresos: ItemMovimiento[];
     items_transferencias_salientes: TransferenciaItem[];
     items_transferencias_entrantes: TransferenciaItem[];
     productos_resumen?: Record<
@@ -183,30 +182,6 @@ interface ComisionGestorItem {
     fecha: string;
     total_venta: number;
     productos: ProductoItem[];
-}
-
-interface ComparativaItem {
-    id: number;
-    nombre: string;
-    tipo: string;
-    moneda: string;
-    saldo_anterior: number;
-    saldo_actual: number;
-    diferencia: number;
-    estado: 'subio' | 'bajo' | 'igual';
-}
-
-interface ComparativaClienteItem {
-    id: number;
-    nombre: string;
-    deuda_anterior: number;
-    deuda_actual: number;
-    diferencia: number;
-    estado: 'mejoro' | 'empeoro' | 'igual';
-}
-
-interface TransferenciaCompleta extends TransferenciaItem {
-    tipo: 'saliente' | 'entrante';
 }
 
 interface TransferenciasResumen {
@@ -263,6 +238,15 @@ interface VentaEspecialItemShow {
     fecha: string;
 }
 
+/** Venta sin comisión (de la agencia); costo e impacto solo los recibe admin o moderador. */
+interface VentaSinComisionItemShow {
+    venta_id: number;
+    total: number;
+    costo?: number;
+    impacto?: number;
+    fecha: string;
+}
+
 interface VentaAnuladaItemShow {
     venta_id: number;
     total: number;
@@ -304,6 +288,11 @@ interface Props extends PageProps {
     ventas_especiales_costo_usd?: number;
     ventas_especiales_impacto_usd?: number;
     ventas_especiales_detalles?: VentaEspecialItemShow[];
+    ventas_sin_comision_count?: number;
+    ventas_sin_comision_total_usd?: number;
+    ventas_sin_comision_costo_usd?: number;
+    ventas_sin_comision_impacto_usd?: number;
+    ventas_sin_comision_detalles?: VentaSinComisionItemShow[];
     ventas_anuladas_count?: number;
     ventas_anuladas_total_usd?: number;
     ventas_anuladas_detalles?: VentaAnuladaItemShow[];
@@ -316,8 +305,21 @@ interface Props extends PageProps {
     comisiones_gestor_cup?: number;
     comisiones_total_cup?: number;
     comparativa_cuentas?: ComparativaItem[];
+    /** Lo cobrado en las cuentas de cobro del dueño del cierre (sin su saldo). */
+    comparativa_cuentas_cobro?: CuentaDeCobro[];
     comparativa_clientes?: ComparativaClienteItem[];
     tiene_cierre_anterior?: boolean;
+    /** Quién cerró (turno "Atendido por") y los turnos del periodo; null en los cierres anteriores a guardarlos. */
+    turno_cierre?: string | null;
+    turnos?: TurnoResumen[] | null;
+    ventas_devueltas_count?: number;
+    ventas_devueltas_total_usd?: number;
+    ventas_devueltas_detalles?: Array<{ venta_id: number }>;
+    /** Envíos que seguían en tránsito al cerrar (se guardan desde el 10-09); false en los cierres anteriores. */
+    envios_guardados?: boolean;
+    envios_en_transito?: EnviosGuardados | null;
+    /** Solo admin y moderador (`visible`); se recalcula por las fechas del cierre. */
+    operaciones_multiples?: OperacionesMultiplesCierre;
     transacciones_externas?: Array<{
         hora: string;
         tipo: string;
@@ -328,6 +330,13 @@ interface Props extends PageProps {
         moneda: string;
         es_entrante: boolean;
     }>;
+}
+
+/** Lo que el cierre guardó de los envíos de dinero que seguían en tránsito al cerrarlo. */
+interface EnviosGuardados {
+    resumen?: { total: number; montos: Array<{ moneda: string; monto: number }> };
+    enviados?: EnvioAbierto[];
+    por_recibir?: EnvioAbierto[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -348,6 +357,11 @@ export default function Show({
     ventas_especiales_costo_usd = 0,
     ventas_especiales_impacto_usd = 0,
     ventas_especiales_detalles = [],
+    ventas_sin_comision_count = 0,
+    ventas_sin_comision_total_usd = 0,
+    ventas_sin_comision_costo_usd = 0,
+    ventas_sin_comision_impacto_usd = 0,
+    ventas_sin_comision_detalles = [],
     ventas_anuladas_count = 0,
     ventas_anuladas_total_usd = 0,
     ventas_anuladas_detalles = [],
@@ -360,12 +374,26 @@ export default function Show({
     comisiones_gestor_cup = 0,
     comisiones_total_cup = 0,
     comparativa_cuentas = [],
+    comparativa_cuentas_cobro = [],
     comparativa_clientes = [],
     tiene_cierre_anterior = false,
     transacciones_externas = [],
+    turno_cierre = null,
+    turnos = null,
+    ventas_devueltas_count = 0,
+    ventas_devueltas_total_usd = 0,
+    ventas_devueltas_detalles = [],
+    envios_guardados = false,
+    envios_en_transito = null,
+    operaciones_multiples,
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
+    const enviosGuardadosLista = [...(envios_en_transito?.enviados ?? []), ...(envios_en_transito?.por_recibir ?? [])];
+    const enviosGuardadosTotal = envios_en_transito?.resumen?.total ?? enviosGuardadosLista.length;
+    const enviosGuardadosAtrasados = enviosGuardadosLista.filter((envio) => envio.atrasado).length;
+
+    const [showVentasSinComisionDialog, setShowVentasSinComisionDialog] = useState(false);
     const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
     const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
     const [showComisionPVDialog, setShowComisionPVDialog] = useState(false);
@@ -591,94 +619,6 @@ export default function Show({
         });
     });
 
-    // Sección unificada "Transacciones del Turno" (Gastos/Ingresos/Transferencias, propias + externas)
-    const [busquedaTransacciones, setBusquedaTransacciones] = useState('');
-    const [filtroOrigenTransacciones, setFiltroOrigenTransacciones] = useState<'todas' | 'propias' | 'externas'>('todas');
-    const [filtroMonedaTransacciones, setFiltroMonedaTransacciones] = useState('todas');
-
-    // Monedas presentes en los datos del turno (no hardcodeado, se arma según lo que exista)
-    const monedasTransacciones = useMemo(() => {
-        const set = new Set<string>();
-        (todosGastos ?? []).forEach((i) => set.add(i.moneda || 'USD'));
-        (todosIngresos ?? []).forEach((i) => set.add(i.moneda || 'USD'));
-        (todasTransferencias ?? []).forEach((i) => {
-            set.add(i.moneda_origen || 'USD');
-            set.add(i.moneda_destino || 'USD');
-        });
-        return ['todas', ...Array.from(set).sort()];
-    }, [todosGastos, todosIngresos, todasTransferencias]);
-
-    const coincideFiltrosTransaccion = (esPropio: boolean | undefined, texto: string, monedasItem: string[]) => {
-        const matchOrigen =
-            filtroOrigenTransacciones === 'todas' ||
-            (filtroOrigenTransacciones === 'propias' ? esPropio === true : esPropio === false);
-        const matchMoneda = filtroMonedaTransacciones === 'todas' || monedasItem.includes(filtroMonedaTransacciones);
-        const matchTexto = !busquedaTransacciones || texto.toLowerCase().includes(busquedaTransacciones.toLowerCase());
-        return matchOrigen && matchMoneda && matchTexto;
-    };
-
-    const gastosFiltrados = useMemo(
-        () =>
-            (todosGastos ?? []).filter((i) =>
-                coincideFiltrosTransaccion(i.es_propio, `${i.desc} ${i.origen ?? ''}`, [i.moneda || 'USD']),
-            ),
-        [todosGastos, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
-    );
-    const ingresosFiltrados = useMemo(
-        () =>
-            (todosIngresos ?? []).filter((i) =>
-                coincideFiltrosTransaccion(i.es_propio, `${i.desc} ${i.destino ?? ''}`, [i.moneda || 'USD']),
-            ),
-        [todosIngresos, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
-    );
-    const transferenciasFiltradas = useMemo(
-        () =>
-            (todasTransferencias ?? []).filter((i) =>
-                coincideFiltrosTransaccion(
-                    i.es_propio,
-                    `${i.desc} ${i.origen_nombre ?? ''} ${i.destino_nombre ?? ''}`,
-                    [i.moneda_origen || 'USD', i.moneda_destino || 'USD'],
-                ),
-            ),
-        [todasTransferencias, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
-    );
-
-    // Cuando se filtra por una moneda específica, mostrar la transferencia desde la
-    // perspectiva de esa moneda (signo/monto principal) en vez del `tipo` canónico
-    // que trae el backend (pensado solo para la vista "Todas").
-    const tipoEfectivoTransferencia = (item: TransferenciaCompleta): 'entrante' | 'saliente' => {
-        if (filtroMonedaTransacciones === 'todas' || item.moneda_origen === item.moneda_destino) {
-            return item.tipo;
-        }
-        if (filtroMonedaTransacciones === item.moneda_origen) return 'saliente';
-        if (filtroMonedaTransacciones === item.moneda_destino) return 'entrante';
-        return item.tipo;
-    };
-
-    // Filtros para Comparativa
-    const [busquedaCuentas, setBusquedaCuentas] = useState('');
-    const [filtroTipoCuentas, setFiltroTipoCuentas] = useState('todos');
-    const [busquedaClientes, setBusquedaClientes] = useState('');
-
-    const tiposUnicos = useMemo(() => {
-        const tipos = new Set((comparativa_cuentas ?? []).map(c => c.tipo));
-        return ['todos', ...Array.from(tipos).sort()];
-    }, [comparativa_cuentas]);
-
-    const cuentasFiltradas = useMemo(() => {
-        return (comparativa_cuentas ?? []).filter(c => {
-            const matchTexto = !busquedaCuentas || c.nombre.toLowerCase().includes(busquedaCuentas.toLowerCase());
-            const matchTipo = filtroTipoCuentas === 'todos' || c.tipo === filtroTipoCuentas;
-            return matchTexto && matchTipo;
-        });
-    }, [comparativa_cuentas, busquedaCuentas, filtroTipoCuentas]);
-
-    const clientesFiltrados = useMemo(() => {
-        return (comparativa_clientes ?? []).filter(c => {
-            return !busquedaClientes || c.nombre.toLowerCase().includes(busquedaClientes.toLowerCase());
-        });
-    }, [comparativa_clientes, busquedaClientes]);
-
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Cierre #${cierre.id}`} />
@@ -687,7 +627,7 @@ export default function Show({
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
                     <HeadingSmall
                         title={`Reporte de Cierre #${cierre.id}`}
-                        description={`Auditoría detallada de movimientos realizados por ${cierre.usuario?.name || 'usuario'}.`}
+                        description={`Auditoría detallada de movimientos realizados por ${cierre.usuario?.name || 'usuario'}.${turno_cierre ? ` Cerrado por ${turno_cierre}.` : ''}`}
                     />
                     <Wallet
                         size={70}
@@ -847,25 +787,29 @@ export default function Show({
                 </Card>
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Receipt className="h-5 w-5" />
-                            Ventas del Día
-                        </CardTitle>
-                        <CardDescription>
-                            Productos vendidos el{' '}
-                            {new Date(cierre.fecha_apertura).toLocaleDateString('es-ES', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                            })}
-                            . Importes en {moneda_referencia}.
-                        </CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-teal-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Ventas</CardTitle>
+                                <CardDescription className="text-teal-100">
+                                    Productos vendidos el{' '}
+                                    {new Date(cierre.fecha_apertura).toLocaleDateString('es-ES', {
+                                        weekday: 'long',
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                    })}
+                                    . Importes en {moneda_referencia} (moneda de referencia).
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto rounded-lg border">
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-muted text-muted-foreground">
                                     <tr>
@@ -909,11 +853,17 @@ export default function Show({
                                                 <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
                                                 <td className="px-4 py-2 text-center">
-                                                    <span className="text-primary font-bold">{linea.cantidad}</span>
+                                                    <Badge className="border border-teal-400/30 bg-teal-500/10 px-2.5 py-0.5 font-bold text-teal-700 backdrop-blur-sm dark:text-teal-300">
+                                                        {linea.cantidad}
+                                                    </Badge>
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
                                                 <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right font-mono text-green-600">${Number(linea.comision).toFixed(2)}</td>
+                                                <td className="px-4 py-2 text-right">
+                                                    <Badge className="border border-emerald-400/30 bg-emerald-500/10 font-mono text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                        ${Number(linea.comision).toFixed(2)}
+                                                    </Badge>
+                                                </td>
                                             </tr>
                                         ))
                                     ) : (
@@ -929,12 +879,16 @@ export default function Show({
                                         <td colSpan={4} className="px-4 py-3 text-right font-bold">
                                             Total
                                         </td>
-                                        <td className="px-4 py-3 text-center font-bold">{lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <Badge className="border-0 bg-gradient-to-r from-teal-500 to-teal-600 px-3 py-0.5 font-black text-white shadow-md shadow-teal-500/30">
+                                                {lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}
+                                            </Badge>
+                                        </td>
                                         <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-teal-700 dark:text-teal-300">
                                             ${totalVentasProductos.toFixed(2)}
                                         </td>
-                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-emerald-600">
                                             ${totalComisionProductos.toFixed(2)}
                                         </td>
                                     </tr>
@@ -944,17 +898,21 @@ export default function Show({
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Banknote className="h-5 w-5" />
-                            Por dónde entraron
-                        </CardTitle>
-                        <CardDescription>
-                            Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
-                        </CardDescription>
+                <Card className="gap-0 overflow-hidden border-l-4 border-emerald-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Banknote className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Por dónde entraron</CardTitle>
+                                <CardDescription className="text-emerald-100">
+                                    Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-6 p-6">
                         {monedasConPagos.length > 0 ? (
                             monedasConPagos.map((moneda) => {
                                 const metodos = pagosPorMonedaYMetodo[moneda];
@@ -964,8 +922,24 @@ export default function Show({
                                 const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
 
                                 return (
-                                    <div key={moneda} className="space-y-2">
-                                        <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
+                                    <div key={moneda} className="space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-400/30 bg-emerald-500/5 px-4 py-3 backdrop-blur-sm dark:bg-emerald-500/10">
+                                            <div className="flex items-center gap-3">
+                                                {detalleMoneda?.moneda_imagen_url ? (
+                                                    <img src={detalleMoneda.moneda_imagen_url} alt={moneda} className="h-9 w-auto object-contain drop-shadow-md" />
+                                                ) : (
+                                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                                        <DollarSign className="h-5 w-5" />
+                                                    </span>
+                                                )}
+                                                <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 px-3 py-0.5 text-sm font-black text-white shadow-md shadow-emerald-500/30">
+                                                    {moneda}
+                                                </Badge>
+                                            </div>
+                                            <Badge className="border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
+                                                {cantidadMoneda} {cantidadMoneda === 1 ? 'venta' : 'ventas'} · {Number(totalMoneda).toFixed(2)} {moneda}
+                                            </Badge>
+                                        </div>
                                         <Table>
                                             <TableHeader>
                                                 <TableRow data-state="open:bg-muted/40">
@@ -996,23 +970,81 @@ export default function Show({
                                                         }
                                                         return etiquetaMetodo === etiqueta;
                                                     });
+                                                    const primeraOperacion = operacionesPorMetodo[0];
+                                                    const esEfectivoMetodo = primeraOperacion?.tipo_pago === 'efectivo';
 
                                                     return (
                                                         <CollapsibleRoot key={`${moneda}-${etiqueta}`} asChild>
                                                             <>
                                                                 <CollapsibleTrigger asChild>
                                                                     <TableRow className="hover:bg-muted/50 cursor-pointer">
-                                                                        <TableCell className="flex items-center gap-2 font-medium">
-                                                                            <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
-                                                                            {etiqueta}
+                                                                        <TableCell className="flex items-center gap-3 font-medium">
+                                                                            <ChevronDown className="collapsible-trigger-icon h-4 w-4 shrink-0 transition-transform" />
+                                                                            {esEfectivoMetodo ? (
+                                                                                primeraOperacion?.banco?.imagen_url || primeraOperacion?.moneda_imagen_url ? (
+                                                                                    <img
+                                                                                        src={primeraOperacion.banco?.imagen_url ?? primeraOperacion.moneda_imagen_url ?? ''}
+                                                                                        alt=""
+                                                                                        aria-hidden="true"
+                                                                                        className="h-8 w-auto max-w-14 object-contain"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                                                                        <Banknote className="h-4 w-4" />
+                                                                                    </span>
+                                                                                )
+                                                                            ) : (
+                                                                                <>
+                                                                                    {primeraOperacion?.via_info && (
+                                                                                        <ViaLogo
+                                                                                            slug={primeraOperacion.via_info.slug}
+                                                                                            nombre={primeraOperacion.via_info.nombre}
+                                                                                            imagenUrl={primeraOperacion.via_info.imagen_url}
+                                                                                            className="h-6"
+                                                                                        />
+                                                                                    )}
+                                                                                    {primeraOperacion?.banco?.imagen_url && primeraOperacion.banco.slug !== primeraOperacion.via_info?.slug ? (
+                                                                                        <img
+                                                                                            src={primeraOperacion.banco.imagen_url}
+                                                                                            alt={primeraOperacion.banco.nombre}
+                                                                                            className="h-8 w-auto max-w-14 rounded-sm object-contain shadow-sm"
+                                                                                        />
+                                                                                    ) : (
+                                                                                        !primeraOperacion?.via_info &&
+                                                                                        !primeraOperacion?.banco && (
+                                                                                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-400">
+                                                                                                <CreditCard className="h-4 w-4" />
+                                                                                            </span>
+                                                                                        )
+                                                                                    )}
+                                                                                </>
+                                                                            )}
+                                                                            <span className="flex flex-col gap-1">
+                                                                                <span>{etiqueta}</span>
+                                                                                <Badge
+                                                                                    className={
+                                                                                        esEfectivoMetodo
+                                                                                            ? 'w-fit border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300'
+                                                                                            : 'w-fit border border-sky-400/30 bg-sky-500/10 text-sky-700 backdrop-blur-sm dark:text-sky-300'
+                                                                                    }
+                                                                                >
+                                                                                    {esEfectivoMetodo ? 'Efectivo' : 'Transferencia'}
+                                                                                </Badge>
+                                                                            </span>
                                                                         </TableCell>
 
-                                                                        <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
+                                                                        <TableCell className="text-center">
+                                                                            <Badge className="border border-teal-400/30 bg-teal-500/10 px-2.5 font-mono font-bold text-teal-700 backdrop-blur-sm dark:text-teal-300">
+                                                                                {data.cantidad}
+                                                                            </Badge>
+                                                                        </TableCell>
 
                                                                         <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
 
-                                                                        <TableCell className="text-right font-mono font-medium text-green-600">
-                                                                            ${totalEquivalente.toFixed(2)}
+                                                                        <TableCell className="text-right">
+                                                                            <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 font-mono font-bold text-white shadow-md shadow-emerald-500/30">
+                                                                                ${totalEquivalente.toFixed(2)}
+                                                                            </Badge>
                                                                         </TableCell>
                                                                     </TableRow>
                                                                 </CollapsibleTrigger>
@@ -1057,18 +1089,30 @@ export default function Show({
                                                                                                     </div>
 
                                                                                                     <div className="flex items-center gap-4">
-                                                                                                        <span className="text-muted-foreground text-sm">
-                                                                                                            {operacion.cuenta_nombre
-                                                                                                                ? `Cuenta: ${operacion.cuenta_nombre}`
-                                                                                                                : ''}
-                                                                                                            {operacion.destino_nombre
-                                                                                                                ? ` - ${operacion.destino_nombre}`
-                                                                                                                : ''}
-                                                                                                        </span>
+                                                                                                        {operacion.cuenta_nombre ? (
+                                                                                                            <span className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/5 py-1 pr-3 pl-1.5 text-sm backdrop-blur-sm">
+                                                                                                                {operacion.banco?.imagen_url ? (
+                                                                                                                    <img
+                                                                                                                        src={operacion.banco.imagen_url}
+                                                                                                                        alt={operacion.banco.nombre}
+                                                                                                                        className="h-6 w-auto max-w-10 object-contain"
+                                                                                                                    />
+                                                                                                                ) : (
+                                                                                                                    <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                                                                                                )}
+                                                                                                                <span className="font-medium">{operacion.cuenta_nombre}</span>
+                                                                                                            </span>
+                                                                                                        ) : (
+                                                                                                            operacion.destino_nombre && (
+                                                                                                                <Badge className="border border-sky-400/30 bg-sky-500/10 text-sky-700 backdrop-blur-sm dark:text-sky-300">
+                                                                                                                    {operacion.destino_nombre}
+                                                                                                                </Badge>
+                                                                                                            )
+                                                                                                        )}
 
-                                                                                                        <span className="font-mono font-bold text-green-600">
+                                                                                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 font-mono font-bold text-white shadow-md shadow-emerald-500/30">
                                                                                                             ${Number(operacion.monto).toFixed(2)}
-                                                                                                        </span>
+                                                                                                        </Badge>
                                                                                                     </div>
                                                                                                 </div>
 
@@ -1103,6 +1147,9 @@ export default function Show({
                                                                                                                     </th>
                                                                                                                     <th className="px-2 py-1 text-right font-semibold">
                                                                                                                         Total
+                                                                                                                    </th>
+                                                                                                                    <th className="px-2 py-1 text-right font-semibold text-green-600">
+                                                                                                                        Entró
                                                                                                                     </th>
                                                                                                                     <th className="w-10"></th>
                                                                                                                 </tr>
@@ -1152,6 +1199,12 @@ export default function Show({
                                                                                                                                     prod.total,
                                                                                                                                 ).toFixed(2)}
                                                                                                                             </td>
+                                                                                                                            <td className="px-2 py-1 text-right font-mono font-medium text-green-600">
+                                                                                                                                $
+                                                                                                                                {Number(
+                                                                                                                                    operacion.monto,
+                                                                                                                                ).toFixed(2)}
+                                                                                                                            </td>
                                                                                                                             <td className="px-2 py-1 text-center">
                                                                                                                                 <Button
                                                                                                                                     variant="ghost"
@@ -1199,12 +1252,18 @@ export default function Show({
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="font-bold">Total {moneda}</TableCell>
-                                                    <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge className="border-0 bg-gradient-to-r from-teal-500 to-teal-600 px-3 font-mono font-black text-white shadow-md shadow-teal-500/30">
+                                                            {cantidadMoneda}
+                                                        </Badge>
+                                                    </TableCell>
                                                     <TableCell className="text-right font-mono font-bold">
                                                         {Number(totalMoneda).toFixed(2)} {moneda}
                                                     </TableCell>
-                                                    <TableCell className="text-right font-mono font-bold text-green-600">
-                                                        ${totalEquivalenteMoneda.toFixed(2)}
+                                                    <TableCell className="text-right">
+                                                        <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 px-3 font-mono text-base font-black text-white shadow-md shadow-emerald-500/30">
+                                                            ${totalEquivalenteMoneda.toFixed(2)}
+                                                        </Badge>
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
@@ -1218,509 +1277,358 @@ export default function Show({
                     </CardContent>
                 </Card>
 
+                {/* Movimientos Financieros */}
                 <div className="space-y-2">
                     <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
-                    <div className="grid grid-cols-4 gap-2">
-                        <Card className="border-red-200 bg-red-500/5">
-                            <CardContent className="p-3 text-center">
-                                <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
-                                <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)} USD</p>
-                                <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                    <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${operaciones_multiples?.visible ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}>
+                        <SpotlightCard
+                            estado="agotado"
+                            className="rounded-xl border border-red-400/30 bg-red-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-red-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-md shadow-red-500/30">
+                                    <ArrowUp className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Gastos</p>
+                                    <p className="text-2xl font-black text-red-600 dark:text-red-400">${Number(totalGastos).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-red-400/30 bg-red-500/10 text-red-700 backdrop-blur-sm dark:text-red-300">USD</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-red-500 to-rose-600 shadow-md shadow-red-500/30">{todosGastos.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
 
-                        <Card className="border-green-200 bg-green-500/5">
-                            <CardContent className="p-3 text-center">
-                                <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
-                                <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)} USD</p>
-                                <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                        <SpotlightCard
+                            estado="disponible"
+                            className="rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-emerald-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-md shadow-emerald-500/30">
+                                    <ArrowDown className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Ingresos</p>
+                                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${Number(totalIngresos).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-emerald-400/30 bg-emerald-500/10 text-emerald-700 backdrop-blur-sm dark:text-emerald-300">USD</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-green-600 shadow-md shadow-emerald-500/30">{todosIngresos.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
 
-                        <Card className="border-blue-200 bg-blue-500/5">
-                            <CardContent className="p-3 text-center">
-                                <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
-                                <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)} USD</p>
-                                <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                        <SpotlightCard
+                            estado="tarjeta"
+                            className="rounded-xl border border-blue-400/30 bg-blue-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-blue-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/30">
+                                    <TrendingUp className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Transferencias</p>
+                                    <p className="text-2xl font-black text-blue-600 dark:text-blue-400">${Number(totalTransferencias).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-blue-400/30 bg-blue-500/10 text-blue-700 backdrop-blur-sm dark:text-blue-300">USD</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md shadow-blue-500/30">{todasTransferencias.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
 
-                        <Card className="border-purple-200 bg-purple-500/5">
-                            <CardContent className="p-3 text-center">
-                                <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
-                                <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
-                                <div className="space-y-0.5">
+                        <SpotlightCard
+                            estado="global"
+                            className="rounded-xl border border-purple-400/30 bg-purple-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-purple-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-violet-600 text-white shadow-md shadow-purple-500/30">
+                                    <Briefcase className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Gestores</p>
                                     {comisionesGestorDetalles.length > 0 ? (
                                         Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
-                                            <p key={moneda} className="text-lg font-bold text-purple-700">
-                                                -${Number(data.total).toFixed(2)} {moneda}
+                                            <p key={moneda} className="text-2xl leading-tight font-black text-purple-600 dark:text-purple-400">
+                                                -${Number(data.total).toFixed(2)} <span className="text-sm font-bold">{moneda}</span>
                                             </p>
                                         ))
                                     ) : (
-                                        <p className="text-lg font-bold text-purple-700">$0.00</p>
+                                        <p className="text-2xl font-black text-purple-600 dark:text-purple-400">$0.00</p>
                                     )}
                                 </div>
-                                <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
-                            </CardContent>
-                        </Card>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                                <Badge className="border border-purple-400/30 bg-purple-500/10 text-purple-700 backdrop-blur-sm dark:text-purple-300">Comisión</Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-purple-500 to-violet-600 shadow-md shadow-purple-500/30">{comisionesGestorDetalles.length} oper.</Badge>
+                            </div>
+                        </SpotlightCard>
+
+                        {/* En tránsito: lo que quedó guardado al cerrar. Los cierres anteriores a guardarlo no lo tienen. */}
+                        <SpotlightCard
+                            estado="especial"
+                            className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-amber-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/30">
+                                    <Truck className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">En tránsito al cerrar</p>
+                                    {!envios_guardados ? (
+                                        <p className="text-muted-foreground text-sm font-medium italic">No se guardó en este cierre</p>
+                                    ) : (envios_en_transito?.resumen?.montos ?? []).length > 0 ? (
+                                        (envios_en_transito?.resumen?.montos ?? []).map(({ moneda, monto }) => (
+                                            <p key={moneda} className="text-2xl leading-tight font-black text-amber-600 dark:text-amber-400">
+                                                ${Number(monto).toFixed(2)} <span className="text-sm font-bold">{moneda}</span>
+                                            </p>
+                                        ))
+                                    ) : (
+                                        <p className="text-2xl font-black text-amber-600 dark:text-amber-400">$0.00</p>
+                                    )}
+                                </div>
+                            </div>
+                            {envios_guardados && (
+                                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                    <Badge className="border-0 bg-gradient-to-r from-amber-500 to-orange-600 shadow-md shadow-amber-500/30">
+                                        {enviosGuardadosTotal} {enviosGuardadosTotal === 1 ? 'envío' : 'envíos'}
+                                    </Badge>
+                                    {enviosGuardadosAtrasados > 0 && (
+                                        <Badge className="border border-red-400/40 bg-red-500/15 text-red-700 backdrop-blur-sm dark:text-red-300">
+                                            {enviosGuardadosAtrasados} atrasado{enviosGuardadosAtrasados === 1 ? '' : 's'}
+                                        </Badge>
+                                    )}
+                                </div>
+                            )}
+                        </SpotlightCard>
+
+                        {operaciones_multiples?.visible && (
+                            <SpotlightCard
+                                estado="indigo"
+                                className="rounded-xl border border-cyan-400/30 bg-cyan-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-cyan-500/10"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-sky-600 text-white shadow-md shadow-cyan-500/30">
+                                        <Shuffle className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Op. Múltiples</p>
+                                        <p className="text-2xl font-black text-cyan-600 dark:text-cyan-400">{operaciones_multiples.resumen.total}</p>
+                                    </div>
+                                </div>
+                                <div className="mt-3 space-y-1 text-xs">
+                                    {operaciones_multiples.resumen.entradas.map(({ moneda, monto }) => (
+                                        <p key={`e-${moneda}`} className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                            Entró +${Number(monto).toFixed(2)} {moneda}
+                                        </p>
+                                    ))}
+                                    {operaciones_multiples.resumen.salidas.map(({ moneda, monto }) => (
+                                        <p key={`s-${moneda}`} className="font-mono font-bold text-red-600 dark:text-red-400">
+                                            Salió -${Number(monto).toFixed(2)} {moneda}
+                                        </p>
+                                    ))}
+                                    <div className="flex justify-end pt-1">
+                                        <Badge className="border-0 bg-gradient-to-r from-cyan-500 to-sky-600 shadow-md shadow-cyan-500/30">
+                                            {operaciones_multiples.resumen.total} oper.
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </SpotlightCard>
+                        )}
+
+                        <SpotlightCard
+                            estado="sin-comision"
+                            className="rounded-xl border border-pink-400/30 bg-pink-500/5 p-4 shadow-sm backdrop-blur-sm dark:bg-pink-500/10"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/30">
+                                    <Undo2 className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Devueltas</p>
+                                    <p className="text-2xl font-black text-pink-600 dark:text-pink-400">
+                                        ${Number(ventas_devueltas_total_usd).toFixed(2)} <span className="text-sm font-bold">USD</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                <Badge className="border border-pink-400/30 bg-pink-500/10 font-mono text-pink-700 dark:text-pink-300">
+                                    {ventas_devueltas_detalles
+                                        .slice(0, 3)
+                                        .map((v) => `#${v.venta_id}`)
+                                        .join(' ') || 'Ninguna'}
+                                    {ventas_devueltas_detalles.length > 3 ? ' …' : ''}
+                                </Badge>
+                                <Badge className="border-0 bg-gradient-to-r from-pink-500 to-rose-600 shadow-md shadow-pink-500/30">
+                                    {ventas_devueltas_count} {ventas_devueltas_count === 1 ? 'venta' : 'ventas'}
+                                </Badge>
+                            </div>
+                        </SpotlightCard>
                     </div>
                 </div>
 
-                {/* Transacciones del Turno: Gastos, Ingresos, Transferencias — propias y externas, unificado */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Transacciones del Turno
-                        </CardTitle>
-                        <CardDescription>
-                            Gastos, ingresos y transferencias del turno — propias y de otros usuarios sobre las cuentas de {cierre.usuario?.name || 'este vendedor'}. Las filas resaltadas son de otros usuarios.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="relative">
-                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                            <Input
-                                placeholder="Buscar en transacciones..."
-                                value={busquedaTransacciones}
-                                onChange={(e) => setBusquedaTransacciones(e.target.value)}
-                                className="pl-9"
-                            />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4">
-                            <div className="flex flex-wrap items-center gap-1">
-                                <span className="text-muted-foreground mr-1 text-xs font-medium">Origen:</span>
-                                {(['todas', 'propias', 'externas'] as const).map((opt) => (
-                                    <Button
-                                        key={opt}
-                                        variant={filtroOrigenTransacciones === opt ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => setFiltroOrigenTransacciones(opt)}
-                                        className="h-7 text-xs"
-                                    >
-                                        {opt === 'todas' ? 'Todas' : opt === 'propias' ? 'Internas' : 'Externas'}
-                                    </Button>
-                                ))}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1">
-                                <span className="text-muted-foreground mr-1 text-xs font-medium">Moneda:</span>
-                                {monedasTransacciones.map((m) => (
-                                    <Button
-                                        key={m}
-                                        variant={filtroMonedaTransacciones === m ? 'default' : 'outline'}
-                                        size="sm"
-                                        onClick={() => setFiltroMonedaTransacciones(m)}
-                                        className="h-7 text-xs"
-                                    >
-                                        {m === 'todas' ? 'Todas' : m}
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
+                {/* Turnos de este cierre: quién atendió ("Atendido por") y qué movió cada uno */}
+                <TarjetaTurnos turnos={turnos} nota={turno_cierre ? `Cerró el cierre: ${turno_cierre}.` : undefined} />
 
-                        <Tabs defaultValue="gastos" className="w-full">
-                            <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="gastos">Gastos ({gastosFiltrados.length})</TabsTrigger>
-                                <TabsTrigger value="ingresos">Ingresos ({ingresosFiltrados.length})</TabsTrigger>
-                                <TabsTrigger value="transferencias">Transferencias ({transferenciasFiltradas.length})</TabsTrigger>
-                            </TabsList>
-
-                            <TabsContent value="gastos" className="mt-4">
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-16">Hora</TableHead>
-                                                <TableHead>Descripción</TableHead>
-                                                <TableHead>Cuenta de Operación</TableHead>
-                                                <TableHead className="w-28">Creado por</TableHead>
-                                                <TableHead className="w-28 text-right">Monto</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {gastosFiltrados.length > 0 ? (
-                                                gastosFiltrados.map((item, idx) => (
-                                                    <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
-                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
-                                                        <TableCell className="text-xs">
-                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
-                                                        {busquedaTransacciones || filtroOrigenTransacciones !== 'todas' || filtroMonedaTransacciones !== 'todas'
-                                                            ? 'No se encontraron resultados con los filtros aplicados'
-                                                            : 'No hay gastos registrados en este turno.'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="ingresos" className="mt-4">
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-16">Hora</TableHead>
-                                                <TableHead>Descripción</TableHead>
-                                                <TableHead>Cuenta de Operación</TableHead>
-                                                <TableHead className="w-28">Creado por</TableHead>
-                                                <TableHead className="w-28 text-right">Monto</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {ingresosFiltrados.length > 0 ? (
-                                                ingresosFiltrados.map((item, idx) => (
-                                                    <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
-                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
-                                                        <TableCell className="text-xs">
-                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-green-600">
-                                                            +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
-                                                        {busquedaTransacciones || filtroOrigenTransacciones !== 'todas' || filtroMonedaTransacciones !== 'todas'
-                                                            ? 'No se encontraron resultados con los filtros aplicados'
-                                                            : 'No hay ingresos registrados en este turno.'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="transferencias" className="mt-4">
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-16">Hora</TableHead>
-                                                <TableHead className="max-w-[160px]">Descripción</TableHead>
-                                                <TableHead className="w-[170px]">Origen</TableHead>
-                                                <TableHead className="w-[170px]">Destino</TableHead>
-                                                <TableHead className="w-28">Creado por</TableHead>
-                                                <TableHead className="w-40 text-right">Monto</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {transferenciasFiltradas.length > 0 ? (
-                                                transferenciasFiltradas.map((item, idx) => {
-                                                    const tEfectivo = tipoEfectivoTransferencia(item);
-                                                    return (
-                                                    <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
-                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="max-w-[160px] truncate text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[170px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
-                                                                <span className="capitalize">{item.origen_tipo}:</span> {item.origen_nombre}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[170px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
-                                                                <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-xs">
-                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono text-xs">
-                                                            <div>
-                                                                <span className={tEfectivo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
-                                                                    {tEfectivo === 'entrante' ? '+' : '-'}${Number(tEfectivo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
-                                                                    {tEfectivo === 'entrante' ? item.moneda_destino : item.moneda_origen}
-                                                                </span>
-                                                                {(item.moneda_origen ?? item.moneda_destino) && item.moneda_origen !== item.moneda_destino && (
-                                                                    <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
-                                                                        ≈ ${Number(tEfectivo === 'entrante' ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
-                                                                        {tEfectivo === 'entrante' ? item.moneda_origen : item.moneda_destino}
-                                                                        <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                    );
-                                                })
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
-                                                        {busquedaTransacciones || filtroOrigenTransacciones !== 'todas' || filtroMonedaTransacciones !== 'todas'
-                                                            ? 'No se encontraron resultados con los filtros aplicados'
-                                                            : 'No hay transferencias registradas en este turno.'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </TabsContent>
-                        </Tabs>
-                    </CardContent>
-                </Card>
+                {/* Transacciones del Turno: Gastos, Ingresos, Transferencias, envíos en tránsito y Op. Múltiples */}
+                <TarjetaTransaccionesTurno
+                    gastos={todosGastos}
+                    ingresos={todosIngresos}
+                    transferencias={todasTransferencias}
+                    enviosEnviados={envios_en_transito?.enviados ?? []}
+                    enviosPorRecibir={envios_en_transito?.por_recibir ?? []}
+                    operacionesMultiples={operaciones_multiples}
+                    descripcion={`Gastos, ingresos y transferencias del turno — propias y de otros usuarios sobre las cuentas de ${cierre.usuario?.name || 'este vendedor'}. Las filas resaltadas son de otros usuarios.`}
+                    etiquetaPropio={userRole === 'vendedor' ? 'Tú' : cierre.usuario?.name || 'Dueño del cierre'}
+                    cierreGuardado
+                    enviosGuardados={envios_guardados}
+                />
 
                 {/* Comparativa con Cierre Anterior */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Comparativa con Cierre Anterior
-                        </CardTitle>
-                        <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <Tabs defaultValue="cuentas" className="w-full">
-                            <TabsList className={`grid w-full ${userRole !== 'vendedor' ? 'grid-cols-2' : ''}`}>
-                                <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas?.length ?? 0})</TabsTrigger>
-                                {userRole !== 'vendedor' && (
-                                    <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
-                                )}
-                            </TabsList>
-
-                            <TabsContent value="cuentas" className="mt-4">
-                                {!tiene_cierre_anterior && comparativa_cuentas.length > 0 && (
-                                    <p className="text-muted-foreground mb-2 text-xs italic">
-                                        Primer cierre: estos son los saldos iniciales actuales.
-                                    </p>
-                                )}
-                                <Accordion type="single" collapsible>
-                                    <AccordionItem value="cuentas">
-                                        <AccordionTrigger className="text-sm font-semibold">
-                                            Cuentas ({cuentasFiltradas.length})
-                                        </AccordionTrigger>
-                                        <AccordionContent>
-                                            <div className="space-y-3">
-                                                <div className="relative">
-                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                                    <Input
-                                                        placeholder="Buscar cuenta..."
-                                                        value={busquedaCuentas}
-                                                        onChange={(e) => setBusquedaCuentas(e.target.value)}
-                                                        className="pl-9"
-                                                    />
-                                                </div>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {tiposUnicos.map(tipo => (
-                                                        <Button
-                                                            key={tipo}
-                                                            variant={filtroTipoCuentas === tipo ? 'default' : 'outline'}
-                                                            size="sm"
-                                                            onClick={() => setFiltroTipoCuentas(tipo)}
-                                                            className="text-xs capitalize"
-                                                        >
-                                                            {tipo === 'todos' ? 'Todos' : tipo}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Cuenta</TableHead>
-                                                                <TableHead>Tipo</TableHead>
-                                                                <TableHead>Moneda</TableHead>
-                                                                <TableHead className="text-right">Cierre Anterior</TableHead>
-                                                                <TableHead className="text-right">Cierre Hoy</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {cuentasFiltradas.length > 0 ? (
-                                                                cuentasFiltradas.map((item: ComparativaItem) => (
-                                                                    <TableRow key={item.id}>
-                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                                        <TableCell>
-                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                                                                                {item.tipo === 'efectivo' ? 'Efectivo' : item.tipo === 'tarjeta' ? 'Tarjeta' : item.tipo || '-'}
-                                                                            </span>
-                                                                        </TableCell>
-                                                                        <TableCell>
-                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right font-mono">
-                                                                            ${Number(item.saldo_anterior).toFixed(2)}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right font-mono font-medium">
-                                                                            ${Number(item.saldo_actual).toFixed(2)}
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                ))
-                                                            ) : (
-                                                                <TableRow>
-                                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
-                                                                        {busquedaCuentas || filtroTipoCuentas !== 'todos'
-                                                                            ? 'No se encontraron cuentas con los filtros aplicados'
-                                                                            : !tiene_cierre_anterior
-                                                                              ? 'No hay cierre anterior para comparar'
-                                                                              : 'No hay cuentas para mostrar'}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            )}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
-                            </TabsContent>
-
-                            {userRole !== 'vendedor' && (
-                            <TabsContent value="clientes" className="mt-4">
-                                <Accordion type="single" collapsible>
-                                    <AccordionItem value="clientes">
-                                        <AccordionTrigger className="text-sm font-semibold">
-                                            Clientes ({clientesFiltrados.length})
-                                        </AccordionTrigger>
-                                        <AccordionContent>
-                                            <div className="space-y-3">
-                                                <div className="relative">
-                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                                    <Input
-                                                        placeholder="Buscar cliente..."
-                                                        value={busquedaClientes}
-                                                        onChange={(e) => setBusquedaClientes(e.target.value)}
-                                                        className="pl-9"
-                                                    />
-                                                </div>
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Cliente</TableHead>
-                                                                <TableHead className="text-right">Deuda Anterior</TableHead>
-                                                                <TableHead className="text-right">Deuda Actual</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {clientesFiltrados.length > 0 ? (
-                                                                clientesFiltrados.map((item: ComparativaClienteItem) => (
-                                                                    <TableRow key={item.id}>
-                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                                        <TableCell className="text-right font-mono">
-                                                                            ${Number(item.deuda_anterior).toFixed(2)}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-right font-mono font-medium">
-                                                                            ${Number(item.deuda_actual).toFixed(2)}
-                                                                        </TableCell>
-                                                                    </TableRow>
-                                                                ))
-                                                            ) : (
-                                                                <TableRow>
-                                                                    <TableCell colSpan={3} className="text-muted-foreground py-8 text-center italic">
-                                                                        {busquedaClientes
-                                                                            ? 'No se encontraron clientes con los filtros aplicados'
-                                                                            : 'No hay clientes con deuda registrada.'}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            )}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            </div>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                </Accordion>
-                            </TabsContent>
-                            )}
-                        </Tabs>
-                    </CardContent>
-                </Card>
+                <TarjetaComparativa
+                    cuentas={comparativa_cuentas}
+                    cuentasCobro={comparativa_cuentas_cobro}
+                    clientes={comparativa_clientes}
+                    tieneCierreAnterior={tiene_cierre_anterior}
+                    verClientes={userRole !== 'vendedor'}
+                    cierreGuardado
+                />
 
                 <Card className="border-primary/20 bg-primary/5">
                     <CardHeader>
                         <CardTitle className="text-sm font-bold tracking-wider uppercase">Resumen del Cierre</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="border-primary bg-primary/10 rounded-lg border p-4">
-                            <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Total de Ventas del Turno</p>
-                            <p className="text-4xl font-black text-emerald-600">${Number(totalVentasProductos).toFixed(2)}</p>
-                            <p className="text-muted-foreground mt-2 text-xs">Total real de productos vendidos</p>
-                        </div>
+                        {/* Total de Venta — ícono/etiqueta a un lado, el número protagonista al otro */}
+                        <SpotlightCard estado="disponible" className="border-primary/30 bg-primary/5 relative overflow-hidden rounded-lg border p-4 shadow-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="bg-primary/15 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
+                                            <ShoppingCart className="h-4.5 w-4.5" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Total de Ventas del Turno</p>
+                                    </div>
+                                    <p className="text-muted-foreground mt-2 text-sm">Total real de productos vendidos</p>
+                                </div>
+                                <p className="text-5xl font-black text-emerald-600">${Number(totalVentasProductos).toFixed(2)}</p>
+                            </div>
+                        </SpotlightCard>
 
-                        <div className="grid grid-cols-3 gap-3">
+                        {/* Widgets: Comisión PV, Comisión Gestor, Ganancia Agencia, Especiales, Sin Comisión —
+                            flex-wrap en vez de grid-cols fijo: con 3 a 5 widgets activos se acomodan solos. */}
+                        <div className="flex flex-wrap gap-3">
                             {/* Comisión Punto de Venta — todos los roles */}
-                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:bg-blue-900/20">
-                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión P.V.</p>
-                                <p className="text-xl font-black text-blue-700 dark:text-blue-300">
-                                    ${Number(comision_pv_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="mt-0.5 text-xs text-blue-500 dark:text-blue-400">
-                                    {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                </p>
+                            <SpotlightCard estado="tarjeta" className="min-w-[220px] flex-1 rounded-lg border border-blue-400/30 bg-blue-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-blue-500/10">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                                        <Store className="h-4 w-4" />
+                                    </span>
+                                    <p className="text-muted-foreground text-xs font-bold uppercase">Comisión P.V.</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-blue-500 to-blue-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-blue-500/30">
+                                        ${Number(comision_pv_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </Badge>
+                                    <Badge className="gap-1 border border-blue-400/30 bg-blue-500/10 text-sm font-semibold text-blue-700 backdrop-blur-sm dark:text-blue-300">
+                                        {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                    </Badge>
+                                </div>
                                 {comisiones_pv_detalles.length > 0 && (
                                     <button onClick={() => setShowComisionPVDialog(true)} className="mt-1 text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400">
                                         Ver detalles
                                     </button>
                                 )}
-                            </div>
+                            </SpotlightCard>
 
                             {/* Comisión Gestor — todos los roles */}
-                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 dark:bg-purple-900/20">
-                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión Gestor</p>
-                                <p className="text-xl font-black text-purple-700 dark:text-purple-300">
-                                    ${Number(comision_gestor_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                                <p className="mt-0.5 text-xs text-purple-500 dark:text-purple-400">
-                                    {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                </p>
+                            <SpotlightCard estado="global" className="min-w-[220px] flex-1 rounded-lg border border-purple-400/30 bg-purple-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-purple-500/10">
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                                        <HandCoins className="h-4 w-4" />
+                                    </span>
+                                    <p className="text-muted-foreground text-xs font-bold uppercase">Comisión Gestor</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-purple-500 to-purple-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-purple-500/30">
+                                        ${Number(comision_gestor_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </Badge>
+                                    <Badge className="gap-1 border border-purple-400/30 bg-purple-500/10 text-sm font-semibold text-purple-700 backdrop-blur-sm dark:text-purple-300">
+                                        {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                    </Badge>
+                                </div>
                                 {comisionesGestorDetalles.length > 0 && (
                                     <button onClick={() => setShowComisionGestorDialog(true)} className="mt-1 text-xs text-purple-600 underline hover:text-purple-800 dark:text-purple-400">
                                         Ver detalles
                                     </button>
                                 )}
-                            </div>
+                            </SpotlightCard>
 
-                            {/* Ganancia Agencia — solo admin */}
+                            {/* Ganancia Agencia — solo admin — efecto metálico, es el dato que más le importa al dueño */}
                             {userRole === 'admin' && (
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:bg-emerald-900/20">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ganancia Agencia</p>
-                                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-300">
+                                <SpotlightCard estado="especial" className="min-w-[220px] flex-1 rounded-lg border border-amber-300/40 bg-amber-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-amber-500/10">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                            <TrendingUp className="h-4 w-4" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Ganancia Agencia</p>
+                                    </div>
+                                    <Badge className="gap-1 border border-amber-200 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-300 px-3 py-1 text-2xl font-black text-amber-950 shadow-md shadow-amber-500/40 transition-transform hover:scale-105">
                                         ${Number(ganancia_agencia_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </p>
-                                    <p className="text-muted-foreground mt-1 text-xs">Neto agencia</p>
-                                </div>
+                                    </Badge>
+                                    <p className="text-muted-foreground mt-1.5 text-sm">Neto agencia</p>
+                                </SpotlightCard>
                             )}
 
                             {/* Ventas Especiales — si hubo en el turno */}
                             {ventas_especiales_count > 0 && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Especiales</p>
-                                    <p className="text-xl font-black text-amber-700 dark:text-amber-300">
+                                <SpotlightCard estado="especial" className="min-w-[220px] flex-1 rounded-lg border border-amber-400/30 bg-amber-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-amber-500/10">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                            <AlertTriangle className="h-4 w-4" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Ventas Especiales</p>
+                                    </div>
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-amber-500/30">
                                         {ventas_especiales_count} venta{ventas_especiales_count > 1 ? 's' : ''}
-                                    </p>
+                                    </Badge>
                                     {canViewEspecialesCostImpact && (
-                                        <p className={`mt-1 text-xs font-semibold ${ventas_especiales_impacto_usd < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                                        <p className={`mt-1.5 text-sm font-semibold ${ventas_especiales_impacto_usd < 0 ? 'text-red-600' : 'text-amber-600'}`}>
                                             Impacto: ${Number(ventas_especiales_impacto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                         </p>
                                     )}
-                                </div>
+                                </SpotlightCard>
                             )}
 
-                            {/* Resumen Financiero del Turno */}
+                            {/* Ventas sin comisión (de la agencia) — si hubo en el turno */}
+                            {ventas_sin_comision_count > 0 && (
+                                <SpotlightCard estado="sin-comision" className="min-w-[220px] flex-1 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/5 p-3 shadow-sm backdrop-blur-sm dark:bg-fuchsia-500/10">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400">
+                                            <Building2 className="h-4 w-4" />
+                                        </span>
+                                        <p className="text-muted-foreground text-xs font-bold uppercase">Ventas sin Comisión</p>
+                                    </div>
+                                    <Badge className="gap-1 border-0 bg-gradient-to-r from-fuchsia-500 to-fuchsia-600 px-3 py-1 text-2xl font-black text-white shadow-md shadow-fuchsia-500/30">
+                                        {ventas_sin_comision_count} venta{ventas_sin_comision_count > 1 ? 's' : ''}
+                                    </Badge>
+                                    {canViewEspecialesCostImpact && (
+                                        <p className="mt-1.5 text-sm font-semibold text-fuchsia-600">
+                                            Impacto: ${Number(ventas_sin_comision_impacto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                        </p>
+                                    )}
+                                </SpotlightCard>
+                            )}
+                        </div>
+
+                        {/* Resumen Financiero del Turno + resumen de Ventas sin Comisión — en la misma fila
+                            (el detalle completo de ventas sin comisión vive en un modal, como Comisión P.V./Gestor/Anuladas/Mensajería). */}
+                        <div className="flex flex-wrap gap-3">
                             {userRole !== 'vendedor' && ventas_brutas_usd > 0 && (
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950">
+                                <SpotlightCard estado="disponible" className="min-w-[280px] flex-1 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950">
                                     <p className="text-muted-foreground mb-2 text-xs font-bold uppercase">Resumen Financiero del Turno</p>
-                                    <div className="space-y-1.5 text-xs">
+                                    <div className="space-y-2 text-base">
                                         <div className="flex items-center justify-between">
                                             <span className="text-emerald-700 dark:text-emerald-400">Ventas brutas</span>
                                             <span className="font-semibold text-emerald-800 dark:text-emerald-200">
@@ -1748,65 +1656,89 @@ export default function Show({
                                                 </span>
                                             </div>
                                         )}
-                                        <div className="mt-1.5 flex items-center justify-between border-t border-emerald-200 pt-1.5 dark:border-emerald-700">
+                                        <div className="mt-2 flex items-center justify-between border-t border-emerald-200 pt-2 dark:border-emerald-700">
                                             <span className="font-bold text-emerald-800 dark:text-emerald-200">Ganancia neta agencia</span>
-                                            <span className="font-black text-emerald-700 dark:text-emerald-300">
+                                            <span className="text-xl font-black text-emerald-700 dark:text-emerald-300">
                                                 ${Number(ganancia_agencia_total).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                             </span>
                                         </div>
                                     </div>
-                                </div>
+                                </SpotlightCard>
                             )}
 
-                            {/* Mensajería del turno */}
-                            {mensajero_count > 0 && (
-                                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Mensajería del Turno</p>
-                                    <p className="text-xl font-black text-sky-700 dark:text-sky-300">
-                                        {Number(mensajero_total_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                            {/* Ventas sin comisión — resumen compacto, detalle completo en el modal */}
+                            {ventas_sin_comision_count > 0 && (
+                                <SpotlightCard estado="sin-comision" className="min-w-[220px] flex-1 rounded-lg border border-fuchsia-300 bg-fuchsia-100 p-3 dark:border-fuchsia-800 dark:bg-fuchsia-950">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas sin Comisión</p>
+                                    <p className="text-xl font-black text-fuchsia-700 dark:text-fuchsia-300">
+                                        {ventas_sin_comision_count} venta{ventas_sin_comision_count > 1 ? 's' : ''}
                                     </p>
-                                    <p className="mt-1 text-xs text-sky-600 dark:text-sky-400">
-                                        ≈ ${Number(mensajero_total_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD · {mensajero_count} entrega{mensajero_count > 1 ? 's' : ''}
+                                    <p className="mt-1 text-sm font-semibold text-fuchsia-600 dark:text-fuchsia-400">
+                                        Cobrado: ${Number(ventas_sin_comision_total_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                     </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Ya descontado del saldo esperado (pass-through)
-                                    </p>
+                                    {canViewEspecialesCostImpact && (
+                                        <p className={`text-sm font-semibold ${ventas_sin_comision_impacto_usd < 0 ? 'text-red-600' : 'text-fuchsia-600 dark:text-fuchsia-400'}`}>
+                                            Impacto: ${Number(ventas_sin_comision_impacto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                        </p>
+                                    )}
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="mt-2 h-7 border-sky-300 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300"
-                                        onClick={() => setShowMensajeriaDialog(true)}
-                                    >
-                                        Ver entregas
-                                    </Button>
-                                </div>
-                            )}
-
-                            {/* Ventas Anuladas — si hubo en el turno */}
-                            {ventas_anuladas_count > 0 && (
-                                <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Anuladas</p>
-                                    <p className="text-xl font-black text-red-700 dark:text-red-300">
-                                        {ventas_anuladas_count} venta{ventas_anuladas_count > 1 ? 's' : ''}
-                                    </p>
-                                    <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                                        Valor: ${Number(ventas_anuladas_total_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
-                                    </p>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="mt-2 h-7 border-red-300 text-xs text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300"
-                                        onClick={() => setShowAnuladasDialog(true)}
+                                        className="mt-2 h-7 border-fuchsia-400 text-xs text-fuchsia-700 hover:bg-fuchsia-200 dark:border-fuchsia-700 dark:text-fuchsia-300"
+                                        onClick={() => setShowVentasSinComisionDialog(true)}
                                     >
                                         Ver detalles
                                     </Button>
-                                </div>
+                                </SpotlightCard>
                             )}
                         </div>
 
+                        {/* Mensajería del turno — informativo */}
+                        {mensajero_count > 0 && (
+                            <SpotlightCard estado="tarjeta" className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Mensajería del Turno</p>
+                                <p className="text-xl font-black text-sky-700 dark:text-sky-300">
+                                    {Number(mensajero_total_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                                <p className="mt-1 text-sm text-sky-600 dark:text-sky-400">
+                                    ≈ ${Number(mensajero_total_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD · {mensajero_count} entrega{mensajero_count > 1 ? 's' : ''}
+                                </p>
+                                <p className="text-muted-foreground mt-1 text-xs">Ya descontado del saldo esperado (pass-through)</p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 border-sky-300 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300"
+                                    onClick={() => setShowMensajeriaDialog(true)}
+                                >
+                                    Ver entregas
+                                </Button>
+                            </SpotlightCard>
+                        )}
+
+                        {/* Ventas Anuladas — tarjeta resumen */}
+                        {ventas_anuladas_count > 0 && (
+                            <SpotlightCard estado="agotado" className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Anuladas</p>
+                                <p className="text-xl font-black text-red-700 dark:text-red-300">
+                                    {ventas_anuladas_count} venta{ventas_anuladas_count > 1 ? 's' : ''}
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-red-600 dark:text-red-400">
+                                    Valor: ${Number(ventas_anuladas_total_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 border-red-300 text-xs text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300"
+                                    onClick={() => setShowAnuladasDialog(true)}
+                                >
+                                    Ver detalles
+                                </Button>
+                            </SpotlightCard>
+                        )}
+
                         {/* Detalle de ventas especiales del turno */}
                         {ventas_especiales_count > 0 && (
-                            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                            <SpotlightCard estado="especial" className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
                                 <p className="mb-3 text-sm font-bold text-amber-800 dark:text-amber-200">
                                     Ventas Especiales del Turno ({ventas_especiales_count})
                                 </p>
@@ -1857,7 +1789,82 @@ export default function Show({
                                         </>
                                     )}
                                 </div>
-                            </div>
+                            </SpotlightCard>
+                        )}
+
+                        {/* Dialog detalle Ventas sin Comisión */}
+                        {ventas_sin_comision_count > 0 && (
+                            <Dialog open={showVentasSinComisionDialog} onOpenChange={setShowVentasSinComisionDialog}>
+                                <DialogContent className="sm:max-w-2xl">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-fuchsia-700 dark:text-fuchsia-300">Ventas sin Comisión del Turno</DialogTitle>
+                                        <DialogDescription>
+                                            Total cobrado: <strong>${Number(ventas_sin_comision_total_usd).toFixed(2)} USD</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-[80px] text-xs">Venta</TableHead>
+                                                    <TableHead className="text-xs">Fecha</TableHead>
+                                                    <TableHead className="text-right text-xs">Cobrado</TableHead>
+                                                    {canViewEspecialesCostImpact && (
+                                                        <>
+                                                            <TableHead className="text-right text-xs">Costo</TableHead>
+                                                            <TableHead className="text-right text-xs">Impacto</TableHead>
+                                                        </>
+                                                    )}
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {ventas_sin_comision_detalles.map((vsc) => (
+                                                    <TableRow key={vsc.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{vsc.venta_id}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{vsc.fecha}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-fuchsia-700 dark:text-fuchsia-300">
+                                                            ${vsc.total.toFixed(2)}
+                                                        </TableCell>
+                                                        {canViewEspecialesCostImpact && (
+                                                            <>
+                                                                <TableCell className="text-right text-xs text-red-600 dark:text-red-400">
+                                                                    ${Number(vsc.costo ?? 0).toFixed(2)}
+                                                                </TableCell>
+                                                                <TableCell
+                                                                    className={`text-right text-xs font-bold ${(vsc.impacto ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-fuchsia-700 dark:text-fuchsia-300'}`}
+                                                                >
+                                                                    ${Number(vsc.impacto ?? 0).toFixed(2)}
+                                                                </TableCell>
+                                                            </>
+                                                        )}
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell />
+                                                    <TableCell className="text-right text-xs font-bold text-fuchsia-700 dark:text-fuchsia-300">
+                                                        ${Number(ventas_sin_comision_total_usd).toFixed(2)}
+                                                    </TableCell>
+                                                    {canViewEspecialesCostImpact && (
+                                                        <>
+                                                            <TableCell className="text-right text-xs font-bold text-red-700 dark:text-red-400">
+                                                                ${Number(ventas_sin_comision_costo_usd).toFixed(2)}
+                                                            </TableCell>
+                                                            <TableCell
+                                                                className={`text-right text-xs font-bold ${ventas_sin_comision_impacto_usd < 0 ? 'text-red-700 dark:text-red-400' : 'text-fuchsia-700 dark:text-fuchsia-300'}`}
+                                                            >
+                                                                ${Number(ventas_sin_comision_impacto_usd).toFixed(2)}
+                                                            </TableCell>
+                                                        </>
+                                                    )}
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
                         )}
 
                         {/* Dialog detalles Comisión PV */}

@@ -59,16 +59,17 @@ class ReporteController extends Controller
         $request->validate([
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
-            'proveedor_id' => 'nullable|exists:proveedors,id',
+            'proveedor_id' => 'nullable|exists:clientes,id',
         ]);
 
+        // El proveedor de una compra es un cliente; `proveedor_id` es el id de ese cliente
         $query = DB::table('compras')
-            ->join('proveedors', 'compras.proveedor_id', '=', 'proveedors.id')
+            ->join('clientes', 'compras.cliente_id', '=', 'clientes.id')
             ->select(
                 'compras.id',
                 'compras.fecha_compra',
                 'compras.total_compra',
-                'proveedors.nombre_proveedor',
+                'clientes.nombre_cliente as nombre_proveedor',
                 'compras.tipo_compra'
             );
 
@@ -81,7 +82,7 @@ class ReporteController extends Controller
         }
 
         if ($request->filled('proveedor_id')) {
-            $query->where('compras.proveedor_id', $request->proveedor_id);
+            $query->where('compras.cliente_id', $request->proveedor_id);
         }
 
         $compras = $query->orderByDesc('compras.fecha_compra')->get();
@@ -117,7 +118,7 @@ class ReporteController extends Controller
     public function comprasPorProveedor($proveedorId = null)
     {
         $query = DB::table('compras')
-            ->join('proveedors', 'compras.proveedor_id', '=', 'proveedors.id')
+            ->join('clientes', 'compras.cliente_id', '=', 'clientes.id')
             ->select(
                 'compras.id',
                 'compras.fecha_compra',
@@ -126,12 +127,12 @@ class ReporteController extends Controller
             );
 
         if ($proveedorId) {
-            $query->where('compras.proveedor_id', $proveedorId);
+            $query->where('compras.cliente_id', $proveedorId);
         }
 
         $compras = $query->orderByDesc('compras.fecha_compra')->get();
         $proveedor = $proveedorId
-            ? DB::table('proveedors')->find($proveedorId)
+            ? DB::table('clientes')->select('id', 'nombre_cliente as nombre_proveedor')->where('id', $proveedorId)->first()
             : null;
 
         return Inertia::render('Reportes/Report/ComprasPorProveedor', [

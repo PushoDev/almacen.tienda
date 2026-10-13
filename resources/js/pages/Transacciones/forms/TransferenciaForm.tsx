@@ -9,12 +9,10 @@ import {
     type Entidad,
     entidadDeCliente,
     entidadDeCuenta,
-    entidadDeProveedor,
     etiquetaSaldoDe,
     formatear,
     OpcionesTipo,
     type OpcionTipo,
-    type ProveedorEntidad,
     ResumenCard,
     ResumenDato,
     SeccionTitulo,
@@ -34,7 +32,6 @@ import {
     ArrowLeftRight,
     ArrowRight,
     ArrowUpFromLine,
-    Building2,
     Clock,
     FileText,
     Loader2,
@@ -59,7 +56,6 @@ const TIPOS_ORIGEN: OpcionTipo<TipoOrigen>[] = [
 const TIPOS_DESTINO: OpcionTipo<TipoEntidad>[] = [
     { valor: 'cuenta', titulo: 'Cuenta', descripcion: 'Entra a una cuenta', icono: Wallet },
     { valor: 'cliente', titulo: 'Cliente', descripcion: 'Afecta la deuda o el pago del cliente', icono: UserRound },
-    { valor: 'proveedor', titulo: 'Proveedor', descripcion: 'Suma al saldo del proveedor', icono: Building2 },
 ];
 
 const NOMBRE_TIPO: Record<TipoEntidad, string> = { cuenta: 'cuenta', cliente: 'cliente', proveedor: 'proveedor' };
@@ -125,7 +121,6 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
     const [cuentasOrigen, setCuentasOrigen] = useState<CuentaEntidad[]>([]);
     const [cuentasDestino, setCuentasDestino] = useState<CuentaEntidad[]>([]);
     const [clientes, setClientes] = useState<ClienteEntidad[]>([]);
-    const [proveedores, setProveedores] = useState<ProveedorEntidad[]>([]);
     const [monedasActivas, setMonedasActivas] = useState<MonedaActiva[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -136,7 +131,6 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
                 setCuentasOrigen(res.data.cuentasOrigen);
                 setCuentasDestino(res.data.cuentasDestino);
                 setClientes(res.data.clientes);
-                setProveedores(res.data.proveedores);
                 setMonedasActivas(res.data.monedasActivas);
             })
             .catch(() => sileo.error({ title: 'Error al cargar datos del formulario', description: 'Inténtalo nuevamente' }))
@@ -167,13 +161,7 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
     const entidadesOrigen = data.origen_tipo === 'cuenta' ? cuentasOrigen.map(entidadDeCuenta) : clientes.map(entidadDeCliente);
     const origen = entidadesOrigen.find((e) => e.id === data.origen_id) ?? null;
 
-    const entidadesDestino = (
-        data.destino_tipo === 'cuenta'
-            ? cuentasDestino.map(entidadDeCuenta)
-            : data.destino_tipo === 'cliente'
-              ? clientes.map(entidadDeCliente)
-              : proveedores.map(entidadDeProveedor)
-    ).filter((e) => !(origen && origen.tipo === e.tipo && origen.id === e.id));
+    const entidadesDestino = (data.destino_tipo === 'cuenta' ? cuentasDestino.map(entidadDeCuenta) : clientes.map(entidadDeCliente)).filter((e) => !(origen && origen.tipo === e.tipo && origen.id === e.id));
     const destino = entidadesDestino.find((e) => e.id === data.destino_id) ?? null;
 
     const monto = parseFloat(data.monto) || 0;
@@ -182,13 +170,11 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
     const montoDestino = conversion?.montoDestino ?? monto;
 
     const saldoOrigenDespues = origen && origen.saldo !== null ? origen.saldo - monto : null;
-    // Un vendedor que envía a una cuenta de otra persona no acredita al instante: el dinero sale del origen y
-    // espera a que el destino (o admin/moderador) confirme cuánto llegó. A una cuenta suya es inmediato.
-    // Admin y moderador no tienen cuentas propias: para ellos lo que viaja es el efectivo (de una cuenta de
-    // efectivo a otra de efectivo); con una tarjeta de por medio es inmediato. Mismo criterio que el servidor.
-    const esEfectivoAEfectivo =
+    // Para todos los roles, lo que viaja es el efectivo: de una cuenta de efectivo a otra de efectivo el dinero sale
+    // del origen y espera a que el destino (o admin/moderador) confirme cuánto llegó. Con una tarjeta de por medio
+    // es inmediato. Mismo criterio que el servidor.
+    const quedaPendiente =
         origen?.tipo === 'cuenta' && destino?.tipo === 'cuenta' && origen.tipoCuenta === 'efectivo' && destino.tipoCuenta === 'efectivo';
-    const quedaPendiente = soloCuentas ? destino?.tipo === 'cuenta' && destino.propia === false : esEfectivoAEfectivo;
     const saldoDestinoDespues = !quedaPendiente && destino && destino.saldo !== null ? destino.saldo + montoDestino : null;
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -371,7 +357,7 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
                                 <Clock className="h-4 w-4" /> Quedará pendiente de confirmación
                             </p>
                             <p className="text-muted-foreground text-xs">
-                                {soloCuentas ? 'Esta cuenta no es tuya' : 'Es efectivo de una cuenta de efectivo a otra'}
+                                Es efectivo de una cuenta de efectivo a otra
                                 {destino.responsables && destino.responsables.length > 0 ? ` (${destino.responsables.join(', ')})` : ''}. El dinero
                                 sale de la cuenta de origen ahora y se acredita cuando el destino confirme cuánto llegó. Puedes seguirlo en
                                 Envíos de Dinero.

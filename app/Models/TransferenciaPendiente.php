@@ -35,6 +35,7 @@ class TransferenciaPendiente extends Model
         'cuenta_origen_id',
         'cuenta_destino_id',
         'monto',
+        'monto_usd',
         'moneda',
         'monto_destino',
         'moneda_destino',
@@ -58,6 +59,7 @@ class TransferenciaPendiente extends Model
 
     protected $casts = [
         'monto' => 'double',
+        'monto_usd' => 'double',
         'monto_destino' => 'double',
         'tasa_cambio_aplicada' => 'double',
         'tasa_oficial_en_momento' => 'double',
@@ -70,6 +72,15 @@ class TransferenciaPendiente extends Model
         'fecha_confirmacion' => 'datetime',
         'diferencia_resuelta_en' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        // Lo que valía el envío en USD el día que salió: la salida del Cierre de Caja cuenta ese día y con esa tasa,
+        // aunque el envío se confirme días después.
+        static::creating(function (self $envio) {
+            $envio->monto_usd ??= Moneda::equivalenteUsd((float) $envio->monto, $envio->cuenta_origen_id, $envio->moneda);
+        });
+    }
 
     public function usuario(): BelongsTo
     {
@@ -160,6 +171,42 @@ class TransferenciaPendiente extends Model
                 ->map(fn ($grupo, $moneda) => ['moneda' => (string) $moneda, 'monto' => round((float) $grupo->sum('monto'), 2)])
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * Dinero que viaja ahora mismo en todo el sistema, por código de moneda y en USD (monto de origen entre la tasa
+     * de la moneda de la cuenta de origen). Es el único cálculo del "en tránsito" que se suma al capital de admin y
+     * moderador en Dashboard, Logística y Cuentas: ese dinero ya salió del origen y todavía no está en el destino,
+     * así que ninguna cuenta lo cuenta.
+     *
+     * @return array{total_usd: float, cantidad: int, por_codigo: array<string, array{monto: float, equivalente_usd: float}>}
+     */
+    public static function resumenEnTransitoGlobal(): array
+    {
+        $filas = static::query()
+            ->where('transferencias_pendientes.estado', self::ESTADO_EN_TRANSITO)
+            ->join('cuentas', 'cuentas.id', '=', 'transferencias_pendientes.cuenta_origen_id')
+            ->join('monedas', 'monedas.id', '=', 'cuentas.moneda_id')
+            ->get(['transferencias_pendientes.monto', 'monedas.codigo_moneda', 'monedas.tasa_cambio']);
+
+        $porCodigo = [];
+        foreach ($filas as $fila) {
+            $tasa = (float) $fila->tasa_cambio;
+            $codigo = (string) $fila->codigo_moneda;
+            $porCodigo[$codigo]['monto'] = ($porCodigo[$codigo]['monto'] ?? 0.0) + $fila->monto;
+            $porCodigo[$codigo]['equivalente_usd'] = ($porCodigo[$codigo]['equivalente_usd'] ?? 0.0) + ($tasa > 0 ? $fila->monto / $tasa : 0.0);
+        }
+
+        $porCodigo = array_map(fn (array $moneda) => [
+            'monto' => round($moneda['monto'], 2),
+            'equivalente_usd' => round($moneda['equivalente_usd'], 2),
+        ], $porCodigo);
+
+        return [
+            'total_usd' => round(array_sum(array_column($porCodigo, 'equivalente_usd')), 2),
+            'cantidad' => $filas->count(),
+            'por_codigo' => $porCodigo,
         ];
     }
 

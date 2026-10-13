@@ -20,6 +20,15 @@ use App\Models\TipoMovimientoFinanciero;
 use App\Models\User;
 use Illuminate\Http\Request;
 
+/**
+ * El proveedor de una compra es un cliente: su saldo vive en `clientes.deuda_pago_cliente`, con el mismo signo de
+ * siempre (negativo = el negocio le debe).
+ */
+function crearProveedor(float $saldo = 0): Cliente
+{
+    return Cliente::factory()->create(['tipo_cliente' => 'fisico', 'deuda_pago_cliente' => $saldo]);
+}
+
 test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
@@ -43,7 +52,6 @@ test('puede crear compra con precio 0.50 usando pago_cash con cuenta USD', funct
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor Test',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-07-30',
         'productos' => [
             [
@@ -108,17 +116,14 @@ test('puede crear compra como deuda a proveedor con precio 0.50', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create([
-        'saldo_proveedor' => 500,
-    ]);
+    $proveedor = crearProveedor(500);
 
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-07-30',
         'productos' => [
             [
@@ -139,10 +144,11 @@ test('puede crear compra como deuda a proveedor con precio 0.50', function () {
         'tipo_compra' => 'deuda_proveedor',
     ]);
 
-    $this->assertDatabaseHas('proveedors', [
+    $this->assertDatabaseHas('clientes', [
         'id' => $proveedor->id,
-        'saldo_proveedor' => 497.50,
+        'deuda_pago_cliente' => 497.50,
     ]);
+    $this->assertDatabaseHas('compras', ['cliente_id' => $proveedor->id, 'proveedor_id' => null]);
 
     $this->assertDatabaseHas('compras', [
         'id' => Compra::first()->id,
@@ -174,7 +180,6 @@ test('rechaza precio de compra en 0', function () {
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-07-30',
         'productos' => [
             [
@@ -220,7 +225,6 @@ test('rechaza precio de compra negativo', function () {
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-07-30',
         'productos' => [
             [
@@ -247,15 +251,14 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacenA = Almacen::factory()->create();
     $almacenB = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-08-10',
         'productos' => [
             [
@@ -382,7 +385,6 @@ test('un moderador sí puede registrar una compra', function () {
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Moderador',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
@@ -412,14 +414,13 @@ test('una compra registrada por un moderador con turno activo guarda el turno_ve
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Turno',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-09',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Turno', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
         ],
     ], ['X-Inertia' => 'true'])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', '!=', null)->latest('id')->first();
+    $compra = Compra::where('cliente_id', '!=', null)->latest('id')->first();
     expect($compra->turno_vendedor_id)->toBe($turno->id);
 });
 
@@ -433,7 +434,6 @@ test('una compra registrada por admin no guarda turno_vendedor_id (admin nunca c
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Admin Sin Turno',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-09',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Admin Sin Turno', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -454,7 +454,6 @@ test('un vendedor no puede registrar una compra por bypass directo de URL (403),
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Bypass',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
@@ -503,7 +502,6 @@ test('una compra del mismo producto a un precio distinto reusa la ficha existent
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Costo',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
@@ -540,7 +538,6 @@ test('comprar el mismo producto dos veces en una misma compra, al mismo almacén
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Contenedor',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
@@ -602,7 +599,6 @@ test('una compra con el mismo costo que ya tenía el producto también reusa la 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Costo Igual',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
@@ -646,7 +642,6 @@ test('prorratear una compra nueva no toca el costo del lote de otra compra vieja
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Regresion Viejo',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-01',
         'productos' => [
             [
@@ -669,7 +664,6 @@ test('prorratear una compra nueva no toca el costo del lote de otra compra vieja
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Regresion Nuevo',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-18',
         'productos' => [
             [
@@ -723,7 +717,6 @@ test('no se puede prorratear costos de una compra que sigue pendiente (sin aprob
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Sin Aprobar',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-18',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Sin Aprobar', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
@@ -769,7 +762,6 @@ test('prorratear una compra aprobada sincroniza el lote_stock que aprobar() ya h
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Sync Lote',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-18',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Sync Lote', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
@@ -810,7 +802,6 @@ test('una compra que da de alta un producto nuevo no crea entrada en historial_p
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Producto Nuevo',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-11',
         'productos' => [
             [
@@ -847,7 +838,6 @@ test('pago_cash sin permitir_deuda_parcial y con pagos insuficientes: rechaza la
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor Parcial Sin Flag',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Parcial 1', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -857,7 +847,6 @@ test('pago_cash sin permitir_deuda_parcial y con pagos insuficientes: rechaza la
     ]);
 
     $response->assertSessionHasErrors('error');
-    $this->assertDatabaseMissing('compras', ['proveedor_id' => null, 'total_compra' => 10]);
     $this->assertDatabaseCount('compras', 0);
     $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 100]);
 });
@@ -866,7 +855,7 @@ test('pago_cash con permitir_deuda_parcial y pagos insuficientes: completa la co
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $moneda = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
     $cuenta = Cuenta::create([
         'nombre_cuenta' => 'Cuenta Parcial Test 2',
@@ -880,8 +869,7 @@ test('pago_cash con permitir_deuda_parcial y pagos insuficientes: completa la co
 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Parcial 2', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -893,13 +881,13 @@ test('pago_cash con permitir_deuda_parcial y pagos insuficientes: completa la co
     $response->assertSessionHasNoErrors();
 
     $this->assertDatabaseHas('compras', ['total_compra' => 10, 'tipo_compra' => 'pago_cash']);
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     // La cuenta se descuenta solo por lo que realmente pagó, no por el total.
     $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 94]);
 
     // El faltante (10 - 6 = 4) queda como deuda del proveedor.
-    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 496]);
+    $this->assertDatabaseHas('clientes', ['id' => $proveedor->id, 'deuda_pago_cliente' => 496]);
 
     // La compra guarda el snapshot del saldo del receptor (proveedor) antes/después del faltante.
     $this->assertDatabaseHas('compras', [
@@ -950,7 +938,6 @@ test('pago_cash con permitir_deuda_parcial y tipo_proveedor cliente: el faltante
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => $clienteProveedor->nombre_cliente,
-        'tipo_proveedor' => 'cliente',
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Parcial 3', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -999,7 +986,6 @@ test('deuda_proveedor pura con tipo_proveedor cliente: decrementa deuda_pago_cli
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => $cliente->nombre_cliente,
-        'tipo_proveedor' => 'cliente',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Deuda Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
@@ -1029,7 +1015,6 @@ test('anular con reversión una compra deuda_proveedor pura con tipo_proveedor c
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => $cliente->nombre_cliente,
-        'tipo_proveedor' => 'cliente',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Anular Deuda Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
@@ -1068,7 +1053,6 @@ test('anular como fondo una compra pago_cash parcial con tipo_proveedor cliente:
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => $cliente->nombre_cliente,
-        'tipo_proveedor' => 'cliente',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Fondo Parcial Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1097,7 +1081,7 @@ test('el historial de compras marca es_parcial solo en la compra que quedó con 
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $moneda = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
     $cuenta = Cuenta::create([
         'nombre_cuenta' => 'Cuenta Historial Test',
@@ -1112,8 +1096,7 @@ test('el historial de compras marca es_parcial solo en la compra que quedó con 
     // Compra 1: pago_cash completo, sin deuda parcial.
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Historial 1', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1124,8 +1107,7 @@ test('el historial de compras marca es_parcial solo en la compra que quedó con 
     // Compra 2: pago_cash con deuda parcial — esta es la que debe salir es_parcial=true.
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Historial 2', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1137,8 +1119,7 @@ test('el historial de compras marca es_parcial solo en la compra que quedó con 
     // Compra 3: 100% a deuda (tipo_compra=deuda_proveedor) — no debe marcarse como parcial, es crédito completo.
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Historial 3', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1180,7 +1161,6 @@ test('pago_cash con permitir_deuda_parcial pero pagando de más: sigue rechazand
     $response = $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor Sobrepago',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-08-15',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Sobrepago', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1206,7 +1186,6 @@ test('aprobar una compra pendiente crea el ProductoCodigo real y suma el stock, 
     $response = $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Aprobar',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             [
@@ -1254,7 +1233,6 @@ test('no se puede aprobar una compra que ya está aprobada', function () {
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Doble Aprobar',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Doble Aprobar', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 2, 'precio' => 10],
@@ -1282,22 +1260,21 @@ test('anular con reversión una compra deuda_proveedor pura: la deuda vuelve a 0
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Anular Deuda', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('450.00');
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('450.00');
 
     $response = $this->post(route('comprar.anular', $compra->id), [
         'tipo_anulacion' => 'reversion',
@@ -1307,7 +1284,7 @@ test('anular con reversión una compra deuda_proveedor pura: la deuda vuelve a 0
 
     expect($compra->fresh()->estado)->toBe('anulada');
     expect($compra->fresh()->tipo_anulacion)->toBe('reversion');
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('500.00');
 
     // La fila de compra_pago NO se borra al anular — queda como registro de qué se pagó
     // originalmente, para que el detalle de la compra anulada lo pueda mostrar.
@@ -1336,7 +1313,6 @@ test('anular con reversión una compra pago_cash: la cuenta recupera exactamente
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor Anular Cash',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Anular Cash', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1362,21 +1338,20 @@ test('una compra 100% deuda_proveedor no puede anularse como fondo (rechazado)',
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Fondo Rechazado', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     $response = $this->post(route('comprar.anular', $compra->id), [
         'tipo_anulacion' => 'fondo',
@@ -1386,14 +1361,14 @@ test('una compra 100% deuda_proveedor no puede anularse como fondo (rechazado)',
     $response->assertSessionHasErrors('tipo_anulacion');
     expect($compra->fresh()->estado)->toBe('pendiente');
     // El saldo no se tocó — ni se revirtió ni se convirtió en fondo, la anulación no se aplicó.
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('450.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('450.00');
 });
 
 test('anular como fondo una compra pago_cash completa: la cuenta NO recupera el dinero, el proveedor queda con fondo a favor', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
+    $proveedor = crearProveedor(0);
     $moneda = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
     $cuenta = Cuenta::create([
         'nombre_cuenta' => 'Cuenta Anular Fondo',
@@ -1407,8 +1382,7 @@ test('anular como fondo una compra pago_cash completa: la cuenta NO recupera el 
 
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Fondo Cash', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 30],
@@ -1416,7 +1390,7 @@ test('anular como fondo una compra pago_cash completa: la cuenta NO recupera el 
         'pagos' => [['cuenta_id' => $cuenta->id, 'monto' => 30]],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
     expect($cuenta->fresh()->saldo_cuenta)->toEqual('70.00');
 
     $this->post(route('comprar.anular', $compra->id), [
@@ -1427,7 +1401,7 @@ test('anular como fondo una compra pago_cash completa: la cuenta NO recupera el 
     // La cuenta se queda como está — el dinero no vuelve.
     expect($cuenta->fresh()->saldo_cuenta)->toEqual('70.00');
     // El proveedor ahora tiene fondo a favor por el monto pagado.
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('30.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('30.00');
     expect($compra->fresh()->estado)->toBe('anulada');
     expect($compra->fresh()->tipo_anulacion)->toBe('fondo');
 
@@ -1445,7 +1419,7 @@ test('anular como fondo una compra pago_cash parcial: la porción de deuda se re
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
+    $proveedor = crearProveedor(0);
     $moneda = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
     $cuenta = Cuenta::create([
         'nombre_cuenta' => 'Cuenta Anular Fondo Parcial',
@@ -1460,8 +1434,7 @@ test('anular como fondo una compra pago_cash parcial: la porción de deuda se re
     // Total 10, paga 6 con cuenta, 4 queda como deuda parcial al proveedor.
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Fondo Parcial', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1470,8 +1443,8 @@ test('anular como fondo una compra pago_cash parcial: la porción de deuda se re
         'permitir_deuda_parcial' => true,
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('-4.00');
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('-4.00');
     expect($cuenta->fresh()->saldo_cuenta)->toEqual('94.00');
 
     $this->post(route('comprar.anular', $compra->id), [
@@ -1483,7 +1456,7 @@ test('anular como fondo una compra pago_cash parcial: la porción de deuda se re
     expect($cuenta->fresh()->saldo_cuenta)->toEqual('94.00');
     // Neto en saldo_proveedor: la deuda de 4 se revierte (+4) y los 6 pagados se convierten en
     // fondo (+6) => de -4 pasa a +6.
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('6.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('6.00');
 });
 
 test('anular como fondo con tipo_proveedor cliente: el fondo se acredita en deuda_pago_cliente del cliente-fuente correcto', function () {
@@ -1505,7 +1478,6 @@ test('anular como fondo con tipo_proveedor cliente: el fondo se acredita en deud
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => $clienteFuente->nombre_cliente,
-        'tipo_proveedor' => 'cliente',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Fondo Cliente', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 20],
@@ -1528,21 +1500,20 @@ test('no se puede anular una compra que ya está aprobada', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto No Anular Aprobada', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
     $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
 
     $response = $this->post(route('comprar.anular', $compra->id), [
@@ -1553,7 +1524,7 @@ test('no se puede anular una compra que ya está aprobada', function () {
     $response->assertSessionHasErrors('error');
     expect($compra->fresh()->estado)->toBe('aprobada');
     // La deuda sigue como quedó al aprobar, no se tocó.
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('490.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('490.00');
 });
 
 // ─── Edición de compra pendiente — "tratarla como nueva" ───────────────────
@@ -1562,23 +1533,22 @@ test('editar una compra pendiente reemplaza por completo las líneas de producto
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 1000]);
+    $proveedor = crearProveedor(1000);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Editar', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 100, 'precio' => 5],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
     expect($compra->total_compra)->toEqual('500.00');
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('500.00');
 
     // Editar: baja a 60 unidades del mismo producto y agrega uno nuevo.
     $response = $this->post(route('comprar.actualizar', $compra->id), [
@@ -1595,7 +1565,7 @@ test('editar una compra pendiente reemplaza por completo las líneas de producto
     expect($compra->estado)->toBe('pendiente');
 
     // La deuda con el proveedor se recalculó desde cero sobre el total nuevo, no se acumuló.
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('620.00'); // 1000 - 380
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('620.00'); // 1000 - 380
 
     // Cada línea de compra crea siempre una ficha nueva — la edición reemplaza también las
     // fichas, no solo el pivot. La ficha de la versión anterior ("100 unidades") queda huérfana
@@ -1618,21 +1588,20 @@ test('editar una compra pendiente varias veces no acumula fichas huérfanas en e
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 1000]);
+    $proveedor = crearProveedor(1000);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-18',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Huerfano', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 100, 'precio' => 5],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     // 3 correcciones seguidas de la misma compra, todavía pendiente.
     foreach ([80, 70, 60] as $cantidad) {
@@ -1662,7 +1631,6 @@ test('editar una compra pendiente pago_cash vuelve a procesar los pagos desde ce
     $this->post(route('comprar.store'), [
         'compra' => 'pago_cash',
         'proveedor' => 'Proveedor Editar Cash',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Editar Cash', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1693,21 +1661,20 @@ test('editar una compra pendiente sin escribir una nota: falla validación, nada
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Editar Sin Nota', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 10, 'precio' => 5],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     $response = $this->post(route('comprar.actualizar', $compra->id), [
         'productos' => [
@@ -1725,21 +1692,20 @@ test('cada edición de una compra pendiente queda auditada en compra_ediciones',
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Auditoria Edicion', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 10, 'precio' => 5],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     $this->post(route('comprar.actualizar', $compra->id), [
         'productos' => [
@@ -1777,21 +1743,20 @@ test('no se puede editar una compra que ya está aprobada', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto No Editar Aprobada', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
 
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
     $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
 
     $response = $this->post(route('comprar.actualizar', $compra->id), [
@@ -1817,7 +1782,6 @@ test('aprobar una compra con 2 líneas crea un LoteStock por línea, con código
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Lotes',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacenA->id, 'producto' => 'Producto Lote 1', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 5, 'precio' => 10],
@@ -1863,7 +1827,6 @@ test('el código de un lote se puede editar a mano después de generado', functi
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Lote Editable',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Lote Editable', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 3, 'precio' => 15],
@@ -1896,7 +1859,6 @@ test('no se puede editar el código de un lote con uno que ya usa otro lote', fu
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Lote Duplicado',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Lote Dup A', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1928,7 +1890,6 @@ test('un moderador sí puede editar el código de un lote', function () {
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
         'proveedor' => 'Proveedor Lote Moderador',
-        'tipo_proveedor' => 'proveedor',
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Lote Moderador', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
@@ -1954,20 +1915,19 @@ test('un vendedor no puede aprobar/anular/editar una compra por bypass directo (
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Bypass Estado', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);
@@ -1983,20 +1943,19 @@ test('un moderador sí puede aprobar/anular/editar una compra, igual que admin',
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
 
     $this->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => 'Producto Moderador Estado', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 1, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
-    $compra = Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    $compra = Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 
     $moderador = User::factory()->moderador()->create();
     crearTurnoActivo($moderador);
@@ -2014,25 +1973,24 @@ test('un moderador sí puede aprobar/anular/editar una compra, igual que admin',
 // petición "ganadora" cambia el estado y la "perdedora" entra al controlador con el modelo
 // que cargó antes — por eso se llama al controlador directo con esa copia obsoleta.
 
-function crearCompraPendienteConDeuda(Proveedor $proveedor, Almacen $almacen, Categoria $categoria, string $nombreProducto): Compra
+function crearCompraPendienteConDeuda(Cliente $proveedor, Almacen $almacen, Categoria $categoria, string $nombreProducto): Compra
 {
     test()->post(route('comprar.store'), [
         'compra' => 'deuda_proveedor',
-        'proveedor' => $proveedor->nombre_proveedor,
-        'tipo_proveedor' => 'proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
         'fecha' => '2026-09-07',
         'productos' => [
             ['almacen_id' => $almacen->id, 'producto' => $nombreProducto, 'categoria' => $categoria->nombre_categoria, 'codigo_barras' => 'BARCODE-DOBLE', 'cantidad' => 2, 'precio' => 10],
         ],
     ])->assertSessionHasNoErrors();
 
-    return Compra::where('proveedor_id', $proveedor->id)->firstOrFail();
+    return Compra::where('cliente_id', $proveedor->id)->firstOrFail();
 }
 
 test('aprobar con el estado desactualizado (otra petición ya la aprobó) no duplica stock, código ni lote', function () {
     $this->actingAs(User::factory()->admin()->create());
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $compra = crearCompraPendienteConDeuda($proveedor, $almacen, Categoria::factory()->create(), 'Producto Doble Clic Aprobar');
 
@@ -2051,29 +2009,29 @@ test('aprobar con el estado desactualizado (otra petición ya la aprobó) no dup
 test('anular con el estado desactualizado (otra petición ya la anuló) no devuelve el dinero dos veces', function () {
     $this->actingAs(User::factory()->admin()->create());
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $compra = crearCompraPendienteConDeuda($proveedor, Almacen::factory()->create(), Categoria::factory()->create(), 'Producto Doble Clic Anular');
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('480.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('480.00');
 
     $copiaObsoleta = Compra::findOrFail($compra->id);
     $this->post(route('comprar.anular', $compra->id), [
         'tipo_anulacion' => 'reversion',
         'motivo_anulacion' => 'Primer clic',
     ])->assertSessionHasNoErrors();
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('500.00');
 
     $peticion = Request::create('/', 'POST', ['tipo_anulacion' => 'reversion', 'motivo_anulacion' => 'Segundo clic']);
     $respuesta = app(CompraController::class)->anular($peticion, $copiaObsoleta);
 
     expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede anular una compra pendiente.');
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('500.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('500.00');
     expect($compra->fresh()->motivo_anulacion)->toBe('Primer clic');
 });
 
 test('editar con el estado desactualizado (otra petición ya la aprobó) no reemplaza las líneas ni toca el dinero', function () {
     $this->actingAs(User::factory()->admin()->create());
 
-    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $proveedor = crearProveedor(500);
     $almacen = Almacen::factory()->create();
     $categoria = Categoria::factory()->create();
     $compra = crearCompraPendienteConDeuda($proveedor, $almacen, $categoria, 'Producto Doble Clic Editar');
@@ -2092,7 +2050,7 @@ test('editar con el estado desactualizado (otra petición ya la aprobó) no reem
     expect($respuesta->getSession()->get('errors')->first('error'))->toBe('Solo se puede editar una compra pendiente.');
     $this->assertDatabaseHas('compra_producto', ['compra_id' => $compra->id, 'cantidad' => 2]);
     expect($compra->fresh()->total_compra)->toEqual('20.00');
-    expect($proveedor->fresh()->saldo_proveedor)->toEqual('480.00');
+    expect($proveedor->fresh()->deuda_pago_cliente)->toEqual('480.00');
     expect(CompraEdicion::where('compra_id', $compra->id)->count())->toBe(0);
 });
 

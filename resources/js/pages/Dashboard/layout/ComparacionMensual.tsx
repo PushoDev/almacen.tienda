@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Info, TrendingUp } from 'lucide-react';
+import { Info, TrendingUp, Truck } from 'lucide-react';
 
 import type { ComparacionMensual as ComparacionMensualData } from '../types';
 import { colorMoneda } from '../utils';
@@ -78,6 +78,11 @@ export default function ComparacionMensual({
                                         (sum, comp) => sum + comp.monto_actual / (comp.tasa_cambio || 1),
                                         0,
                                     );
+                                    // Lo que viaja en envíos sin confirmar, en USD (ya está dentro del Saldo Acumulado)
+                                    const totalEnTransito = comparaciones.reduce(
+                                        (sum, comp) => sum + (comp.en_transito ?? 0) / (comp.tasa_cambio || 1),
+                                        0,
+                                    );
 
                                     const filaComparacion = (comparacion: ComparacionMensualData, index: number) => {
                                         const c = colorMoneda(comparacion.moneda, index);
@@ -117,6 +122,14 @@ export default function ComparacionMensual({
                                                         minimumFractionDigits: 2,
                                                         maximumFractionDigits: 6,
                                                     })}
+                                                    {(comparacion.en_transito ?? 0) > 0 && (
+                                                        <span className="mt-0.5 flex items-center justify-end gap-1 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                                            <Truck className="h-3 w-3" />
+                                                            incluye{' '}
+                                                            {Number(comparacion.en_transito).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                                            en tránsito
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         );
@@ -207,6 +220,13 @@ export default function ComparacionMensual({
                                                         maximumFractionDigits: 2,
                                                     })}{' '}
                                                     USD
+                                                    {totalEnTransito > 0 && (
+                                                        <span className="mt-0.5 flex items-center justify-end gap-1 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                                            <Truck className="h-3 w-3" />
+                                                            incluye{' '}
+                                                            {totalEnTransito.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD en tránsito
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         </>
@@ -224,8 +244,8 @@ export default function ComparacionMensual({
                     <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
                         <Info className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>
-                            <strong>Saldo Acumulado</strong> es el saldo total real de las cuentas ahora mismo (mismo valor que el Resumen
-                            Financiero). <strong>Mes Actual</strong> muestra cuánto cambió ese saldo desde que cerró el mes pasado — esa columna
+                            <strong>Saldo Acumulado</strong> es el saldo total real de las cuentas ahora mismo, más el dinero que viaja en envíos sin
+                            confirmar (mismo valor que el Resumen Financiero). <strong>Mes Actual</strong> muestra cuánto cambió ese saldo desde que cerró el mes pasado — esa columna
                             sí puede aparecer en rojo si el saldo bajó, eso no significa que la cuenta esté en negativo.
                         </span>
                     </div>

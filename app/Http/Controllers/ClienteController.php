@@ -86,7 +86,6 @@ class ClienteController extends Controller
         // ✅ CARGAR LAS COMPRAS DONDE ESTE CLIENTE PARTICIPÓ COMO PAGADOR
         $cliente->load(['comprasComoPagador' => function ($query) {
             $query->with([
-                'proveedor',
                 'cliente',
                 'productos' => function ($productQuery) {
                     $productQuery->withPivot('cantidad', 'precio', 'almacen_id');
@@ -100,6 +99,30 @@ class ClienteController extends Controller
         $cliente->comprasComoPagador->each(function ($compra) {
             $compra->detalle = $this->detalleOperacionService->detalleCompra($compra);
         });
+
+        // ✅ CARGAR LAS COMPRAS HECHAS A ESTE CLIENTE (cuando actúa como proveedor). Son datos de costo: solo
+        // admin/moderador, igual que el módulo Compras.
+        if ($puedeVerCosto) {
+            $cliente->load(['comprasComoProveedor' => function ($query) {
+                $query->with([
+                    'cliente',
+                    'usuario',
+                    'productos' => function ($productQuery) {
+                        $productQuery->withPivot('cantidad', 'precio', 'almacen_id');
+                    },
+                    'productos.categoria',
+                    'pagos.cuenta',
+                    'pagos.cliente',
+                ])->orderBy('fecha_compra', 'desc');
+            }]);
+            $cliente->comprasComoProveedor->each(function ($compra) {
+                // es_parcial no es una columna: setAttribute() la deja viajar en el JSON sin $appends en el modelo
+                $compra->setAttribute('es_parcial', $compra->es_parcial);
+                $compra->detalle = $this->detalleOperacionService->detalleCompra($compra);
+            });
+        } else {
+            $cliente->setRelation('comprasComoProveedor', collect());
+        }
 
         // ✅ CARGAR LAS VENTAS DONDE ESTE CLIENTE ES EL COMPRADOR
         $cliente->load(['ventas' => function ($query) {

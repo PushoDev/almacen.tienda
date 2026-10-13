@@ -1,3 +1,4 @@
+import { CreadoPor, MarcaInformativa, TarjetaTurnos, type TurnoResumen } from '@/components/cierres/piezas';
 import HeadingSmall from '@/components/heading-small';
 import { ViaLogo } from '@/components/monedas/via-logo';
 import { type Banco, Insignia, type TipoEntidad } from '@/components/transacciones/entidad';
@@ -205,6 +206,10 @@ interface ItemMovimiento {
     banco?: Banco | null;
     usuario_nombre?: string;
     es_propio?: boolean;
+    /** false = movimiento de un cliente: se lista pero no cambia la caja (solo informativo). */
+    afecta_caja?: boolean;
+    /** Quién atendió ("Atendido por"); null si la operación no tiene turno. */
+    turno_nombre?: string | null;
 }
 
 /** Separa "Cuenta: X" / "Cliente: Y" / "Proveedor: Z" (como lo arma el servidor) en tipo y nombre. */
@@ -237,6 +242,9 @@ interface EnvioAbierto {
     es_propio: boolean;
     comentario: string | null;
     por_recibir: boolean;
+    /** Días que lleva en tránsito; a partir de 2 se marca atrasado (el efectivo puede tardar días). */
+    dias_en_transito?: number;
+    atrasado?: boolean;
 }
 
 /** Una pata (entrada, salida o mensajero) de una Operación Múltiple. */
@@ -402,8 +410,13 @@ function TablaEnviosAbiertos({ envios, mensajeVacio, porRecibir }: { envios: Env
                 <TableBody>
                     {envios.length > 0 ? (
                         envios.map((envio) => (
-                            <TableRow key={envio.id}>
-                                <TableCell className="font-mono text-xs">{envio.fecha}</TableCell>
+                            <TableRow key={envio.id} className={envio.atrasado ? 'bg-red-50/60 dark:bg-red-950/20' : undefined}>
+                                <TableCell className="font-mono text-xs">
+                                    {envio.fecha}
+                                    {envio.dias_en_transito !== undefined && envio.dias_en_transito > 0 && (
+                                        <p className="text-muted-foreground text-[10px]">hace {envio.dias_en_transito} {envio.dias_en_transito === 1 ? 'día' : 'días'}</p>
+                                    )}
+                                </TableCell>
                                 <TableCell className="text-xs">
                                     <EntidadFila tipo="cuenta" nombre={envio.origen_nombre} banco={envio.banco_origen} />
                                 </TableCell>
@@ -429,8 +442,13 @@ function TablaEnviosAbiertos({ envios, mensajeVacio, porRecibir }: { envios: Env
                                         </div>
                                     )}
                                 </TableCell>
-                                <TableCell className="text-center">
-                                    <Link href={route('transacciones.envios.index', { estado: porRecibir ? 'por_confirmar' : 'en_transito' })}>
+                                <TableCell className="space-y-1 text-center">
+                                    {envio.atrasado && (
+                                        <Badge className="border border-red-400/40 bg-red-500/15 text-red-700 backdrop-blur-sm dark:text-red-300">
+                                            Atrasado · {envio.dias_en_transito} días
+                                        </Badge>
+                                    )}
+                                    <Link className="block" href={route('transacciones.envios.index', { estado: porRecibir ? 'por_confirmar' : 'en_transito' })}>
                                         {porRecibir ? (
                                             <Badge className="border-0 bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30">Confirma tú</Badge>
                                         ) : (
@@ -482,6 +500,7 @@ interface TransferenciaItem {
     es_entrada?: boolean;
     usuario_nombre?: string;
     es_propio?: boolean;
+    turno_nombre?: string | null;
 }
 
 interface TransferenciaCompleta extends TransferenciaItem {
@@ -517,7 +536,10 @@ interface Calculos {
     // NUEVO: Totales separados por destino
     /** Envíos de dinero abiertos que el usuario puede ver (informativo: no entra en el saldo esperado). */
     envios_en_transito?: { total: number; por_confirmar: number; montos: Array<{ moneda: string; monto: number }> };
-    envios_en_transito_detalle?: { enviados: EnvioAbierto[]; por_recibir: EnvioAbierto[] };
+    envios_en_transito_detalle?: { atrasados?: number; enviados: EnvioAbierto[]; por_recibir: EnvioAbierto[] };
+    /** Turnos ("Atendido por") del periodo, con lo que movió cada uno. */
+    turnos?: TurnoResumen[];
+    turno_actual?: string | null;
     operaciones_multiples?: OperacionesMultiplesCierre;
     ventas_a_cuentas_total_usd?: number;
     ventas_a_clientes_total_usd?: number;
@@ -982,7 +1004,7 @@ export default function Create({
             },
             onError: (err) => {
                 console.error('Errores en el cierre:', err);
-                sileo.error({ title: 'Error al cerrar', description: 'Revisa los datos e inténtalo de nuevo' });
+                sileo.error({ title: 'Error al cerrar', description: err.cierre ?? 'Revisa los datos e inténtalo de nuevo' });
             },
             onFinish: () => setShowConfirmModal(false),
         });
@@ -1792,6 +1814,11 @@ export default function Create({
                                     <Badge className="border-0 bg-gradient-to-r from-amber-500 to-orange-600 shadow-md shadow-amber-500/30">
                                         {enviosEnTransito.total} {enviosEnTransito.total === 1 ? 'envío' : 'envíos'}
                                     </Badge>
+                                    {(calculos.envios_en_transito_detalle?.atrasados ?? 0) > 0 && (
+                                        <Badge className="border border-red-400/40 bg-red-500/15 text-red-700 backdrop-blur-sm dark:text-red-300">
+                                            {calculos.envios_en_transito_detalle?.atrasados} atrasado{calculos.envios_en_transito_detalle?.atrasados === 1 ? '' : 's'}
+                                        </Badge>
+                                    )}
                                 </div>
                             </SpotlightCard>
                         </Link>
@@ -1860,6 +1887,9 @@ export default function Create({
                         </SpotlightCard>
                     </div>
                 </div>
+
+                {/* Turnos de este cierre: quién atendió ("Atendido por") y qué movió cada uno */}
+                <TarjetaTurnos turnos={calculos.turnos ?? []} nota={calculos.turno_actual ? `Atiende ahora: ${calculos.turno_actual}.` : undefined} />
 
                 {/* Transacciones del Turno: Gastos, Ingresos, Transferencias — propias y externas, unificado */}
                 <Card className="gap-0 overflow-hidden border-l-4 border-violet-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">
@@ -2000,16 +2030,15 @@ export default function Create({
                                                 gastosFiltrados.map((item, idx) => (
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="text-sm">
+                                                            {item.desc}
+                                                            <MarcaInformativa afectaCaja={item.afecta_caja} />
+                                                        </TableCell>
                                                         <TableCell className="text-xs">
                                                             <EntidadFila {...partirEntidad(item.origen || '-')} banco={item.banco ?? null} />
                                                         </TableCell>
                                                         <TableCell className="text-xs">
-                                                            {item.es_propio ? (
-                                                                <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
-                                                            ) : (
-                                                                item.usuario_nombre || 'Sistema'
-                                                            )}
+                                                            <CreadoPor esPropio={item.es_propio} usuario={item.usuario_nombre} turno={item.turno_nombre} />
                                                         </TableCell>
                                                         <TableCell className="text-right">
                                                             <Badge className="gap-1.5 border border-red-400/30 whitespace-nowrap bg-red-500/10 font-mono font-bold text-red-700 backdrop-blur-sm dark:text-red-300">
@@ -2050,16 +2079,15 @@ export default function Create({
                                                 ingresosFiltrados.map((item, idx) => (
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="text-sm">
+                                                            {item.desc}
+                                                            <MarcaInformativa afectaCaja={item.afecta_caja} />
+                                                        </TableCell>
                                                         <TableCell className="text-xs">
                                                             <EntidadFila {...partirEntidad(item.destino || '-')} banco={item.banco ?? null} />
                                                         </TableCell>
                                                         <TableCell className="text-xs">
-                                                            {item.es_propio ? (
-                                                                <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
-                                                            ) : (
-                                                                item.usuario_nombre || 'Sistema'
-                                                            )}
+                                                            <CreadoPor esPropio={item.es_propio} usuario={item.usuario_nombre} turno={item.turno_nombre} />
                                                         </TableCell>
                                                         <TableCell className="text-right">
                                                             <Badge className="gap-1.5 border border-emerald-400/30 whitespace-nowrap bg-emerald-500/10 font-mono font-bold text-emerald-700 backdrop-blur-sm dark:text-emerald-300">
@@ -2119,11 +2147,7 @@ export default function Create({
                                                             />
                                                         </TableCell>
                                                         <TableCell className="text-xs">
-                                                            {item.es_propio ? (
-                                                                <Badge className="border border-violet-400/30 bg-violet-500/10 text-violet-700 backdrop-blur-sm dark:text-violet-300">Tú</Badge>
-                                                            ) : (
-                                                                item.usuario_nombre || 'Sistema'
-                                                            )}
+                                                            <CreadoPor esPropio={item.es_propio} usuario={item.usuario_nombre} turno={item.turno_nombre} />
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
                                                             <div>

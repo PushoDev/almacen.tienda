@@ -97,6 +97,7 @@ class TransferenciaPendienteService
                 'cuenta_origen_id' => $envio->cuenta_origen_id,
                 'cuenta_destino_id' => $envio->cuenta_destino_id,
                 'monto' => $envio->monto,
+                'monto_usd' => $envio->monto_usd,
                 'moneda' => $envio->moneda,
                 'tasa_cambio_aplicada' => $envio->tasa_cambio_aplicada ?? 1.0,
                 'tasa_oficial_en_momento' => $envio->tasa_oficial_en_momento,

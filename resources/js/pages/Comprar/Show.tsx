@@ -35,21 +35,16 @@ import {
     Store,
     Tag,
     Trash2,
-    Truck,
     Users,
     Wallet,
     XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 
+/** A quien se le compró: el proveedor de una compra es un cliente. */
 interface Proveedor {
     id?: number;
-    nombre_proveedor?: string;
-}
-
-interface Cliente {
-    id?: number;
-    nombre_cliente?: string;
+    nombre?: string;
 }
 
 interface Almacen {
@@ -86,8 +81,7 @@ interface Compra {
     tipo_anulacion: TipoAnulacion;
     motivo_anulacion: string | null;
     es_parcial: boolean;
-    proveedor?: Proveedor;
-    cliente?: Cliente;
+    proveedor?: Proveedor | null;
     pagos: Pago[];
 }
 
@@ -197,10 +191,7 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
         });
 
     const isDeuda = compra.tipo_compra === 'deuda_proveedor';
-    const esProveedor = !!compra.proveedor?.nombre_proveedor;
-    const esCliente = !!compra.cliente?.nombre_cliente;
-    const nombrePersona = compra.proveedor?.nombre_proveedor || compra.cliente?.nombre_cliente || 'Sin registro';
-    const tipoPersona = esProveedor ? 'Proveedor' : esCliente ? 'Cliente' : 'Proveedor';
+    const nombrePersona = compra.proveedor?.nombre || 'Sin registro';
     const tipoLabel = isDeuda ? 'Crédito' : compra.es_parcial ? 'Parcial' : 'Contado';
     const esPendiente = compra.estado === 'pendiente';
     const estadoInfo = ESTADO_CONFIG[compra.estado];
@@ -527,17 +518,17 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
 
                 <Separator />
 
-                {/* Información del proveedor/cliente estilo card */}
+                {/* Información del cliente estilo card */}
                 <Card className="overflow-hidden border-0 pt-0 shadow-lg">
                     <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
                         <div className="flex items-center gap-3">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                                {esProveedor ? <Truck className="h-5 w-5" /> : <Users className="h-5 w-5" />}
+                                <Users className="h-5 w-5" />
                             </div>
                             <div>
-                                <CardTitle className="text-base font-semibold text-white">{tipoPersona}</CardTitle>
+                                <CardTitle className="text-base font-semibold text-white">Asociado</CardTitle>
                                 <CardDescription className="text-xs text-indigo-100">
-                                    {esProveedor ? 'Proveedor externo registrado' : esCliente ? 'Cliente como proveedor' : 'Sin registro'}
+                                    {compra.proveedor ? 'Asociado registrado' : 'Sin registro'}
                                 </CardDescription>
                             </div>
                         </div>
@@ -689,7 +680,7 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                             ? (pago.cuenta?.nombre_cuenta ?? 'Cuenta')
                                             : pago.tipo_pago === 'cliente'
                                               ? (pago.cliente?.nombre_cliente ?? 'Cliente')
-                                              : 'Deuda con proveedor';
+                                              : 'Deuda con el asociado';
 
                                     // Qué pasó con esta fuente si la compra terminó anulada. La porción de
                                     // deuda siempre se revierte a 0, haya elegido el usuario 'reversion' o
@@ -839,7 +830,7 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                     <p className="text-muted-foreground text-xs">
                                         {isDeuda
                                             ? 'No disponible: esta compra fue 100% a deuda, sin pago real.'
-                                            : 'Lo pagado queda como crédito a favor con el proveedor/cliente.'}
+                                            : 'Lo pagado queda como crédito a favor con el asociado.'}
                                     </p>
                                 </button>
                             </div>

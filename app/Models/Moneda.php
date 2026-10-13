@@ -43,6 +43,28 @@ class Moneda extends Model
     }
 
     /**
+     * Lo que valen `$monto` en USD con la tasa vigente AHORA. Se usa al crear una operación para guardar su
+     * `monto_usd` (la tasa de la operación). La moneda se toma de la cuenta cuando hay una (el sistema tiene dos
+     * monedas "CUP" con tasas distintas, el código solo no alcanza) y, si no, del código.
+     */
+    public static function equivalenteUsd(float $monto, ?int $cuentaId, ?string $codigoMoneda): float
+    {
+        $tasa = null;
+
+        if ($cuentaId) {
+            $tasa = Cuenta::query()->whereKey($cuentaId)->with('moneda:id,tasa_cambio')->first()?->moneda?->tasa_cambio;
+        }
+
+        if ($tasa === null && $codigoMoneda) {
+            $tasa = static::query()->where('codigo_moneda', $codigoMoneda)->orderBy('id')->value('tasa_cambio');
+        }
+
+        $tasa = (float) $tasa;
+
+        return round($monto / ($tasa > 0 ? $tasa : 1), 2);
+    }
+
+    /**
      * Métodos de pago que admite esta moneda (efectivo / transferencia).
      */
     public function metodosPago(): BelongsToMany

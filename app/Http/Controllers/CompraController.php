@@ -14,7 +14,6 @@ use App\Models\Cuenta;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
-use App\Models\Proveedor;
 use App\Services\CodigoStockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -26,40 +25,6 @@ use Inertia\Response;
 
 class CompraController extends Controller
 {
-    /**
-     * Devuelve una lista de proveedores y clientes tipo fisico combinados.
-     *
-     * @return JsonResponse
-     */
-    public function getProveedor()
-    {
-        $proveedores = Proveedor::select('id', 'nombre_proveedor as nombre')
-            ->addSelect(DB::raw("'proveedor' as tipo"))
-            ->orderBy('nombre');
-
-        $clientes = Cliente::where('tipo_cliente', 'fisico')
-            ->select('id', 'nombre_cliente as nombre')
-            ->addSelect(DB::raw("'cliente' as tipo"))
-            ->orderBy('nombre');
-
-        return response()->json([
-            'proveedores' => $proveedores->get(),
-            'clientes' => $clientes->get(),
-        ]);
-    }
-
-    /**
-     * Devuelve una lista solo de proveedores.
-     *
-     * @return JsonResponse
-     */
-    public function getSoloProveedores()
-    {
-        $proveedores = Proveedor::select('id', 'nombre_proveedor')->get();
-
-        return response()->json($proveedores);
-    }
-
     /**
      * Devuelve una lista de categorías.
      *
@@ -198,7 +163,7 @@ class CompraController extends Controller
             ->with('moneda')
             ->get();
 
-        $comprasRecientes = Compra::with(['proveedor', 'cliente', 'pagos'])
+        $comprasRecientes = Compra::with(['cliente', 'pagos'])
             ->latest()
             ->take(15)
             ->get()
@@ -208,15 +173,13 @@ class CompraController extends Controller
                 'total_compra' => $c->total_compra,
                 'tipo_compra' => $c->tipo_compra,
                 'estado' => $c->estado,
-                'proveedor' => $c->proveedor?->nombre_proveedor,
-                'cliente' => $c->cliente?->nombre_cliente,
+                'proveedor' => $c->cliente?->nombre_cliente,
                 'es_parcial' => $c->es_parcial,
             ]);
 
         return Inertia::render('Comprar/Index', [
             'cuentas' => $cuentasUSD,
             'almacenes' => Almacen::all(),
-            'proveedores' => Proveedor::all(),
             'categorias' => Categoria::all(),
             'clientes' => Cliente::where('tipo_cliente', 'fisico')->get(),
             'compras_recientes' => $comprasRecientes,
@@ -235,27 +198,20 @@ class CompraController extends Controller
         DB::beginTransaction();
 
         try {
-            $tipoProveedor = $validated['tipo_proveedor'];
-            $nombreProveedor = $validated['proveedor'];
-
-            if ($tipoProveedor === 'proveedor') {
-                $entidad = Proveedor::firstOrCreate(['nombre_proveedor' => $nombreProveedor]);
-            } else {
-                $entidad = Cliente::firstOrCreate([
-                    'nombre_cliente' => $nombreProveedor,
-                    'tipo_cliente' => 'fisico',
-                ]);
-            }
+            // El proveedor de la compra es un cliente: el que ya existe con ese nombre, o uno nuevo.
+            $entidad = Cliente::firstOrCreate([
+                'nombre_cliente' => $validated['proveedor'],
+                'tipo_cliente' => 'fisico',
+            ]);
 
             $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
 
-            $resultadoPagos = $this->procesarPagos($validated['compra'], $tipoProveedor, $entidad, $total, $validated, $permitirDeudaParcial);
+            $resultadoPagos = $this->procesarPagos($validated['compra'], $entidad, $total, $validated, $permitirDeudaParcial);
 
             $compraData = $resultadoPagos['compraData'] + [
                 'user_id' => $request->user()->id,
                 'turno_vendedor_id' => $request->user()->turnoActivo()?->id,
-                'proveedor_id' => $tipoProveedor === 'proveedor' ? $entidad->id : null,
-                'cliente_id' => $tipoProveedor === 'cliente' ? $entidad->id : null,
+                'cliente_id' => $entidad->id,
                 'fecha_compra' => $validated['fecha'],
                 'total_compra' => $total,
                 'tipo_compra' => $validated['compra'],
@@ -272,7 +228,7 @@ class CompraController extends Controller
 
             DB::commit();
 
-            $compra->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
+            $compra->load(['cliente', 'pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
                 'compra' => $this->shapeCompraParaVista($compra),
@@ -322,7 +278,6 @@ class CompraController extends Controller
             $reglas = [
                 'compra' => 'required|in:deuda_proveedor,pago_cash',
                 'proveedor' => 'required|string|max:255',
-                'tipo_proveedor' => 'required|in:proveedor,cliente',
                 'fecha' => 'required|date',
             ] + $reglas;
         }
@@ -339,8 +294,7 @@ class CompraController extends Controller
      */
     private function procesarPagos(
         string $tipoCompra,
-        string $tipoProveedor,
-        Proveedor|Cliente $entidad,
+        Cliente $entidad,
         float $total,
         array $validated,
         bool $permitirDeudaParcial
@@ -351,17 +305,10 @@ class CompraController extends Controller
         $pagosClientes = [];
 
         if ($tipoCompra === 'deuda_proveedor') {
-            if ($tipoProveedor === 'proveedor') {
-                $receptorSaldoAnterior = (float) $entidad->saldo_proveedor;
-                $entidad->decrement('saldo_proveedor', $total);
-                $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
-            } else {
-                $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
-                $entidad->decrement('deuda_pago_cliente', $total);
-                $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
-            }
+            $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
+            $entidad->decrement('deuda_pago_cliente', $total);
+            $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+            $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $total;
             $compraData['cuenta_id'] = null;
         } elseif ($tipoCompra === 'pago_cash') {
             $pagos = $validated['pagos'] ?? [];
@@ -386,21 +333,14 @@ class CompraController extends Controller
 
             if ($montoFaltante > 0.01) {
                 // El usuario habilitó completar con deuda: el resto no cubierto por cuentas/clientes
-                // se suma como deuda al proveedor/cliente de la compra — misma lógica que
+                // se suma como deuda al cliente de la compra — misma lógica que
                 // tipo_compra=deuda_proveedor, pero solo por la parte que faltó. Tiene que ir ANTES
                 // del foreach de pagosClientes de abajo, que usa un Cliente propio para el cliente
                 // que está pagando, no el dueño de la compra.
-                if ($tipoProveedor === 'proveedor') {
-                    $receptorSaldoAnterior = (float) $entidad->saldo_proveedor;
-                    $entidad->decrement('saldo_proveedor', $montoFaltante);
-                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
-                } else {
-                    $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
-                    $entidad->decrement('deuda_pago_cliente', $montoFaltante);
-                    $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
-                    $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
-                }
+                $receptorSaldoAnterior = (float) $entidad->deuda_pago_cliente;
+                $entidad->decrement('deuda_pago_cliente', $montoFaltante);
+                $compraData['receptor_saldo_anterior'] = $receptorSaldoAnterior;
+                $compraData['receptor_saldo_posterior'] = $receptorSaldoAnterior - $montoFaltante;
             } else {
                 $montoFaltante = 0;
             }
@@ -607,21 +547,32 @@ class CompraController extends Controller
      */
     private function revertirEfectosMonetarios(Compra $compra): void
     {
-        $compra->loadMissing(['pagos.cuenta', 'pagos.cliente', 'proveedor', 'cliente']);
+        $compra->loadMissing(['pagos.cuenta', 'pagos.cliente', 'cliente']);
+        $proveedor = $this->proveedorDe($compra);
 
         foreach ($compra->pagos as $pago) {
             if ($pago->tipo_pago === 'cuenta' && $pago->cuenta) {
                 $pago->cuenta->increment('saldo_cuenta', $pago->monto);
             } elseif ($pago->tipo_pago === 'cliente' && $pago->cliente) {
                 $pago->cliente->increment('deuda_pago_cliente', $pago->monto);
-            } elseif ($pago->tipo_pago === 'deuda_proveedor') {
-                if ($compra->proveedor) {
-                    $compra->proveedor->increment('saldo_proveedor', $pago->monto);
-                } elseif ($compra->cliente) {
-                    $compra->cliente->increment('deuda_pago_cliente', $pago->monto);
-                }
+            } elseif ($pago->tipo_pago === 'deuda_proveedor' && $proveedor) {
+                $proveedor->increment('deuda_pago_cliente', $pago->monto);
             }
         }
+    }
+
+    /**
+     * El cliente al que se le compró. Una compra que todavía apunta a la tabla vieja de proveedores
+     * (`proveedor_id` sin `cliente_id`) no se puede tocar: hay que migrarla primero con
+     * `php artisan compras:migrar-proveedores-a-clientes`.
+     */
+    private function proveedorDe(Compra $compra): ?Cliente
+    {
+        if ($compra->cliente_id === null && $compra->proveedor_id !== null) {
+            throw new \DomainException('Esta compra aún apunta a un proveedor sin migrar. Ejecute primero php artisan compras:migrar-proveedores-a-clientes.');
+        }
+
+        return $compra->cliente;
     }
 
     /**
@@ -766,32 +717,26 @@ class CompraController extends Controller
         try {
             DB::transaction(function () use ($comprar, $validated) {
                 $this->bloquearCompraPendiente($comprar, 'Solo se puede anular una compra pendiente.');
-                $comprar->loadMissing(['pagos.cuenta', 'pagos.cliente', 'proveedor', 'cliente']);
+                $comprar->loadMissing(['pagos.cuenta', 'pagos.cliente', 'cliente']);
 
                 if ($validated['tipo_anulacion'] === 'reversion') {
                     $this->revertirEfectosMonetarios($comprar);
                 } else {
+                    $proveedor = $this->proveedorDe($comprar);
+
                     // La porción de deuda (si la hubo, ej. compra parcial) siempre se revierte a 0 —
                     // nunca se convierte en fondo, haya habido pago real en el resto o no.
                     $pagoDeuda = $comprar->pagos->firstWhere('tipo_pago', 'deuda_proveedor');
-                    if ($pagoDeuda) {
-                        if ($comprar->proveedor) {
-                            $comprar->proveedor->increment('saldo_proveedor', $pagoDeuda->monto);
-                        } elseif ($comprar->cliente) {
-                            $comprar->cliente->increment('deuda_pago_cliente', $pagoDeuda->monto);
-                        }
+                    if ($pagoDeuda && $proveedor) {
+                        $proveedor->increment('deuda_pago_cliente', $pagoDeuda->monto);
                     }
 
                     // El dinero que sí se pagó (cuentas + clientes-pagadores) no vuelve a su origen —
-                    // se convierte en crédito a favor con el proveedor/cliente-fuente de esta compra.
+                    // se convierte en crédito a favor con el cliente-proveedor de esta compra.
                     $montoRealPagado = $comprar->pagos->whereIn('tipo_pago', ['cuenta', 'cliente'])->sum('monto');
 
-                    if ($montoRealPagado > 0) {
-                        if ($comprar->proveedor) {
-                            $comprar->proveedor->increment('saldo_proveedor', $montoRealPagado);
-                        } elseif ($comprar->cliente) {
-                            $comprar->cliente->increment('deuda_pago_cliente', $montoRealPagado);
-                        }
+                    if ($montoRealPagado > 0 && $proveedor) {
+                        $proveedor->increment('deuda_pago_cliente', $montoRealPagado);
                     }
                     // Las filas de compra_pago NO se borran — quedan como el registro de qué cuenta/
                     // cliente puso cada monto originalmente, para que el detalle de la compra anulada
@@ -842,9 +787,8 @@ class CompraController extends Controller
             $this->bloquearCompraPendiente($comprar, 'Solo se puede editar una compra pendiente.');
 
             $totalAnterior = (float) $comprar->total_compra;
-            $comprar->loadMissing(['proveedor', 'cliente']);
-            $tipoProveedor = $comprar->proveedor_id ? 'proveedor' : 'cliente';
-            $entidad = $comprar->proveedor_id ? $comprar->proveedor : $comprar->cliente;
+            $comprar->loadMissing(['cliente']);
+            $entidad = $this->proveedorDe($comprar);
 
             // Fichas que esta MISMA compra había creado antes de esta edición (cada línea crea
             // siempre una ficha nueva, ver procesarLineasProducto) — si esta edición ya no las
@@ -859,7 +803,7 @@ class CompraController extends Controller
 
             $total = collect($validated['productos'])->sum(fn ($p) => $p['cantidad'] * $p['precio']);
 
-            $resultadoPagos = $this->procesarPagos($comprar->tipo_compra, $tipoProveedor, $entidad, $total, $validated, $permitirDeudaParcial);
+            $resultadoPagos = $this->procesarPagos($comprar->tipo_compra, $entidad, $total, $validated, $permitirDeudaParcial);
 
             $comprar->update($resultadoPagos['compraData'] + ['total_compra' => $total]);
 
@@ -900,7 +844,7 @@ class CompraController extends Controller
 
             DB::commit();
 
-            $comprar->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
+            $comprar->load(['cliente', 'pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
                 'compra' => $this->shapeCompraParaVista($comprar),
@@ -923,7 +867,7 @@ class CompraController extends Controller
      */
     public function show(Compra $comprar)
     {
-        $comprar->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
+        $comprar->load(['cliente', 'pagos.cuenta', 'pagos.cliente']);
 
         $productos = $comprar->productos()
             ->with('categoria')
@@ -965,7 +909,7 @@ class CompraController extends Controller
      * Arma el array de compra para Comprar/Show — mismo shape para store() y show() para que el
      * detalle de pago (cuentas/clientes de origen y monto de cada uno) se vea igual recién
      * registrada la compra o al navegar desde el historial. Requiere que el caller ya haya
-     * cargado ['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente'].
+     * cargado ['cliente', 'pagos.cuenta', 'pagos.cliente'].
      */
     private function shapeCompraParaVista(Compra $compra): array
     {
@@ -978,11 +922,9 @@ class CompraController extends Controller
             'tipo_anulacion' => $compra->tipo_anulacion,
             'motivo_anulacion' => $compra->motivo_anulacion,
             'es_parcial' => $compra->es_parcial,
-            'proveedor' => $compra->proveedor
-                ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]
-                : null,
-            'cliente' => $compra->cliente
-                ? ['id' => $compra->cliente->id, 'nombre_cliente' => $compra->cliente->nombre_cliente]
+            // El proveedor de la compra es un cliente
+            'proveedor' => $compra->cliente
+                ? ['id' => $compra->cliente->id, 'nombre' => $compra->cliente->nombre_cliente]
                 : null,
             'pagos' => $compra->pagos->map(fn ($pago) => [
                 'tipo_pago' => $pago->tipo_pago,
@@ -1151,103 +1093,6 @@ class CompraController extends Controller
             'almacen' => $almacen,
             'existe' => false,
         ], 201);
-    }
-
-    /**
-     * Crea o busca un proveedor/cliente para uso durante el proceso de compra.
-     *
-     * @return JsonResponse
-     */
-    public function storeProveedor(Request $request)
-    {
-        // Determinar el tipo
-        $tipo = $request->tipo ?? 'proveedor';
-
-        // Si ya existe como proveedor
-        if ($tipo === 'proveedor') {
-            $existente = Proveedor::where('nombre_proveedor', $request->nombre_proveedor)->first();
-            if ($existente) {
-                return response()->json([
-                    'message' => 'Ya existe como proveedor.',
-                    'data' => $existente,
-                    'tipo' => 'proveedor',
-                    'existe' => true,
-                ], 200);
-            }
-        }
-
-        // Si ya existe como cliente
-        $existenteCliente = Cliente::where('nombre_cliente', $request->nombre_cliente ?? $request->nombre_proveedor)->first();
-        if ($existenteCliente) {
-            return response()->json([
-                'message' => 'Ya existe como cliente.',
-                'data' => $existenteCliente,
-                'tipo' => 'cliente',
-                'existe' => true,
-            ], 200);
-        }
-
-        // Validación de datos
-        $validator = Validator::make([
-            'nombre_proveedor' => $request->nombre_proveedor,
-            'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
-        ], [
-            'nombre_proveedor' => 'required|string',
-            'nombre_cliente' => 'required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        if ($tipo === 'proveedor') {
-            $proveedor = Proveedor::create([
-                'nombre_proveedor' => $request->nombre_proveedor,
-                'saldo_proveedor' => 0,
-            ]);
-
-            return response()->json([
-                'message' => 'Proveedor creado exitosamente.',
-                'data' => $proveedor,
-                'tipo' => 'proveedor',
-                'existe' => false,
-            ], 201);
-        } else {
-            // Para clientes, el teléfono es obligatorio
-            $telefono = $request->telefono_cliente ?? null;
-            if (empty($telefono)) {
-                return response()->json([
-                    'errors' => ['telefono_cliente' => 'El teléfono es requerido para clientes.'],
-                ], 422);
-            }
-
-            // Verificar si ya existe con ese teléfono
-            $clienteExistentePorTelefono = Cliente::where('telefono_cliente', $telefono)->first();
-            if ($clienteExistentePorTelefono) {
-                return response()->json([
-                    'message' => 'Ya existe un cliente con ese teléfono.',
-                    'data' => $clienteExistentePorTelefono,
-                    'tipo' => 'cliente',
-                    'existe' => true,
-                ], 200);
-            }
-
-            $cliente = Cliente::create([
-                'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => $telefono,
-                'direccion_cliente' => $request->direccion_cliente ?? null,
-                'ciudad_cliente' => $request->ciudad_cliente ?? null,
-            ]);
-
-            return response()->json([
-                'message' => 'Cliente creado exitosamente.',
-                'data' => $cliente,
-                'tipo' => 'cliente',
-                'existe' => false,
-            ], 201);
-        }
     }
 
     /**
