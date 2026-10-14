@@ -159,6 +159,7 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         href: route('reportes.historial_precios'),
         icon: History,
         colors: 'from-amber-800 to-amber-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Cambios de Precio de Costo',
@@ -166,6 +167,7 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         href: route('reportes.historial_costo_precio'),
         icon: LibraryBig,
         colors: 'from-rose-800 to-rose-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Movimientos Financieros',
@@ -173,6 +175,7 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         href: route('reportes.movimientos_financieros'),
         icon: Landmark,
         colors: 'from-gray-800 to-gray-500',
+        mostrarDescripcion: true,
     },
 ];
 
