@@ -13,7 +13,7 @@ import {
 } from '@/components/detalle-operacion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Combobox,
     ComboboxChip,
@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import SpotlightCard from '@/components/ui/spotlightcard';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
@@ -139,19 +140,19 @@ interface RastreoOperacionesPageProps {
 const colorTipo = (tipo: string) => {
     switch (tipo) {
         case 'Venta':
-            return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300';
+            return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
         case 'Gasto':
-            return 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300';
+            return 'border-red-400/30 bg-red-500/10 text-red-700 dark:text-red-300';
         case 'Ingreso':
-            return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300';
+            return 'border-sky-400/30 bg-sky-500/10 text-sky-700 dark:text-sky-300';
         case 'Transferencia':
-            return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300';
+            return 'border-amber-400/30 bg-amber-500/10 text-amber-700 dark:text-amber-300';
         case 'Compra':
-            return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300';
+            return 'border-indigo-400/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300';
         case 'Ajuste':
-            return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300';
+            return 'border-violet-400/30 bg-violet-500/10 text-violet-700 dark:text-violet-300';
         case 'Remesa':
-            return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300';
+            return 'border-cyan-400/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300';
         default:
             return 'border-border bg-muted text-foreground';
     }
@@ -191,12 +192,12 @@ const tasaOperacion = (op: Operacion) => {
 // para identificar visualmente el mismo pago entre las columnas Cuenta que Recibe / Monto /
 // Tasa de la Operación (mismo índice de pago = mismo color). Cicla si hay más de 6 pagos.
 const coloresPago = [
-    'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300',
-    'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/20 dark:text-pink-300',
-    'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300',
-    'border-lime-200 bg-lime-50 text-lime-700 dark:border-lime-800 dark:bg-lime-950/20 dark:text-lime-300',
-    'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/20 dark:text-orange-300',
-    'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 dark:border-fuchsia-800 dark:bg-fuchsia-950/20 dark:text-fuchsia-300',
+    'border-violet-400/30 bg-violet-500/10 text-violet-700 dark:text-violet-300',
+    'border-pink-400/30 bg-pink-500/10 text-pink-700 dark:text-pink-300',
+    'border-cyan-400/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+    'border-lime-400/30 bg-lime-500/10 text-lime-700 dark:text-lime-300',
+    'border-orange-400/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+    'border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300',
 ];
 const colorPago = (index: number) => coloresPago[index % coloresPago.length];
 
@@ -243,15 +244,71 @@ const montoRecibeRemesa = (op: Operacion) => {
 
 // Widgets informativos sobre el filtro: mismo orden fijo y familia de color que colorTipo()
 // arriba, solo que como ícono en vez de texto (el valor grande se queda en tinta neutra —
-// el color identifica la categoría, no decora el número).
+// el color identifica la categoría; la cifra va en un badge con degradado, igual que Historial de Movimientos).
 const resumenTipos = [
-    { tipo: 'Venta' as const, label: 'Ventas', icon: ShoppingBag, iconClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' },
-    { tipo: 'Gasto' as const, label: 'Gastos', icon: TrendingDown, iconClass: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400' },
-    { tipo: 'Ingreso' as const, label: 'Ingresos', icon: TrendingUp, iconClass: 'bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400' },
-    { tipo: 'Transferencia' as const, label: 'Transferencias', icon: ArrowLeftRight, iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' },
-    { tipo: 'Compra' as const, label: 'Compras', icon: PackagePlus, iconClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400' },
-    { tipo: 'Ajuste' as const, label: 'Ajustes', icon: Edit3, iconClass: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400' },
-    { tipo: 'Remesa' as const, label: 'Operaciones Múltiples', icon: Shuffle, iconClass: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-400' },
+    {
+        tipo: 'Venta' as const,
+        label: 'Ventas',
+        icon: ShoppingBag,
+        estado: 'disponible' as const,
+        tarjeta: 'border-emerald-400/30 bg-emerald-500/5 dark:bg-emerald-500/10',
+        circulo: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+        cifra: 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-emerald-500/30',
+    },
+    {
+        tipo: 'Gasto' as const,
+        label: 'Gastos',
+        icon: TrendingDown,
+        estado: 'agotado' as const,
+        tarjeta: 'border-red-400/30 bg-red-500/5 dark:bg-red-500/10',
+        circulo: 'bg-red-500/15 text-red-600 dark:text-red-400',
+        cifra: 'bg-gradient-to-r from-red-500 to-red-600 shadow-red-500/30',
+    },
+    {
+        tipo: 'Ingreso' as const,
+        label: 'Ingresos',
+        icon: TrendingUp,
+        estado: 'tarjeta' as const,
+        tarjeta: 'border-sky-400/30 bg-sky-500/5 dark:bg-sky-500/10',
+        circulo: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+        cifra: 'bg-gradient-to-r from-sky-500 to-sky-600 shadow-sky-500/30',
+    },
+    {
+        tipo: 'Transferencia' as const,
+        label: 'Transferencias',
+        icon: ArrowLeftRight,
+        estado: 'especial' as const,
+        tarjeta: 'border-amber-400/30 bg-amber-500/5 dark:bg-amber-500/10',
+        circulo: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+        cifra: 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-500/30',
+    },
+    {
+        tipo: 'Compra' as const,
+        label: 'Compras',
+        icon: PackagePlus,
+        estado: 'indigo' as const,
+        tarjeta: 'border-indigo-400/30 bg-indigo-500/5 dark:bg-indigo-500/10',
+        circulo: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+        cifra: 'bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-indigo-500/30',
+    },
+    {
+        tipo: 'Ajuste' as const,
+        label: 'Ajustes',
+        icon: Edit3,
+        estado: 'global' as const,
+        tarjeta: 'border-violet-400/30 bg-violet-500/5 dark:bg-violet-500/10',
+        circulo: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+        cifra: 'bg-gradient-to-r from-violet-500 to-violet-600 shadow-violet-500/30',
+    },
+    {
+        tipo: 'Remesa' as const,
+        label: 'Operaciones Múltiples',
+        icon: Shuffle,
+        estado: 'completo' as const,
+        tarjeta: 'border-cyan-400/30 bg-cyan-500/5 dark:bg-cyan-500/10',
+        circulo: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',
+        cifra: 'bg-gradient-to-r from-cyan-500 to-cyan-600 shadow-cyan-500/30',
+    },
 ];
 
 // ─── Componente: ComboboxFiltro (multiselect con chips, para Cliente/Proveedor/Cuenta) ──
@@ -638,27 +695,39 @@ export default function RastreoOperacionesPage({
                 <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${puedeVerCosto ? 'lg:grid-cols-7' : 'lg:grid-cols-5'}`}>
                     {resumenTipos
                         .filter(({ tipo }) => (tipo !== 'Compra' || puedeVerCosto) && (tipo !== 'Remesa' || puedeVerRemesas))
-                        .map(({ tipo, label, icon: Icon, iconClass }) => (
-                            <Card key={tipo}>
-                                <CardContent className="flex items-center gap-3 p-4">
-                                    <div className={`rounded-lg p-2 ${iconClass}`}>
-                                        <Icon className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</p>
-                                        <p className="text-2xl font-semibold">{conteoPorTipo[tipo]}</p>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                        .map(({ tipo, label, icon: Icon, estado, tarjeta, circulo, cifra }) => (
+                            <SpotlightCard
+                                key={tipo}
+                                estado={estado}
+                                className={`rounded-lg border p-4 shadow-sm backdrop-blur-sm ${tarjeta}`}
+                            >
+                                <div className="mb-2 flex items-center gap-2">
+                                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${circulo}`}>
+                                        <Icon className="h-4 w-4" />
+                                    </span>
+                                    <p className="text-muted-foreground text-sm font-medium">{label}</p>
+                                </div>
+                                <Badge className={`gap-1 border-0 px-3 py-1 text-xl font-black text-white shadow-md ${cifra}`}>
+                                    {conteoPorTipo[tipo].toLocaleString('es-ES')}
+                                </Badge>
+                            </SpotlightCard>
                         ))}
                 </div>
 
                 {/* Filtros */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-sm font-medium">Filtros de Búsqueda</CardTitle>
+                <Card className="overflow-hidden border-l-4 border-slate-500/30 pt-0 shadow-sm">
+                    <CardHeader className="border-b bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Search className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Filtros de Búsqueda</CardTitle>
+                                <CardDescription className="text-slate-300">Acota las operaciones por fecha, tipo, usuario, cuenta o producto.</CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pt-6">
                         <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-2 lg:grid-cols-4">
                             <div className="space-y-2 md:col-span-2">
                                 <Label htmlFor="buscar">Buscar</Label>
@@ -758,31 +827,44 @@ export default function RastreoOperacionesPage({
                                 <Button onClick={handleFilter} className="w-full">
                                     <Search className="mr-2 h-4 w-4" /> Filtrar
                                 </Button>
-                                <Button variant="outline" onClick={exportToPDF}>
-                                    <FileText className="h-4 w-4" />
-                                </Button>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
                 {/* Tabla */}
-                <Card className="flex-1">
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-sidebar-border">
-                                <thead className="bg-sidebar-accent/50">
+                <Card className="flex-1 overflow-hidden border-l-4 border-slate-500/30 pt-0 shadow-sm">
+                    <CardHeader className="border-b bg-gradient-to-r from-slate-800 to-slate-900 px-6 py-5 text-white">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <History className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Operaciones registradas</CardTitle>
+                                    <CardDescription className="text-slate-300">{total} {total === 1 ? 'operación' : 'operaciones'} según los filtros.</CardDescription>
+                                </div>
+                            </div>
+                            <Button variant="secondary" size="sm" onClick={exportToPDF} className="gap-1 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
+                                <FileText className="h-4 w-4" /> Exportar PDF
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gradient-to-r from-slate-700 to-slate-800 text-white">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Referencia</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Cuenta Envía</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Monto</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Cuenta que Recibe</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Monto</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tasa de la Operación</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Detalles</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Referencia</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Cuenta Envía</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Monto</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Cuenta que Recibe</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Monto</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Tasa de la Operación</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Detalles</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-sidebar-border">
+                                <tbody className="divide-y">
                                     {ops.length === 0 ? (
                                         <tr>
                                             <td colSpan={7} className="px-6 py-10 text-center text-muted-foreground">
@@ -798,10 +880,10 @@ export default function RastreoOperacionesPage({
                                             return (
                                                 <React.Fragment key={rowKey}>
                                                     <tr
-                                                        className={`hover:bg-sidebar-accent/30 transition-colors ${esColapsable ? 'cursor-pointer' : ''}`}
+                                                        className={`hover:bg-muted/40 transition-colors ${esColapsable ? 'cursor-pointer' : ''}`}
                                                         onClick={() => esColapsable && toggleRow(rowKey)}
                                                     >
-                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
+                                                        <td className="px-4 py-3 text-sm whitespace-nowrap">
                                                             <div className="flex items-center gap-1.5">
                                                                 {esColapsable ? (
                                                                     expandida ? (
@@ -812,17 +894,17 @@ export default function RastreoOperacionesPage({
                                                                 ) : (
                                                                     <span className="w-4" />
                                                                 )}
-                                                                <Badge variant="outline" className={colorTipo(op.tipo)}>
+                                                                <Badge className={colorTipo(op.tipo)}>
                                                                     {op.referencia}
                                                                 </Badge>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
+                                                        <td className="px-4 py-3 text-sm whitespace-nowrap">
                                                             {op.tipo === 'Compra' ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {pagosCompraConOrigen(op).length > 0
                                                                         ? pagosCompraConOrigen(op).map((p, i) => (
-                                                                              <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                              <Badge key={i} className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
                                                                                   {p.origen}
                                                                               </Badge>
                                                                           ))
@@ -834,18 +916,17 @@ export default function RastreoOperacionesPage({
                                                                 cuentaEnvia(op)
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
+                                                        <td className="px-4 py-3 text-sm font-mono whitespace-nowrap">
                                                             {op.tipo === 'Compra' ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {pagosCompraConOrigen(op).map((p, i) => (
-                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                        <Badge key={i} className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
                                                                             {formatMonto(p.monto, 'USD')}
                                                                         </Badge>
                                                                     ))}
                                                                     {montoPendienteCompra(op) > 0 && (
                                                                         <Badge
-                                                                            variant="outline"
-                                                                            className="border-red-200 bg-red-50 font-normal text-red-700 whitespace-nowrap dark:border-red-800 dark:bg-red-950/20 dark:text-red-300"
+                                                                            className="border-red-400/30 bg-red-500/10 font-normal text-red-700 whitespace-nowrap dark:text-red-300"
                                                                         >
                                                                             Deuda pendiente: {formatMonto(montoPendienteCompra(op), 'USD')}
                                                                         </Badge>
@@ -858,11 +939,11 @@ export default function RastreoOperacionesPage({
                                                                 montoEnvia(op)
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm">
+                                                        <td className="px-4 py-3 text-sm">
                                                             {op.tipo === 'Venta' ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {op.detalle_venta?.pagos.map((p, i) => (
-                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                        <Badge key={i} className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
                                                                             {p.destino}
                                                                         </Badge>
                                                                     ))}
@@ -875,11 +956,11 @@ export default function RastreoOperacionesPage({
                                                                 cuentaRecibeMovimiento(op)
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm font-mono">
+                                                        <td className="px-4 py-3 text-sm font-mono">
                                                             {op.tipo === 'Venta' ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {op.detalle_venta?.pagos.map((p, i) => (
-                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                        <Badge key={i} className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
                                                                             {p.moneda ? formatMonto(p.monto_original, p.moneda) : fmt(p.monto_original)}
                                                                         </Badge>
                                                                     ))}
@@ -905,11 +986,11 @@ export default function RastreoOperacionesPage({
                                                                 montoRecibeMovimiento(op)
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm">
+                                                        <td className="px-4 py-3 text-sm">
                                                             {op.tipo === 'Venta' ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {op.detalle_venta?.pagos.map((p, i) => (
-                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                        <Badge key={i} className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
                                                                             {p.tasa_cambio}
                                                                         </Badge>
                                                                     ))}
@@ -918,13 +999,13 @@ export default function RastreoOperacionesPage({
                                                                 tasaOperacion(op)
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm text-muted-foreground">
+                                                        <td className="px-4 py-3 text-sm text-muted-foreground">
                                                             {op.descripcion || '-'}
                                                         </td>
                                                     </tr>
                                                     {esColapsable && expandida && (
                                                         <tr>
-                                                            <td colSpan={7} className="bg-sidebar-accent/20 px-6 py-3">
+                                                            <td colSpan={7} className="bg-muted/20 px-6 py-4">
                                                                 {op.detalle_venta ? (
                                                                     <DetalleVentaExpandido detalle={op.detalle_venta} />
                                                                 ) : op.detalle_movimiento ? (
@@ -956,11 +1037,11 @@ export default function RastreoOperacionesPage({
                         </div>
 
                         {/* Paginación */}
-                        {last_page > 1 && (
-                            <div className="flex items-center justify-between border-t border-sidebar-border px-6 py-4">
-                                <p className="text-sm text-muted-foreground">
-                                    Mostrando {from}–{to} de {total} operaciones
-                                </p>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm">
+                                Mostrando {from ?? 0} a {to ?? 0} de {total} resultados
+                            </div>
+                            {last_page > 1 && (
                                 <Pagination className="mx-0 w-auto">
                                     <PaginationContent>
                                         <PaginationItem>
@@ -1006,8 +1087,8 @@ export default function RastreoOperacionesPage({
                                         </PaginationItem>
                                     </PaginationContent>
                                 </Pagination>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
             </div>

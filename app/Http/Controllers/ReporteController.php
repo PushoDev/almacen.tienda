@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Almacen;
 use App\Models\Compra;
 use App\Models\Cuenta;
 use App\Models\HistorialPrecioCosto;
@@ -424,82 +425,226 @@ class ReporteController extends Controller
     // ========================================================================
 
     /**
-     * Obtener los productos más vendidos.
+     * Top 10 de productos con más unidades vendidas, con filtros. Solo cuenta ventas completadas
+     * (las canceladas, devueltas, rechazadas y pendientes no son ventas hechas). Los totales
+     * cubren TODO lo que cumple los filtros, no solo el top 10.
      */
-    public function productosMasVendidos()
+    public function productosMasVendidos(Request $request)
     {
-        $productos = DB::table('venta_detalles')
-            ->join('productos', 'venta_detalles.producto_id', '=', 'productos.id')
+        $filtros = $request->validate([
+            'almacen_id' => ['nullable', 'integer', 'exists:almacens,id'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
+            'buscar' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $base = DB::table('venta_detalles')
+            ->join('ventas', 'ventas.id', '=', 'venta_detalles.venta_id')
+            ->join('productos', 'productos.id', '=', 'venta_detalles.producto_id')
+            ->where('ventas.estado', 'completada')
+            ->when($filtros['almacen_id'] ?? null, fn ($q, $almacenId) => $q->where('ventas.almacen_id', $almacenId))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
+                $like = '%'.$buscar.'%';
+
+                $q->where(fn ($q) => $q->where('productos.nombre_producto', 'like', $like)
+                    ->orWhere('productos.marca_producto', 'like', $like)
+                    ->orWhere('productos.modelo_producto', 'like', $like));
+            });
+
+        $productos = (clone $base)
             ->select(
+                'productos.id',
                 'productos.nombre_producto',
+                'productos.marca_producto',
+                'productos.modelo_producto',
+                'productos.capacidad_producto',
+                'productos.color_producto',
                 DB::raw('SUM(venta_detalles.cantidad) as total_vendido'),
-                DB::raw('COUNT(venta_detalles.venta_id) as veces_vendido')
+                DB::raw('COUNT(DISTINCT venta_detalles.venta_id) as veces_vendido'),
+                DB::raw('SUM(venta_detalles.subtotal) as ingresos'),
+                DB::raw('SUM(venta_detalles.ganancia) as ganancia'),
             )
-            ->groupBy('productos.id', 'productos.nombre_producto')
+            ->groupBy(
+                'productos.id',
+                'productos.nombre_producto',
+                'productos.marca_producto',
+                'productos.modelo_producto',
+                'productos.capacidad_producto',
+                'productos.color_producto',
+            )
             ->orderByDesc('total_vendido')
-            ->take(10)
-            ->get();
+            ->orderBy('productos.nombre_producto')
+            ->limit(10)
+            ->get()
+            ->map(fn ($p) => [
+                'id' => (int) $p->id,
+                'nombre_producto' => $p->nombre_producto,
+                'marca_producto' => $p->marca_producto,
+                'modelo_producto' => $p->modelo_producto,
+                'capacidad_producto' => $p->capacidad_producto,
+                'color_producto' => $p->color_producto,
+                'total_vendido' => (int) $p->total_vendido,
+                'veces_vendido' => (int) $p->veces_vendido,
+                'ingresos' => round((float) $p->ingresos, 2),
+                'ganancia' => round((float) $p->ganancia, 2),
+            ]);
+
+        $totales = (clone $base)
+            ->selectRaw('COALESCE(SUM(venta_detalles.cantidad), 0) as unidades, COUNT(DISTINCT venta_detalles.producto_id) as productos, COUNT(DISTINCT venta_detalles.venta_id) as ventas, COALESCE(SUM(venta_detalles.subtotal), 0) as ingresos')
+            ->first();
 
         return Inertia::render('Reportes/Report/ProductosMasVendidos', [
             'productos' => $productos,
+            'totales' => [
+                'unidades' => (int) $totales->unidades,
+                'productos' => (int) $totales->productos,
+                'ventas' => (int) $totales->ventas,
+                'ingresos' => round((float) $totales->ingresos, 2),
+            ],
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->orderBy('nombre_almacen')->get(),
+            'filtros' => [
+                'almacen_id' => $filtros['almacen_id'] ?? '',
+                'desde' => $filtros['desde'] ?? '',
+                'hasta' => $filtros['hasta'] ?? '',
+                'buscar' => $filtros['buscar'] ?? '',
+            ],
         ]);
     }
 
     /**
-     * Reporte de Ventas por Período.
+     * Reporte de Ventas por Período: ventas completadas, paginadas, con filtros y el receptor de
+     * cada una. Los totales cubren todo lo que cumple los filtros, no solo la página.
      */
     public function ventasPorPeriodo(Request $request)
     {
-        $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'user_id' => 'nullable|exists:users,id',
+        $filtros = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:100'],
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'almacen_id' => ['nullable', 'integer', 'exists:almacens,id'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
         ]);
 
-        $query = Venta::with(['usuario', 'cliente', 'almacen'])
-            ->where('estado', 'completada'); // Solo ventas completadas
+        $consulta = Venta::query()
+            ->where('ventas.estado', 'completada')
+            ->when($filtros['user_id'] ?? null, fn ($q, $userId) => $q->where('ventas.user_id', $userId))
+            ->when($filtros['almacen_id'] ?? null, fn ($q, $almacenId) => $q->where('ventas.almacen_id', $almacenId))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
+                $like = '%'.$buscar.'%';
 
-        if ($request->filled('start_date')) {
-            $query->whereDate('created_at', '>=', $request->start_date);
-        }
+                $q->where(function ($q) use ($buscar, $like) {
+                    if (ctype_digit($buscar)) {
+                        $q->orWhere('ventas.id', (int) $buscar);
+                    }
 
-        if ($request->filled('end_date')) {
-            $query->whereDate('created_at', '<=', $request->end_date);
-        }
+                    $q->orWhereHas('usuario', fn ($q) => $q->where('name', 'like', $like))
+                        ->orWhereHas('destinatario', fn ($q) => $q->where('nombre', 'like', $like)
+                            ->orWhere('apellidos', 'like', $like)
+                            ->orWhere('telefono_contacto', 'like', $like));
+                });
+            });
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->user_id);
-        }
+        $totales = (clone $consulta)
+            ->selectRaw('COUNT(*) as ventas, COALESCE(SUM(ventas.total), 0) as total, COALESCE(SUM(ventas.total_ganancia), 0) as ganancia')
+            ->first();
 
-        $ventas = $query->orderByDesc('created_at')->get();
+        $ventas = (clone $consulta)
+            ->select('ventas.id', 'ventas.user_id', 'ventas.almacen_id', 'ventas.total', 'ventas.total_ganancia', 'ventas.es_venta_especial', 'ventas.es_venta_sin_comision', 'ventas.created_at')
+            ->with([
+                'usuario:id,name',
+                'almacen:id,nombre_almacen',
+                'destinatario:id,venta_id,nombre,apellidos,telefono_contacto',
+            ])
+            ->orderByDesc('ventas.created_at')
+            ->orderByDesc('ventas.id')
+            ->paginate(15)
+            ->withQueryString();
+
+        $cantidad = (int) $totales->ventas;
 
         return Inertia::render('Reportes/Report/VentasPorPeriodo', [
             'ventas' => $ventas,
-            'usuarios' => DB::table('users')->select('id', 'name')->get(),
+            'totales' => [
+                'ventas' => $cantidad,
+                'total' => round((float) $totales->total, 2),
+                'ganancia' => round((float) $totales->ganancia, 2),
+                'promedio' => $cantidad > 0 ? round((float) $totales->total / $cantidad, 2) : 0.0,
+            ],
+            'usuarios' => DB::table('users')
+                ->whereIn('id', DB::table('ventas')->where('estado', 'completada')->select('user_id'))
+                ->select('id', 'name')
+                ->orderBy('name')
+                ->get(),
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->orderBy('nombre_almacen')->get(),
+            'filtros' => [
+                'buscar' => $filtros['buscar'] ?? '',
+                'user_id' => $filtros['user_id'] ?? '',
+                'almacen_id' => $filtros['almacen_id'] ?? '',
+                'desde' => $filtros['desde'] ?? '',
+                'hasta' => $filtros['hasta'] ?? '',
+            ],
         ]);
     }
 
     /**
-     * Reporte de Ventas por Vendedor.
+     * Reporte de Ventas por Vendedor: ventas completadas agrupadas por quien las hizo, con
+     * periodo opcional. Los admin y moderadores que venden también aparecen, con su rol.
      */
-    public function ventasPorVendedor()
+    public function ventasPorVendedor(Request $request)
     {
-        $ventas = DB::table('ventas')
+        $filtros = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:100'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
+        ]);
+
+        $vendedores = DB::table('ventas')
             ->join('users', 'ventas.user_id', '=', 'users.id')
-            ->select(
-                'users.name as vendedor',
-                DB::raw('COUNT(ventas.id) as total_ventas'),
-                DB::raw('SUM(ventas.total) as monto_total_vendido'),
-                DB::raw('SUM(ventas.total_ganancia) as ganancia_operativa'),
-                DB::raw('SUM(ventas.monto_diferencia_cambiaria) as diferencia_cambiaria')
-            )
             ->where('ventas.estado', 'completada')
-            ->groupBy('users.id', 'users.name')
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where('users.name', 'like', '%'.$buscar.'%'))
+            ->select(
+                'users.id',
+                'users.name as vendedor',
+                'users.role as rol',
+                DB::raw('COUNT(ventas.id) as total_ventas'),
+                DB::raw('COALESCE(SUM(ventas.total), 0) as monto_total_vendido'),
+                DB::raw('COALESCE(SUM(ventas.total_ganancia), 0) as ganancia'),
+                DB::raw('COALESCE(SUM(ventas.total_comision), 0) as comision'),
+            )
+            ->groupBy('users.id', 'users.name', 'users.role')
             ->orderByDesc('monto_total_vendido')
-            ->get();
+            ->orderBy('users.name')
+            ->get()
+            ->map(fn ($v) => [
+                'id' => (int) $v->id,
+                'vendedor' => $v->vendedor,
+                'rol' => $v->rol,
+                'total_ventas' => (int) $v->total_ventas,
+                'monto_total_vendido' => round((float) $v->monto_total_vendido, 2),
+                'ganancia' => round((float) $v->ganancia, 2),
+                'comision' => round((float) $v->comision, 2),
+            ]);
 
         return Inertia::render('Reportes/Report/VentasPorVendedor', [
-            'ventas' => $ventas,
+            'vendedores' => $vendedores,
+            'totales' => [
+                'vendedores' => $vendedores->count(),
+                'ventas' => $vendedores->sum('total_ventas'),
+                'total' => round($vendedores->sum('monto_total_vendido'), 2),
+                'ganancia' => round($vendedores->sum('ganancia'), 2),
+                'comision' => round($vendedores->sum('comision'), 2),
+            ],
+            'filtros' => [
+                'buscar' => $filtros['buscar'] ?? '',
+                'desde' => $filtros['desde'] ?? '',
+                'hasta' => $filtros['hasta'] ?? '',
+            ],
         ]);
     }
 
@@ -528,52 +673,68 @@ class ReporteController extends Controller
     }
 
     /**
-     * Reporte de Ganancias (Optimizado).
-     * Ahora utiliza los totales calculados en la tabla ventas.
+     * Reporte de Ganancias: rentabilidad de cada venta completada, paginada y con filtros. La
+     * ganancia neta es la de los productos, más el resultado cambiario, menos la comisión: se
+     * muestra la cadena completa para que no haya que adivinar de dónde sale cada número. Los
+     * totales cubren todo lo que cumple los filtros, no solo la página.
      */
     public function reporteGanancias(Request $request)
     {
-        $query = Venta::with(['usuario'])
-            ->where('estado', 'completada');
+        $filtros = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:100'],
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
+        ]);
 
-        if ($request->filled('start_date')) {
-            $query->whereDate('created_at', '>=', $request->start_date);
-        }
+        $consulta = Venta::query()
+            ->where('ventas.estado', 'completada')
+            ->when($filtros['user_id'] ?? null, fn ($q, $userId) => $q->where('ventas.user_id', $userId))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
+                $q->where(function ($q) use ($buscar) {
+                    if (ctype_digit($buscar)) {
+                        $q->orWhere('ventas.id', (int) $buscar);
+                    }
 
-        if ($request->filled('end_date')) {
-            $query->whereDate('created_at', '<=', $request->end_date);
-        }
+                    $q->orWhereHas('usuario', fn ($q) => $q->where('name', 'like', '%'.$buscar.'%'));
+                });
+            });
 
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->user_id);
-        }
+        $totales = (clone $consulta)
+            ->selectRaw('COUNT(*) as ventas, COALESCE(SUM(ventas.total), 0) as total, COALESCE(SUM(ventas.total_ganancia), 0) as productos, COALESCE(SUM(ventas.ganancia_perdida_cambiaria), 0) as cambiaria, COALESCE(SUM(ventas.total_comision), 0) as comision, COALESCE(SUM(ventas.ganancia_neta), 0) as neta')
+            ->first();
 
-        $ventas = $query->orderByDesc('created_at')->get()->map(function ($venta) {
-            // Ganancia Real = Ganancia Producto + Diferencia Cambiaria
-            $ganancia_real = ($venta->total_ganancia ?? 0) + ($venta->monto_diferencia_cambiaria ?? 0);
-
-            return [
-                'id' => $venta->id,
-                'fecha' => $venta->created_at->format('Y-m-d H:i'),
-                'vendedor' => $venta->usuario->name,
-                'total_venta' => (float) $venta->total,
-                'ganancia_producto' => (float) $venta->total_ganancia,
-                'diferencia_cambiaria' => (float) $venta->monto_diferencia_cambiaria,
-                'ganancia_total' => (float) $ganancia_real,
-            ];
-        });
-
-        // Totales generales para el pie del reporte
-        $totales = [
-            'venta' => $ventas->sum('total_venta'),
-            'ganancia' => $ventas->sum('ganancia_total'),
-            'diferencia_cambiaria' => $ventas->sum('diferencia_cambiaria'),
-        ];
+        $ventas = (clone $consulta)
+            ->select('ventas.id', 'ventas.user_id', 'ventas.total', 'ventas.total_ganancia', 'ventas.ganancia_perdida_cambiaria', 'ventas.total_comision', 'ventas.ganancia_neta', 'ventas.created_at')
+            ->with('usuario:id,name')
+            ->orderByDesc('ventas.created_at')
+            ->orderByDesc('ventas.id')
+            ->paginate(15)
+            ->withQueryString();
 
         return Inertia::render('Reportes/Report/ReporteGanancias', [
             'ventas' => $ventas,
-            'totales' => $totales,
-            'usuarios' => DB::table('users')->select('id', 'name')->get(),
+            'totales' => [
+                'ventas' => (int) $totales->ventas,
+                'total' => round((float) $totales->total, 2),
+                'productos' => round((float) $totales->productos, 2),
+                'cambiaria' => round((float) $totales->cambiaria, 2),
+                'comision' => round((float) $totales->comision, 2),
+                'neta' => round((float) $totales->neta, 2),
+            ],
+            'usuarios' => DB::table('users')
+                ->whereIn('id', DB::table('ventas')->where('estado', 'completada')->select('user_id'))
+                ->select('id', 'name')
+                ->orderBy('name')
+                ->get(),
+            'filtros' => [
+                'buscar' => $filtros['buscar'] ?? '',
+                'user_id' => $filtros['user_id'] ?? '',
+                'desde' => $filtros['desde'] ?? '',
+                'hasta' => $filtros['hasta'] ?? '',
+            ],
         ]);
     }
 
