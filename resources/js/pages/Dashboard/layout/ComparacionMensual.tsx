@@ -53,18 +53,15 @@ export default function ComparacionMensual({
                         <TableBody>
                             {comparaciones && comparaciones.length > 0 ? (
                                 (() => {
-                                    // Clientes, Proveedores e Inventario se muestran aparte de las monedas reales
+                                    // Clientes e Inventario se muestran aparte de las monedas reales
                                     // (su propia fila con borde punteado, sin tasa de cambio propia — igual que
                                     // antes), pero SÍ cuentan dentro de "Totales" (confirmado por el cliente
-                                    // 2026-08-25 — antes Inventario quedaba fuera a propósito, ya no; Proveedores
-                                    // se agregó el mismo día tras notar que Totales daba más que Capital
-                                    // Financiero por excluir esta deuda, que es negativa).
+                                    // 2026-08-25 — antes Inventario quedaba fuera a propósito, ya no).
                                     const filasMonedas = comparaciones.filter(
-                                        (c) => c.moneda !== 'INVENTARIO' && c.moneda !== 'CLIENTES' && c.moneda !== 'PROVEEDORES',
+                                        (c) => c.moneda !== 'INVENTARIO' && c.moneda !== 'CLIENTES',
                                     );
                                     const filaInventario = comparaciones.find((c) => c.moneda === 'INVENTARIO');
                                     const filaClientes = comparaciones.find((c) => c.moneda === 'CLIENTES');
-                                    const filaProveedores = comparaciones.find((c) => c.moneda === 'PROVEEDORES');
 
                                     const totalMesAnterior = comparaciones.reduce(
                                         (sum, comp) => sum + comp.monto_anterior / (comp.tasa_cambio || 1),
@@ -187,7 +184,6 @@ export default function ComparacionMensual({
                                             {filasMonedas.map((comparacion, index) => filaComparacion(comparacion, index))}
                                             {filaInventario && filaEspecial(filaInventario, 'valor de inventario (Productos)')}
                                             {filaClientes && filaEspecial(filaClientes, 'saldo neto de clientes')}
-                                            {filaProveedores && filaEspecial(filaProveedores, 'saldo neto de proveedores')}
 
                                             <TableRow className="bg-muted/40 hover:bg-muted/40 font-semibold">
                                                 <TableCell>Totales</TableCell>

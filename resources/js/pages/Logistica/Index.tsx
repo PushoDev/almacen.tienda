@@ -49,7 +49,6 @@ export default function LogisticaPage({
     totalCategorias,
     categoriasActivas,
     totalClientes,
-    totalProveedores,
     totalProductos,
     totalUnidades,
     gastosMensuales,
@@ -60,7 +59,6 @@ export default function LogisticaPage({
     enTransito,
     resumenCuentas,
     resumenClientes,
-    resumenProveedores,
     resumenProductos,
     almacenesLista = [],
 }: LogisticaProps) {
@@ -117,7 +115,7 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                        {formatearMonto((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + transitoUsd)}
+                                        {formatearMonto((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + transitoUsd)}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
@@ -137,7 +135,7 @@ export default function LogisticaPage({
                                         </div>
                                     </div>
                                     <CardTitle className="text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                                        {formatearMonto((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0) + (transitoDe('USD')?.monto ?? 0))}
+                                        {formatearMonto((resumenClientes?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0) + (transitoDe('USD')?.monto ?? 0))}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
@@ -441,95 +439,6 @@ export default function LogisticaPage({
                         </Card>
                     )}
 
-                    {/* Resumen de Proveedores */}
-                    {canViewFinance && resumenProveedores && (
-                        <Card className="col-span-full overflow-hidden border-purple-500/30 border-l-4 pt-0 shadow-sm hover:shadow-md transition-shadow">
-                            <CardHeader className="border-b bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 text-white">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                                        <Handshake className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-white">Resumen de Proveedores</CardTitle>
-                                        <CardDescription className="text-purple-100">Distribución general de todos los proveedores del sistema</CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* Row 1: KPIs */}
-                                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                                    <div className="rounded-lg border border-purple-500/20 bg-purple-50/50 p-4 dark:bg-purple-900/20">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Total Proveedores</p>
-                                            <Truck className="h-5 w-5 text-purple-500" />
-                                        </div>
-                                        <p className="mt-1 text-2xl font-bold text-purple-900 dark:text-purple-200">{resumenProveedores.total_proveedores}</p>
-                                        <p className="text-xs text-purple-500 dark:text-purple-400">Proveedores registrados</p>
-                                    </div>
-                                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-50/50 p-4 dark:bg-emerald-900/20">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Fondo Total</p>
-                                            <TrendingUp className="h-5 w-5 text-emerald-500" />
-                                        </div>
-                                        <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-200">$: {resumenProveedores.total_fondo.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-xs text-emerald-500 dark:text-emerald-400">Saldo a favor empresa</p>
-                                    </div>
-                                    <div className="rounded-lg border border-red-500/20 bg-red-50/50 p-4 dark:bg-red-900/20">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-medium text-red-600 dark:text-red-400">Deuda Total</p>
-                                            <TrendingDown className="h-5 w-5 text-red-500" />
-                                        </div>
-                                        <p className="mt-1 text-2xl font-bold text-red-900 dark:text-red-200">$: {resumenProveedores.total_deuda.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-xs text-red-500 dark:text-red-400">Deuda pendiente</p>
-                                    </div>
-                                    <div className="rounded-lg border border-slate-500/20 bg-slate-50/50 p-4 dark:bg-slate-900/20">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Balance Neto</p>
-                                            <DollarSign className="h-5 w-5 text-slate-500" />
-                                        </div>
-                                        <p className={`mt-1 text-2xl font-bold ${resumenProveedores.balance_neto >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            $: {resumenProveedores.balance_neto.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                                            {resumenProveedores.balance_neto >= 0 ? 'A favor empresa' : 'A favor proveedores'}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Row 2: Barras de estado */}
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                    {(['fondo', 'deuda', 'neutro'] as const).map((estado) => {
-                                        const data = resumenProveedores.por_estado[estado];
-                                        const total = resumenProveedores.total_proveedores;
-                                        const pct = total > 0 ? (data.cantidad / total) * 100 : 0;
-                                        const styles = estado === 'fondo'
-                                            ? { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', label: 'Con Fondo' }
-                                            : estado === 'deuda'
-                                                ? { bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800', bar: 'bg-red-500', label: 'En Deuda' }
-                                                : { bg: 'bg-gray-50 dark:bg-gray-800/40', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700', bar: 'bg-gray-400', label: 'Neutro' };
-                                        return (
-                                            <div key={estado} className={`rounded-lg border p-4 shadow-sm ${styles.border} ${styles.bg}`}>
-                                                <div className="mb-2 flex items-center justify-between">
-                                                    <span className={`text-sm font-semibold ${styles.text}`}>{styles.label}</span>
-                                                    <Badge variant="outline" className={`${styles.text} ${styles.border} text-xs`}>{data.cantidad} {data.cantidad === 1 ? 'proveedor' : 'proveedores'}</Badge>
-                                                </div>
-                                                <p className={`text-2xl font-bold ${styles.text}`}>
-                                                    $: {data.saldo.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </p>
-                                                <div className="mt-3 flex items-center gap-3">
-                                                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                                                        <div className={`h-full rounded-full transition-all duration-500 ${styles.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                                                    </div>
-                                                    <span className="text-xs font-medium tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
                     {/* Resumen de Productos */}
                     {canViewFinance && resumenProductos && (
                         <Card className="col-span-full overflow-hidden border-cyan-500/30 border-l-4 pt-0 shadow-sm hover:shadow-md transition-shadow">
@@ -630,7 +539,7 @@ export default function LogisticaPage({
                             <GastosMensualesChart data={gastosMensuales} />
                             {/* Productos Mas Comprados */}
                             <ProductosMasCompradosPie data={productosTop} />
-                            {/* Compras por Proveedor */}
+                            {/* Compras por Asociado (la contraparte de una compra es un cliente) */}
                             <ComprasPorProveedorPie data={comprasPorProveedor} />
                             {/* Productos por Almacen */}
                             <ProductosPorAlmacenCharts data={productosPorAlmacen} />
