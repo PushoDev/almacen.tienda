@@ -41,7 +41,6 @@ class DashboardStatsService
             : $this->countAlmacenes();
 
         $categoriasActivas = $isVendor ? 0 : $this->countCategoriasActivas();
-        $totalProveedores = $isVendor ? 0 : $this->countProveedores();
         $totalClientes = $isVendor ? 0 : $this->countClientes();
 
         $inversionTotal = $canViewFinance ? $this->calculateInversionTotal() : 0.0;
@@ -59,14 +58,12 @@ class DashboardStatsService
 
         $resumenCuentas = $canViewFinance ? $this->getResumenCuentas() : null;
         $resumenClientes = $canViewFinance ? $this->getResumenClientes() : null;
-        $resumenProveedores = $canViewFinance ? $this->getResumenProveedores() : null;
         $resumenProductos = $canViewFinance ? $this->getResumenProductos() : null;
 
         return [
             'canViewFinance' => $canViewFinance,
             'totalCategorias' => $totalCategorias,
             'categoriasActivas' => $categoriasActivas,
-            'totalProveedores' => $totalProveedores,
             'totalClientes' => $totalClientes,
             'totalAlmacenes' => $totalAlmacenes,
             'totalProductos' => $totalProductos,
@@ -90,7 +87,6 @@ class DashboardStatsService
             'resumenCuentas' => $resumenCuentas,
             'enTransito' => $canViewFinance ? TransferenciaPendiente::resumenEnTransitoGlobal() : null,
             'resumenClientes' => $resumenClientes,
-            'resumenProveedores' => $resumenProveedores,
             'resumenProductos' => $resumenProductos,
         ];
     }
@@ -105,14 +101,12 @@ class DashboardStatsService
     {
         $resumenCuentas = $this->getResumenCuentas();
         $resumenClientes = $this->getResumenClientes();
-        $resumenProveedores = $this->getResumenProveedores();
         $resumenProductos = $this->getResumenProductos();
 
-        // Clientes/proveedores/inventario no tienen desglose por moneda en el sistema
+        // Clientes/inventario no tienen desglose por moneda en el sistema
         // (son montos únicos, sin columna moneda) — se asumen en la moneda principal,
         // así que solo se suman a esa tarjeta, no a las demás.
         $extrasMonedaPrincipal = $resumenClientes['balance_neto']
-            + $resumenProveedores['balance_neto']
             + $resumenProductos['total_importe_global'];
 
         $codigoPrincipal = $resumenCuentas['moneda_principal']['codigo'] ?? null;
@@ -138,7 +132,7 @@ class DashboardStatsService
                     'principal' => $esPrincipal,
                     'monto' => round(($esPrincipal ? $extrasMonedaPrincipal : 0) + $info['original'] + $transitoMoneda, 2),
                     'en_transito' => $transitoMoneda,
-                    'incluye_clientes_proveedores_inventario' => $esPrincipal,
+                    'incluye_clientes_inventario' => $esPrincipal,
                 ];
             })
             ->values()
@@ -190,12 +184,6 @@ class DashboardStatsService
             'original' => $this->getResumenClientes()['balance_neto'],
             'simbolo' => '$',
         ];
-        // Mismo mecanismo que Clientes — pedido explícito del cliente 2026-08-25, tras notar que
-        // Totales daba un valor mayor que Capital Financiero por no incluir esta deuda (negativa).
-        $porMoneda['PROVEEDORES'] = [
-            'original' => $this->getResumenProveedores()['balance_neto'],
-            'simbolo' => '$',
-        ];
         // El dinero en tránsito ya salió de su cuenta de origen y aún no está en la de destino: se suma al saldo de su
         // moneda (igual que el Resumen Financiero) para que Totales y Capital Financiero sean el mismo número. Se
         // guarda dentro de `monto_actual`, así el "Mes Anterior" del próximo mes también lo incluye.
@@ -242,7 +230,7 @@ class DashboardStatsService
             $diferencia = $montoActual - $montoAnterior;
             $porcentajeCambio = $montoAnterior != 0.0 ? round(($diferencia / $montoAnterior) * 100, 2) : 0.0;
             $nombreMoneda = $monedaInfo->nombre_moneda
-                ?? ($codigo === 'INVENTARIO' ? 'Inventario' : ($codigo === 'CLIENTES' ? 'Clientes' : ($codigo === 'PROVEEDORES' ? 'Proveedores' : $codigo)));
+                ?? ($codigo === 'INVENTARIO' ? 'Inventario' : ($codigo === 'CLIENTES' ? 'Clientes' : $codigo));
 
             // Tasa efectiva, no la tasa cruda de "la primera moneda que coincida con el código".
             // getResumenPorMonedaPerm() agrupa por codigo_moneda — este sistema tiene 2 monedas
@@ -537,11 +525,6 @@ class DashboardStatsService
     private function countCategoriasActivas(): int
     {
         return (int) DB::table('categorias')->where('activar_categoria', true)->count();
-    }
-
-    private function countProveedores(): int
-    {
-        return (int) DB::table('proveedors')->count();
     }
 
     private function countClientes(): int
@@ -922,30 +905,6 @@ class DashboardStatsService
 
         return [
             'total_clientes' => $clientes->count(),
-            'total_fondo' => round($totalFondo, 2),
-            'total_deuda' => round(abs($totalDeuda), 2),
-            'balance_neto' => round($totalFondo + $totalDeuda, 2),
-            'por_estado' => [
-                'fondo' => ['cantidad' => $conFondo->count(), 'saldo' => round($totalFondo, 2)],
-                'deuda' => ['cantidad' => $conDeuda->count(), 'saldo' => round(abs($totalDeuda), 2)],
-                'neutro' => ['cantidad' => $neutro->count(), 'saldo' => 0],
-            ],
-        ];
-    }
-
-    private function getResumenProveedores(): array
-    {
-        $proveedores = DB::table('proveedors')->get();
-
-        $conFondo = $proveedores->where('saldo_proveedor', '>', 0);
-        $conDeuda = $proveedores->where('saldo_proveedor', '<', 0);
-        $neutro = $proveedores->filter(fn ($p) => is_null($p->saldo_proveedor) || (float) $p->saldo_proveedor === 0.0);
-
-        $totalFondo = (float) $conFondo->sum('saldo_proveedor');
-        $totalDeuda = (float) $conDeuda->sum('saldo_proveedor');
-
-        return [
-            'total_proveedores' => $proveedores->count(),
             'total_fondo' => round($totalFondo, 2),
             'total_deuda' => round(abs($totalDeuda), 2),
             'balance_neto' => round($totalFondo + $totalDeuda, 2),

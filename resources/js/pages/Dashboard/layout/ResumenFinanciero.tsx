@@ -85,8 +85,8 @@ export default function ResumenFinanciero({
                                                                 )}
                                                             </div>
                                                             <p className="text-muted-foreground truncate text-xs">{item.nombre}</p>
-                                                            {item.incluye_clientes_proveedores_inventario && (
-                                                                <p className="text-muted-foreground text-xs italic">incluye clientes, proveedores e inventario</p>
+                                                            {item.incluye_clientes_inventario && (
+                                                                <p className="text-muted-foreground text-xs italic">incluye clientes e inventario</p>
                                                             )}
                                                         </div>
                                                     </div>
@@ -133,7 +133,7 @@ export default function ResumenFinanciero({
                             <Info className="mt-0.5 h-4 w-4 shrink-0" />
                             <span>
                                 El monto de <strong>{resumenFinanciero.moneda_principal.codigo}</strong> incluye, además del saldo real de las
-                                cuentas, el saldo neto de clientes y proveedores y el valor del inventario — por eso no coincide con la suma
+                                cuentas, el saldo neto de clientes y el valor del inventario — por eso no coincide con la suma
                                 simple de solo cuentas. Las demás monedas muestran únicamente su saldo de cuentas.
                             </span>
                         </div>

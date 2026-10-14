@@ -125,7 +125,7 @@ export interface CapitalPorMoneda {
     monto: number;
     /** Parte de `monto` que viaja en envíos de dinero sin confirmar (ya está sumada). */
     en_transito: number;
-    incluye_clientes_proveedores_inventario: boolean;
+    incluye_clientes_inventario: boolean;
 }
 
 export interface ResumenFinanciero {
