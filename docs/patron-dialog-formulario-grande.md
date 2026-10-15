@@ -1,6 +1,6 @@
 # Patrón: Diálogo grande de dos paneles (formulario + resumen)
 
-> Origen: `Comprar/Index.tsx`, diálogo "Editar Producto" (dentro de la tabla de "Lista de los Productos a Comprar"). Identificado el 2026-08-10 como un patrón que vale la pena reutilizar — el resto del proyecto usa versiones más simples para diálogos grandes de una sola columna (ver "Variantes más simples, ya existentes" al final, con los candidatos pendientes de aplicar después).
+> Origen: `Comprar/Index.tsx`, diálogo "Editar Producto" (dentro de la tabla de "Lista de los Productos a Comprar"). Desde el 2026-10-15 vive en `resources/js/components/compras/compra-lista-productos.tsx`, como un solo diálogo para toda la lista y con un borrador propio. Identificado el 2026-08-10 como un patrón que vale la pena reutilizar — el resto del proyecto usa versiones más simples para diálogos grandes de una sola columna (ver "Variantes más simples, ya existentes" al final, con los candidatos pendientes de aplicar después).
 
 ## Cuándo usar este patrón
 
