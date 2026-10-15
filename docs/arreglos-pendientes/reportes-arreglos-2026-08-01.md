@@ -70,28 +70,28 @@ Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cad
 ## Ventas y Rentabilidad
 
 ### 8. Productos Más Vendidos
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — reconstruido en el diseño uniforme (widgets, filtros almacén/fechas/producto, tabla con puesto, unidades, ventas, ingresos y ganancia). El servidor ahora cuenta solo ventas `completada` (antes contaba también canceladas, devueltas, rechazadas y pendientes). Test `ProductosMasVendidosTest`. Lo de abajo es el hallazgo original.
 - **Ruta:** `GET /reportes/productos-mas-vendidos` (`reportes.productos_mas_vendidos`)
 - **Controller:** `ReporteController::productosMasVendidos()` — línea 411, hace `Inertia::render('Reportes/Report/ProductosMasVendidos', ...)`
 - **Frontend:** ⚠️ **`resources/js/pages/Reportes/Report/ProductosMasVendidos.tsx` NO EXISTE.** Confirmado con `find`/`grep` sobre todo `resources/js/`. La ruta está enlazada desde el menú (`Index.tsx:101`) — al hacer clic, Inertia no puede resolver el componente. **Bug reproducible ahora mismo, no hipotético.**
 - **Hallazgos:** este es probablemente el más urgente de los 15 — el único que está roto en el sentido literal de "no carga".
 
 ### 9. Ventas por Período
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — paginado (15), filtros (venta, vendedor, almacén, fechas con `desde`/`hasta`), columna "Receptor" en vez de "Cliente" (el 98% de las ventas no tiene `cliente_id`, el 100% de las completadas tiene receptor), widgets y totales de todo lo filtrado. Test `VentasPorPeriodoTest`.
 - **Ruta:** `GET /reportes/ventas-por-periodo` (`reportes.ventas_por_periodo`)
 - **Controller:** `ReporteController::ventasPorPeriodo()` — línea 433
 - **Frontend:** `resources/js/pages/Reportes/Report/VentasPorPeriodo.tsx`
 - **Hallazgos:** sin límite ni paginación — trae **todas** las ventas completadas con relaciones cargadas si no hay filtro de fecha.
 
 ### 10. Ventas por Vendedor
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — periodo (`desde`/`hasta`) y búsqueda por nombre, comisión y % del total, rol en badge; se quitó "Dif. Cambiaria" (0 en todos los usuarios). Ganancia = `total_ganancia`. Test `VentasPorVendedorTest`.
 - **Ruta:** `GET /reportes/ventas-por-vendedor` (`reportes.ventas_por_vendedor`)
 - **Controller:** `ReporteController::ventasPorVendedor()` — línea 467
 - **Frontend:** `resources/js/pages/Reportes/Report/VentasPorVendedor.tsx`
 - **Hallazgos:** sin problema estructural detectado.
 
 ### 11. Reporte de Ganancias
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — por venta y paginado: total vendido, ganancia de productos (`total_ganancia`), cambiario (`ganancia_perdida_cambiaria`), comisión y neta (`ganancia_neta`); la suma cuadra con lo guardado. Antes sumaba `monto_diferencia_cambiaria`, que es 0 en toda la base. Test `ReporteGananciasTest`. Queda abierta la pregunta de cuál ganancia es "la oficial" del negocio.
 - **Ruta:** `GET /reportes/reporte-ganancias` (`reportes.reporte_ganancias`)
 - **Controller:** `ReporteController::reporteGanancias()` — línea 516
 - **Frontend:** `resources/js/pages/Reportes/Report/ReporteGanancias.tsx`
@@ -113,21 +113,21 @@ Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cad
 ## Finanzas y Otros
 
 ### 13. Historial de Precios
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — paginado (15), filtros (producto, usuario, almacén, tipo de cambio, fechas), muestra almacén y tipo de cambio (la columna `accion` guarda "Tipo - Almacén ID N"; se muestra el tipo), precios en `$` (estaba en EUR) y variación. Test en `ReportesFinanzasTest`.
 - **Ruta:** `GET /reportes/historial-precios` (`reportes.historial_precios`)
 - **Controller:** `ReporteController::historialPrecios()` — línea 614
 - **Frontend:** `resources/js/pages/Reportes/Report/HistorialPrecios.tsx`
 - **Hallazgos:** sin límite ni paginación — tabla de auditoría que crece con cada cambio de precio de venta. Sensibilidad menor (precio de venta, no costo).
 
 ### 14. Cambios de Precio de Costo
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — filtros (producto, usuario, almacén, resultado, fechas), estadísticas calculadas sobre lo filtrado, almacén visible, mismo diseño. Test en `ReportesFinanzasTest`.
 - **Ruta:** `GET /reportes/historial-costo-precio` (`reportes.historial_costo_precio`)
 - **Controller:** `ReporteController::historialCostoPrecio()` — línea 640
 - **Frontend:** `resources/js/pages/Reportes/Report/HistorialCostoPrecio.tsx`
 - **Hallazgos:** este es el único de los 21 métodos que **sí** protege por rol (`abort(403)` si no admin/moderador, línea ~643) y **sí** pagina (`paginate(20)`). Es el modelo a seguir para los demás, no el que necesita arreglo.
 
 ### 15. Movimientos Financieros
-- [ ] Pendiente
+- [x] **HECHO 2026-10-14** — paginado (15), filtros (texto, tipo, estado, fechas), cancelados visibles pero fuera de los totales (13 en producción), equivalente en USD desde `monto_usd`; color/signo del monto corregido (comparaba contra "Ingreso"/"Gasto" y los nombres reales son "Ingreso por Venta"/"Gasto Operativo"). Sigue leyendo el nombre del proveedor destino de movimientos viejos (historial). Test en `ReportesFinanzasTest`.
 - **Ruta:** `GET /reportes/movimientos-financieros` (`reportes.movimientos_financieros`)
 - **Controller:** `ReporteController::movimientosFinancieros()` — línea 689
 - **Frontend:** `resources/js/pages/Reportes/Report/MovimientosFinancieros.tsx`

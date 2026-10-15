@@ -355,8 +355,10 @@ La página de Logística es un **dashboard informativo** tipo KPI dashboard con 
 
 ### Cards superiores — Capitales Financieros (4 widgets):
 
-1. **Capital Financiero** (verde, `Landmark` icon) — Suma de: `total_saldo` (cuentas eq. USD) + `balance_neto` (clientes) + `balance_neto` (proveedores) + `total_importe_global` (productos)
-2. **Capital USD** (ámbar, `DollarSign` icon) — Suma de: `balance_neto` (clientes) + `balance_neto` (proveedores) + `total_importe_global` (productos) + `por_tipo['temporales']` + `por_moneda_perm['USD'].equivalente`
+> **Desde 2026-10-14 el capital NO suma `proveedors`** (decisión del cliente: los proveedores se retiran poco a poco). `getResumenProveedores()`, `countProveedores()`, `totalProveedores` y `resumenProveedores` ya no existen, y la card "Resumen de Proveedores" de abajo fue eliminada. Lo que queda escrito sobre proveedores en esta sección es histórico.
+
+1. **Capital Financiero** (verde, `Landmark` icon) — Suma de: `total_saldo` (cuentas eq. USD) + `balance_neto` (clientes) + `total_importe_global` (productos) + dinero en tránsito *(antes sumaba también `balance_neto` de proveedores, hasta 2026-10-14)*
+2. **Capital USD** (ámbar, `DollarSign` icon) — Suma de: `balance_neto` (clientes) + `total_importe_global` (productos) + `por_tipo['temporales']` + `por_moneda_perm['USD'].equivalente`
 3. **Capital CUP** (índigo, `Wallet` icon) — `por_moneda_perm['CUP'].original` (saldo original en CUP)
 4. **Capital EUR** (azul, `Euro` icon) — `por_moneda_perm['EUR'].original` (saldo original en EUR)
 
@@ -399,7 +401,7 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 | `getPeriodKpis(User, periodo)` | KPIs de ventas/compras por período (diario/semanal/mensual) | `ventas` + `compras` (admin) |
 | `getResumenCuentas()` | Datos agregados de todas las cuentas | `total_saldo`, `por_tipo`, `por_moneda_perm`, `por_estado`, `por_tipo_moneda`, `cuentas_con_deuda`, `cuentas_deuda_saldo`, `moneda_principal` |
 | `getResumenClientes()` | Datos agregados de clientes | `total_clientes`, `total_fondo`, `total_deuda`, `balance_neto`, `por_estado` |
-| `getResumenProveedores()` | Datos agregados de proveedores | `total_proveedores`, `total_fondo`, `total_deuda`, `balance_neto`, `por_estado` |
+| ~~`getResumenProveedores()`~~ | **Eliminado el 2026-10-14**: el capital ya no suma `proveedors` | — |
 | `getResumenProductos()` | Datos agregados de productos | `total_productos`, `total_unidades`, `total_importe_global`, `productos_stock_bajo`, `valor_stock_bajo`, `por_stock` |
 | `getResumenPorMonedaPerm()` | Saldo de cuentas permanentes agrupado por moneda | `[codigo => {original, equivalente, cantidad, simbolo}]` |
 | `getMonedaPrincipal()` | Moneda principal del sistema (fallback primera activa, último `$/USD`) | `['simbolo', 'codigo']` |
@@ -435,6 +437,14 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 ---
 
 ## Branch Actual
+
+**Actualización 2026-10-14** (lo más reciente; el detalle de 09-26 a 10-13 está en el historial de `docs/ESTADO_DESARROLLO.md`):
+
+- **Proveedores se retiran poco a poco**: Compras usa `compras.cliente_id` ("Asociado"); Ingreso, Transferencia y Remesa ya no los ofrecen; Dashboard y Logística ya no los suman. La migración `2026_10_14_162650_mover_proveedores_con_uso_a_clientes` pasa a clientes los que tienen compras o saldo (corrida en test; **falta producción**). `proveedors` y su historial siguen intactos.
+- **Dinero en tránsito**: una transferencia efectivo→efectivo queda pendiente (`transferencias_pendientes`) y se suma al capital; vista `/transacciones/envios` y hoja imprimible.
+- **Cierre de Caja**: saldo esperado solo con lo que mueve una cuenta, tasa de cada operación (`monto_usd`), tránsito por días, `store()` validado y `aprobar()` solo admin/moderador.
+- **Reportes** en un patrón uniforme (`.ai/rules/reportes.md`): Rastreo, Historial de Movimientos, Más Vendidos, Ventas por Período, Ventas por Vendedor, Ganancias, Historial de Precios, Cambios de Precio de Costo y Movimientos Financieros. Faltan 7 por rediseñar.
+- **Entornos**: producción (`gestion.posglorietashop.com`) y test (`test-sistema.posglorietashop.com`) en el mismo servidor Hostinger.
 
 `feature/desarrollo-caliente` — Estado al 2026-09-26 (todo lo de abajo hasta el 09-25 ya está commiteado; empezar por `docs/arreglos-pendientes/resumen-cambios-2026-09-25.md` y luego `docs/ESTADO_DESARROLLO.md`, cuya primera fila del historial es la verificación contra el código del 09-26):
 
