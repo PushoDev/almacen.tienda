@@ -29,7 +29,7 @@ test('un moderador que abre una sección solo de admin va al inicio con el aviso
     $moderador = User::factory()->moderador()->create();
     crearTurnoActivo($moderador);
 
-    $this->actingAs($moderador)->get(route('monedas.index'))
+    $this->actingAs($moderador)->get(route('monedas.create'))
         ->assertRedirect(route('dashboard'))
         ->assertSessionHas('error');
 });
