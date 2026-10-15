@@ -32,7 +32,7 @@
 | `telefono_almacen` | string | único |
 | `correo_almacen` | string nullable | |
 | `provincia_almacen` | string nullable | |
-| `ciudad_almacen` | string nullable | Usado por `Api/CatalogoPublicoController` |
+| `ciudad_almacen` | string nullable | Lo usaba la API pública de catálogo, retirada el 2026-10-15; la columna se conserva |
 | `notas_almacen` | text nullable | |
 | `nombre_responsable` | string nullable | |
 | `apellido_responsable` | string nullable | |

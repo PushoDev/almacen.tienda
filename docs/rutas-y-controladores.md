@@ -339,21 +339,9 @@ Pantalla puramente informativa (dashboard) — no tiene create/edit/show/update/
 
 ---
 
-## API Pública (catálogo sin autenticación)
+## API Pública (catálogo sin autenticación) — RETIRADA (2026-10-15)
 
-Definida en `routes/web.php` con prefijo `/api/tienda` y middleware `throttle:60,1`.
-
-| Método | Ruta | Controlador@Método | Descripción |
-|--------|------|-------------------|-------------|
-| GET | `/api/tienda/almacenes` | `CatalogoPublicoController@indexAlmacenes` | Lista almacenes activos |
-| GET | `/api/tienda/almacenes/{id}` | `CatalogoPublicoController@showAlmacen` | Detalle de almacén |
-| GET | `/api/tienda/almacenes/{id}/productos` | `CatalogoPublicoController@productosPorAlmacen` | Productos del almacén con stock |
-| GET | `/api/tienda/productos` | `CatalogoPublicoController@searchProductos` | Búsqueda de productos |
-| GET | `/api/tienda/productos/{id}` | `CatalogoPublicoController@showProducto` | Detalle de producto |
-| GET | `/api/tienda/productos/{id}/stock` | `CatalogoPublicoController@stockPorProducto` | Stock por almacén |
-| GET | `/api/tienda/categorias` | `CatalogoPublicoController@indexCategorias` | Categorías |
-| GET | `/api/tienda/docs/openapi.json` | `CatalogoPublicoController@openApiSpec` | Especificación OpenAPI |
-| GET | `/api/tienda/docs` | `CatalogoPublicoController@swaggerUi` | Swagger UI |
+Las rutas `/api/tienda/*` y sus controladores (`CatalogoPublicoController`, `EcommerceController`) se eliminaron por decisión del cliente. Ya no existe ninguna ruta pública de catálogo; `routes/api.php` solo tiene `POST /telegram/webhook`.
 
 ---
 
