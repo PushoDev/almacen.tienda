@@ -72,7 +72,6 @@ export interface User {
     avatar?: string | null;
     avatar_url?: string | null;
     role: 'admin' | 'moderador' | 'vendedor';
-    telegram_chat_id?: string | null;
     telegram_link_token?: string | null;
     email_verified_at: string | null;
     created_at: string;

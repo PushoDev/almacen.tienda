@@ -54,7 +54,8 @@ class TransferenciaPendienteService
         $this->notificar(
             $envio,
             "{$emisor->name} envió {$envio->monto} {$envio->moneda} a la cuenta {$destino->nombre_cuenta}: pendiente de confirmación.",
-            $this->usuariosDelDestino($envio)->merge($this->usuariosGlobales())->reject(fn (User $u) => $u->id === $emisor->id)
+            $this->usuariosDelDestino($envio)->merge($this->usuariosGlobales())->reject(fn (User $u) => $u->id === $emisor->id),
+            requiereAccion: true
         );
 
         return $envio;
@@ -283,10 +284,10 @@ class TransferenciaPendienteService
     /**
      * @param  Collection<int, User>  $usuarios
      */
-    private function notificar(TransferenciaPendiente $envio, string $mensaje, Collection $usuarios): void
+    private function notificar(TransferenciaPendiente $envio, string $mensaje, Collection $usuarios, bool $requiereAccion = false): void
     {
         try {
-            Notification::send($usuarios->unique('id'), new TransferenciaPendienteNotification($envio, $mensaje));
+            Notification::send($usuarios->unique('id'), new TransferenciaPendienteNotification($envio, $mensaje, $requiereAccion));
         } catch (\Throwable $e) {
             Log::error("Error notificando el envío pendiente #{$envio->id}: ".$e->getMessage());
         }

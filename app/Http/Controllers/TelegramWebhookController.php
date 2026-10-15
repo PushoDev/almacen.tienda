@@ -6,8 +6,11 @@ use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\CierreCaja;
 use App\Models\HistorialStock;
+use App\Models\Movimiento;
 use App\Models\MovimientoFinanciero;
 use App\Models\ProductoCodigo;
+use App\Models\TelegramVinculo;
+use App\Models\TransferenciaPendiente;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\VentaEspecialDecisionNotification;
@@ -51,30 +54,45 @@ class TelegramWebhookController extends Controller
         $text = trim($message['text'] ?? '');
 
         if (str_starts_with($text, '/vincular')) {
-            return $this->cmdVincular($chatId, $text);
+            return $this->cmdVincular($chatId, $text, $message['from'] ?? []);
         }
 
-        $admin = $this->verificarAdmin($chatId);
-        if (! $admin) {
+        $usuario = $this->verificarUsuario($chatId);
+        if (! $usuario) {
             $this->sendMessage($chatId, '⛔ No tienes acceso a este bot.');
 
             return response()->json(['ok' => true]);
         }
 
+        // Los reportes generales son de admin y moderador; el vendedor solo consulta lo suyo.
+        $global = $this->esGlobal($usuario);
+        $soloGlobal = fn (callable $accion) => $global
+            ? $accion()
+            : $this->sendMessage($chatId, '⛔ Este comando es solo para administradores y moderadores.');
+
         match (true) {
-            str_starts_with($text, '/start') => $this->cmdStart($chatId, $admin),
-            str_starts_with($text, '/reporte') => $this->cmdReporte($chatId),
-            str_starts_with($text, '/estadocierres') => $this->cmdEstadoCierres($chatId),
-            str_starts_with($text, '/cierres') => $this->cmdCierres($chatId),
-            str_starts_with($text, '/movimientos') => $this->cmdMovimientos($chatId),
-            str_starts_with($text, '/ayuda') => $this->cmdAyuda($chatId),
-            default => $this->sendMessage($chatId, 'Comando no reconocido. Escribe /ayuda.'),
+            str_starts_with($text, '/start') => $this->cmdStart($chatId, $usuario),
+            str_starts_with($text, '/menu') => $this->cmdMenu($chatId, $usuario),
+            str_starts_with($text, '/pendientes') => $this->cmdPendientes($chatId, $usuario),
+            str_starts_with($text, '/reporte') => $soloGlobal(fn () => $this->cmdReporte($chatId)),
+            str_starts_with($text, '/estadocierres') => $soloGlobal(fn () => $this->cmdEstadoCierres($chatId)),
+            str_starts_with($text, '/cierres') => $soloGlobal(fn () => $this->cmdCierres($chatId)),
+            str_starts_with($text, '/movimientos') => $soloGlobal(fn () => $this->cmdMovimientos($chatId)),
+            str_starts_with($text, '/ayuda') => $this->cmdAyuda($chatId, $usuario),
+            default => $this->sendMessage($chatId, 'Comando no reconocido. Escribe /menu.'),
         };
 
         return response()->json(['ok' => true]);
     }
 
-    private function cmdVincular(int|string $chatId, string $text): JsonResponse
+    /**
+     * Vincula este chat a la cuenta dueña del código. El código NO se gasta: varias personas (los
+     * responsables de turno de una misma cuenta) pueden vincular su Telegram con el mismo. Para cortar
+     * el acceso se regenera el código y/o se desconecta a cada persona desde Configuración › Perfil.
+     *
+     * @param  array<string, mixed>  $from  Datos de quien escribe, tal como los manda Telegram
+     */
+    private function cmdVincular(int|string $chatId, string $text, array $from = []): JsonResponse
     {
         $partes = explode(' ', $text);
         $token = strtoupper(trim($partes[1] ?? ''));
@@ -93,13 +111,17 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        $user->update([
-            'telegram_chat_id' => (string) $chatId,
-            'telegram_link_token' => null,
-        ]);
+        $nombre = trim(($from['first_name'] ?? '').' '.($from['last_name'] ?? ''))
+            ?: (isset($from['username']) ? '@'.$from['username'] : null);
+
+        // Un chat solo puede pertenecer a una cuenta: si ya estaba en otra, pasa a esta.
+        TelegramVinculo::updateOrCreate(
+            ['chat_id' => (string) $chatId],
+            ['user_id' => $user->id, 'nombre' => $nombre, 'vinculado_en' => now()]
+        );
 
         $this->sendMessage($chatId,
-            "✅ <b>Cuenta vinculada correctamente, {$user->name}.</b>\n\n".
+            "✅ <b>Cuenta vinculada correctamente a {$user->name}.</b>\n\n".
             "👋 ¡Bienvenido(a)!\n".
             "Soy <b>GloriBot</b>, tu asistente virtual para ayudarte a gestionar y consultar información de forma rápida y sencilla. 🚀\n\n".
             "Para comenzar, escribe / y selecciona la opción que necesites. Te guiaré paso a paso para acceder a las herramientas y funciones disponibles.\n\n".
@@ -110,25 +132,144 @@ class TelegramWebhookController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    private function cmdStart(int|string $chatId, User $admin): void
+    private function cmdStart(int|string $chatId, User $usuario): void
     {
         $this->sendMessage($chatId,
-            "👋 ¡Hola de nuevo, <b>{$admin->name}</b>!\n\n".
+            "👋 ¡Hola de nuevo, <b>{$usuario->name}</b>!\n\n".
             "Soy <b>GloriBot</b>, tu asistente virtual de La Glorieta Tienda. 🚀\n\n".
-            'Escribe /ayuda para ver los comandos disponibles.'
+            'Escribe /menu para ver lo que puedes consultar.'
         );
     }
 
-    private function cmdAyuda(int|string $chatId): void
+    private function cmdAyuda(int|string $chatId, User $usuario): void
     {
-        $this->sendMessage($chatId,
-            "📋 <b>Comandos disponibles:</b>\n\n".
-            "/reporte — Ventas del día por almacén\n".
-            "/estadocierres — Quiénes ya cerraron hoy y quiénes faltan\n".
-            "/cierres — Ver cierres de caja por usuario\n".
-            "/movimientos — Ver gastos, ingresos y transferencias\n".
-            '/ayuda — Ver esta ayuda'
-        );
+        $texto = "📋 <b>Comandos disponibles:</b>\n\n".
+            "/menu — Menú con botones\n".
+            "/pendientes — Lo que espera tu acción\n";
+
+        if ($this->esGlobal($usuario)) {
+            $texto .= "/reporte — Ventas del día por almacén\n".
+                "/estadocierres — Quiénes ya cerraron hoy y quiénes faltan\n".
+                "/cierres — Ver cierres de caja por usuario\n".
+                "/movimientos — Ver gastos, ingresos y transferencias\n";
+        }
+
+        $this->sendMessage($chatId, $texto.'/ayuda — Ver esta ayuda');
+    }
+
+    /**
+     * Menú con botones: en vez de empujar un aviso por cada operación, cada quien consulta a demanda lo
+     * que le interesa. El vendedor solo ve las opciones de su cuenta.
+     */
+    private function cmdMenu(int|string $chatId, User $usuario): void
+    {
+        $filas = [[['text' => '📌 Pendientes (lo que espera mi acción)', 'callback_data' => 'menu:pendientes']]];
+
+        if ($this->esGlobal($usuario)) {
+            $filas[] = [
+                ['text' => '📊 Reporte del día', 'callback_data' => 'menu:reporte'],
+                ['text' => '🔒 Cierres', 'callback_data' => 'menu:cierres'],
+            ];
+            $filas[] = [
+                ['text' => '🕐 Quiénes faltan por cerrar', 'callback_data' => 'menu:estadocierres'],
+                ['text' => '💸 Movimientos', 'callback_data' => 'menu:movimientos'],
+            ];
+        }
+
+        $filas[] = [['text' => '❓ Ayuda', 'callback_data' => 'menu:ayuda']];
+
+        try {
+            Telegram::sendMessage([
+                'chat_id' => $chatId,
+                'text' => "🤖 <b>¿Qué quieres consultar, {$usuario->name}?</b>",
+                'parse_mode' => 'HTML',
+                'reply_markup' => json_encode(['inline_keyboard' => $filas]),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Telegram cmdMenu error: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Lo que está esperando una acción de esta persona: ventas especiales por decidir, envíos de dinero
+     * por confirmar y movimientos de inventario en camino. Admin y moderador ven todo lo que pueden
+     * decidir; el vendedor solo lo de su cuenta. Las ventas especiales llevan botones para decidir.
+     */
+    private function cmdPendientes(int|string $chatId, User $usuario): void
+    {
+        $global = $this->esGlobal($usuario);
+
+        $ventas = Venta::where('estado', 'solicitud_especial')
+            ->when($usuario->role === 'moderador', fn ($q) => $q->where(fn ($sub) => $sub->whereNull('tipo_venta_especial')->orWhere('tipo_venta_especial', '!=', 'bajo_costo')))
+            ->when(! $global, fn ($q) => $q->where('user_id', $usuario->id));
+
+        $envios = TransferenciaPendiente::where('estado', TransferenciaPendiente::ESTADO_EN_TRANSITO)
+            ->when(! $global, fn ($q) => $q
+                ->whereIn('cuenta_destino_id', $usuario->cuentas()->pluck('cuentas.id'))
+                ->where('user_id', '!=', $usuario->id));
+
+        $movimientos = Movimiento::where('estado', 'en_transito')
+            ->when(! $global, fn ($q) => $q->whereIn('almacen_destino_id', $usuario->almacenes()->pluck('almacens.id')));
+
+        $totalVentas = (clone $ventas)->count();
+        $totalEnvios = (clone $envios)->count();
+        $totalMovimientos = (clone $movimientos)->count();
+
+        if ($totalVentas + $totalEnvios + $totalMovimientos === 0) {
+            $this->sendMessage($chatId, '✅ <b>No tienes nada pendiente.</b>');
+
+            return;
+        }
+
+        $texto = "📌 <b>Pendientes</b>\n";
+        $botones = [];
+
+        if ($totalVentas > 0) {
+            $texto .= "\n🔔 <b>Ventas especiales por decidir ({$totalVentas})</b>\n";
+
+            foreach ($ventas->with('usuario')->latest()->limit(5)->get() as $venta) {
+                $enlace = route('ventas.show', $venta->id);
+                $texto .= "• <a href=\"{$enlace}\">Venta #{$venta->id}</a> — {$venta->usuario?->name} — $ ".number_format((float) $venta->total, 2)."\n";
+
+                if ($global) {
+                    $botones[] = [
+                        ['text' => "✅ Aprobar #{$venta->id}", 'callback_data' => "aprobar_venta:{$venta->id}"],
+                        ['text' => "❌ Rechazar #{$venta->id}", 'callback_data' => "rechazar_venta:{$venta->id}"],
+                    ];
+                }
+            }
+        }
+
+        if ($totalEnvios > 0) {
+            $texto .= "\n💸 <b>Envíos de dinero por confirmar ({$totalEnvios})</b>\n";
+
+            foreach ($envios->with('usuario')->latest()->limit(5)->get() as $envio) {
+                $texto .= "• #{$envio->id} — {$envio->usuario?->name} — {$envio->monto} {$envio->moneda}\n";
+            }
+
+            $texto .= '<a href="'.route('transacciones.envios.index').'">Abrir envíos en la app</a>'."\n";
+        }
+
+        if ($totalMovimientos > 0) {
+            $texto .= "\n🚚 <b>Movimientos en camino ({$totalMovimientos})</b>\n";
+
+            foreach ($movimientos->with(['almacenOrigen', 'almacenDestino'])->latest()->limit(5)->get() as $movimiento) {
+                $enlace = route('movimientos.show', $movimiento->id);
+                $texto .= "• <a href=\"{$enlace}\">Movimiento #{$movimiento->id}</a> — {$movimiento->almacenOrigen?->nombre_almacen} → {$movimiento->almacenDestino?->nombre_almacen}\n";
+            }
+        }
+
+        try {
+            Telegram::sendMessage(array_filter([
+                'chat_id' => $chatId,
+                'text' => $texto,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+                'reply_markup' => $botones ? json_encode(['inline_keyboard' => $botones]) : null,
+            ]));
+        } catch (\Exception $e) {
+            Log::error('Telegram cmdPendientes error: '.$e->getMessage());
+        }
     }
 
     private function cmdReporte(int|string $chatId): void
@@ -286,9 +427,24 @@ class TelegramWebhookController extends Controller
         $callbackId = $callbackQuery['id'];
         $data = $callbackQuery['data'] ?? '';
 
-        $admin = $this->verificarAdmin($chatId);
-        if (! $admin) {
+        $usuario = $this->verificarUsuario($chatId);
+        if (! $usuario) {
             Telegram::answerCallbackQuery(['callback_query_id' => $callbackId, 'text' => '⛔ Sin acceso']);
+
+            return response()->json(['ok' => true]);
+        }
+
+        // Botones del menú
+        if (str_starts_with($data, 'menu:')) {
+            Telegram::answerCallbackQuery(['callback_query_id' => $callbackId]);
+            $this->opcionDeMenu(substr($data, 5), $chatId, $usuario);
+
+            return response()->json(['ok' => true]);
+        }
+
+        // Reportes con filtros y decisiones: solo admin y moderador (el vendedor no llega aquí)
+        if (! $this->esGlobal($usuario)) {
+            Telegram::answerCallbackQuery(['callback_query_id' => $callbackId, 'text' => '⛔ Sin permiso']);
 
             return response()->json(['ok' => true]);
         }
@@ -338,13 +494,43 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        // Misma regla que la web: la de 'descuento' la deciden admin y moderador; la que baja del
+        // costo ('bajo_costo') solo un admin.
+        $puedeDecidir = $venta->tipo_venta_especial === 'bajo_costo'
+            ? $usuario->role === 'admin'
+            : $this->esGlobal($usuario);
+
+        if (! $puedeDecidir) {
+            Telegram::answerCallbackQuery([
+                'callback_query_id' => $callbackId,
+                'text' => '⛔ Esta solicitud solo la puede decidir un administrador.',
+            ]);
+
+            return response()->json(['ok' => true]);
+        }
+
         if ($accion === 'aprobar_venta') {
-            $this->aprobarVenta($venta, $admin, $chatId, $messageId, $callbackId);
+            $this->aprobarVenta($venta, $usuario, $chatId, $messageId, $callbackId);
         } else {
-            $this->rechazarVenta($venta, $admin, $chatId, $messageId, $callbackId);
+            $this->rechazarVenta($venta, $usuario, $chatId, $messageId, $callbackId);
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    private function opcionDeMenu(string $opcion, int|string $chatId, User $usuario): void
+    {
+        $global = $this->esGlobal($usuario);
+
+        match (true) {
+            $opcion === 'pendientes' => $this->cmdPendientes($chatId, $usuario),
+            $opcion === 'ayuda' => $this->cmdAyuda($chatId, $usuario),
+            $opcion === 'reporte' && $global => $this->cmdReporte($chatId),
+            $opcion === 'cierres' && $global => $this->cmdCierres($chatId),
+            $opcion === 'estadocierres' && $global => $this->cmdEstadoCierres($chatId),
+            $opcion === 'movimientos' && $global => $this->cmdMovimientos($chatId),
+            default => $this->sendMessage($chatId, '⛔ Opción no disponible para tu rol.'),
+        };
     }
 
     private function handleCierresUsuario(string $data, int|string $chatId, int $messageId, string $callbackId): void
@@ -671,11 +857,17 @@ class TelegramWebhookController extends Controller
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private function verificarAdmin(int|string $chatId): ?User
+    /**
+     * El usuario dueño de este chat (cualquier rol). Un chat pertenece a una sola cuenta.
+     */
+    private function verificarUsuario(int|string $chatId): ?User
     {
-        return User::where('telegram_chat_id', (string) $chatId)
-            ->where('role', 'admin')
-            ->first();
+        return User::whereHas('telegramVinculos', fn ($query) => $query->where('chat_id', (string) $chatId))->first();
+    }
+
+    private function esGlobal(User $usuario): bool
+    {
+        return in_array($usuario->role, ['admin', 'moderador'], true);
     }
 
     private function sendMessage(int|string $chatId, string $text): void

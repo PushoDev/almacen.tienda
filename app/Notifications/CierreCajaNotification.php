@@ -3,12 +3,14 @@
 namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
+use App\Notifications\Concerns\EnviaAvisoPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class CierreCajaNotification extends Notification
 {
-    use Queueable;
+    use EnviaAvisoPush, Queueable;
 
     /**
      * Create a new notification instance.
@@ -30,9 +32,10 @@ class CierreCajaNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        // Push: solo admin y moderador (nunca a quien hizo el cierre). La campana no cambia.
+        $channels = $this->conPushSi(['database'], $notifiable, $this->esAdminOModerador($notifiable));
 
-        if (! $notifiable->telegram_chat_id) {
+        if (! $notifiable->tieneTelegram()) {
             return $channels;
         }
 
@@ -46,6 +49,21 @@ class CierreCajaNotification extends Notification
         }
 
         return $channels;
+    }
+
+    public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
+    {
+        $esDescuadre = abs($this->cierre->diferencia) > 0.01;
+        $quien = $this->cierre->usuario->name ?? 'Un usuario';
+
+        return $this->mensajePush(
+            $esDescuadre ? 'Cierre de caja con descuadre' : 'Cierre de caja realizado',
+            $esDescuadre
+                ? "{$quien} cerró la caja con una diferencia de ".number_format(abs($this->cierre->diferencia), 2).'.'
+                : "{$quien} cerró la caja sin descuadre.",
+            route('ventas.cierres.show', $this->cierre->id),
+            'cierre-caja-'.$this->cierre->id,
+        );
     }
 
     public function toTelegram(object $notifiable): array

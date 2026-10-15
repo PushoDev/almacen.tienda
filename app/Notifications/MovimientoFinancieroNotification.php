@@ -41,7 +41,7 @@ class MovimientoFinancieroNotification extends Notification
     {
         $channels = ['database'];
 
-        if (! $notifiable->telegram_chat_id) {
+        if (! $notifiable->tieneTelegram()) {
             return $channels;
         }
 

@@ -229,23 +229,26 @@ Webhook autenticado por `X-Telegram-Bot-Api-Secret-Token`.
 - `CambioPrecioVendedorNotification`: cuando cambia precio de vendedor.
 - `MovimientoFinancieroNotification`: en movimientos financieros.
 
+**Avisos push del navegador (Web Push, 2026-10-15):** llegan con la pestaña cerrada. Paquete `laravel-notification-channels/webpush` 13.x (claves VAPID en `.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`; tabla `push_subscriptions`, una fila por dispositivo). El usuario los activa con un diálogo animado (`components/Notifications/activar-avisos-dialog.tsx`, montado en `app-sidebar-layout.tsx`) que registra `public/sw.js` y manda la suscripción a `push/suscripciones`. **Solo van por push los avisos que exigen acción** (el resto queda en la campana, que consulta cada 30 s); la regla de destinatarios vive en el `via()` de cada notificación y el trait `App\Notifications\Concerns\EnviaAvisoPush` descarta a quien hizo la acción:
+
+| Notificación | Push a |
+|---|---|
+| `VentaEspecialSolicitudNotification` | admin; moderador solo si `tipo_venta_especial = 'descuento'` |
+| `VentaEspecialDecisionNotification` | el vendedor que la pidió |
+| `TransferenciaPendienteNotification` | solo el aviso del envío recién registrado (`requiereAccion: true`) |
+| `VentaDevueltaNotification` | admin y moderador |
+| `CierreCajaNotification` | admin y moderador |
+| `CierresPendientesNotification` | solo admin |
+| `ProrrateoRequeridoNotification` | admin y moderador |
+| `MovimientoStockNotification` | `en_transito`: almacén destino + admin/moderador; `recibido_parcial` y `rechazado`: almacén origen + admin/moderador; creado, editado y recibido completo, ninguno |
+
+Sin push, solo campana: `VentaCreadaNotification`, `MovimientoFinancieroNotification`, `CambioPrecioVendedorNotification` y `RemesaNotification`. Reglas de volumen: ver nota del 2026-10-15 en `ESTADO_DESARROLLO.md`.
+
 ---
 
-## API Pública (e-commerce)
+## API Pública y Ecommerce — RETIRADOS (2026-10-15)
 
-Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
-
-| Endpoint | Descripción |
-|---|---|
-| `GET /almacenes` | Lista de almacenes activos |
-| `GET /almacenes/{id}` | Detalle de almacén |
-| `GET /almacenes/{id}/productos` | Productos del almacén con stock |
-| `GET /productos` | Búsqueda de productos |
-| `GET /productos/{id}` | Detalle de producto |
-| `GET /productos/{id}/stock` | Stock por almacén |
-| `GET /categorias` | Categorías |
-| `GET /docs/openapi.json` | Spec OpenAPI |
-| `GET /docs` | Swagger UI |
+El cliente decidió no usar el ecommerce. Se eliminaron el prefijo `/api/tienda/*` (catálogo, almacenes, Swagger), `EcommerceController`, `Api/CatalogoPublicoController`, `components/Ecommerce/` y `pages/Ecommerce/`. No hay API pública sin autenticación; la única entrada sin sesión es el webhook de Telegram (`routes/api.php`). Las columnas de BD que alimentaban ese catálogo (p. ej. `ciudad_almacen`, `activo` y `descripcion_producto` de productos) **siguen en las tablas**: no se tocaron migraciones.
 
 ---
 
@@ -280,8 +283,6 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `MonedaController` | CRUD de monedas, actualización de tasas, cambiar estado, establecer principal |
 | `MovimientosPendienteController` | Movimientos de stock pendientes |
 | `NotificationController` | Lectura, historial y marcado de notificaciones |
-| `EcommerceController` | Vista de catálogo público (en desarrollo — rutas comentadas) |
-| `Api/CatalogoPublicoController` | API REST pública sin auth (catálogo, almacenes, Swagger) |
 | `DestinatarioVentaController` | Destinatarios/receptores de ventas |
 | `ClienteController` | CRUD de clientes y gestión de deuda, resumen con KPIs |
 | `ProveedorController` | CRUD de proveedores |

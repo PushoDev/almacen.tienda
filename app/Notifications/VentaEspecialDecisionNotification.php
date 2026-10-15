@@ -2,12 +2,14 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\EnviaAvisoPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class VentaEspecialDecisionNotification extends Notification
 {
-    use Queueable;
+    use EnviaAvisoPush, Queueable;
 
     public $venta;
 
@@ -21,7 +23,22 @@ class VentaEspecialDecisionNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['database'];
+        // Solo la recibe el vendedor que pidió la venta, que está esperando la respuesta.
+        return $this->conPushSi(['database'], $notifiable, true);
+    }
+
+    public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
+    {
+        $aprobada = $this->decision === 'aprobada';
+
+        return $this->mensajePush(
+            $aprobada ? 'Solicitud aprobada' : 'Solicitud rechazada',
+            $aprobada
+                ? "Tu solicitud especial #{$this->venta->id} fue aprobada. Ya puedes completarla."
+                : "Tu solicitud especial #{$this->venta->id} fue rechazada.",
+            route('ventas.show', $this->venta->id),
+            'venta-especial-'.$this->venta->id,
+        );
     }
 
     public function toArray(object $notifiable): array

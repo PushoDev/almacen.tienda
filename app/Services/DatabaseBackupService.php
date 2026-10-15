@@ -91,7 +91,7 @@ class DatabaseBackupService
         foreach ($admins as $admin) {
             try {
                 Telegram::sendDocument([
-                    'chat_id' => $admin->telegram_chat_id,
+                    'chat_id' => $admin->chatTelegramPrincipal(),
                     'document' => InputFile::create($rutaAbsoluta, basename($rutaRelativa)),
                     'caption' => 'Backup automático de la base de datos — '.now()->format('d/m/Y H:i'),
                 ]);
@@ -140,7 +140,7 @@ class DatabaseBackupService
         foreach ($this->adminsConTelegram() as $admin) {
             try {
                 Telegram::sendMessage([
-                    'chat_id' => $admin->telegram_chat_id,
+                    'chat_id' => $admin->chatTelegramPrincipal(),
                     'text' => "⚠️ Backup de la base de datos: falló el envío a [{$fallidos}]. La copia local sí se guardó.",
                 ]);
             } catch (Throwable $e) {
@@ -150,10 +150,13 @@ class DatabaseBackupService
     }
 
     /**
+     * Admins con Telegram. El respaldo es el volcado completo de la BD: va solo al vínculo más antiguo
+     * de cada admin (`chatTelegramPrincipal()`), nunca a todos los vinculados de la cuenta.
+     *
      * @return Collection<int, User>
      */
     private function adminsConTelegram(): Collection
     {
-        return User::where('role', 'admin')->whereNotNull('telegram_chat_id')->get();
+        return User::where('role', 'admin')->whereHas('telegramVinculos')->get();
     }
 }

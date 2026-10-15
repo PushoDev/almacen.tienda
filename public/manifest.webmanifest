@@ -1,0 +1,18 @@
+{
+    "name": "La GlorietaShop — Panel Administrativo",
+    "short_name": "GlorietaShop",
+    "description": "Panel administrativo de logística de La GlorietaShop",
+    "start_url": "/dashboard",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#0f1330",
+    "theme_color": "#0f1330",
+    "icons": [
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ]
+}

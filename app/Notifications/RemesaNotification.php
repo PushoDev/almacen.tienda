@@ -30,7 +30,7 @@ class RemesaNotification extends Notification
         // basta con confiar en que la lista de destinatarios ya venga filtrada, el
         // chequeo de rol va explícito acá también, mismo criterio que
         // MovimientoFinancieroNotification::via().
-        if ($notifiable->telegram_chat_id && in_array($notifiable->role, ['admin', 'moderador'])) {
+        if ($notifiable->tieneTelegram() && in_array($notifiable->role, ['admin', 'moderador'])) {
             $channels[] = TelegramChannel::class;
         }
 

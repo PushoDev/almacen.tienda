@@ -7,13 +7,15 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, HasPushSubscriptions, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -26,7 +28,6 @@ class User extends Authenticatable
         'password',
         'avatar',
         'role',
-        'telegram_chat_id',
         'telegram_link_token',
     ];
 
@@ -141,9 +142,39 @@ class User extends Authenticatable
         return asset($this->avatar);
     }
 
-    public function routeNotificationForTelegram(): ?string
+    /**
+     * Telegram vinculados a este usuario. Varias personas (los responsables de turno de una misma cuenta)
+     * pueden vincular el suyo con el mismo código. Antes era `users.telegram_chat_id` (uno solo, sin uso).
+     *
+     * @return HasMany<TelegramVinculo, $this>
+     */
+    public function telegramVinculos(): HasMany
     {
-        return $this->telegram_chat_id;
+        return $this->hasMany(TelegramVinculo::class)->orderBy('id');
+    }
+
+    public function tieneTelegram(): bool
+    {
+        return $this->telegramVinculos()->exists();
+    }
+
+    /**
+     * Chats a los que llegan las notificaciones de Telegram: todos los vinculados.
+     *
+     * @return array<int, string>
+     */
+    public function routeNotificationForTelegram(): array
+    {
+        return $this->telegramVinculos()->pluck('chat_id')->all();
+    }
+
+    /**
+     * El vínculo más antiguo. Es el único que recibe lo sensible que no debe repartirse entre todo el
+     * equipo (el respaldo de la base de datos).
+     */
+    public function chatTelegramPrincipal(): ?string
+    {
+        return $this->telegramVinculos()->value('chat_id');
     }
 
     public function isAdmin(): bool
