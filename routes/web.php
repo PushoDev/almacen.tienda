@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReporteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -14,6 +15,15 @@ use Inertia\Inertia;
 Route::get('/', function () {
     return Inertia::render('auth/login');
 })->name('home');
+
+/**
+ * Avisos push del navegador. Fuera de 'requiere.turno': activar los avisos no depende del turno.
+ */
+Route::middleware(['auth', 'verified'])->prefix('push')->name('push.')->group(function () {
+    Route::get('config', [PushSubscriptionController::class, 'config'])->name('config');
+    Route::post('suscripciones', [PushSubscriptionController::class, 'store'])->name('suscripciones.store');
+    Route::delete('suscripciones', [PushSubscriptionController::class, 'destroy'])->name('suscripciones.destroy');
+});
 
 Route::middleware(['auth', 'verified', 'requiere.turno'])->group(function () {
 

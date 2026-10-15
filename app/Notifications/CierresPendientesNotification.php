@@ -4,9 +4,11 @@ namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
 use App\Models\User;
+use App\Notifications\Concerns\EnviaAvisoPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
+use NotificationChannels\WebPush\WebPushMessage;
 
 /**
  * Aviso diario a los admins: qué usuarios con rol moderador/vendedor no han
@@ -15,7 +17,7 @@ use Illuminate\Support\Collection;
  */
 class CierresPendientesNotification extends Notification
 {
-    use Queueable;
+    use EnviaAvisoPush, Queueable;
 
     /**
      * @param  Collection<int, User>  $usuariosPendientes
@@ -27,13 +29,23 @@ class CierresPendientesNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = $this->conPushSi(['database'], $notifiable, $notifiable->role === 'admin');
 
         if ($notifiable->telegram_chat_id && $notifiable->role === 'admin') {
             $channels[] = TelegramChannel::class;
         }
 
         return $channels;
+    }
+
+    public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
+    {
+        return $this->mensajePush(
+            'Cierres de caja pendientes',
+            "{$this->usuariosPendientes->count()} usuario(s) no han registrado su cierre hoy.",
+            route('ventas.cierres'),
+            'cierres-pendientes',
+        );
     }
 
     /**

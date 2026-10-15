@@ -3,12 +3,14 @@
 namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
+use App\Notifications\Concerns\EnviaAvisoPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class ProrrateoRequeridoNotification extends Notification
 {
-    use Queueable;
+    use EnviaAvisoPush, Queueable;
 
     public $movimiento;
 
@@ -24,13 +26,23 @@ class ProrrateoRequeridoNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = $this->conPushSi(['database'], $notifiable, $this->esAdminOModerador($notifiable));
 
         if ($notifiable->telegram_chat_id) {
             $channels[] = TelegramChannel::class;
         }
 
         return $channels;
+    }
+
+    public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
+    {
+        return $this->mensajePush(
+            'Prorrateo de costos disponible',
+            "Movimiento #{$this->movimiento->id} en tránsito puede prorratear costos (es opcional).",
+            route('distribucion-costos.index'),
+            'prorrateo-'.$this->movimiento->id,
+        );
     }
 
     /**

@@ -3,8 +3,10 @@
 namespace App\Notifications;
 
 use App\Models\TransferenciaPendiente;
+use App\Notifications\Concerns\EnviaAvisoPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 /**
  * Aviso de un envío de dinero que espera confirmación (o de lo que pasó con él). Solo campana: el bot de
@@ -12,16 +14,30 @@ use Illuminate\Notifications\Notification;
  */
 class TransferenciaPendienteNotification extends Notification
 {
-    use Queueable;
+    use EnviaAvisoPush, Queueable;
 
-    public function __construct(public TransferenciaPendiente $envio, public string $mensaje) {}
+    /**
+     * @param  bool  $requiereAccion  true solo en el aviso de un envío recién registrado, que alguien debe
+     *                                confirmar: es el único que va por push; lo que pasó después queda en la campana.
+     */
+    public function __construct(public TransferenciaPendiente $envio, public string $mensaje, public bool $requiereAccion = false) {}
 
     /**
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->conPushSi(['database'], $notifiable, $this->requiereAccion);
+    }
+
+    public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
+    {
+        return $this->mensajePush(
+            'Envío de dinero por confirmar',
+            $this->mensaje,
+            route('transacciones.envios.index'),
+            'envio-'.$this->envio->id,
+        );
     }
 
     /**

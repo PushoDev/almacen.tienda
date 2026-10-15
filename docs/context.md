@@ -229,6 +229,21 @@ Webhook autenticado por `X-Telegram-Bot-Api-Secret-Token`.
 - `CambioPrecioVendedorNotification`: cuando cambia precio de vendedor.
 - `MovimientoFinancieroNotification`: en movimientos financieros.
 
+**Avisos push del navegador (Web Push, 2026-10-15):** llegan con la pestaña cerrada. Paquete `laravel-notification-channels/webpush` 13.x (claves VAPID en `.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`; tabla `push_subscriptions`, una fila por dispositivo). El usuario los activa con un diálogo animado (`components/Notifications/activar-avisos-dialog.tsx`, montado en `app-sidebar-layout.tsx`) que registra `public/sw.js` y manda la suscripción a `push/suscripciones`. **Solo van por push los avisos que exigen acción** (el resto queda en la campana, que consulta cada 30 s); la regla de destinatarios vive en el `via()` de cada notificación y el trait `App\Notifications\Concerns\EnviaAvisoPush` descarta a quien hizo la acción:
+
+| Notificación | Push a |
+|---|---|
+| `VentaEspecialSolicitudNotification` | admin; moderador solo si `tipo_venta_especial = 'descuento'` |
+| `VentaEspecialDecisionNotification` | el vendedor que la pidió |
+| `TransferenciaPendienteNotification` | solo el aviso del envío recién registrado (`requiereAccion: true`) |
+| `VentaDevueltaNotification` | admin y moderador |
+| `CierreCajaNotification` | admin y moderador |
+| `CierresPendientesNotification` | solo admin |
+| `ProrrateoRequeridoNotification` | admin y moderador |
+| `MovimientoStockNotification` | `en_transito`: almacén destino + admin/moderador; `recibido_parcial` y `rechazado`: almacén origen + admin/moderador; creado, editado y recibido completo, ninguno |
+
+Sin push, solo campana: `VentaCreadaNotification`, `MovimientoFinancieroNotification`, `CambioPrecioVendedorNotification` y `RemesaNotification`. Reglas de volumen: ver nota del 2026-10-15 en `ESTADO_DESARROLLO.md`.
+
 ---
 
 ## API Pública y Ecommerce — RETIRADOS (2026-10-15)

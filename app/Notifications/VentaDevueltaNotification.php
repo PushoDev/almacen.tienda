@@ -4,8 +4,10 @@ namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
 use App\Models\Venta;
+use App\Notifications\Concerns\EnviaAvisoPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use NotificationChannels\WebPush\WebPushMessage;
 
 /**
  * Notificación de Devolución de Venta — solo se dispara cuando una venta ya
@@ -14,7 +16,7 @@ use Illuminate\Notifications\Notification;
  */
 class VentaDevueltaNotification extends Notification
 {
-    use Queueable;
+    use EnviaAvisoPush, Queueable;
 
     public function __construct(public Venta $venta) {}
 
@@ -23,7 +25,7 @@ class VentaDevueltaNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = $this->conPushSi(['database'], $notifiable, $this->esAdminOModerador($notifiable));
 
         // Mismo criterio que RemesaNotification/MovimientoFinancieroNotification::via()
         // — admin y moderador reciben Telegram, el chequeo de rol va explícito acá
@@ -33,6 +35,18 @@ class VentaDevueltaNotification extends Notification
         }
 
         return $channels;
+    }
+
+    public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
+    {
+        $monto = number_format((float) $this->venta->total, 2);
+
+        return $this->mensajePush(
+            'Venta devuelta',
+            "Venta #{$this->venta->id} por {$monto}. Motivo: {$this->venta->motivo_anulacion}",
+            route('ventas.show', $this->venta->id),
+            'venta-devuelta-'.$this->venta->id,
+        );
     }
 
     /**

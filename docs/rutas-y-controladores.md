@@ -322,6 +322,16 @@ Pantalla puramente informativa (dashboard) — no tiene create/edit/show/update/
 | POST | `/notifications/{id}/read` | `NotificationController@markAsRead` | JSON |
 | POST | `/notifications/mark-all-read` | `NotificationController@markAllAsRead` | JSON |
 
+### Avisos push del navegador (2026-10-15)
+
+Grupo `auth` + `verified` con prefijo `push` y **sin** `requiere.turno` (activar los avisos no depende del turno).
+
+| Método | Ruta | Controlador@Método | Respuesta |
+|--------|------|-------------------|-----------|
+| GET | `/push/config` | `PushSubscriptionController@config` | JSON `{habilitado, public_key}` (clave VAPID pública) |
+| POST | `/push/suscripciones` | `PushSubscriptionController@store` | JSON; guarda o actualiza la suscripción de este dispositivo |
+| DELETE | `/push/suscripciones` | `PushSubscriptionController@destroy` | JSON; elimina la suscripción por `endpoint` |
+
 ---
 
 ## Settings (Ajustes de Perfil)

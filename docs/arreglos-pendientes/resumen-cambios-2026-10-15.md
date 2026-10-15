@@ -69,9 +69,21 @@ A pedido del cliente, de a una pieza, sin tocar el flujo de negocio ni las migra
 - **CSRF en `fetch()` re-verificado:** quedan `Productos/Index.tsx:418` y `postJson` (5 pantallas); impacto bajo (ver `ESTADO_DESARROLLO.md`).
 - Documentación actualizada: `ESTADO_DESARROLLO.md`, `INDEX.md`, `context.md`, `base-de-datos.md`, `rutas-y-controladores.md` y este resumen; en Obsidian, ADR 012, bitácora, Estado y backlog, Arquitectura, Operación, Visión y la nota "API pública".
 
+## 6. Avisos push del navegador (noche)
+
+- **Problema:** la campana consulta cada 30 s, así que con la pestaña cerrada nadie se enteraba. Un admin recibía ~220 notificaciones/día en la campana y había 25.631 sin leer, por eso **no se manda todo por push**.
+- **Backend:** paquete `laravel-notification-channels/webpush` 13.x (aprobado por el cliente); `User` con `HasPushSubscriptions`; `PushSubscriptionController` + rutas `push/*` sin `requiere.turno`; trait `Notifications/Concerns/EnviaAvisoPush`; `toWebPush()` y regla en `via()` de 8 notificaciones; `TransferenciaPendienteService::enviar()` pasa `requiereAccion: true`.
+- **Frontend:** `public/sw.js`, `public/manifest.webmanifest`, `hooks/use-push-notifications.ts`, `components/Notifications/activar-avisos-dialog.tsx` (montado en `app-sidebar-layout.tsx`) y animaciones en `app.css`.
+- **Quién recibe qué** (≈20/día por admin o moderador): solicitud de venta especial (admin; moderador solo si es `descuento`), decisión (el vendedor que la pidió), envío por confirmar, venta devuelta, cierre de caja, cierres pendientes (solo admin), prorrateo, y movimiento enviado / con discrepancia / rechazado (almacén que corresponde + admin y moderador). Nadie recibe el push de su propia acción. Venta creada, movimiento financiero, cambio de precio y remesa siguen solo en la campana.
+- **Verificado:** `PushSubscriptionTest` (6) y `AvisosPushTest` (12); suite completa 944 verdes, 6.558 aserciones; ESLint, Prettier y Pint limpios.
+- **No verificado:** la entrega real por el navegador (no se vio el diálogo ni llegó un push). Falta `VAPID_SUBJECT` en el `.env` (Safari/iPhone lo exige).
+- **No pedido / pendiente:** interruptor para desactivar los avisos desde la app; agrupar los avisos de cambio de precio masivo.
+
 ## Para desplegar
 
 Sin migraciones. Cambia backend (`DetalleOperacionService`, `Reportes/MovimientosFinancierosController`, `routes/acciones/reportes.php`, `ReporteController`, `CompraController`) y frontend (reportes, `detalle-operacion.tsx`, Compras y 15 archivos nuevos en `components/compras/`): hay que recompilar (`npm ci` + `npm run build`) y limpiar cachés (`php artisan optimize:clear`). Conviene correr la suite completa antes de subir.
+
+**Lo de la sección 6 (push) sí lleva más:** dependencia nueva (`composer install`), 2 migraciones (`push_subscriptions` y el ensanche de `endpoint`), claves `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` en el `.env` (`php artisan webpush:vapid`), recompilar el frontend y que el sitio sirva `public/sw.js` desde la raíz con HTTPS.
 
 ## Pendiente
 
