@@ -42,6 +42,8 @@ interface ReportCardProps {
     href: string;
     icon: React.ElementType;
     colors: string; // e.g., 'from-blue-800 to-blue-400'
+    /** Solo los reportes ya desarrollados muestran su descripción en la tarjeta; el resto la recibe cuando le toque. */
+    mostrarDescripcion?: boolean;
 }
 
 const reportesComprasInventario: ReportCardProps[] = [
@@ -103,6 +105,7 @@ const reportesVentasRentabilidad: ReportCardProps[] = [
         href: route('reportes.productos_mas_vendidos'),
         icon: TrendingUp,
         colors: 'from-cyan-800 to-cyan-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Ventas por Período',
@@ -110,6 +113,7 @@ const reportesVentasRentabilidad: ReportCardProps[] = [
         href: route('reportes.ventas_por_periodo'),
         icon: CalendarClock,
         colors: 'from-teal-800 to-teal-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Ventas por Vendedor',
@@ -117,6 +121,7 @@ const reportesVentasRentabilidad: ReportCardProps[] = [
         href: route('reportes.ventas_por_vendedor'),
         icon: Users,
         colors: 'from-fuchsia-800 to-fuchsia-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Reporte de Ganancias',
@@ -124,6 +129,7 @@ const reportesVentasRentabilidad: ReportCardProps[] = [
         href: route('reportes.reporte_ganancias'),
         icon: DollarSign,
         colors: 'from-green-800 to-green-400',
+        mostrarDescripcion: true,
     },
 ];
 
@@ -134,6 +140,7 @@ const reportesAuditoria: ReportCardProps[] = [
         href: route('reportes.rastreo_operaciones'),
         icon: History,
         colors: 'from-slate-900 to-slate-600',
+        mostrarDescripcion: true,
     },
     {
         title: 'Historial de Movimientos',
@@ -141,6 +148,7 @@ const reportesAuditoria: ReportCardProps[] = [
         href: route('reportes.historial_movimientos'),
         icon: Repeat,
         colors: 'from-violet-900 to-violet-500',
+        mostrarDescripcion: true,
     },
 ];
 
@@ -151,6 +159,7 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         href: route('reportes.historial_precios'),
         icon: History,
         colors: 'from-amber-800 to-amber-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Cambios de Precio de Costo',
@@ -158,6 +167,7 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         href: route('reportes.historial_costo_precio'),
         icon: LibraryBig,
         colors: 'from-rose-800 to-rose-400',
+        mostrarDescripcion: true,
     },
     {
         title: 'Movimientos Financieros',
@@ -165,10 +175,11 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         href: route('reportes.movimientos_financieros'),
         icon: Landmark,
         colors: 'from-gray-800 to-gray-500',
+        mostrarDescripcion: true,
     },
 ];
 
-const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors }) => (
+const ReportCard: React.FC<ReportCardProps> = ({ title, description, href, icon: Icon, colors, mostrarDescripcion }) => (
     <SpotlightCard
         estado="claro"
         className={`border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br ${colors}`}
@@ -182,6 +193,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors
             </div>
             <div className="flex h-full flex-col items-end justify-center space-y-2">
                 <span className="text-right text-lg text-white">{title}</span>
+                {mostrarDescripcion && <p className="max-w-[85%] text-right text-xs leading-snug text-white/80">{description}</p>}
             </div>
             <Link href={href}>
                 <button

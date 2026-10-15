@@ -43,8 +43,8 @@ export function ComprasPorProveedorPie({ data }: ComprasPorProveedorPieProps) {
     return (
         <Card className="flex flex-col">
             <CardHeader className="items-center pb-0">
-                <CardTitle>Compras por Proveedor</CardTitle>
-                <CardDescription>Total gastado por proveedor</CardDescription>
+                <CardTitle>Compras por Asociado</CardTitle>
+                <CardDescription>Total gastado por asociado</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 pb-0">
                 <ChartContainer
@@ -59,9 +59,9 @@ export function ComprasPorProveedorPie({ data }: ComprasPorProveedorPieProps) {
             </CardContent>
             <CardFooter className="flex-col gap-2 text-sm">
                 <div className="flex items-center gap-2 leading-none font-medium">
-                    Distribución por proveedores <TrendingUp className="h-4 w-4" />
+                    Distribución por asociados <TrendingUp className="h-4 w-4" />
                 </div>
-                <div className="text-muted-foreground leading-none">Total gastado a cada Proveedor</div>
+                <div className="text-muted-foreground leading-none">Total gastado a cada Asociado</div>
             </CardFooter>
         </Card>
     );

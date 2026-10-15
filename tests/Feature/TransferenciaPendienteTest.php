@@ -4,6 +4,7 @@ use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\Moneda;
 use App\Models\MovimientoFinanciero;
+use App\Models\Proveedor;
 use App\Models\TransferenciaPendiente;
 use App\Models\User;
 
@@ -784,6 +785,23 @@ test('el total de la Comparación Mensual coincide con el Capital Financiero del
     $this->actingAs($admin)->get(route('dashboard'))->assertInertia(fn ($page) => $page
         ->where('comparaciones.0.monto_actual', 600)
         ->where('comparaciones.0.en_transito', 0));
+});
+
+test('el saldo de la tabla proveedors no entra al capital ni a la Comparación Mensual', function () {
+    prepararEnvioEnTransito(); // 600 USD de capital sin contar proveedores
+    Proveedor::factory()->create(['saldo_proveedor' => 5000]);
+    $admin = User::factory()->admin()->create();
+
+    $props = [];
+    $this->actingAs($admin)->get(route('dashboard'))->assertInertia(function ($page) use (&$props) {
+        $props = $page->toArray()['props'];
+
+        return $page;
+    });
+
+    expect((float) $props['resumenFinanciero']['capital_financiero'])->toBe(600.0)
+        ->and(collect($props['comparaciones'])->pluck('moneda')->all())->not->toContain('PROVEEDORES');
+
 });
 
 test('el Resumen Financiero manda por moneda su nombre, su insignia y si es la principal', function () {

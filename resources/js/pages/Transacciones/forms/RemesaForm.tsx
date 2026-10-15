@@ -8,12 +8,10 @@ import {
     type Entidad,
     entidadDeCliente,
     entidadDeCuenta,
-    entidadDeProveedor,
     etiquetaSaldoDe,
     formatear,
     OpcionesTipo,
     type OpcionTipo,
-    type ProveedorEntidad,
     ResumenCard,
     ResumenDato,
     SeccionTitulo,
@@ -27,13 +25,12 @@ import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Building2, Handshake, Loader2, Receipt, Shuffle, UserRound, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Handshake, Loader2, Receipt, Shuffle, UserRound, Wallet } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 const TIPOS: OpcionTipo<TipoEntidad>[] = [
     { valor: 'cuenta', titulo: 'Cuenta', descripcion: 'Una de las cuentas del sistema', icono: Wallet },
     { valor: 'cliente', titulo: 'Cliente', descripcion: 'Afecta la deuda o el pago del cliente', icono: UserRound },
-    { valor: 'proveedor', titulo: 'Proveedor', descripcion: 'Afecta el saldo del proveedor', icono: Building2 },
 ];
 
 const NOMBRE_TIPO: Record<TipoEntidad, string> = { cuenta: 'cuenta', cliente: 'cliente', proveedor: 'proveedor' };
@@ -47,7 +44,6 @@ const formatearTasa = (tasa: number) =>
 export default function RemesaForm() {
     const [cuentas, setCuentas] = useState<CuentaEntidad[]>([]);
     const [clientes, setClientes] = useState<ClienteEntidad[]>([]);
-    const [proveedores, setProveedores] = useState<ProveedorEntidad[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -56,7 +52,6 @@ export default function RemesaForm() {
             .then((res) => {
                 setCuentas(res.data.cuentas);
                 setClientes(res.data.clientes);
-                setProveedores(res.data.proveedores);
             })
             .catch(() => sileo.error({ title: 'Error al cargar datos del formulario', description: 'Inténtalo nuevamente' }))
             .finally(() => setLoading(false));
@@ -82,8 +77,7 @@ export default function RemesaForm() {
         );
     }
 
-    const entidadesDe = (tipo: TipoEntidad): Entidad[] =>
-        tipo === 'cuenta' ? cuentas.map(entidadDeCuenta) : tipo === 'cliente' ? clientes.map(entidadDeCliente) : proveedores.map(entidadDeProveedor);
+    const entidadesDe = (tipo: TipoEntidad): Entidad[] => (tipo === 'cuenta' ? cuentas.map(entidadDeCuenta) : clientes.map(entidadDeCliente));
 
     const entidadesEntrada = entidadesDe(data.entrada_tipo);
     const entrada = entidadesEntrada.find((e) => e.id === data.entrada_id) ?? null;

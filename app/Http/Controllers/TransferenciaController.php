@@ -55,16 +55,14 @@ class TransferenciaController extends Controller
             $cuentas->each(fn (Cuenta $cuenta) => $cuenta->setAttribute('banco', CatalogoTarjetasService::porSlug($cuenta->imagen)));
         }
 
-        // Un vendedor transfiere solo entre cuentas: no tiene acceso a clientes ni a proveedores
+        // Un vendedor transfiere solo entre cuentas: no tiene acceso a clientes
         $clientes = $esVendedor ? collect() : Cliente::all();
-        $proveedores = $esVendedor ? collect() : Proveedor::all();
         $monedasActivas = Moneda::where('estado', true)->get();
 
         return response()->json([
             'cuentasOrigen' => $cuentasOrigen,
             'cuentasDestino' => $cuentasDestino,
             'clientes' => $clientes,
-            'proveedores' => $proveedores,
             'monedasActivas' => $monedasActivas,
         ]);
     }
@@ -73,13 +71,14 @@ class TransferenciaController extends Controller
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
-        // Un vendedor transfiere solo entre cuentas: ni clientes ni proveedores, ni de origen ni de destino
+        // Un vendedor transfiere solo entre cuentas, ni de origen ni de destino clientes; los proveedores ya no
+        // reciben operaciones (los clientes toman su función)
         $esVendedor = auth()->user()->role === 'vendedor';
 
         $request->validate([
             'origen_tipo' => 'required|string|in:'.($esVendedor ? 'cuenta' : 'cuenta,cliente'),
             'origen_id' => 'required|integer',
-            'destino_tipo' => 'required|string|in:'.($esVendedor ? 'cuenta' : 'cuenta,cliente,proveedor'),
+            'destino_tipo' => 'required|string|in:'.($esVendedor ? 'cuenta' : 'cuenta,cliente'),
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:'.implode(',', $monedasValidas),
@@ -87,7 +86,7 @@ class TransferenciaController extends Controller
             'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
         ], [
             'origen_tipo.in' => 'No tiene permiso para transferir desde clientes.',
-            'destino_tipo.in' => 'No tiene permiso para transferir a clientes ni a proveedores.',
+            'destino_tipo.in' => 'No tiene permiso para transferir a ese tipo de destino.',
         ]);
 
         if ($request->origen_tipo === $request->destino_tipo && (int) $request->origen_id === (int) $request->destino_id) {

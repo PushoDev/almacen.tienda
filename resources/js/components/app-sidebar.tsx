@@ -92,13 +92,7 @@ const allNavItems: NavItem[] = [
         href: '/transacciones/envios',
         icon: Truck,
         roles: ['admin', 'moderador', 'vendedor'],
-        
-    },
-    {
-        title: 'Proveedores',
-        href: '/proveedores',
-        icon: ShoppingCart,
-        roles: ['admin', 'moderador'],
+
     },
     {
         title: 'Clientes Asociados',
@@ -116,7 +110,7 @@ const allNavItems: NavItem[] = [
         title: 'Categorias',
         href: '/categorias',
         icon: StoreIcon,
-        roles: ['admin', 'moderador'],
+        roles: ['admin'],
     },
     {
         title: 'Reportes Generales',
@@ -134,7 +128,7 @@ const allNavItems: NavItem[] = [
         title: 'Calendario de Historial',
         href: '/calendario',
         icon: CalendarIcon,
-        roles: ['admin'],
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Empleados & Usuarios',

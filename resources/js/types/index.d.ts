@@ -438,7 +438,6 @@ export interface LogisticaProps {
     almacenesLista?: { id: number; nombre_almacen: string }[];
     totalCategorias: number;
     categoriasActivas: number;
-    totalProveedores: number;
     totalClientes: number;
     totalAlmacenes: number;
     totalProductos: number;
@@ -494,15 +493,6 @@ export interface LogisticaProps {
     // Resumen de Clientes
     resumenClientes?: {
         total_clientes: number;
-        total_fondo: number;
-        total_deuda: number;
-        balance_neto: number;
-        por_estado: Record<string, { cantidad: number; saldo: number }>;
-    } | null;
-
-    // Resumen de Proveedores
-    resumenProveedores?: {
-        total_proveedores: number;
         total_fondo: number;
         total_deuda: number;
         balance_neto: number;

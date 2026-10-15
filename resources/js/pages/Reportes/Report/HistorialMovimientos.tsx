@@ -301,6 +301,138 @@ export default function HistorialMovimientosPage({ movimientos, totales, almacen
 
                 <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm">
                     <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Search className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Filtros de Búsqueda</CardTitle>
+                                <CardDescription className="text-violet-100">
+                                    Acota los movimientos por estado, almacén, fechas o producto.
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3 pt-6">
+                        <div className="relative">
+                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                            <Input
+                                type="text"
+                                placeholder="Buscar por # de movimiento, producto, marca, modelo o solicitante..."
+                                value={filtroBuscar}
+                                onChange={(e) => setFiltroBuscar(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && aplicarFiltros()}
+                                className="pl-9"
+                            />
+                        </div>
+                        <div className={`grid grid-cols-1 gap-3 md:grid-cols-3 ${esVendedor ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
+                            <div>
+                                <Label className="text-muted-foreground mb-1 block text-xs">Estado</Label>
+                                <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Todos" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos los estados</SelectItem>
+                                        {Object.entries(estados).map(([valor, etiqueta]) => (
+                                            <SelectItem key={valor} value={valor}>
+                                                {etiqueta}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            {esVendedor && (
+                                <div>
+                                    <Label className="text-muted-foreground mb-1 block text-xs">Sentido</Label>
+                                    <Select value={filtroSentido} onValueChange={setFiltroSentido}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Todos" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Salientes y entrantes</SelectItem>
+                                            <SelectItem value="salientes">Salientes (de mis almacenes)</SelectItem>
+                                            <SelectItem value="entrantes">Entrantes (a mis almacenes)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+                            <div>
+                                <Label className="text-muted-foreground mb-1 block text-xs">Almacén origen</Label>
+                                <Combobox
+                                    value={filtroOrigenId || null}
+                                    onValueChange={(val) => setFiltroOrigenId(val ?? '')}
+                                    onInputValueChange={setFiltroOrigenSearch}
+                                    itemToStringLabel={nombreAlmacen}
+                                >
+                                    <ComboboxInput className="w-full" placeholder="Cualquiera..." showClear />
+                                    <ComboboxContent>
+                                        <ComboboxList>
+                                            {almacenes
+                                                .filter(
+                                                    (a) =>
+                                                        !filtroOrigenSearch ||
+                                                        a.nombre_almacen.toLowerCase().includes(filtroOrigenSearch.toLowerCase()),
+                                                )
+                                                .map((almacen) => (
+                                                    <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
+                                                        {almacen.nombre_almacen}
+                                                    </ComboboxItem>
+                                                ))}
+                                        </ComboboxList>
+                                    </ComboboxContent>
+                                </Combobox>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground mb-1 block text-xs">Almacén destino</Label>
+                                <Combobox
+                                    value={filtroDestinoId || null}
+                                    onValueChange={(val) => setFiltroDestinoId(val ?? '')}
+                                    onInputValueChange={setFiltroDestinoSearch}
+                                    itemToStringLabel={nombreAlmacen}
+                                >
+                                    <ComboboxInput className="w-full" placeholder="Cualquiera..." showClear />
+                                    <ComboboxContent>
+                                        <ComboboxList>
+                                            {almacenes
+                                                .filter(
+                                                    (a) =>
+                                                        !filtroDestinoSearch ||
+                                                        a.nombre_almacen.toLowerCase().includes(filtroDestinoSearch.toLowerCase()),
+                                                )
+                                                .map((almacen) => (
+                                                    <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
+                                                        {almacen.nombre_almacen}
+                                                    </ComboboxItem>
+                                                ))}
+                                        </ComboboxList>
+                                    </ComboboxContent>
+                                </Combobox>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground mb-1 block text-xs">Desde</Label>
+                                <Input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="w-full" />
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground mb-1 block text-xs">Hasta</Label>
+                                <Input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="w-full" />
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            {hayFiltrosActivos && (
+                                <Button variant="outline" size="sm" onClick={limpiarFiltros} className="gap-1">
+                                    <FilterX className="h-4 w-4" /> Limpiar
+                                </Button>
+                            )}
+                            <Button size="sm" onClick={() => aplicarFiltros()} className="gap-1">
+                                <Filter className="h-4 w-4" /> Filtrar
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm">
+                    <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <CardTitle className="text-white">Movimientos registrados</CardTitle>
@@ -316,123 +448,6 @@ export default function HistorialMovimientosPage({ movimientos, totales, almacen
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="bg-muted/30 mb-4 space-y-3 rounded-lg border p-4">
-                            <div className="relative">
-                                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                <Input
-                                    type="text"
-                                    placeholder="Buscar por # de movimiento, producto, marca, modelo o solicitante..."
-                                    value={filtroBuscar}
-                                    onChange={(e) => setFiltroBuscar(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && aplicarFiltros()}
-                                    className="pl-9"
-                                />
-                            </div>
-                            <div className={`grid grid-cols-1 gap-3 md:grid-cols-3 ${esVendedor ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
-                                <div>
-                                    <Label className="text-muted-foreground mb-1 block text-xs">Estado</Label>
-                                    <Select value={filtroEstado} onValueChange={setFiltroEstado}>
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Todos" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Todos los estados</SelectItem>
-                                            {Object.entries(estados).map(([valor, etiqueta]) => (
-                                                <SelectItem key={valor} value={valor}>
-                                                    {etiqueta}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                {esVendedor && (
-                                    <div>
-                                        <Label className="text-muted-foreground mb-1 block text-xs">Sentido</Label>
-                                        <Select value={filtroSentido} onValueChange={setFiltroSentido}>
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Todos" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">Salientes y entrantes</SelectItem>
-                                                <SelectItem value="salientes">Salientes (de mis almacenes)</SelectItem>
-                                                <SelectItem value="entrantes">Entrantes (a mis almacenes)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                )}
-                                <div>
-                                    <Label className="text-muted-foreground mb-1 block text-xs">Almacén origen</Label>
-                                    <Combobox
-                                        value={filtroOrigenId || null}
-                                        onValueChange={(val) => setFiltroOrigenId(val ?? '')}
-                                        onInputValueChange={setFiltroOrigenSearch}
-                                        itemToStringLabel={nombreAlmacen}
-                                    >
-                                        <ComboboxInput className="w-full" placeholder="Cualquiera..." showClear />
-                                        <ComboboxContent>
-                                            <ComboboxList>
-                                                {almacenes
-                                                    .filter(
-                                                        (a) =>
-                                                            !filtroOrigenSearch ||
-                                                            a.nombre_almacen.toLowerCase().includes(filtroOrigenSearch.toLowerCase()),
-                                                    )
-                                                    .map((almacen) => (
-                                                        <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
-                                                            {almacen.nombre_almacen}
-                                                        </ComboboxItem>
-                                                    ))}
-                                            </ComboboxList>
-                                        </ComboboxContent>
-                                    </Combobox>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground mb-1 block text-xs">Almacén destino</Label>
-                                    <Combobox
-                                        value={filtroDestinoId || null}
-                                        onValueChange={(val) => setFiltroDestinoId(val ?? '')}
-                                        onInputValueChange={setFiltroDestinoSearch}
-                                        itemToStringLabel={nombreAlmacen}
-                                    >
-                                        <ComboboxInput className="w-full" placeholder="Cualquiera..." showClear />
-                                        <ComboboxContent>
-                                            <ComboboxList>
-                                                {almacenes
-                                                    .filter(
-                                                        (a) =>
-                                                            !filtroDestinoSearch ||
-                                                            a.nombre_almacen.toLowerCase().includes(filtroDestinoSearch.toLowerCase()),
-                                                    )
-                                                    .map((almacen) => (
-                                                        <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
-                                                            {almacen.nombre_almacen}
-                                                        </ComboboxItem>
-                                                    ))}
-                                            </ComboboxList>
-                                        </ComboboxContent>
-                                    </Combobox>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground mb-1 block text-xs">Desde</Label>
-                                    <Input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="w-full" />
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground mb-1 block text-xs">Hasta</Label>
-                                    <Input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="w-full" />
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                {hayFiltrosActivos && (
-                                    <Button variant="outline" size="sm" onClick={limpiarFiltros} className="gap-1">
-                                        <FilterX className="h-4 w-4" /> Limpiar
-                                    </Button>
-                                )}
-                                <Button size="sm" onClick={() => aplicarFiltros()} className="gap-1">
-                                    <Filter className="h-4 w-4" /> Filtrar
-                                </Button>
-                            </div>
-                        </div>
-
                         <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full text-sm">
                                 <thead className="bg-gradient-to-r from-slate-700 to-slate-800 text-white">

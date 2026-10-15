@@ -408,7 +408,7 @@ test('un ingreso a un cliente suma su deuda_pago_cliente', function () {
     $this->assertDatabaseHas('clientes', ['id' => $cliente->id, 'deuda_pago_cliente' => 50]);
 });
 
-test('un ingreso a un proveedor suma su saldo_proveedor', function () {
+test('un ingreso a un proveedor se rechaza: los proveedores ya no reciben operaciones', function () {
     crearTiposMovimientoFinanciero();
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
@@ -416,15 +416,15 @@ test('un ingreso a un proveedor suma su saldo_proveedor', function () {
     crearMoneda('USD', 1, true);
     $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
 
-    $response = $this->post(route('transacciones.ingresar'), [
+    $this->post(route('transacciones.ingresar'), [
         'destino_tipo' => 'proveedor',
         'destino_id' => $proveedor->id,
         'monto' => 75,
         'moneda' => 'USD',
-    ]);
+    ])->assertSessionHasErrors('destino_tipo');
 
-    $response->assertRedirect();
-    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 75]);
+    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 0]);
+    expect(MovimientoFinanciero::count())->toBe(0);
 });
 
 test('un vendedor no puede ingresar a una cuenta que no tiene asignada', function () {
@@ -508,15 +508,15 @@ test('un vendedor no puede ingresar a un proveedor: no tiene acceso a proveedore
     expect(MovimientoFinanciero::count())->toBe(0);
 });
 
-test('formData() de Ingreso no entrega clientes ni proveedores al vendedor pero sí al admin', function () {
+test('formData() de Ingreso no entrega clientes al vendedor pero sí al admin, y a nadie los proveedores', function () {
     Cliente::factory()->count(2)->create();
     Proveedor::factory()->count(3)->create();
 
     $this->actingAs(User::factory()->vendedor()->create());
-    $this->getJson(route('transacciones.ingreso.data'))->assertOk()->assertJsonCount(0, 'clientes')->assertJsonCount(0, 'proveedores');
+    $this->getJson(route('transacciones.ingreso.data'))->assertOk()->assertJsonCount(0, 'clientes')->assertJsonMissingPath('proveedores');
 
     $this->actingAs(User::factory()->admin()->create());
-    $this->getJson(route('transacciones.ingreso.data'))->assertOk()->assertJsonCount(2, 'clientes')->assertJsonCount(3, 'proveedores');
+    $this->getJson(route('transacciones.ingreso.data'))->assertOk()->assertJsonCount(2, 'clientes')->assertJsonMissingPath('proveedores');
 });
 
 test('un vendedor sí puede ingresar a una cuenta asignada con acceso completo', function () {
@@ -802,15 +802,35 @@ test('un vendedor transfiere solo entre cuentas: se rechaza un cliente de origen
     expect(MovimientoFinanciero::count())->toBe(0);
 });
 
-test('formData() de Transferencia no entrega clientes ni proveedores al vendedor pero sí al admin', function () {
+test('formData() de Transferencia no entrega clientes al vendedor pero sí al admin, y a nadie los proveedores', function () {
     Cliente::factory()->count(2)->create();
     Proveedor::factory()->count(3)->create();
 
     $this->actingAs(User::factory()->vendedor()->create());
-    $this->getJson(route('transacciones.transferencia.data'))->assertOk()->assertJsonCount(0, 'clientes')->assertJsonCount(0, 'proveedores');
+    $this->getJson(route('transacciones.transferencia.data'))->assertOk()->assertJsonCount(0, 'clientes')->assertJsonMissingPath('proveedores');
 
     $this->actingAs(User::factory()->admin()->create());
-    $this->getJson(route('transacciones.transferencia.data'))->assertOk()->assertJsonCount(2, 'clientes')->assertJsonCount(3, 'proveedores');
+    $this->getJson(route('transacciones.transferencia.data'))->assertOk()->assertJsonCount(2, 'clientes')->assertJsonMissingPath('proveedores');
+});
+
+test('una transferencia a un proveedor se rechaza: los proveedores ya no reciben operaciones', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $monedaUsd = crearMoneda('USD', 1, true);
+    $cuenta = crearCuentaEnMoneda($monedaUsd, saldo: 500);
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 0]);
+
+    $this->post(route('transacciones.transferir'), [
+        'origen_tipo' => 'cuenta', 'origen_id' => $cuenta->id,
+        'destino_tipo' => 'proveedor', 'destino_id' => $proveedor->id,
+        'monto' => 10, 'moneda' => 'USD',
+    ])->assertSessionHasErrors('destino_tipo');
+
+    $this->assertDatabaseHas('cuentas', ['id' => $cuenta->id, 'saldo_cuenta' => 500]);
+    $this->assertDatabaseHas('proveedors', ['id' => $proveedor->id, 'saldo_proveedor' => 0]);
+    expect(MovimientoFinanciero::count())->toBe(0);
 });
 
 test('formData() de Transferencia entrega a un admin todas las cuentas con su saldo', function () {
