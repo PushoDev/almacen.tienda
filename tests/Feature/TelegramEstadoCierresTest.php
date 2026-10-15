@@ -1,14 +1,23 @@
 <?php
 
 use App\Models\CierreCaja;
+use App\Models\TelegramVinculo;
 use App\Models\User;
 use Telegram\Bot\Laravel\Facades\Telegram;
+
+function adminConTelegram(string $chatId): User
+{
+    $admin = User::factory()->admin()->create();
+    TelegramVinculo::factory()->for($admin, 'usuario')->create(['chat_id' => $chatId]);
+
+    return $admin;
+}
 
 function enviarComandoTelegram(User $admin, string $texto): void
 {
     test()->postJson('/api/telegram/webhook', [
         'message' => [
-            'chat' => ['id' => $admin->telegram_chat_id],
+            'chat' => ['id' => $admin->chatTelegramPrincipal()],
             'text' => $texto,
         ],
     ], [
@@ -17,7 +26,7 @@ function enviarComandoTelegram(User $admin, string $texto): void
 }
 
 test('/estadocierres separa a los que ya cerraron de los que faltan', function () {
-    $admin = User::factory()->admin()->create(['telegram_chat_id' => '111']);
+    $admin = adminConTelegram('111');
 
     $vendedorConCierre = User::factory()->vendedor()->create(['name' => 'Ana Vendedora']);
     $moderadorSinCierre = User::factory()->moderador()->create(['name' => 'Beto Moderador']);
@@ -45,7 +54,7 @@ test('/estadocierres separa a los que ya cerraron de los que faltan', function (
 });
 
 test('/estadocierres muestra "faltan por cerrar (0)" cuando todos ya cerraron', function () {
-    $admin = User::factory()->admin()->create(['telegram_chat_id' => '222']);
+    $admin = adminConTelegram('222');
 
     $vendedor = User::factory()->vendedor()->create(['name' => 'Carla Vendedora']);
     CierreCaja::create([

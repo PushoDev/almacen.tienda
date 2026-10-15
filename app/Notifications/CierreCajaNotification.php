@@ -35,7 +35,7 @@ class CierreCajaNotification extends Notification
         // Push: solo admin y moderador (nunca a quien hizo el cierre). La campana no cambia.
         $channels = $this->conPushSi(['database'], $notifiable, $this->esAdminOModerador($notifiable));
 
-        if (! $notifiable->telegram_chat_id) {
+        if (! $notifiable->tieneTelegram()) {
             return $channels;
         }
 

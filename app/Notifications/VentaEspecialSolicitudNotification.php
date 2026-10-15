@@ -28,7 +28,8 @@ class VentaEspecialSolicitudNotification extends Notification
 
         $channels = $this->conPushSi(['database'], $notifiable, $puedeDecidir);
 
-        if ($notifiable->role === 'admin' && $notifiable->telegram_chat_id) {
+        // Telegram: quien puede decidir (con los botones Aprobar/Rechazar). Mismo criterio que el push.
+        if ($puedeDecidir && $notifiable->tieneTelegram()) {
             $channels[] = TelegramChannel::class;
         }
 

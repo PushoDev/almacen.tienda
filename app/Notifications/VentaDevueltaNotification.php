@@ -30,7 +30,7 @@ class VentaDevueltaNotification extends Notification
         // Mismo criterio que RemesaNotification/MovimientoFinancieroNotification::via()
         // — admin y moderador reciben Telegram, el chequeo de rol va explícito acá
         // también (ver bug B10 en docs/ESTADO_DESARROLLO.md).
-        if ($notifiable->telegram_chat_id && in_array($notifiable->role, ['admin', 'moderador'])) {
+        if ($notifiable->tieneTelegram() && in_array($notifiable->role, ['admin', 'moderador'])) {
             $channels[] = TelegramChannel::class;
         }
 

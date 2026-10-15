@@ -31,7 +31,7 @@ class CierresPendientesNotification extends Notification
     {
         $channels = $this->conPushSi(['database'], $notifiable, $notifiable->role === 'admin');
 
-        if ($notifiable->telegram_chat_id && $notifiable->role === 'admin') {
+        if ($notifiable->tieneTelegram() && $notifiable->role === 'admin') {
             $channels[] = TelegramChannel::class;
         }
 

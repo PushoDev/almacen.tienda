@@ -41,7 +41,7 @@ beforeEach(function () {
         '*mysqldump*' => Process::result(output: '-- dump falso --'),
     ]);
     Storage::fake('local');
-    // Ningún admin de prueba tiene telegram_chat_id: enviarPorTelegram() corta antes de tocar
+    // Ningún admin de prueba tiene Telegram vinculado: enviarPorTelegram() corta antes de tocar
     // red (adminsConTelegram() vacío), así los tests no dependen de api.telegram.org.
 });
 
@@ -54,7 +54,7 @@ it('guarda el dump comprimido en el disco local', function () {
     expect($archivos)->toHaveCount(1);
 });
 
-it('sin admins con telegram_chat_id, ese destino falla sin romper el resto', function () {
+it('sin admins con Telegram vinculado, ese destino falla sin romper el resto', function () {
     $resultado = app(DatabaseBackupService::class)->ejecutar();
 
     expect($resultado['telegram'])->toBeFalse()

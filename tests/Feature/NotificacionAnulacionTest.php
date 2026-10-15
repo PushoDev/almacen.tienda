@@ -3,6 +3,7 @@
 use App\Channels\TelegramChannel;
 use App\Models\MovimientoFinanciero;
 use App\Models\Remesa;
+use App\Models\TelegramVinculo;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\MovimientoFinancieroNotification;
@@ -42,7 +43,8 @@ test('anular un gasto envía la notificación con anulado=true', function () {
 
 test('un moderador recibe el canal de Telegram para la notificación de movimiento financiero', function () {
     crearTiposMovimientoFinanciero();
-    $moderador = User::factory()->moderador()->create(['telegram_chat_id' => '12345']);
+    $moderador = User::factory()->moderador()->create();
+    TelegramVinculo::factory()->for($moderador, 'usuario')->create(['chat_id' => '12345']);
 
     $movimiento = MovimientoFinanciero::create([
         'user_id' => $moderador->id,
@@ -139,7 +141,8 @@ test('anular una venta pendiente no envía VentaDevueltaNotification', function 
 });
 
 test('un moderador recibe el canal de Telegram para la notificación de devolución de venta', function () {
-    $moderador = User::factory()->moderador()->create(['telegram_chat_id' => '12345']);
+    $moderador = User::factory()->moderador()->create();
+    TelegramVinculo::factory()->for($moderador, 'usuario')->create(['chat_id' => '12345']);
     $venta = Venta::factory()->devuelta()->create();
 
     $notification = new VentaDevueltaNotification($venta);

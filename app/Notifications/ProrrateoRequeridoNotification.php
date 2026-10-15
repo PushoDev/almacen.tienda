@@ -28,7 +28,7 @@ class ProrrateoRequeridoNotification extends Notification
     {
         $channels = $this->conPushSi(['database'], $notifiable, $this->esAdminOModerador($notifiable));
 
-        if ($notifiable->telegram_chat_id) {
+        if ($this->esAdminOModerador($notifiable) && $notifiable->tieneTelegram()) {
             $channels[] = TelegramChannel::class;
         }
 
