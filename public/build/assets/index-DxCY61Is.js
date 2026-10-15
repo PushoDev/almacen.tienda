@@ -1,0 +1,1 @@
+import{c as o}from"./createLucideIcon-vRsXjhqQ.js";import{r}from"./index-CIlCc7SX.js";const e=[["path",{d:"M18 6 6 18",key:"1bl5f8"}],["path",{d:"m6 6 12 12",key:"d8bk6v"}]],a=o("x",e);var c=r();export{a as X,c as s};
