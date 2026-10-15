@@ -42,9 +42,9 @@ import { Separator } from '@/components/ui/separator';
 import SpotlightCard from '@/components/ui/spotlightcard';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowLeftRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, Shuffle, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeftRight, ArrowUpRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, Shuffle, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -155,6 +155,26 @@ const colorTipo = (tipo: string) => {
             return 'border-cyan-400/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300';
         default:
             return 'border-border bg-muted text-foreground';
+    }
+};
+
+// Pantalla propia de cada operación, para llegar al registro completo desde el reporte.
+// Gasto/Ingreso/Transferencia comparten `transacciones.show` (es un MovimientoFinanciero).
+// Ajuste de saldo no tiene pantalla propia: la referencia queda sin enlace.
+const rutaOperacion = (op: Operacion): string | null => {
+    switch (op.tipo) {
+        case 'Venta':
+            return route('ventas.show', { id: op.id });
+        case 'Compra':
+            return route('comprar.show', op.id);
+        case 'Remesa':
+            return route('transacciones.remesa.show', op.id);
+        case 'Gasto':
+        case 'Ingreso':
+        case 'Transferencia':
+            return route('transacciones.show', op.id);
+        default:
+            return null;
     }
 };
 
@@ -908,9 +928,21 @@ export default function RastreoOperacionesPage({
                                                                 ) : (
                                                                     <span className="w-4" />
                                                                 )}
-                                                                <Badge className={colorTipo(op.tipo)}>
-                                                                    {op.referencia}
-                                                                </Badge>
+                                                                {rutaOperacion(op) ? (
+                                                                    // El clic en la fila expande el detalle; el enlace no debe expandirla.
+                                                                    <Link
+                                                                        href={rutaOperacion(op)!}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        title="Ver la operación completa"
+                                                                    >
+                                                                        <Badge className={`gap-1 hover:underline ${colorTipo(op.tipo)}`}>
+                                                                            {op.referencia}
+                                                                            <ArrowUpRight className="h-3 w-3" />
+                                                                        </Badge>
+                                                                    </Link>
+                                                                ) : (
+                                                                    <Badge className={colorTipo(op.tipo)}>{op.referencia}</Badge>
+                                                                )}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 text-sm whitespace-nowrap">
