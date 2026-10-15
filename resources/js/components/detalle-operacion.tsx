@@ -42,6 +42,9 @@ export interface EntidadMovimiento {
     saldo_anterior: number | null;
     saldo_posterior: number | null;
     moneda: string | null;
+    // Lo que movió esta pata (Operación Múltiple: Entrada, Salida y Mensajero). Ausente en
+    // Venta/Compra, que no lo mandan.
+    monto?: number | null;
 }
 
 // Una "pata" de saldo tocada por Venta/Compra (pago, comisión PV, gestor, mensajero,
@@ -225,6 +228,11 @@ export const EntidadMovimientoCard = ({ titulo, entidad }: { titulo: string; ent
         </CardHeader>
         <CardContent className="space-y-1 text-xs">
             <p><strong>Nombre:</strong> {entidad.nombre}</p>
+            {entidad.monto !== undefined && entidad.monto !== null && (
+                <p>
+                    <strong>Monto:</strong> {formatMonto(entidad.monto, entidad.moneda ?? '')}
+                </p>
+            )}
             <p>
                 <strong>Saldo Anterior:</strong>{' '}
                 {entidad.saldo_anterior !== null ? formatMonto(entidad.saldo_anterior, entidad.moneda ?? '') : '—'}

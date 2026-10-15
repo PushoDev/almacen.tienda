@@ -235,6 +235,18 @@ const montoEnviaRemesa = (op: Operacion) => {
     return leg ? formatMonto(Math.abs((leg.saldo_posterior ?? 0) - (leg.saldo_anterior ?? 0)), leg.moneda ?? op.moneda) : '—';
 };
 
+// Pago al mensajero (tercera pata, opcional): sale de su propia cuenta y no entra en el monto
+// de "Cuenta Envía" (ese es solo la Salida al destinatario). Se muestra aparte para que no
+// pase desapercibido. `monto` lo manda el backend; la resta de saldos es el respaldo para
+// datos que lleguen sin él.
+const montoMensajeroRemesa = (op: Operacion) => {
+    const leg = remesaLeg(op, 'Mensajero');
+    if (!leg) return null;
+    const monto = leg.monto ?? Math.abs((leg.saldo_posterior ?? 0) - (leg.saldo_anterior ?? 0));
+
+    return monto > 0 ? formatMonto(monto, leg.moneda ?? op.moneda) : null;
+};
+
 const cuentaRecibeRemesa = (op: Operacion) => remesaLeg(op, 'Entrada')?.nombre ?? '—';
 
 const montoRecibeRemesa = (op: Operacion) => {
@@ -574,7 +586,9 @@ export default function RastreoOperacionesPage({
             return partes.length > 0 ? partes.join(', ') : '—';
         }
         if (op.tipo === 'Remesa') {
-            return montoEnviaRemesa(op);
+            const mensajero = montoMensajeroRemesa(op);
+
+            return mensajero ? `${montoEnviaRemesa(op)}, Mensajero: ${mensajero}` : montoEnviaRemesa(op);
         }
 
         return montoEnvia(op);
@@ -934,7 +948,14 @@ export default function RastreoOperacionesPage({
                                                                     {pagosCompraConOrigen(op).length === 0 && montoPendienteCompra(op) === 0 && '—'}
                                                                 </div>
                                                             ) : op.tipo === 'Remesa' ? (
-                                                                montoEnviaRemesa(op)
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    <span>{montoEnviaRemesa(op)}</span>
+                                                                    {montoMensajeroRemesa(op) && (
+                                                                        <Badge className="border-amber-400/30 bg-amber-500/10 font-normal whitespace-nowrap text-amber-700 dark:text-amber-300">
+                                                                            Mensajero: {montoMensajeroRemesa(op)}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
                                                             ) : (
                                                                 montoEnvia(op)
                                                             )}
