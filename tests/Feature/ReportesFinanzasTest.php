@@ -1,10 +1,13 @@
 <?php
 
+use App\Models\AjusteSaldoCuenta;
 use App\Models\Almacen;
 use App\Models\HistorialPrecioCosto;
 use App\Models\MovimientoFinanciero;
 use App\Models\PrecioHistorial;
 use App\Models\Producto;
+use App\Models\Remesa;
+use App\Models\TransferenciaPendiente;
 use App\Models\User;
 
 // ─── Historial de Precios ────────────────────────────────────────────────────
@@ -90,15 +93,133 @@ test('los movimientos financieros no suman los cancelados y se pueden filtrar po
             ->has('movimientos.data', 4)
             ->where('totales.movimientos', 3)
             ->where('totales.cancelados', 1)
-            ->where('porTipo.0.nombre', 'Gasto')
+            ->where('porTipo.0.tipo', 'Gasto')
             ->where('porTipo.0.movimientos', 2)
-            ->where('porTipo.0.monto_usd', 100));
+            ->where('porTipo.0.monto_usd', 100)
+            ->where('porTipo.1.tipo', 'Ingreso')
+            ->where('porTipo.1.movimientos', 1));
 
     $this->actingAs($admin)->get(route('reportes.movimientos_financieros', ['estado' => 'cancelado']))
-        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1));
+        ->assertInertia(fn ($page) => $page
+            ->has('movimientos.data', 1)
+            // Los widgets de tipo siguen presentes (en cero), no desaparecen al filtrar cancelados.
+            ->has('porTipo', 6)
+            ->where('porTipo.0.movimientos', 0)
+            ->where('totales.cancelados', 1));
 
     $this->actingAs($admin)->get(route('reportes.movimientos_financieros', ['buscar' => 'GASTO UNO']))
         ->assertInertia(fn ($page) => $page->has('movimientos.data', 1));
+
+    $this->actingAs($admin)->get(route('reportes.movimientos_financieros', ['tipo' => 'Ingreso']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.tipo', 'Ingreso'));
+});
+
+test('los movimientos financieros incluyen operaciones múltiples, ajustes y envíos en tránsito sin duplicar los ya recibidos', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+    $monedaUsd = crearMonedaUsd();
+    $cuentaEntrada = crearCuentaEnMoneda($monedaUsd);
+    $cuentaSalida = crearCuentaEnMoneda($monedaUsd);
+
+    $remesa = Remesa::create([
+        'user_id' => $admin->id,
+        'entrada_tipo' => 'cuenta',
+        'entrada_cuenta_id' => $cuentaEntrada->id,
+        'entrada_monto' => 50,
+        'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 100,
+        'entrada_saldo_posterior' => 150,
+        'salida_tipo' => 'cuenta',
+        'salida_cuenta_id' => $cuentaSalida->id,
+        'salida_monto' => 39250,
+        'salida_moneda' => 'CUP',
+        'salida_saldo_anterior' => 73989,
+        'salida_saldo_posterior' => 34739,
+        'mensajero_cuenta_id' => $cuentaSalida->id,
+        'mensajero_monto' => 1000,
+        'mensajero_moneda' => 'CUP',
+        'mensajero_saldo_anterior' => 34739,
+        'mensajero_saldo_posterior' => 33739,
+        'notas' => 'REMESA DE PRUEBA',
+        'fecha_operacion' => now(),
+    ]);
+
+    AjusteSaldoCuenta::create([
+        'cuenta_id' => $cuentaEntrada->id,
+        'user_id' => $admin->id,
+        'saldo_anterior' => 100,
+        'saldo_nuevo' => 70,
+        'motivo' => 'AJUSTE DE PRUEBA',
+    ]);
+
+    // Un envío abierto (sin movimiento) y uno recibido que ya tiene su Transferencia.
+    // Cuentas explícitas: las factories crean una moneda por cuenta y sus códigos únicos se agotan.
+    $cuentas = ['cuenta_origen_id' => $cuentaSalida->id, 'cuenta_destino_id' => $cuentaEntrada->id];
+    TransferenciaPendiente::factory()->create($cuentas + ['monto' => 30, 'monto_usd' => 30, 'comentario' => 'ENVIO ABIERTO']);
+    $transferencia = MovimientoFinanciero::factory()->transferencia()->create($cuentas + ['monto' => 80, 'monto_usd' => 80]);
+    TransferenciaPendiente::factory()->recibido()->create($cuentas + [
+        'monto' => 80,
+        'monto_usd' => 80,
+        'movimiento_financiero_id' => $transferencia->id,
+    ]);
+
+    $this->actingAs($admin)->get(route('reportes.movimientos_financieros'))
+        ->assertOk()
+        ->assertInertia(function ($page) use ($remesa) {
+            $page->has('movimientos.data', 4);
+
+            $porTipo = collect($page->toArray()['props']['porTipo'])->keyBy('tipo');
+            expect($porTipo['Operación Múltiple']['movimientos'])->toBe(1);
+            expect($porTipo['Operación Múltiple']['monto_usd'])->toBeNull();
+            expect($porTipo['Ajuste']['movimientos'])->toBe(1);
+            expect($porTipo['Envío en tránsito']['movimientos'])->toBe(1);
+            expect($porTipo['Envío en tránsito']['monto_usd'])->toEqual(30.0);
+            // El envío recibido NO se cuenta aparte: ya es la Transferencia.
+            expect($porTipo['Transferencia']['movimientos'])->toBe(1);
+
+            $filas = collect($page->toArray()['props']['movimientos']['data'])->keyBy('tipo');
+            $operacion = $filas['Operación Múltiple'];
+            expect($operacion['id'])->toBe($remesa->id);
+            expect((float) $operacion['monto'])->toEqual(50.0);
+            expect($operacion['moneda'])->toBe('USD');
+            expect((float) $operacion['salida_monto'])->toEqual(39250.0);
+            expect((float) $operacion['mensajero_monto'])->toEqual(1000.0);
+            expect($operacion['mensajero_moneda'])->toBe('CUP');
+            expect($operacion['descripcion'])->toBe('REMESA DE PRUEBA');
+
+            $ajuste = $filas['Ajuste'];
+            expect((float) $ajuste['monto'])->toEqual(-30.0);
+            expect((float) $ajuste['saldo_anterior'])->toEqual(100.0);
+            expect((float) $ajuste['saldo_posterior'])->toEqual(70.0);
+
+            expect($filas['Envío en tránsito']['estado'])->toBe('en_transito');
+        });
+
+    $this->actingAs($admin)->get(route('reportes.movimientos_financieros', ['estado' => 'en_transito']))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1)->where('movimientos.data.0.tipo', 'Envío en tránsito'));
+
+    $this->actingAs($admin)->get(route('reportes.movimientos_financieros', ['tipo' => 'Operación Múltiple', 'buscar' => (string) $remesa->id]))
+        ->assertInertia(fn ($page) => $page->has('movimientos.data', 1));
+});
+
+test('un envío anulado o rechazado sin movimiento aparece como cancelado y no suma', function () {
+    crearTiposMovimientoFinanciero();
+    $admin = User::factory()->admin()->create();
+
+    $cuentas = [
+        'cuenta_origen_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
+        'cuenta_destino_id' => crearCuentaEnMoneda(crearMoneda('CUP', 400))->id,
+    ];
+    TransferenciaPendiente::factory()->create($cuentas + ['estado' => TransferenciaPendiente::ESTADO_ANULADO, 'monto' => 70, 'monto_usd' => 70]);
+    TransferenciaPendiente::factory()->create($cuentas + ['estado' => TransferenciaPendiente::ESTADO_RECHAZADO, 'monto' => 20, 'monto_usd' => 20]);
+
+    $this->actingAs($admin)->get(route('reportes.movimientos_financieros'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('movimientos.data', 2)
+            ->where('totales.cancelados', 2)
+            ->where('totales.movimientos', 0)
+            ->where('movimientos.data.0.estado', 'cancelado'));
 });
 
 test('un vendedor no puede abrir los reportes de finanzas', function () {

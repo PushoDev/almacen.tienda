@@ -171,7 +171,7 @@ const reportesFinanzasOtros: ReportCardProps[] = [
     },
     {
         title: 'Movimientos Financieros',
-        description: 'Historial de ingresos, gastos y transferencias.',
+        description: 'Gastos, ingresos, transferencias, envíos, operaciones múltiples y ajustes de caja.',
         href: route('reportes.movimientos_financieros'),
         icon: Landmark,
         colors: 'from-gray-800 to-gray-500',
