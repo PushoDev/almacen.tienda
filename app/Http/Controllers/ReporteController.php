@@ -9,10 +9,10 @@ use App\Models\HistorialPrecioCosto;
 use App\Models\Venta;
 use App\Services\CatalogoTarjetasService;
 use App\Services\DashboardStatsService;
+use App\Services\FechaNegocio;
 use App\Services\ValorInventarioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -213,22 +213,21 @@ class ReporteController extends Controller
         $timeRange = $request->query('timeRange', '90d');
 
         // Lógica para filtrar por un solo día o un rango
+        // Los días son del negocio (Cuba), no UTC: una venta de las 21:00 cuenta para ese día.
+        $hoy = FechaNegocio::ahora();
         if ($timeRange === '1d') {
-            $startDate = Carbon::now()->startOfDay();
-            $endDate = Carbon::now()->endOfDay();
+            $startDate = $endDate = $hoy->toDateString();
         } elseif ($timeRange === '2d') {
-            $startDate = Carbon::now()->subDay()->startOfDay();
-            $endDate = Carbon::now()->subDay()->endOfDay();
+            $startDate = $endDate = $hoy->subDay()->toDateString();
         } elseif ($timeRange === '3d') {
-            $startDate = Carbon::now()->subDays(2)->startOfDay();
-            $endDate = Carbon::now()->subDays(2)->endOfDay();
+            $startDate = $endDate = $hoy->subDays(2)->toDateString();
         } else {
             $days = (int) substr($timeRange, 0, -1);
-            $startDate = Carbon::now()->subDays($days);
-            $endDate = Carbon::now()->endOfDay();
+            $startDate = $hoy->subDays($days)->toDateString();
+            $endDate = $hoy->toDateString();
         }
 
-        // Consulta de compras
+        // Consulta de compras (fecha_compra es una columna `date`: ya es el día del negocio)
         $compras = Compra::select(
             DB::raw('DATE(fecha_compra) as date'),
             DB::raw('SUM(total_compra) as total')
@@ -237,14 +236,14 @@ class ReporteController extends Controller
             ->groupBy('date')
             ->get();
 
-        // Consulta de ventas
-        $ventas = Venta::select(
-            DB::raw('DATE(created_at) as date'),
-            DB::raw('SUM(total) as total')
-        )
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->groupBy('date')
-            ->get();
+        // Consulta de ventas: se agrupa por el día del negocio en PHP porque DATE(created_at)
+        // en SQL agrupa por día UTC.
+        $ventas = Venta::query()
+            ->whereBetween('created_at', [FechaNegocio::inicioDelDiaUtc($startDate), FechaNegocio::finDelDiaUtc($endDate)])
+            ->get(['created_at', 'total'])
+            ->groupBy(fn (Venta $venta) => FechaNegocio::diaDe($venta->created_at))
+            ->map(fn ($ventasDelDia, $dia) => (object) ['date' => $dia, 'total' => $ventasDelDia->sum('total')])
+            ->values();
 
         // Combinar los resultados de compras y ventas por fecha
         $combinedData = [];
@@ -444,8 +443,8 @@ class ReporteController extends Controller
             ->join('productos', 'productos.id', '=', 'venta_detalles.producto_id')
             ->where('ventas.estado', 'completada')
             ->when($filtros['almacen_id'] ?? null, fn ($q, $almacenId) => $q->where('ventas.almacen_id', $almacenId))
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('ventas.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('ventas.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)))
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
                 $like = '%'.$buscar.'%';
 
@@ -532,8 +531,8 @@ class ReporteController extends Controller
             ->where('ventas.estado', 'completada')
             ->when($filtros['user_id'] ?? null, fn ($q, $userId) => $q->where('ventas.user_id', $userId))
             ->when($filtros['almacen_id'] ?? null, fn ($q, $almacenId) => $q->where('ventas.almacen_id', $almacenId))
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('ventas.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('ventas.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)))
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
                 $like = '%'.$buscar.'%';
 
@@ -606,8 +605,8 @@ class ReporteController extends Controller
         $vendedores = DB::table('ventas')
             ->join('users', 'ventas.user_id', '=', 'users.id')
             ->where('ventas.estado', 'completada')
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('ventas.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('ventas.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)))
             ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where('users.name', 'like', '%'.$buscar.'%'))
             ->select(
                 'users.id',
@@ -691,8 +690,8 @@ class ReporteController extends Controller
         $consulta = Venta::query()
             ->where('ventas.estado', 'completada')
             ->when($filtros['user_id'] ?? null, fn ($q, $userId) => $q->where('ventas.user_id', $userId))
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('ventas.created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('ventas.created_at', '<=', $hasta))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('ventas.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('ventas.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)))
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
                 $q->where(function ($q) use ($buscar) {
                     if (ctype_digit($buscar)) {
@@ -809,8 +808,8 @@ class ReporteController extends Controller
             ->when($filtros['user_id'] ?? null, fn ($q, $userId) => $q->where('precio_historials.user_id', $userId))
             ->when($filtros['almacen_id'] ?? null, fn ($q, $almacenId) => $q->where('precio_historials.almacen_id', $almacenId))
             ->when($filtros['tipo'] ?? null, fn ($q, $tipo) => $q->where('precio_historials.accion', 'like', $tiposAccion[$tipo]['like']))
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('precio_historials.created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('precio_historials.created_at', '<=', $hasta));
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('precio_historials.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('precio_historials.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)));
 
         $totales = (clone $base)
             ->selectRaw('COUNT(*) as cambios, COUNT(DISTINCT precio_historials.producto_id) as productos, COALESCE(SUM(precio_historials.precio_anterior IS NOT NULL AND precio_historials.precio_nuevo > precio_historials.precio_anterior), 0) as subidas, COALESCE(SUM(precio_historials.precio_anterior IS NOT NULL AND precio_historials.precio_nuevo < precio_historials.precio_anterior), 0) as bajadas, COALESCE(SUM(precio_historials.precio_anterior IS NULL), 0) as primeras')
@@ -909,8 +908,8 @@ class ReporteController extends Controller
                 'perdida' => $q->where('historial_precio_costos.impacto_financiero', '<', 0),
                 default => $q->where('historial_precio_costos.impacto_financiero', 0),
             })
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('historial_precio_costos.created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('historial_precio_costos.created_at', '<=', $hasta));
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('historial_precio_costos.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('historial_precio_costos.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)));
 
         $stats = (clone $consulta)
             ->selectRaw('COUNT(*) as cambios, COALESCE(SUM(CASE WHEN impacto_financiero > 0 THEN impacto_financiero ELSE 0 END), 0) as ganancias, COALESCE(SUM(CASE WHEN impacto_financiero < 0 THEN impacto_financiero ELSE 0 END), 0) as perdidas, COALESCE(SUM(impacto_financiero), 0) as neto, COALESCE(SUM(impacto_financiero > 0), 0) as con_ganancia, COALESCE(SUM(impacto_financiero < 0), 0) as con_perdida')

@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Channels\TelegramChannel;
 use App\Models\User;
 use App\Notifications\Concerns\EnviaAvisoPush;
+use App\Services\FechaNegocio;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
@@ -60,7 +61,7 @@ class CierresPendientesNotification extends Notification
         $texto = "🟠 <b>Cierres de Caja Pendientes</b>\n";
         $texto .= "Los siguientes usuarios no han registrado su cierre hoy:\n\n";
         $texto .= $lista."\n\n";
-        $texto .= '🕐 '.now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.FechaNegocio::ahora()->format('d/m/Y H:i');
 
         return [
             'text' => $texto,

@@ -24,6 +24,7 @@ use App\Notifications\VentaEspecialSolicitudNotification;
 use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
+use App\Services\FechaNegocio;
 use App\Services\FichasHermanasService;
 use App\Services\LoteConsumoService;
 use App\Services\MetodosPagoService;
@@ -1838,11 +1839,11 @@ class VentaController extends Controller
         }
 
         if ($request->has('fecha_desde') && $request->fecha_desde) {
-            $query->whereDate('created_at', '>=', $request->fecha_desde);
+            $query->where('created_at', '>=', FechaNegocio::inicioDelDiaUtc($request->fecha_desde));
         }
 
         if ($request->has('fecha_hasta') && $request->fecha_hasta) {
-            $query->whereDate('created_at', '<=', $request->fecha_hasta);
+            $query->where('created_at', '<=', FechaNegocio::finDelDiaUtc($request->fecha_hasta));
         }
 
         if ($request->has('search') && $request->search) {

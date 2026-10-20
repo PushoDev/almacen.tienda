@@ -292,7 +292,18 @@ Verificado por SSH/HTTP que en `https://posglorietashop.com/proyectos/almacen.ti
 
 ### Infraestructura — cron del Scheduler sin configurar (2026-09-14)
 
-`NotificarCierresPendientes` (y cualquier otra tarea futura en `routes/console.php`) depende de que algo externo llame `php artisan schedule:run` cada minuto. Verificado por SSH en el servidor de producción que **este hosting compartido (Hostinger/`main-hosting.eu`) no permite configurar cron desde la terminal** (no existe el binario `crontab`, y hay un script que lo deja de solo lectura a propósito) — la única vía es entrar a **hPanel → Cron Jobs** desde el navegador. Comando exacto a registrar ahí: `* * * * * php /home/u706356131/domains/TU_DOMINIO/public_html/proyectos/almacen.tienda/artisan schedule:run >> /dev/null 2>&1` (falta confirmar la ruta exacta del dominio real). Hasta que esto se configure, el aviso diario de cierres pendientes **no se va a disparar solo**, aunque el código ya está desplegado. Ver memoria `reference_acceso_servidor_produccion` / `project_notificaciones_telegram_mejoras`.
+`NotificarCierresPendientes` (y cualquier otra tarea futura en `routes/console.php`) depende de que algo externo llame `php artisan schedule:run` cada minuto. Verificado por SSH en el servidor de producción que **este hosting compartido (Hostinger/`main-hosting.eu`) no permite configurar cron desde la terminal** (no existe el binario `crontab`, y hay un script que lo deja de solo lectura a propósito) — la única vía es entrar a **hPanel → Cron Jobs** desde el navegador. Hasta que esto se configure, el aviso diario de cierres pendientes y el **backup de la BD cada 6 h** (`backup:database`, ver historial 2026-09-28) **no se van a disparar solos**, aunque el código ya está desplegado.
+
+**Guía para configurarlo (verificada por SSH, solo lectura, 2026-10-20; ruta y PHP ya confirmados):** producción tiene `routes/console.php` con `backup:database` programado, PHP `/usr/bin/php` 8.4, `mysqldump` en `/usr/bin/mysqldump` y el token del bot de Telegram definido. Falta únicamente el disparador:
+
+1. hPanel → sitio `posglorietashop.com` → **Avanzado → Cron Jobs**.
+2. Crear un cron **cada minuto** (`* * * * *`, "Every minute") con el comando:
+   ```
+   cd /home/u706356131/domains/posglorietashop.com/public_html/proyectos/almacen.tienda && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
+   ```
+3. Guardar. Si el panel solo acepta "PHP script", usar la ruta completa de `artisan` con el argumento `schedule:run`.
+
+**Cómo verificar:** pasadas unas horas (el backup corre cada 6 h en horas UTC múltiplo de 6, así que la primera copia no es inmediata) deben aparecer archivos en `storage/app/private/backups` y llegar el `.gz` por Telegram a cada admin vinculado. **Efectos al activarlo:** además del backup empieza a dispararse todo lo programado (aviso diario de cierres pendientes a admins, 21:00). **Google Drive sigue inactivo** (faltan `GOOGLE_DRIVE_CREDENTIALS_PATH` y `GOOGLE_DRIVE_BACKUPS_FOLDER_ID` en el `.env`); con solo Telegram y la copia local, esta última vive en el mismo servidor. El entorno test (`test-projects/almacen.tienda`) es otra carpeta: no necesita este cron salvo que se quiera backup allí. **Pendiente del cliente:** subir a producción y crear el cron (no puede hacerlo ahora, 2026-10-20). Ver memoria `reference_acceso_servidor_produccion` / `project_notificaciones_telegram_mejoras`.
 
 ### CSRF/token roto en `fetch()` nativos — parcialmente resuelto 2026-09-28 (originalmente documentado 2026-09-16)
 

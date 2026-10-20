@@ -171,20 +171,21 @@ test('el filtro por fecha (un solo día) en el reporte aplica a Venta, Gasto, In
 
     $cuentaUsd = crearCuentaEnMoneda(crearMonedaUsd());
 
-    Venta::factory()->create(['created_at' => '2026-06-15']);
-    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-06-15']);
-    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-06-15']);
+    // Mediodía UTC: cae en el mismo día en UTC y en Cuba (a las 00:00 UTC ya sería el día anterior allá).
+    Venta::factory()->create(['created_at' => '2026-06-15 12:00:00']);
+    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-06-15 12:00:00']);
+    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-06-15 12:00:00']);
     MovimientoFinanciero::factory()->transferencia()->create([
-        'fecha_operacion' => '2026-06-15',
+        'fecha_operacion' => '2026-06-15 12:00:00',
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
 
-    Venta::factory()->create(['created_at' => '2026-07-30']);
-    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-07-30']);
-    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-07-30']);
+    Venta::factory()->create(['created_at' => '2026-07-30 12:00:00']);
+    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-07-30 12:00:00']);
+    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-07-30 12:00:00']);
     MovimientoFinanciero::factory()->transferencia()->create([
-        'fecha_operacion' => '2026-07-30',
+        'fecha_operacion' => '2026-07-30 12:00:00',
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
@@ -1490,4 +1491,44 @@ test('el almacén para los combobox de filtro se manda a todos los roles', funct
     $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
 
     expect(collect($response->json('props.almacenes'))->pluck('nombre'))->toContain('Almacén Central');
+});
+
+test('una venta con varios destinatarios aparece una sola vez, con o sin búsqueda', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $venta = Venta::factory()->create();
+    foreach (['Ana', 'Anabel'] as $nombre) {
+        DestinatarioVenta::create(['venta_id' => $venta->id, 'nombre' => $nombre, 'apellidos' => 'Lopez']);
+    }
+
+    foreach ([[], ['buscar' => 'Ana']] as $filtros) {
+        $respuesta = $this->get(route('reportes.rastreo_operaciones', $filtros), ['X-Inertia' => 'true']);
+        $operaciones = collect($respuesta->json('props.operaciones.data'));
+
+        expect($operaciones)->toHaveCount(1)
+            ->and($respuesta->json('props.operaciones.total'))->toBe(1);
+    }
+});
+
+test('operaciones con el mismo instante se ordenan por tipo e id y las páginas no repiten ni omiten filas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $instante = now()->subHour()->startOfSecond();
+    Venta::factory()->count(30)->create(['created_at' => $instante]);
+
+    $ids = [];
+    foreach ([1, 2] as $pagina) {
+        $respuesta = $this->get(route('reportes.rastreo_operaciones', ['page' => $pagina]), ['X-Inertia' => 'true']);
+        $ids = array_merge($ids, collect($respuesta->json('props.operaciones.data'))->pluck('id')->all());
+    }
+
+    expect($ids)->toHaveCount(30)
+        ->and(array_unique($ids))->toHaveCount(30)
+        ->and($ids)->toBe(collect($ids)->sortDesc()->values()->all());
 });

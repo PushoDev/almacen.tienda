@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Reportes;
 
 use App\Http\Controllers\Controller;
+use App\Services\FechaNegocio;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -55,8 +56,8 @@ class MovimientosFinancierosController extends Controller
             ->when($filtros['tipo'] ?? null, fn ($q, $tipo) => $q->where('op.tipo', $tipo))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('op.estado', $estado))
             ->when($filtros['user_id'] ?? null, fn ($q, $userId) => $q->where('op.user_id', $userId))
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('op.fecha', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('op.fecha', '<=', $hasta))
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('op.fecha', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('op.fecha', '<=', FechaNegocio::finDelDiaUtc($hasta)))
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
                 $like = '%'.$buscar.'%';
 

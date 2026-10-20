@@ -15,8 +15,8 @@ use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Services\CodigoStockService;
+use App\Services\FechaNegocio;
 use App\Services\LoteConsumoService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -274,7 +274,8 @@ class TelegramWebhookController extends Controller
 
     private function cmdReporte(int|string $chatId): void
     {
-        $hoy = Carbon::today();
+        $hoy = FechaNegocio::ahora();
+        $rangoHoy = FechaNegocio::rangoDelDiaUtc($hoy->toDateString());
         $almacenes = Almacen::all();
 
         if ($almacenes->isEmpty()) {
@@ -287,7 +288,7 @@ class TelegramWebhookController extends Controller
 
         foreach ($almacenes as $almacen) {
             $ventas = Venta::where('almacen_id', $almacen->id)
-                ->whereDate('created_at', $hoy)
+                ->whereBetween('created_at', $rangoHoy)
                 ->where('estado', 'completada')
                 ->get();
 
@@ -295,8 +296,8 @@ class TelegramWebhookController extends Controller
             $texto .= "   Ventas: {$ventas->count()}  |  Total: $ ".round($ventas->sum('total'), 2)."\n\n";
         }
 
-        $countGlobal = Venta::whereDate('created_at', $hoy)->where('estado', 'completada')->count();
-        $totalGlobal = round(Venta::whereDate('created_at', $hoy)->where('estado', 'completada')->sum('total'), 2);
+        $countGlobal = Venta::whereBetween('created_at', $rangoHoy)->where('estado', 'completada')->count();
+        $totalGlobal = round(Venta::whereBetween('created_at', $rangoHoy)->where('estado', 'completada')->sum('total'), 2);
 
         $texto .= "━━━━━━━━━━━━━━\n";
         $texto .= "📦 Total global: {$countGlobal} ventas\n";
@@ -345,7 +346,7 @@ class TelegramWebhookController extends Controller
 
     private function cmdEstadoCierres(int|string $chatId): void
     {
-        $hoy = Carbon::today();
+        $hoy = FechaNegocio::ahora();
 
         $usuarios = User::whereIn('role', ['moderador', 'vendedor'])->orderBy('name')->get();
 
@@ -356,7 +357,7 @@ class TelegramWebhookController extends Controller
         }
 
         $cierresHoy = CierreCaja::whereIn('user_id', $usuarios->pluck('id'))
-            ->whereDate('fecha_cierre', $hoy)
+            ->whereBetween('fecha_cierre', FechaNegocio::rangoDelDiaUtc($hoy->toDateString()))
             ->orderBy('fecha_cierre')
             ->get()
             ->keyBy('user_id');
@@ -373,7 +374,7 @@ class TelegramWebhookController extends Controller
             foreach ($cerraron as $usuario) {
                 $cierre = $cierresHoy->get($usuario->id);
                 $icon = $cierre->tieneDiferencia() ? '⚠️' : '✅';
-                $hora = $cierre->fecha_cierre?->format('H:i') ?? '—';
+                $hora = $cierre->fecha_cierre ? FechaNegocio::aZonaDelNegocio($cierre->fecha_cierre)->format('H:i') : '—';
                 $texto .= "{$icon} {$usuario->name} — {$hora}\n";
             }
         }
@@ -599,11 +600,10 @@ class TelegramWebhookController extends Controller
         $query = CierreCaja::where('user_id', $userId)->orderBy('fecha_cierre', 'desc');
 
         match ($filtro) {
-            'hoy' => $query->whereDate('fecha_cierre', Carbon::today()),
-            '3d' => $query->where('fecha_cierre', '>=', Carbon::now()->subDays(3)->startOfDay()),
-            '5d' => $query->where('fecha_cierre', '>=', Carbon::now()->subDays(5)->startOfDay()),
-            'mes' => $query->whereMonth('fecha_cierre', Carbon::now()->month)
-                ->whereYear('fecha_cierre', Carbon::now()->year),
+            'hoy' => $query->where('fecha_cierre', '>=', FechaNegocio::inicioDeHaceDiasUtc(0)),
+            '3d' => $query->where('fecha_cierre', '>=', FechaNegocio::inicioDeHaceDiasUtc(3)),
+            '5d' => $query->where('fecha_cierre', '>=', FechaNegocio::inicioDeHaceDiasUtc(5)),
+            'mes' => $query->whereBetween('fecha_cierre', FechaNegocio::rangoDelMesActualUtc()),
             default => null,
         };
 
@@ -631,8 +631,8 @@ class TelegramWebhookController extends Controller
         foreach ($cierres as $cierre) {
             $esDescuadre = $cierre->tieneDiferencia();
             $icon = $esDescuadre ? '⚠️' : '✅';
-            $apertura = $cierre->fecha_apertura?->format('d/m/Y H:i') ?? '—';
-            $fechaCierre = $cierre->fecha_cierre?->format('d/m/Y H:i') ?? '—';
+            $apertura = $cierre->fecha_apertura ? FechaNegocio::aZonaDelNegocio($cierre->fecha_apertura)->format('d/m/Y H:i') : '—';
+            $fechaCierre = $cierre->fecha_cierre ? FechaNegocio::aZonaDelNegocio($cierre->fecha_cierre)->format('d/m/Y H:i') : '—';
 
             $texto .= "{$icon} <b>Cierre #{$cierre->id}</b>\n";
             $texto .= "📅 Apertura: {$apertura}\n";
@@ -692,11 +692,10 @@ class TelegramWebhookController extends Controller
             ->orderBy('created_at', 'desc');
 
         match ($filtro) {
-            'hoy' => $query->whereDate('created_at', Carbon::today()),
-            '3d' => $query->where('created_at', '>=', Carbon::now()->subDays(3)->startOfDay()),
-            '5d' => $query->where('created_at', '>=', Carbon::now()->subDays(5)->startOfDay()),
-            'mes' => $query->whereMonth('created_at', Carbon::now()->month)
-                ->whereYear('created_at', Carbon::now()->year),
+            'hoy' => $query->where('created_at', '>=', FechaNegocio::inicioDeHaceDiasUtc(0)),
+            '3d' => $query->where('created_at', '>=', FechaNegocio::inicioDeHaceDiasUtc(3)),
+            '5d' => $query->where('created_at', '>=', FechaNegocio::inicioDeHaceDiasUtc(5)),
+            'mes' => $query->whereBetween('created_at', FechaNegocio::rangoDelMesActualUtc()),
             default => null,
         };
 
@@ -740,7 +739,7 @@ class TelegramWebhookController extends Controller
             if ($destino) {
                 $texto .= "   📥 {$destino}\n";
             }
-            $texto .= "   👤 {$mov->user->name} — ".$mov->created_at->format('d/m H:i')."\n";
+            $texto .= "   👤 {$mov->user->name} — ".FechaNegocio::aZonaDelNegocio($mov->created_at)->format('d/m H:i')."\n";
             $texto .= "━━━━━━━━━━━━━━\n";
         }
 

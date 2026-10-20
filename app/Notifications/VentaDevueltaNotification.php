@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Channels\TelegramChannel;
 use App\Models\Venta;
 use App\Notifications\Concerns\EnviaAvisoPush;
+use App\Services\FechaNegocio;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -65,7 +66,7 @@ class VentaDevueltaNotification extends Notification
             $texto .= "📝 Detalle: {$this->venta->detalle_anulacion}\n";
         }
         $texto .= "👤 Procesado por: {$this->venta->usuario->name}\n";
-        $texto .= '🕐 '.now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.FechaNegocio::ahora()->format('d/m/Y H:i');
 
         return [
             'text' => $texto,
