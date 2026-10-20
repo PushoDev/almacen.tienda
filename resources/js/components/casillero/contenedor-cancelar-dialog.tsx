@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Loader2, XCircle } from 'lucide-react';
@@ -44,7 +45,7 @@ export default function ContenedorCancelarDialog({ open, onOpenChange, contenedo
                         Tiene {contenedor.cargos.length} cargo(s) activo(s): anúlalos primero para poder cancelarlo.
                     </p>
                 )}
-                {form.errors.error && <p className="text-sm text-red-600">{form.errors.error}</p>}
+                {errorDe(form.errors, 'error') && <p className="text-sm text-red-600">{errorDe(form.errors, 'error')}</p>}
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={form.processing}>

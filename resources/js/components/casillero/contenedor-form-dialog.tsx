@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Container, Loader2 } from 'lucide-react';
@@ -95,7 +96,7 @@ export default function ContenedorFormDialog({ open, onOpenChange, contenedor }:
                         />
                     </div>
 
-                    {form.errors.error && <p className="text-sm text-red-600">{form.errors.error}</p>}
+                    {errorDe(form.errors, 'error') && <p className="text-sm text-red-600">{errorDe(form.errors, 'error')}</p>}
                 </div>
 
                 <DialogFooter>

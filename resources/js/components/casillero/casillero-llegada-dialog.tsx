@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Loader2, PlaneLanding } from 'lucide-react';
@@ -55,7 +56,7 @@ export default function CasilleroLlegadaDialog({ open, onOpenChange, compra }: C
                     <Label htmlFor="fecha-llegada">Fecha de llegada</Label>
                     <Input id="fecha-llegada" type="date" value={form.data.fecha} onChange={(e) => form.setData('fecha', e.target.value)} />
                     {form.errors.fecha && <p className="text-sm text-red-600">{form.errors.fecha}</p>}
-                    {form.errors.error && <p className="text-sm text-red-600">{form.errors.error}</p>}
+                    {errorDe(form.errors, 'error') && <p className="text-sm text-red-600">{errorDe(form.errors, 'error')}</p>}
                 </div>
 
                 <DialogFooter>

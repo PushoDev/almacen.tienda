@@ -1,3 +1,4 @@
+import type { TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { AccesoGlobalCard } from '@/components/empleados/acceso-global-card';
 import { AsignacionesCard } from '@/components/empleados/asignaciones-card';
 import type { CuentaAsignada, CuentaDisponible } from '@/components/empleados/tipos';

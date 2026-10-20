@@ -78,6 +78,13 @@ Pagos múltiples soportados en `compra_pago`.
 - `user_id` (nullable, agregado 2026-08-06): quién registró la compra. Histórico queda en `null` — se captura desde `CompraController::store()` de ahora en adelante. Se agregó para poder acotar Compras por usuario en el reporte Rastreo de Operaciones (ver más abajo), no había forma de hacerlo antes.
 - **`compra_producto`** (pivot con `productos`): desde el 2026-08-10 tiene `id` autoincremental como clave primaria (antes era compuesta `(compra_id, producto_id)`). El mismo producto puede aparecer en **varias líneas** de una misma compra (p. ej. mandado a dos almacenes distintos, o distinto color) — `CompraController::store()` ya no las fusiona ni promedia el precio entre ellas, cada línea del carrito queda como su propia fila. `TransaccionController` (distribución de costos y de gastos de transportación) y los reportes que cuentan "veces comprado" ya están adaptados para no asumir una fila por producto por compra.
 
+#### Casillero de Compras — la nueva forma de las compras (Fases 1 y 2, 2026-10-20)
+Detalle y plan completo en `docs/plan-casillero-de-compras.md`. La mercancía (muchas veces comprada en Amazon) espera en Panamá, sale en **contenedores** hacia el Mariel y **entra al stock una sola vez, al llegar al almacén**. Solo el administrador lo usa.
+- **`compras`:** `flujo` (`clasico` por defecto o `casillero`), `etapa` (`casillero` mientras le quede alguna unidad sin contenedor, `contenedor` cuando todas están asignadas) y `llegada_panama_at`. **No se tocó el enum `estado`:** una compra del casillero es `pendiente` hasta que entre al stock (Fase 4), así Distribución de Costos y los reportes la tratan como sin stock. `aprobar()` y `actualizar()` la rechazan; `anular()` la rechaza con cargos activos o con unidades en un contenedor. Sus líneas llevan `almacen_id` nulo (el almacén se elige al llegar).
+- **`casillero_cargos`** (+ pivote `casillero_cargo_compra`): cargo a mano (estadía en Panamá, transporte marítimo…) con `monto`, `moneda`, `tasa_cambio`, `monto_usd`, `cuenta_id`, `movimiento_financiero_id` y `estado` (activo/anulado). Cuelga de compras (pivote) o de un contenedor (`contenedor_id`). Se paga en el momento con un Gasto desde una cuenta USD con saldo suficiente y se anula devolviendo el dinero. **Regla de diseño: un cargo es una suma que se reparte entre los productos al entrar al stock (Fase 4), solo entre las unidades que llegaron** (propuesta: por valor, fórmula de Distribución de Costos).
+- **`contenedores`** (`nombre`, `notas`, `fecha_salida`, `estado` abierto/cancelado) y **`contenedor_lineas`** (unidades de cada línea de `compra_producto` por contenedor; una fila por contenedor y línea). `asignarUnidades` reemplaza la cantidad; cancelar devuelve las unidades al casillero y no se puede con cargos activos.
+- **Idea, sin construir:** «Incidencias» sobre unidades de una línea (cancelación, no llega, equivocado o dañado, devolución, faltante en el contenedor) con resolución por reembolso, devolución, reposición o pérdida; propuesta como Fase 2.5 y reutilizada por la Fase 3 para los faltantes.
+
 ### Venta (`ventas`)
 
 **Flujo de estados:**
@@ -262,7 +269,9 @@ El cliente decidió no usar el ecommerce. Se eliminaron el prefijo `/api/tienda/
 |---|---|
 | `AdminController` | Dashboard, tasas de cambio (USD y MLC), historial de comparaciones mensuales, estadísticas costo/precio |
 | `VentaController` | POS completo: crear venta, aprobar, anular, listado, reporte diario, datos JSON para el frontend |
-| `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías |
+| `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías; `store()` acepta `flujo=casillero` (solo admin) |
+| `CasilleroController` | Casillero de Compras (solo admin): listado de lo que espera en Panamá, cargos a mano, anular cargo y llegada a Panamá (`casillero.*`) |
+| `ContenedorController` | Contenedores del casillero (solo admin): crear, editar, asignar unidades, cargos y cancelar (`casillero.contenedores.*`) |
 | `ProductoController` | CRUD de productos, búsqueda, transferencia de códigos, import/export Excel, detección/fusión de duplicados |
 | `ImportacionBorradorController` | Importación de Excel en dos pasos: subir → borrador editable (hoja `Productos/Importaciones/Revisar.tsx`) → confirmar; admin/moderador, con bloqueo de fila al confirmar |
 | `ImportacionProductoController` | Historial de importaciones (listado, detalle por fila) y deshacer una importación completa (solo admin, motivo + contraseña) |
@@ -441,13 +450,17 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 | `DetalleOperacionService` | Detalle de operaciones para Cuentas/Clientes/Proveedores y Rastreo de Operaciones (sin documentar por el cliente, ver `ESTADO_DESARROLLO.md`) |
 | `MetodosPagoService` | Métodos (efectivo / transferencia) y vías de pago (Zelle, EnZona, Transfermóvil…) que admite cada moneda: catálogo, configuración, resumen y guardado desde el CRUD de Monedas |
 | `CatalogoTarjetasService` | Catálogo de bancos/tarjetas para las cuentas (`cuentas.tipo_banco`) |
+| `CasilleroService` | Casillero de Compras: `registrarCargo` (sobre compras del casillero), `registrarCargoContenedor`, `anularCargo` y `marcarLlegadaPanama`; cada cargo se paga con un Gasto (tipo 1) desde una cuenta USD |
+| `ContenedorService` | Contenedores: `crear`, `actualizar`, `asignarUnidades` (reemplaza la cantidad; recalcula la `etapa` de cada compra), `cancelar` y `unidadesEnCasillero` |
 | `FechaNegocio` | Zona horaria de negocio (Cuba, 2026-10-20): convierte el día elegido en un filtro al rango UTC con que se guardan los timestamps (`inicioDelDiaUtc`, `finDelDiaUtc`, `rangoDelDiaUtc`, `inicioDeHaceDiasUtc`, `rangoDelMesActualUtc`) y expone `ahora()`, `aZonaDelNegocio()` y `diaDe()` |
 
 ---
 
 ## Branch Actual
 
-**Actualización 2026-10-20** (lo más reciente): avisos push cerrados (interruptor en la campana, agrupado de avisos de cambio de precio, `VAPID_SUBJECT`); Rastreo con `distinct()` y orden `fecha, tipo, id`; **zona horaria de negocio** (`FechaNegocio`, ver "Patrones y Convenciones") aplicada a filtros por fecha, 2 gráficas, el "hoy" y las horas del bot de Telegram; Empleados, pasos 3 y 4 verificados como hechos (quedan 5–7); suite completa 977 verdes. Resumen: `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md`.
+**Actualización 2026-10-20, tarde** (lo más reciente): **Casillero de Compras, Fases 1 y 2** — ver «Casillero de Compras» en la entidad Compra, `docs/plan-casillero-de-compras.md` y `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md` (secciones 7 a 9). Suite completa 1.015 verdes. Siguen, con calma: incidencias (idea), llegada al almacén y entrada al stock con el reparto de cargos.
+
+**Actualización 2026-10-20** (mañana): avisos push cerrados (interruptor en la campana, agrupado de avisos de cambio de precio, `VAPID_SUBJECT`); Rastreo con `distinct()` y orden `fecha, tipo, id`; **zona horaria de negocio** (`FechaNegocio`, ver "Patrones y Convenciones") aplicada a filtros por fecha, 2 gráficas, el "hoy" y las horas del bot de Telegram; Empleados, pasos 3 y 4 verificados como hechos (quedan 5–7); suite completa 977 verdes. Resumen: `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md`.
 
 **Actualización 2026-10-14** (lo más reciente; el detalle de 09-26 a 10-13 está en el historial de `docs/ESTADO_DESARROLLO.md`):
 

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChartProps, Label, Pie, PieChart, Sector } from 'recharts';
+import { Label, type LabelProps, Pie, PieChart, Sector } from 'recharts';
 import { PieSectorDataItem } from 'recharts/types/polar/Pie';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,7 +74,7 @@ export function ProductosPorAlmacenCharts({ data }: ProductosPorAlmacenChartProp
                             return (
                                 <SelectItem key={key} value={key} className="rounded-lg [&_span]:flex">
                                     <div className="flex items-center gap-2 text-xs">
-                                        <span className="flex h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: config.color }} />
+                                        <span className="flex h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: (config as { color?: string }).color }} />
                                         {config.label}
                                     </div>
                                 </SelectItem>
@@ -93,7 +93,7 @@ export function ProductosPorAlmacenCharts({ data }: ProductosPorAlmacenChartProp
                             nameKey="month"
                             innerRadius={60}
                             strokeWidth={5}
-                            activeIndex={activeIndex}
+                            {...{ activeIndex }}
                             activeShape={({ outerRadius = 0, ...props }: PieSectorDataItem) => (
                                 <g>
                                     <Sector {...props} outerRadius={outerRadius + 10} />
@@ -103,7 +103,7 @@ export function ProductosPorAlmacenCharts({ data }: ProductosPorAlmacenChartProp
                         >
                             {/* Corrección del Label */}
                             <Label
-                                content={({ viewBox }: { viewBox?: ChartProps['viewBox'] }) => {
+                                content={({ viewBox }: LabelProps) => {
                                     if (viewBox && 'cx' in viewBox && 'cy' in viewBox) {
                                         return (
                                             <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">

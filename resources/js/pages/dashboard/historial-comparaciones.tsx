@@ -66,7 +66,7 @@ export default function HistorialComparacionesPage() {
             const data = await response.json();
 
             // Limpiar y validar los datos
-            const cleanedData = (data.data || []).map((item: any) => ({
+            const cleanedData: HistorialComparacion[] = (data.data || []).map((item: any) => ({
                 ...item,
                 porcentaje_cambio: parseFloat(String(item.porcentaje_cambio)) || 0,
                 monto_anterior: parseFloat(String(item.monto_anterior)) || 0,

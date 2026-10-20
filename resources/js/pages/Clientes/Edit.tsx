@@ -73,7 +73,7 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
         });
     };
 
-    const formatearMoneda = (valor: number | null) => {
+    const formatearMoneda = (valor: number | null | undefined) => {
         if (valor === null || valor === undefined) return '$0.00';
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',
@@ -84,7 +84,7 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
     };
 
     // ACTUALIZADO: Nueva lógica coherente con Proveedores
-    const getEstadoFinanciero = (saldo: number | null) => {
+    const getEstadoFinanciero = (saldo: number | null | undefined) => {
         if (saldo === null || saldo === undefined) {
             return { tipo: 'sin-info', color: 'gray', icon: History, texto: 'Sin información' };
         }
@@ -297,7 +297,7 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
                                                     </Tooltip>
                                                 </Label>
                                             </div>
-                                            <Select value={data.tipo_cliente} onValueChange={(value) => setData('tipo_cliente', value)}>
+                                            <Select value={data.tipo_cliente} onValueChange={(value) => setData('tipo_cliente', value as 'fisico' | 'asociado')}>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Seleccione un tipo" />
                                                 </SelectTrigger>

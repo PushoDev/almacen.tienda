@@ -26,6 +26,7 @@ interface Cuenta {
     saldo_cuenta: number;
     deuda: number;
     tipo_cuenta: string;
+    tipo_titular: string | null;
     estado: string;
     moneda_id: number;
     moneda: Moneda;

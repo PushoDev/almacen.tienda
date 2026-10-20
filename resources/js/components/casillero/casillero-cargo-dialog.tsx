@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Loader2, Receipt } from 'lucide-react';
@@ -145,9 +146,9 @@ export default function CasilleroCargoDialog({
                         <Textarea id="nota" rows={2} maxLength={255} value={form.data.nota} onChange={(e) => form.setData('nota', e.target.value)} />
                     </div>
 
-                    {(form.errors.error || form.errors.compra_ids) && (
+                    {(errorDe(form.errors, 'error') || errorDe(form.errors, 'compra_ids')) && (
                         <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-                            {form.errors.error ?? form.errors.compra_ids}
+                            {errorDe(form.errors, 'error') ?? errorDe(form.errors, 'compra_ids')}
                         </p>
                     )}
                 </div>

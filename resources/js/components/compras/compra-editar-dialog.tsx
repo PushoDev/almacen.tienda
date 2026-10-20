@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { errorDe } from '@/lib/errores';
 import { useForm } from '@inertiajs/react';
 import axios from 'axios';
 import { Loader2, Pencil, PlusCircle, Trash2 } from 'lucide-react';
@@ -441,7 +442,7 @@ export default function CompraEditarDialog({ open, onOpenChange, compra, product
                                 {form.errors.nota && <p className="text-sm text-red-600">{form.errors.nota}</p>}
                             </div>
 
-                            {form.errors.error && <p className="text-sm text-red-600">{form.errors.error}</p>}
+                            {errorDe(form.errors, 'error') && <p className="text-sm text-red-600">{errorDe(form.errors, 'error')}</p>}
                         </>
                     )}
                 </div>

@@ -64,6 +64,7 @@ interface Props extends PageProps {
     calculos: Calculos;
     fecha_apertura: string;
     moneda_referencia?: string;
+    almacenes?: { id: number; nombre: string }[];
     // NUEVO: Comparativa con cierre anterior
     comparativa_cuentas?: ComparativaItem[];
     comparativa_cuentas_cobro?: CuentaDeCobro[];
@@ -115,11 +116,16 @@ interface ProductItem {
     precio_unitario: number;
     total: number;
     precio_equivalente?: number;
+    marca?: string;
+    modelo?: string;
+    categoria?: string;
+    capacidad?: string;
+    color?: string;
     total_equivalente?: number;
 }
 
 interface OperacionDetaile {
-    venta_id: string;
+    venta_id: number;
     pago_id: number;
     cliente: string;
     monto: number;
@@ -157,6 +163,7 @@ interface DetalleMoneda {
         string,
         {
             id: number;
+            almacen_id?: number;
             nombre: string;
             marca: string;
             modelo: string;
@@ -169,6 +176,7 @@ interface DetalleMoneda {
             precio_base: number;
             precio_venta: number;
             total: number;
+            comision?: number;
         }
     >;
     operaciones_detalle: OperacionDetaile[];
@@ -716,7 +724,7 @@ export default function Create({
     });
     const canViewEspecialesCostImpact = auth.user.role === 'admin' || auth.user.role === 'moderador';
 
-    const getAlmacenNombre = (almacenId: number) => {
+    const getAlmacenNombre = (almacenId?: number) => {
         const almacen = almacenes.find((a: { id: number; nombre: string }) => a.id === almacenId);
         return almacen?.nombre || `Almacén #${almacenId}`;
     };

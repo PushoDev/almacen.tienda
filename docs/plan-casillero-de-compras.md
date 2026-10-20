@@ -1,6 +1,6 @@
 # Plan: Casillero de Compras
 
-> Plan para el cliente · escrito el 2026-10-19 · **solo documento, nada de esto está construido todavía.**
+> Plan para el cliente · escrito el 2026-10-19 · **Las Fases 1 (Casillero) y 2 (Contenedores) están construidas desde el 2026-10-20 (backend, pantallas y tests); el resto sigue siendo plan.** Se avanza con calma, una fase a la vez.
 > Describe cómo cambiará el recorrido de una compra, qué se hará en cada etapa y en qué orden se construirá, poco a poco.
 > Sirve para que el cliente lo revise y confirme antes de empezar. Lo marcado como **Por confirmar** necesita su respuesta.
 
@@ -92,13 +92,41 @@ Cada fase se entrega y se prueba antes de empezar la siguiente. El cliente decid
 
 | Fase | Qué incluye | Qué se puede hacer al terminar |
 |---|---|---|
-| **1. Casillero** | Compras que quedan sin stock; fecha de llegada a Panamá; cargos a mano sobre una o varias compras | Registrar compras y la estadía, sin que toquen el inventario |
-| **2. Contenedores** | Crear un contenedor, asignarle parte de las compras del casillero, agregarle cargos | Armar el contenedor y ver qué queda en Panamá |
+| **1. Casillero** ✅ *hecha 2026-10-20* | Compras que quedan sin stock; fecha de llegada a Panamá; cargos a mano sobre una o varias compras | Registrar compras y la estadía, sin que toquen el inventario |
+| **2. Contenedores** ✅ *hecha 2026-10-20* | Crear un contenedor, asignarle parte de las compras del casillero, agregarle cargos | Armar el contenedor y ver qué queda en Panamá |
+| **2.5. Incidencias** 💡 *idea, por confirmar* | Reportar y resolver lo que pasa en el camino (Amazon, Panamá, contenedor): reembolso, reposición, devolución o pérdida. Ver "Incidencias en el camino" abajo | Saber qué pasó con cada unidad afectada y dónde está el dinero |
 | **3. Llegada al almacén** | Tramo terrestre, comparación enviado/recibido, faltantes de los dos tipos | Recibir un contenedor completo o con diferencias |
 | **4. Entrada al stock** | Reparto de cargos entre los productos, costo final, lotes de stock | La mercancía suma al almacén con su costo real |
 | **5. Dinero de faltantes y cierre** | Devolver dinero a la cuenta o al proveedor; reportes y Rastreo; retirar el "suma stock al aprobar" de Compras | El flujo viejo desaparece y todo pasa por el casillero |
 
 Lo que **no** se toca mientras tanto: las compras ya hechas (siguen como están, con su stock).
+
+### Incidencias en el camino (idea del 2026-10-20, por confirmar con calma)
+
+**De dónde sale:** muchas compras se hacen en Amazon y van directo al casillero de Panamá. En el camino pueden surgir inconvenientes (cancelaciones, paquetes que no llegan, equivocados o dañados, devoluciones, faltantes en el contenedor) y el cliente quiere que el sistema sepa reflejarlos y ayudarle a resolverlos. **Es el recorrido cotidiano del negocio:** se hace sin prisa y confirmando el flujo completo antes de construir.
+
+**Lo que se sabe de Amazon (general, a confirmar con pedidos reales; las reglas cambian según el vendedor):**
+- Una cancelación o devolución suele reembolsarse al método de pago original, a veces de forma parcial (sin el envío) y con días de espera.
+- La frontera es la entrega en Panamá: para Amazon el pedido queda cumplido al entregarlo en el casillero; lo que ocurra después (en Panamá o en el contenedor) no lo reembolsa Amazon, salvo seguro.
+- Muchas de las cuentas del negocio son tarjetas de crédito con saldo negativo (la deuda): un reembolso a una tarjeta es sumarle saldo, es decir, bajarle la deuda.
+
+**Qué puede pasar, por tramo:** (1) Amazon → Panamá: cancelado, no llega, llega equivocado, dañado o incompleto, o se devuelve. (2) En el casillero: golpeado, mal contado o retenido. (3) Contenedor → Mariel: faltante (error de conteo o pérdida), dañado o sobrante.
+
+**Idea: una sola "Incidencia"** sobre unidades de una línea de compra, válida en cualquier tramo. Guarda cuántas unidades, dónde ocurrió, qué pasó, el número de caso de Amazon y cómo se resuelve:
+
+| Resolución | Qué hace |
+|---|---|
+| **Reembolso** (total o parcial) | El dinero vuelve a una cuenta (por defecto la que pagó) como un ingreso ligado a la compra; puede quedar "por recibir" hasta que el usuario lo escribe |
+| **Devolución en curso** | Estado intermedio hasta que llega el reembolso |
+| **Reposición** | El proveedor manda otra unidad: sin dinero; se cierra cuando llega |
+| **Pérdida asumida** | Sin reembolso: las unidades se dan de baja y la pérdida queda registrada |
+
+**Efectos sobre lo ya construido:** las unidades afectadas dejan de estar disponibles para contenedores y el valor del casillero baja; los cargos (estadía, marítimo) se reparten solo entre las unidades que sí llegan (la regla que ya existe); **la Fase 3 reutiliza la incidencia**: el faltante «se perdió» del conteo es una incidencia de pérdida y el «error de conteo» vuelve al casillero, así no se construye dos veces. Datos extra baratos: número de pedido de Amazon y tracking en la compra, para poder reclamar. Los montos de reembolso los escribe el usuario; nada se calcula solo.
+
+**Orden propuesto:** Incidencias antes de la Fase 3 (como Fase 2.5), backend primero y luego pantalla: botón «Reportar incidencia» en cada línea del casillero y del contenedor, y una sección «Incidencias abiertas» con los reembolsos por recibir.
+
+**Preguntas abiertas** (con la recomendación entre paréntesis; ver también la sección 5, preguntas 10 a 14):
+reembolso a la tarjeta que pagó (sí, editable), pérdida sin reembolso (registrarla aparte en vez de sumarla al costo de las demás unidades), reembolso por recibir (no cuenta al capital hasta que entra), envío de devolución (cargo de la incidencia) y dos o tres casos reales que ya hayan pasado.
 
 ---
 
@@ -114,6 +142,11 @@ Lo que **no** se toca mientras tanto: las compras ya hechas (siguen como están,
 7. **Cómo se paga cada cargo.** ¿Cada cargo sale de una cuenta en el momento de anotarlo (como un gasto), o se anota primero y se paga después? Si sale de una cuenta, ¿de cuál y en qué moneda? **Supuesto de trabajo (2026-10-20, a confirmar):** sale de una cuenta en el momento de anotarlo, como un Gasto; en Panamá, de una cuenta USD. Así quedó construido en la Fase 1.
 8. **Capital.** El dinero pagado por una compra que aún no está en stock sale de la cuenta y no figura en el inventario: el capital bajaría hasta que llegue. **Propuesta (2026-10-20, a confirmar):** la mercancía en el casillero y en contenedor suma al capital a costo, con la nota "incluye X en tránsito" (igual que el efectivo en tránsito, ADR 009). Se decide antes de la Fase 4.
 9. **Quién registra la compra.** Hoy Compras está abierto al moderador. **Construido en la Fase 1:** registrar una compra en el flujo casillero es solo del administrador; el registro clásico sigue como estaba.
+10. **Incidencias — destino del reembolso.** ¿Vuelve siempre a la cuenta (tarjeta) que pagó la compra? **Recomendación:** sí por defecto, editable.
+11. **Incidencias — pérdida sin reembolso.** ¿Se suma al costo de las demás unidades de la compra o se registra como pérdida aparte? **Recomendación:** aparte (el costo de lo que llega se mantiene real y la pérdida queda visible).
+12. **Incidencias — reembolso por recibir.** ¿Cuenta al capital mientras llega? **Recomendación:** no; se muestra aparte como "por recibir" hasta que entra a la cuenta.
+13. **Incidencias — envío de devolución.** Si se paga el envío de vuelta, ¿se anota como cargo de la incidencia? **Recomendación:** sí.
+14. **Incidencias — casos reales.** Dos o tres casos que ya hayan pasado (qué se hizo y cómo terminó), para calibrar el diseño. Pendiente del cliente.
 
 ---
 

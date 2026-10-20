@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Loader2, XCircle } from 'lucide-react';
@@ -64,7 +65,7 @@ export default function CasilleroAnularCargoDialog({ open, onOpenChange, cargo }
                         onChange={(e) => form.setData('motivo', e.target.value)}
                     />
                     {form.errors.motivo && <p className="text-sm text-red-600">{form.errors.motivo}</p>}
-                    {form.errors.error && <p className="text-sm text-red-600">{form.errors.error}</p>}
+                    {errorDe(form.errors, 'error') && <p className="text-sm text-red-600">{errorDe(form.errors, 'error')}</p>}
                 </div>
 
                 <DialogFooter>
