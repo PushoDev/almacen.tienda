@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Compra extends Model
 {
@@ -20,6 +22,9 @@ class Compra extends Model
         'receptor_saldo_anterior',
         'receptor_saldo_posterior',
         'estado',
+        'flujo',
+        'etapa',
+        'llegada_panama_at',
         'tipo_anulacion',
         'motivo_anulacion',
         'prorrateo_decision',
@@ -27,11 +32,55 @@ class Compra extends Model
         'prorrateo_decidido_en',
     ];
 
+    public const FLUJO_CLASICO = 'clasico';
+
+    public const FLUJO_CASILLERO = 'casillero';
+
+    public const ETAPA_CASILLERO = 'casillero';
+
+    /** Todas sus unidades ya están asignadas a contenedores (ver App\Services\ContenedorService). */
+    public const ETAPA_CONTENEDOR = 'contenedor';
+
     protected $casts = [
         'receptor_saldo_anterior' => 'double',
         'receptor_saldo_posterior' => 'double',
         'prorrateo_decidido_en' => 'datetime',
+        'llegada_panama_at' => 'date',
     ];
+
+    /**
+     * Compras del flujo "casillero": no suman stock al registrarse ni al aprobarse; el stock entra
+     * una sola vez al llegar al almacén (ver docs/plan-casillero-de-compras.md).
+     */
+    public function scopeDelCasillero(Builder $query): Builder
+    {
+        return $query->where('flujo', self::FLUJO_CASILLERO);
+    }
+
+    /** Compras del casillero que siguen esperando en Panamá (aún sin contenedor, sin stock). */
+    public function scopeEnCasillero(Builder $query): Builder
+    {
+        return $query->delCasillero()
+            ->where('estado', 'pendiente')
+            ->where('etapa', self::ETAPA_CASILLERO);
+    }
+
+    public function esDelCasillero(): bool
+    {
+        return $this->flujo === self::FLUJO_CASILLERO;
+    }
+
+    /** Alguna unidad de esta compra ya está asignada a un contenedor. */
+    public function tieneUnidadesEnContenedor(): bool
+    {
+        return ContenedorLinea::whereIn('compra_producto_id', CompraProducto::where('compra_id', $this->id)->select('id'))->exists();
+    }
+
+    /** Cargos a mano sobre esta compra (estadía, etc.), activos o anulados. */
+    public function cargosCasillero(): BelongsToMany
+    {
+        return $this->belongsToMany(CasilleroCargo::class, 'casillero_cargo_compra')->withTimestamps();
+    }
 
     // Relación con el usuario que registró la compra (nullable — compras
     // anteriores a 2026-08-06 no tienen este dato, ver migración add_user_id_to_compras_table)

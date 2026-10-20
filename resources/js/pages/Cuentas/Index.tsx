@@ -10,7 +10,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/Components/ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { CuentaCard, type CuentaCardData } from '@/components/CuentaCard';
 import { type TipoCuenta } from '@/components/cuentas/tipo-cuenta-logo';
 import { type CatalogoTarjetas } from '@/components/SelectorBancoTarjeta';

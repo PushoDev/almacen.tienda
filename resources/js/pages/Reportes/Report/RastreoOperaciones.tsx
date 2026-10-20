@@ -246,7 +246,7 @@ const cuentaRecibeCompra = (op: Operacion) => op.detalle_compra?.proveedor ?? op
 // RastreoOperacionesController::construirSubqueryRemesa(). El monto de cada pata se deriva
 // del propio saldo_anterior/saldo_posterior que ya trae movimientos_saldo (sin pedirle un
 // campo nuevo a detalleRemesa(), que es compartido con Cuentas/Clientes/Proveedores Show).
-const remesaLeg = (op: Operacion, etiqueta: 'Entrada' | 'Salida') => op.detalle_remesa?.movimientos_saldo.find((m) => m.etiqueta === etiqueta);
+const remesaLeg = (op: Operacion, etiqueta: 'Entrada' | 'Salida' | 'Mensajero') => op.detalle_remesa?.movimientos_saldo.find((m) => m.etiqueta === etiqueta);
 
 const cuentaEnviaRemesa = (op: Operacion) => remesaLeg(op, 'Salida')?.nombre ?? '—';
 
@@ -742,7 +742,7 @@ export default function RastreoOperacionesPage({
                                     <p className="text-muted-foreground text-sm font-medium">{label}</p>
                                 </div>
                                 <Badge className={`gap-1 border-0 px-3 py-1 text-xl font-black text-white shadow-md ${cifra}`}>
-                                    {conteoPorTipo[tipo].toLocaleString('es-ES')}
+                                    {(conteoPorTipo[tipo] ?? 0).toLocaleString('es-ES')}
                                 </Badge>
                             </SpotlightCard>
                         ))}

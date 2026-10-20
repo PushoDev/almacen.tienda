@@ -20,6 +20,7 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: '/dashboard',
         icon: LayoutGrid,
+        roles: ['admin', 'moderador', 'vendedor'],
     },
 ];
 
@@ -28,11 +29,13 @@ const rightNavItems: NavItem[] = [
         title: 'Repository',
         href: 'https://github.com/laravel/react-starter-kit',
         icon: Folder,
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Documentation',
         href: 'https://laravel.com/docs/starter-kits#react',
         icon: BookOpen,
+        roles: ['admin', 'moderador', 'vendedor'],
     },
 ];
 

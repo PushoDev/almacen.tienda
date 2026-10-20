@@ -22,7 +22,8 @@ import { useState } from 'react';
 /** Una línea de la compra (producto + cantidad + precio + almacén destino). */
 export interface LineaCompra {
     id: number;
-    almacen_id: number;
+    /** null en una compra del casillero: el almacén se elige cuando la mercancía llega. */
+    almacen_id: number | null;
     producto: string;
     marca?: string;
     modelo?: string;
@@ -52,6 +53,8 @@ interface CompraListaProductosProps {
     productos: LineaCompra[];
     almacenes: AlmacenProps[];
     categorias: CategoriasProps[];
+    /** Compra del casillero: las líneas no llevan almacén. */
+    almacenOpcional?: boolean;
     onActualizar: (linea: LineaCompra) => void;
     onEliminar: (id: number) => void;
 }
@@ -62,7 +65,14 @@ const formatearUsd = (monto: number) => `$${monto.toFixed(2)}`;
  * Lista de los productos a comprar, con el diálogo "Editar Producto". La edición trabaja sobre un
  * borrador propio: ya no pisa el formulario de alta que el usuario pueda tener a medias.
  */
-export default function CompraListaProductos({ productos, almacenes, categorias, onActualizar, onEliminar }: CompraListaProductosProps) {
+export default function CompraListaProductos({
+    productos,
+    almacenes,
+    categorias,
+    almacenOpcional = false,
+    onActualizar,
+    onEliminar,
+}: CompraListaProductosProps) {
     const [editandoId, setEditandoId] = useState<number | null>(null);
     const [borrador, setBorrador] = useState<BorradorLinea | null>(null);
 
@@ -82,7 +92,7 @@ export default function CompraListaProductos({ productos, almacenes, categorias,
 
     const abrirEdicion = (linea: LineaCompra) => {
         setBorrador({
-            almacen_id: linea.almacen_id.toString(),
+            almacen_id: linea.almacen_id?.toString() ?? '',
             producto: linea.producto,
             marca: linea.marca || '',
             modelo: linea.modelo || '',
@@ -114,17 +124,19 @@ export default function CompraListaProductos({ productos, almacenes, categorias,
         const cantidad = parseInt(borrador.cantidad) || 0;
         const precio = parseFloat(borrador.precio) || 0;
 
-        if (!borrador.producto.trim() || !borrador.categoria.trim() || cantidad <= 0 || precio <= 0 || !borrador.almacen_id) {
+        if (!borrador.producto.trim() || !borrador.categoria.trim() || cantidad <= 0 || precio <= 0 || (!almacenOpcional && !borrador.almacen_id)) {
             sileo.warning({
                 title: 'Faltan datos',
-                description: 'Completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).',
+                description: almacenOpcional
+                    ? 'Completa los campos obligatorios válidos (Producto, Categoría, Cantidad y Precio).'
+                    : 'Completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).',
             });
             return;
         }
 
         onActualizar({
             id: editandoId,
-            almacen_id: parseInt(borrador.almacen_id),
+            almacen_id: almacenOpcional || !borrador.almacen_id ? null : parseInt(borrador.almacen_id),
             producto: borrador.producto,
             marca: borrador.marca,
             modelo: borrador.modelo,
@@ -187,9 +199,10 @@ export default function CompraListaProductos({ productos, almacenes, categorias,
                             )}
                             {productos.map((p) => {
                                 const almacen = almacenes.find((a) => a.id === p.almacen_id);
+                                const sinAlmacenValido = !almacen && !(almacenOpcional && p.almacen_id === null);
 
                                 return (
-                                    <TableRow key={p.id} className={!almacen ? 'bg-red-50 dark:bg-red-950/20' : ''}>
+                                    <TableRow key={p.id} className={sinAlmacenValido ? 'bg-red-50 dark:bg-red-950/20' : ''}>
                                         <TableCell className="font-medium">{p.producto}</TableCell>
                                         <TableCell>{p.marca || 'N/A'}</TableCell>
                                         <TableCell>{p.modelo || 'N/A'}</TableCell>
@@ -207,6 +220,8 @@ export default function CompraListaProductos({ productos, almacenes, categorias,
                                                             </Badge>
                                                         )}
                                                     </>
+                                                ) : almacenOpcional && p.almacen_id === null ? (
+                                                    <span className="text-muted-foreground text-sm">Se elige al llegar</span>
                                                 ) : (
                                                     <span className="flex items-center gap-2 text-red-600">
                                                         <X className="h-4 w-4" />
@@ -359,30 +374,36 @@ export default function CompraListaProductos({ productos, almacenes, categorias,
                                 <div className="space-y-6">
                                     <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Organización</h3>
 
-                                    <div>
-                                        <Label>Almacén Destino *</Label>
-                                        <Combobox
-                                            items={almacenes}
-                                            itemToStringLabel={(item) => item.nombre_almacen}
-                                            itemToStringValue={(item) => item.nombre_almacen}
-                                            value={almacenSeleccionado}
-                                            onValueChange={(almacen) =>
-                                                setBorrador({ ...borrador, almacen_id: almacen ? almacen.id.toString() : '' })
-                                            }
-                                        >
-                                            <ComboboxInput placeholder="Seleccione Almacén" showClear={!!borrador.almacen_id} className="uppercase" />
-                                            <ComboboxContent container={contenedor}>
-                                                <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
-                                                <ComboboxList>
-                                                    {(almacen) => (
-                                                        <ComboboxItem key={almacen.id} value={almacen}>
-                                                            <span className="uppercase">{almacen.nombre_almacen}</span>
-                                                        </ComboboxItem>
-                                                    )}
-                                                </ComboboxList>
-                                            </ComboboxContent>
-                                        </Combobox>
-                                    </div>
+                                    {!almacenOpcional && (
+                                        <div>
+                                            <Label>Almacén Destino *</Label>
+                                            <Combobox
+                                                items={almacenes}
+                                                itemToStringLabel={(item) => item.nombre_almacen}
+                                                itemToStringValue={(item) => item.nombre_almacen}
+                                                value={almacenSeleccionado}
+                                                onValueChange={(almacen) =>
+                                                    setBorrador({ ...borrador, almacen_id: almacen ? almacen.id.toString() : '' })
+                                                }
+                                            >
+                                                <ComboboxInput
+                                                    placeholder="Seleccione Almacén"
+                                                    showClear={!!borrador.almacen_id}
+                                                    className="uppercase"
+                                                />
+                                                <ComboboxContent container={contenedor}>
+                                                    <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                                    <ComboboxList>
+                                                        {(almacen) => (
+                                                            <ComboboxItem key={almacen.id} value={almacen}>
+                                                                <span className="uppercase">{almacen.nombre_almacen}</span>
+                                                            </ComboboxItem>
+                                                        )}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
+                                        </div>
+                                    )}
 
                                     <div>
                                         <Label>Categoría *</Label>

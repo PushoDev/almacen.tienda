@@ -1,6 +1,6 @@
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { Breadcrumbs } from '@/components/breadcrumbs';
-import { NotificationBell } from '@/Components/Notifications/NotificationBell';
+import { NotificationBell } from '@/components/Notifications/NotificationBell';
 import { QuickAccessTabs } from '@/components/quick-access-tabs';
 import { TurnoIndicador } from '@/components/TurnoIndicador';
 import { SidebarTrigger } from '@/components/ui/sidebar';

@@ -66,7 +66,7 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
     };
 
     // Función para formatear el saldo
-    const formatearMoneda = (valor: number | null) => {
+    const formatearMoneda = (valor: number | null | undefined) => {
         if (valor === null || valor === undefined || isNaN(valor)) return '$0.00';
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',
@@ -113,7 +113,7 @@ export default function ShowProveedoresPage({ proveedor, compras, transacciones,
         };
     };
 
-    const estadoSaldo = getEstadoSaldo(proveedor.saldo_proveedor);
+    const estadoSaldo = getEstadoSaldo(proveedor.saldo_proveedor ?? 0);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs(proveedor)}>

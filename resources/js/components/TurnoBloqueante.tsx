@@ -20,7 +20,7 @@ export default function TurnoBloqueante() {
 
     return (
         <AlertDialog open onOpenChange={() => {}}>
-            <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
+            <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
                 <AlertDialogHeader>
                     <AlertDialogTitle>¿Quién está atendiendo hoy?</AlertDialogTitle>
                     <AlertDialogDescription>

@@ -32,7 +32,7 @@ import { ResumenPorAlmacen } from './layout/ResumenPorAlmacen';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Calendar } from '@/Components/ui/calendar';
+import { Calendar } from '@/components/ui/calendar';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {

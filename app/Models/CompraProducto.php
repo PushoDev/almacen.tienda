@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CompraProducto extends Model
 {
@@ -15,6 +16,12 @@ class CompraProducto extends Model
         'precio',
         'almacen_id', // ¡Agregar esta línea!
     ];
+
+    /** Unidades de esta línea asignadas a contenedores (Casillero de Compras, Fase 2). */
+    public function lineasContenedor(): HasMany
+    {
+        return $this->hasMany(ContenedorLinea::class);
+    }
 
     // Relación con Compra
     public function compra()

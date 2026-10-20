@@ -26,7 +26,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function EditarProveedoresPage({ proveedor }: { proveedor: ProveedorProps }) {
+export default function EditarProveedoresPage({ proveedor: proveedorRecibido }: { proveedor: ProveedorProps }) {
+    const proveedor = { ...proveedorRecibido, saldo_proveedor: proveedorRecibido.saldo_proveedor ?? 0 };
     // Manejo del formulario con useForm
     const { data, setData, put, errors, processing } = useForm({
         nombre_proveedor: proveedor.nombre_proveedor,
@@ -37,7 +38,7 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
     });
 
     // Función para formatear el saldo
-    const formatearMoneda = (valor: number | null) => {
+    const formatearMoneda = (valor: number | null | undefined) => {
         if (valor === null || valor === undefined) return '$0.00';
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',

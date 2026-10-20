@@ -250,7 +250,7 @@ interface Venta {
     pagos: Pago[];
     total_pagado: number;
     restante: number;
-    estado: 'pendiente' | 'completada' | 'cancelada' | 'devuelta';
+    estado: 'pendiente' | 'completada' | 'cancelada' | 'devuelta' | 'rechazada' | 'solicitud_especial';
     moneda_principal: MonedaPrincipal | null;
     tasa_cambio_principal: number;
     tasa_aplicada_venta: number | null;
@@ -2475,13 +2475,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                             de <strong>{currentVenta.gestor.cuenta_nombre}</strong> (gestor)
                                                         </li>
                                                     )}
-                                                    {comisionMontoCuenta != null && currentVenta.comision_pago.cuenta && (
+                                                    {comisionMontoCuenta != null && currentVenta.comision_pago?.cuenta && (
                                                         <li>
                                                             Debitará{' '}
                                                             <strong>
                                                                 {Number(comisionMontoCuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {comisionMoneda}
                                                             </strong>{' '}
-                                                            de <strong>{currentVenta.comision_pago.cuenta.nombre}</strong> (comisión vendedor)
+                                                            de <strong>{currentVenta.comision_pago?.cuenta?.nombre}</strong> (comisión vendedor)
                                                         </li>
                                                     )}
                                                 </ul>

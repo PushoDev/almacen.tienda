@@ -102,6 +102,16 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
+/** Elemento del tooltip tal como lo entrega recharts; sus tipos 3.x no exponen estos campos en `Tooltip`. */
+type ChartTooltipItem = {
+  name?: string
+  dataKey?: string | number
+  value?: number | string | Array<number | string>
+  color?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any
+}
+
 function ChartTooltipContent({
   active,
   payload,
@@ -116,8 +126,24 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-  React.ComponentProps<"div"> & {
+}: Omit<React.ComponentProps<"div">, "color" | "label"> & {
+    active?: boolean
+    payload?: ChartTooltipItem[]
+    label?: React.ReactNode
+    labelFormatter?: (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      label: any,
+      payload: ChartTooltipItem[]
+    ) => React.ReactNode
+    formatter?: (
+      value: ChartTooltipItem["value"],
+      name: string,
+      item: ChartTooltipItem,
+      index: number,
+      payload: ChartTooltipItem["payload"]
+    ) => React.ReactNode
+    color?: string
+    labelClassName?: string
     hideLabel?: boolean
     hideIndicator?: boolean
     indicator?: "line" | "dot" | "dashed"
@@ -254,8 +280,9 @@ function ChartLegendContent({
   payload,
   verticalAlign = "bottom",
   nameKey,
-}: React.ComponentProps<"div"> &
-  Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+}: React.ComponentProps<"div"> & {
+    payload?: ReadonlyArray<RechartsPrimitive.LegendPayload>
+    verticalAlign?: "top" | "middle" | "bottom"
     hideIcon?: boolean
     nameKey?: string
   }) {

@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from '@inertiajs/react';
 import { AlertTriangle, ChevronDown, GitMerge, Layers, PackageX, Tags, Truck, Warehouse } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Label as ChartLabel, ChartProps, Pie, PieChart, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Label as ChartLabel, type LabelProps, Pie, PieChart, XAxis, YAxis } from 'recharts';
 
 export interface AlmacenOpcion {
     id: number;
@@ -196,7 +196,7 @@ function CoberturaDePrecios({ precios }: { precios: ResumenAlmacen['precios'] })
                             <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
                             <Pie data={datos} dataKey="cantidad" nameKey="tipo" innerRadius={60} strokeWidth={5}>
                                 <ChartLabel
-                                    content={({ viewBox }: { viewBox?: ChartProps['viewBox'] }) => {
+                                    content={({ viewBox }: LabelProps) => {
                                         if (viewBox && 'cx' in viewBox && 'cy' in viewBox) {
                                             return (
                                                 <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">

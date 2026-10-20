@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { ActualizarCostoAlmacenesDialog } from '@/components/actualizar-costo-almacenes-dialog';
 import AppLayout from '@/layouts/app-layout';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { CategoriasProps, FichaHermanaProps, LoteStockProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
@@ -1233,9 +1234,9 @@ export default function EditarProductosPage({
                             <InputError message={fusionForm.errors.productos_eliminar_ids} />
                             <InputError message={fusionForm.errors.almacen_id} />
 
-                            {fusionForm.errors.precios_por_almacen && (
+                            {errorDe(fusionForm.errors, 'precios_por_almacen') && (
                                 <div className="mt-1 space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
-                                    <p className="text-xs text-amber-800 dark:text-amber-300">{fusionForm.errors.precios_por_almacen}</p>
+                                    <p className="text-xs text-amber-800 dark:text-amber-300">{errorDe(fusionForm.errors, 'precios_por_almacen')}</p>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <Label htmlFor="fusion-precio-venta">Precio de venta</Label>
