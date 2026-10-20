@@ -13,6 +13,7 @@ import { Link } from '@inertiajs/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, Check } from 'lucide-react';
 import React from 'react';
+import AvisosPushSwitch from './avisos-push-switch';
 import { NotificationItem } from './NotificationItem';
 
 interface NotificationDropdownProps {
@@ -77,6 +78,8 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                         {isLoading && <div className="text-muted-foreground p-4 text-center text-xs">Actualizando...</div>}
                     </div>
                 </ScrollArea>
+                <DropdownMenuSeparator />
+                <AvisosPushSwitch />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                     <Link

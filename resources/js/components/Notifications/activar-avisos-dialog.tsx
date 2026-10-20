@@ -26,7 +26,7 @@ function posponer(): void {
     }
 }
 
-type Paso = 'invitacion' | 'listo' | 'bloqueado';
+type Paso = 'invitacion' | 'listo' | 'bloqueado' | 'error';
 
 /**
  * Invita al usuario a activar los avisos push de este dispositivo. Aparece solo si el navegador
@@ -48,13 +48,15 @@ export default function ActivarAvisosDialog() {
     }, [listo, disponible, suscrito, permiso]);
 
     const manejarActivar = async () => {
-        const activado = await activar();
+        const resultado = await activar();
 
-        if (activado) {
+        if (resultado === 'activado') {
             setPaso('listo');
             window.setTimeout(() => setAbierto(false), 2200);
-        } else if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        } else if (resultado === 'bloqueado') {
             setPaso('bloqueado');
+        } else {
+            setPaso('error');
         }
     };
 
@@ -79,7 +81,7 @@ export default function ActivarAvisosDialog() {
                         <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/40 bg-gradient-to-br from-white to-sky-100 shadow-xl shadow-sky-500/40 dark:from-slate-100 dark:to-sky-200">
                             {paso === 'listo' ? (
                                 <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-                            ) : paso === 'bloqueado' ? (
+                            ) : paso === 'bloqueado' || paso === 'error' ? (
                                 <ShieldAlert className="h-10 w-10 text-amber-600" />
                             ) : (
                                 <BellRing className="avisos-campana h-10 w-10 text-indigo-600" />
@@ -130,6 +132,22 @@ export default function ActivarAvisosDialog() {
                         <div className="space-y-1.5 py-2">
                             <DialogTitle className="text-xl font-bold">¡Avisos activados!</DialogTitle>
                             <DialogDescription>Este dispositivo recibirá los avisos aunque cierres la pestaña.</DialogDescription>
+                        </div>
+                    )}
+
+                    {paso === 'error' && (
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <DialogTitle className="text-xl font-bold">No se pudieron activar los avisos</DialogTitle>
+                                <DialogDescription>
+                                    El servicio de avisos de este navegador rechazó el registro. En Chrome, revisa que esté activado «Usar servicios de
+                                    Google para mensajería push» en Configuración, y que haya conexión a internet. En Chromium o navegadores sin
+                                    cuenta de Google puede no estar disponible.
+                                </DialogDescription>
+                            </div>
+                            <Button variant="outline" onClick={() => setAbierto(false)} className="w-full">
+                                Entendido
+                            </Button>
                         </div>
                     )}
 

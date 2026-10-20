@@ -39,6 +39,12 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
+        title: 'Casillero de Compras',
+        href: '#', // TODO: Agregar enlace cuando se implemente la funcionalidad
+        icon: ShoppingBasket,
+        roles: ['admin'],
+    },
+    {
         title: 'Movimientos de Inventario',
         href: '/movimientos',
         icon: Repeat,

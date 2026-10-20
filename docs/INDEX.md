@@ -75,6 +75,7 @@ La lista completa, con contexto, está en `ESTADO_DESARROLLO.md` → "🎯 Lista
 ### Lotes, costos y prorrateo
 | Documento | Contenido |
 |---|---|
+| [plan-casillero-de-compras.md](plan-casillero-de-compras.md) | **Plan para el cliente (2026-10-19, nada construido)**: nuevo recorrido de una compra — Casillero en Panamá sin stock → contenedor al Mariel → almacén; cargos manuales (estadía, transporte), faltantes por error de conteo (vuelven al casillero) o pérdida (dinero a la cuenta o al proveedor), 5 fases y preguntas por confirmar |
 | [flujo-de-lotes.md](flujo-de-lotes.md) | **Guía para el cliente**: qué es un lote, de dónde nacen, prorrateo pendiente (distribuir / eliminar de la lista / fusionar), `/disponibles`, selector del POS, reglas de precio y comisión con ejemplos |
 | [arreglos-pendientes/distribucion-costos-modulo-2026-08-20.md](arreglos-pendientes/distribucion-costos-modulo-2026-08-20.md) | Módulo Distribución de Costos: fórmula de prorrateo ponderado, lotes y fondos en varias monedas, historial |
 | [arreglos-pendientes/prorrateo-costos-movimientos-2026-08-25.md](arreglos-pendientes/prorrateo-costos-movimientos-2026-08-25.md) | Prorrateo de costos de movimientos entre almacenes |

@@ -21,6 +21,29 @@ function claveVapidABytes(base64Url: string): Uint8Array<ArrayBuffer> {
     return bytes;
 }
 
+const CLAVE_DESACTIVADO = 'avisos-push-desactivados';
+
+/** El usuario apagó los avisos en este dispositivo: no se vuelve a registrar solo al recargar. */
+function estaDesactivadoPorUsuario(): boolean {
+    try {
+        return window.localStorage.getItem(CLAVE_DESACTIVADO) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function marcarDesactivadoPorUsuario(desactivado: boolean): void {
+    try {
+        if (desactivado) {
+            window.localStorage.setItem(CLAVE_DESACTIVADO, '1');
+        } else {
+            window.localStorage.removeItem(CLAVE_DESACTIVADO);
+        }
+    } catch {
+        // Sin almacenamiento disponible: el apagado dura hasta la próxima carga.
+    }
+}
+
 function navegadorSoportaPush(): boolean {
     return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
@@ -78,7 +101,7 @@ export function usePushNotifications() {
                 setDisponible(data.habilitado);
                 setClavePublica(data.public_key);
 
-                if (!data.habilitado || !data.public_key) {
+                if (!data.habilitado || !data.public_key || estaDesactivadoPorUsuario()) {
                     return;
                 }
 
@@ -108,10 +131,15 @@ export function usePushNotifications() {
         };
     }, [suscribirDispositivo]);
 
-    /** Pide permiso al navegador y registra este dispositivo. Devuelve true si quedó activo. */
-    const activar = useCallback(async (): Promise<boolean> => {
+    /**
+     * Pide permiso al navegador y registra este dispositivo.
+     * - 'activado': quedó registrado.
+     * - 'bloqueado': el usuario o el navegador negó el permiso.
+     * - 'error': hubo permiso, pero el servicio push del navegador rechazó el registro.
+     */
+    const activar = useCallback(async (): Promise<'activado' | 'bloqueado' | 'error'> => {
         if (!navegadorSoportaPush() || !clavePublica) {
-            return false;
+            return 'error';
         }
 
         setCargando(true);
@@ -121,17 +149,18 @@ export function usePushNotifications() {
             setPermiso(resultado);
 
             if (resultado !== 'granted') {
-                return false;
+                return 'bloqueado';
             }
 
             await suscribirDispositivo(clavePublica);
+            marcarDesactivadoPorUsuario(false);
             setSuscrito(true);
 
-            return true;
+            return 'activado';
         } catch (error) {
             console.error('No se pudieron activar los avisos push', error);
 
-            return false;
+            return 'error';
         } finally {
             setCargando(false);
         }
@@ -154,6 +183,7 @@ export function usePushNotifications() {
                 await suscripcion.unsubscribe();
             }
 
+            marcarDesactivadoPorUsuario(true);
             setSuscrito(false);
         } catch (error) {
             console.error('No se pudieron desactivar los avisos push', error);
