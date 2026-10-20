@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
 use App\Models\Remesa;
+use App\Services\FechaNegocio;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
@@ -30,7 +31,7 @@ class RemesaNotification extends Notification
         // basta con confiar en que la lista de destinatarios ya venga filtrada, el
         // chequeo de rol va explícito acá también, mismo criterio que
         // MovimientoFinancieroNotification::via().
-        if ($notifiable->telegram_chat_id && in_array($notifiable->role, ['admin', 'moderador'])) {
+        if ($notifiable->tieneTelegram() && in_array($notifiable->role, ['admin', 'moderador'])) {
             $channels[] = TelegramChannel::class;
         }
 
@@ -69,7 +70,7 @@ class RemesaNotification extends Notification
         }
 
         $texto .= "👤 Registrado por: {$this->remesa->user->name}\n";
-        $texto .= '🕐 '.now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.FechaNegocio::ahora()->format('d/m/Y H:i');
 
         return [
             'text' => $texto,

@@ -6,4 +6,5 @@ Before planning or editing, find the row whose globs match the file's path and r
 | --- | --- |
 | app/Http/Controllers/TelegramWebhookController.php | .ai/rules/controllers.md |
 | resources/js/** | .ai/rules/js.md |
+| resources/js/pages/Reportes/** | .ai/rules/reportes.md |
 | tests/Pest.php | .ai/rules/tests.md |

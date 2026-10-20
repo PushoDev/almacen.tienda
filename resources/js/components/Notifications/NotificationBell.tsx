@@ -19,6 +19,7 @@ interface PrecioCambioData {
     vendedor_nombre: string;
     precio_anterior: number;
     precio_nuevo: number;
+    cantidad: number;
 }
 
 export const NotificationBell = () => {
@@ -82,6 +83,7 @@ export const NotificationBell = () => {
                     vendedor_nombre: notification.data.vendedor_nombre,
                     precio_anterior: notification.data.precio_anterior,
                     precio_nuevo:    notification.data.precio_nuevo,
+                    cantidad:        notification.data.cantidad ?? 1,
                 });
             }
         } catch (error) {
@@ -92,7 +94,8 @@ export const NotificationBell = () => {
     const handleMarkAllAsRead = async () => {
         try {
             await axios.post(route('notifications.markAllAsRead'));
-            setNotifications((prev) => prev.map((n) => ({ ...n, read_at: new Date().toISOString() })));
+            // La lista solo trae no leídas: al marcarlas todas ya no hay nada que mostrar.
+            setNotifications([]);
             setUnreadCount(0);
         } catch (error) {
             console.error('Error marking all as read', error);
@@ -128,9 +131,18 @@ export const NotificationBell = () => {
 
                     {precioCambioData && (
                         <div className="space-y-4 p-5">
+                            {precioCambioData.cantidad > 1 && (
+                                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                    Este aviso agrupa {precioCambioData.cantidad} cambios seguidos. Abajo se muestra el último; el historial de
+                                    precios guarda cada uno.
+                                </p>
+                            )}
+
                             {/* Producto y almacén */}
                             <div className="space-y-1">
-                                <p className="text-xs font-medium tracking-wider text-gray-400 uppercase">Producto</p>
+                                <p className="text-xs font-medium tracking-wider text-gray-400 uppercase">
+                                    {precioCambioData.cantidad > 1 ? 'Último producto' : 'Producto'}
+                                </p>
                                 <p className="font-semibold text-gray-800 dark:text-gray-100">
                                     {precioCambioData.producto_nombre}
                                 </p>

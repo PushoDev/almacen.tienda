@@ -11,6 +11,7 @@ use App\Models\Remesa;
 use App\Models\Venta;
 use App\Services\CatalogoTarjetasService;
 use App\Services\DetalleOperacionService;
+use App\Services\FechaNegocio;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -316,10 +317,10 @@ class CuentaController extends Controller
             });
         }
         if ($desde = $request->query('desde_transacciones')) {
-            $query->whereDate('mf.fecha_operacion', '>=', $desde);
+            $query->where('mf.fecha_operacion', '>=', FechaNegocio::inicioDelDiaUtc($desde));
         }
         if ($hasta = $request->query('hasta_transacciones')) {
-            $query->whereDate('mf.fecha_operacion', '<=', $hasta);
+            $query->where('mf.fecha_operacion', '<=', FechaNegocio::finDelDiaUtc($hasta));
         }
 
         $historial = $query->select(
@@ -476,10 +477,10 @@ class CuentaController extends Controller
             });
         }
         if ($desde = $request->query('desde_ventas')) {
-            $finalQuery->whereDate('fecha', '>=', $desde);
+            $finalQuery->where('fecha', '>=', FechaNegocio::inicioDelDiaUtc($desde));
         }
         if ($hasta = $request->query('hasta_ventas')) {
-            $finalQuery->whereDate('fecha', '<=', $hasta);
+            $finalQuery->where('fecha', '<=', FechaNegocio::finDelDiaUtc($hasta));
         }
 
         $historial = $finalQuery->orderByDesc('fecha')->paginate(15, ['*'], 'pagina_ventas')->withQueryString();
@@ -591,10 +592,10 @@ class CuentaController extends Controller
             });
         }
         if ($desde = $request->query('desde_ajustes')) {
-            $query->whereDate('a.created_at', '>=', $desde);
+            $query->where('a.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde));
         }
         if ($hasta = $request->query('hasta_ajustes')) {
-            $query->whereDate('a.created_at', '<=', $hasta);
+            $query->where('a.created_at', '<=', FechaNegocio::finDelDiaUtc($hasta));
         }
 
         $historial = $query->select(
@@ -653,10 +654,10 @@ class CuentaController extends Controller
             });
         }
         if ($desde = $request->query('desde_remesas')) {
-            $query->whereDate('r.fecha_operacion', '>=', $desde);
+            $query->where('r.fecha_operacion', '>=', FechaNegocio::inicioDelDiaUtc($desde));
         }
         if ($hasta = $request->query('hasta_remesas')) {
-            $query->whereDate('r.fecha_operacion', '<=', $hasta);
+            $query->where('r.fecha_operacion', '<=', FechaNegocio::finDelDiaUtc($hasta));
         }
 
         $historial = $query->select(

@@ -56,7 +56,6 @@ class UserController extends Controller
             'cuentas' => 'array',
             'cuentas.*.id' => 'required|distinct|exists:cuentas,id',
             'cuentas.*.acceso' => ['required', Rule::in([Cuenta::ACCESO_COMPLETO, Cuenta::ACCESO_COBRO])],
-            'telegram_chat_id' => 'nullable|string|max:50',
         ]);
 
         // Creación del usuario
@@ -65,7 +64,6 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
-            'telegram_chat_id' => ! empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
         ]);
 
         // Asignar almacenes (solo si no es admin/moderador)
@@ -126,16 +124,16 @@ class UserController extends Controller
             'cuentas' => 'array',
             'cuentas.*.id' => 'required|distinct|exists:cuentas,id',
             'cuentas.*.acceso' => ['required', Rule::in([Cuenta::ACCESO_COMPLETO, Cuenta::ACCESO_COBRO])],
-            'telegram_chat_id' => 'nullable|string|max:50',
         ]);
 
-        // Actualización del usuario
+        // Actualización del usuario. El Telegram ya no se toca aquí: cada persona se vincula con el
+        // código de su cuenta (Configuración › Perfil). Antes este update ponía `telegram_chat_id` en
+        // null si el formulario no lo mandaba, y el formulario de Empleados nunca lo manda.
         $user->update([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'role' => $validated['role'],
             'password' => $validated['password'] ? Hash::make($validated['password']) : $user->password,
-            'telegram_chat_id' => ! empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
         ]);
 
         // Actualizar almacenes (solo si no es admin/moderador)

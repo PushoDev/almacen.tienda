@@ -32,7 +32,7 @@
 | `telefono_almacen` | string | único |
 | `correo_almacen` | string nullable | |
 | `provincia_almacen` | string nullable | |
-| `ciudad_almacen` | string nullable | Usado por `Api/CatalogoPublicoController` |
+| `ciudad_almacen` | string nullable | Lo usaba la API pública de catálogo, retirada el 2026-10-15; la columna se conserva |
 | `notas_almacen` | text nullable | |
 | `nombre_responsable` | string nullable | |
 | `apellido_responsable` | string nullable | |
@@ -463,6 +463,18 @@ Snapshot mensual de comparación entre periodos.
 | `user_id` | FK | |
 | `datos` | json | Datos del periodo |
 | `periodo` | string | Identificador del periodo |
+
+### `push_subscriptions` (2026-10-15)
+Suscripciones de avisos push del navegador, una fila por dispositivo. Las crea el paquete `laravel-notification-channels/webpush` (dos migraciones del 2026-10-15; la segunda ensancha `endpoint` a 1024). Relación polimórfica con `users` (trait `HasPushSubscriptions` en `User`).
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `subscribable_type` / `subscribable_id` | morph | Usuario dueño del dispositivo |
+| `endpoint` | string(1024) | URL del servicio push del navegador (única por dispositivo) |
+| `public_key` | string | Clave pública del dispositivo (`p256dh`) |
+| `auth_token` | string | Secreto de autenticación del dispositivo |
+| `content_encoding` | string | `aesgcm` o `aes128gcm` |
 
 ---
 

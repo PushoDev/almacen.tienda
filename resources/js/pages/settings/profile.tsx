@@ -36,14 +36,22 @@ type ProfileForm = {
     avatar: File | null;
 };
 
+type TelegramVinculo = {
+    id: number;
+    nombre: string | null;
+    vinculado_en: string | null;
+};
+
 export default function Profile({
     mustVerifyEmail,
     status,
     telegramToken,
+    telegramVinculos = [],
 }: {
     mustVerifyEmail: boolean;
     status?: string;
     telegramToken?: string | null;
+    telegramVinculos?: TelegramVinculo[];
 }) {
     const { auth } = usePage<SharedData>().props;
     const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +73,10 @@ export default function Profile({
 
     const handleDisconnect = () => {
         router.delete(route('profile.telegram.disconnect'), { preserveScroll: true });
+    };
+
+    const handleDisconnectVinculo = (vinculoId: number) => {
+        router.delete(route('profile.telegram.disconnect-vinculo', { vinculo: vinculoId }), { preserveScroll: true });
     };
 
     return (
@@ -182,62 +194,85 @@ export default function Profile({
                         </div>
                     </form>
 
-                    {/* Sección Telegram — admin y vendedor (moderador queda fuera del bot por ahora) */}
-                    {(auth.user.role === 'admin' || auth.user.role === 'vendedor') && <div className="border-t pt-6 grid gap-3">
+                    {/* Telegram: varias personas (los responsables de turno de la cuenta) pueden vincular el suyo con el mismo código */}
+                    <div className="border-t pt-6 grid gap-3">
                         <HeadingSmall
                             title="Conexión con Telegram"
-                            description="Recibe notificaciones del sistema directamente en Telegram"
+                            description="Recibe los avisos de esta cuenta en Telegram. Cada responsable de turno vincula su propio Telegram con el mismo código."
                         />
 
-                        {auth.user.telegram_chat_id ? (
-                            <div className="flex items-center gap-3">
-                                <Badge variant="default">Conectado</Badge>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleDisconnect}
-                                >
-                                    Desconectar
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <Badge variant="secondary">No conectado</Badge>
+                        <div className="flex flex-wrap items-center gap-3">
+                            {telegramVinculos.length > 0 ? (
+                                <Badge variant="default">
+                                    {telegramVinculos.length === 1 ? '1 persona conectada' : `${telegramVinculos.length} personas conectadas`}
+                                </Badge>
+                            ) : (
+                                <Badge variant="secondary">Nadie conectado</Badge>
+                            )}
+                        </div>
 
-                                {telegramToken ? (
-                                    <div className="rounded-md border bg-muted p-4 space-y-2">
-                                        <p className="text-sm font-medium">Tu código de vinculación:</p>
-                                        <p className="text-2xl font-mono font-bold tracking-widest">{telegramToken}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Envía este mensaje al bot:{' '}
-                                            <strong className="font-mono">/vincular {telegramToken}</strong>
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Bot: <strong>@laglorietatienda_bot</strong>
-                                        </p>
+                        {telegramVinculos.length > 0 && (
+                            <ul className="divide-y rounded-xl border bg-muted/40">
+                                {telegramVinculos.map((vinculo) => (
+                                    <li key={vinculo.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">{vinculo.nombre ?? 'Telegram sin nombre'}</p>
+                                            {vinculo.vinculado_en && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Conectado el {new Date(vinculo.vinculado_en).toLocaleString('es-ES')}
+                                                </p>
+                                            )}
+                                        </div>
                                         <Button
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            onClick={handleGenerateToken}
+                                            onClick={() => handleDisconnectVinculo(vinculo.id)}
                                         >
-                                            Generar nuevo código
+                                            Desconectar
                                         </Button>
-                                    </div>
-                                ) : (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleGenerateToken}
-                                    >
-                                        Generar código de vinculación
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+
+                        {telegramToken ? (
+                            <div className="rounded-xl border bg-muted p-4 space-y-2">
+                                <p className="text-sm font-medium">Código del equipo:</p>
+                                <p className="text-2xl font-mono font-bold tracking-widest">{telegramToken}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Cada persona envía este mensaje al bot desde su Telegram:{' '}
+                                    <strong className="font-mono">/vincular {telegramToken}</strong>
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    Bot: <strong>@laglorietatienda_bot</strong>. El código sirve para varias personas hasta que lo
+                                    renueves; al renovarlo, el anterior deja de funcionar y quienes ya están conectados siguen conectados.
+                                    Comparte este código solo con tus responsables de turno.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={handleGenerateToken}>
+                                        Renovar código
+                                    </Button>
+                                    {telegramVinculos.length > 0 && (
+                                        <Button type="button" variant="outline" size="sm" onClick={handleDisconnect}>
+                                            Desconectar a todos
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={handleGenerateToken}>
+                                    Generar código del equipo
+                                </Button>
+                                {telegramVinculos.length > 0 && (
+                                    <Button type="button" variant="outline" size="sm" onClick={handleDisconnect}>
+                                        Desconectar a todos
                                     </Button>
                                 )}
                             </div>
                         )}
-                    </div>}
+                    </div>
                 </div>
 
                 <DeleteUser />

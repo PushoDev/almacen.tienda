@@ -1,47 +1,12 @@
 <?php
 
 use App\Http\Controllers\AdminController;
-use App\Http\Controllers\Api\CatalogoPublicoController;
-use App\Http\Controllers\EcommerceController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReporteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-
-// ============================================
-// COMERCIO ELECTRONICO - Catálogo de Tiendas
-// ============================================
-
-// Página principal del ecommerce con selector de almacén
-// Route::get('/', [EcommerceController::class, 'index'])->name('Inicio');
-
-// Productos (mismo ecommerce)
-// Route::get('/productos', [EcommerceController::class, 'index'])->name('productos');
-
-// Carrito (mismo ecommerce)
-// Route::get('/carrito', [EcommerceController::class, 'index'])->name('Carrito');
-
-// API público de catálogo de tienda (sin autenticación)
-Route::prefix('api/tienda')->middleware('throttle:60,1')->group(function () {
-    Route::get('almacenes', [CatalogoPublicoController::class, 'indexAlmacenes']);
-    Route::get('almacenes/{id}', [CatalogoPublicoController::class, 'showAlmacen']);
-    Route::get('almacenes/{id}/productos', [CatalogoPublicoController::class, 'productosPorAlmacen']);
-    Route::get('productos', [CatalogoPublicoController::class, 'searchProductos']);
-    Route::get('productos/{id}', [CatalogoPublicoController::class, 'showProducto']);
-    Route::get('productos/{id}/stock', [CatalogoPublicoController::class, 'stockPorProducto']);
-    Route::get('categorias', [CatalogoPublicoController::class, 'indexCategorias']);
-    Route::get('docs/openapi.json', [CatalogoPublicoController::class, 'openApiSpec']);
-    Route::get('docs', [CatalogoPublicoController::class, 'swaggerUi']);
-});
-
-// API Routes para Ecommerce (sin autenticación)
-// Route::prefix('api/ecommerce')->group(function () {
-//     Route::get('/puntos-venta', [EcommerceController::class, 'getPuntosVenta'])->name('api.ecommerce.puntos-venta');
-//     Route::post('/almacen/select', [EcommerceController::class, 'setAlmacenSesion'])->name('api.ecommerce.select-almacen');
-//     Route::get('/almacen/actual', [EcommerceController::class, 'getAlmacenSesion'])->name('api.ecommerce.almacen-actual');
-//     Route::get('/almacen/productos', [EcommerceController::class, 'getProductosAlmacen'])->name('api.ecommerce.productos');
-// });
 
 /**
  * Entrada al Panel Administradtivo
@@ -50,6 +15,15 @@ Route::prefix('api/tienda')->middleware('throttle:60,1')->group(function () {
 Route::get('/', function () {
     return Inertia::render('auth/login');
 })->name('home');
+
+/**
+ * Avisos push del navegador. Fuera de 'requiere.turno': activar los avisos no depende del turno.
+ */
+Route::middleware(['auth', 'verified'])->prefix('push')->name('push.')->group(function () {
+    Route::get('config', [PushSubscriptionController::class, 'config'])->name('config');
+    Route::post('suscripciones', [PushSubscriptionController::class, 'store'])->name('suscripciones.store');
+    Route::delete('suscripciones', [PushSubscriptionController::class, 'destroy'])->name('suscripciones.destroy');
+});
 
 Route::middleware(['auth', 'verified', 'requiere.turno'])->group(function () {
 

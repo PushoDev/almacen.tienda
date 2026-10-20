@@ -421,3 +421,59 @@
 .hoja-excel .rdg-cell.celda-numero-fila {
     background: var(--hoja-gris);
 }
+
+/* Diálogo "Activar avisos" (components/Notifications/activar-avisos-dialog.tsx): la campana
+   suena por intervalos (no sin parar, para no cansar) y dos ondas se expanden desde detrás. */
+@keyframes avisos-campana-sonar {
+    0%,
+    55%,
+    100% {
+        transform: rotate(0deg);
+    }
+    10% {
+        transform: rotate(16deg);
+    }
+    20% {
+        transform: rotate(-14deg);
+    }
+    30% {
+        transform: rotate(10deg);
+    }
+    40% {
+        transform: rotate(-8deg);
+    }
+    50% {
+        transform: rotate(4deg);
+    }
+}
+
+@keyframes avisos-onda-expandir {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(2.1);
+        opacity: 0;
+    }
+}
+
+.avisos-campana {
+    transform-origin: 50% 10%;
+    animation: avisos-campana-sonar 2.4s ease-in-out infinite;
+}
+
+.avisos-onda {
+    animation: avisos-onda-expandir 2.4s ease-out infinite;
+}
+
+.avisos-onda-retraso {
+    animation-delay: 1.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .avisos-campana,
+    .avisos-onda {
+        animation: none;
+    }
+}

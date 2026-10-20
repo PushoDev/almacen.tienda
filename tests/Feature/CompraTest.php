@@ -1143,6 +1143,32 @@ test('el historial de compras marca es_parcial solo en la compra que quedó con 
     );
 });
 
+test('el detalle de una compra manda el id del almacén de cada línea (el diálogo de edición lo precarga)', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $proveedor = crearProveedor(500);
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $proveedor->nombre_cliente,
+        'fecha' => '2026-08-15',
+        'productos' => [
+            ['almacen_id' => $almacen->id, 'producto' => 'Producto Con Almacen', 'categoria' => $categoria->nombre_categoria, 'cantidad' => 2, 'precio' => 10],
+        ],
+    ])->assertSessionHasNoErrors();
+
+    $compra = Compra::whereHas('productos', fn ($q) => $q->where('nombre_producto', 'Producto Con Almacen'))->firstOrFail();
+
+    $this->get(route('comprar.show', $compra->id))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('productos.0.almacen.id', $almacen->id)
+            ->where('productos.0.almacen.nombre_almacen', $almacen->nombre_almacen));
+});
+
 test('pago_cash con permitir_deuda_parcial pero pagando de más: sigue rechazando la compra', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);

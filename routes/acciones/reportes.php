@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\Reportes\HistorialMovimientosController;
+use App\Http\Controllers\Reportes\MovimientosFinancierosController;
 use App\Http\Controllers\Reportes\RastreoOperacionesController;
 use Illuminate\Support\Facades\Route;
 
@@ -47,7 +48,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // --- REPORTES FINANCIEROS Y OTROS ---
             Route::get('/historial-precios', [ReporteController::class, 'historialPrecios'])->name('historial_precios');
             Route::get('/historial-costo-precio', [ReporteController::class, 'historialCostoPrecio'])->name('historial_costo_precio');
-            Route::get('/movimientos-financieros', [ReporteController::class, 'movimientosFinancieros'])->name('movimientos_financieros');
+            Route::get('/movimientos-financieros', MovimientosFinancierosController::class)->name('movimientos_financieros');
         });
     });
 });

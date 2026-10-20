@@ -42,9 +42,9 @@ import { Separator } from '@/components/ui/separator';
 import SpotlightCard from '@/components/ui/spotlightcard';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowLeftRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, Shuffle, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeftRight, ArrowUpRight, ChevronDown, ChevronRight, Edit3, FileText, History, PackagePlus, Search, Shuffle, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { sileo } from '@/lib/sileo';
 import { Toaster } from '@/components/ui/sileo-toaster';
@@ -158,6 +158,26 @@ const colorTipo = (tipo: string) => {
     }
 };
 
+// Pantalla propia de cada operación, para llegar al registro completo desde el reporte.
+// Gasto/Ingreso/Transferencia comparten `transacciones.show` (es un MovimientoFinanciero).
+// Ajuste de saldo no tiene pantalla propia: la referencia queda sin enlace.
+const rutaOperacion = (op: Operacion): string | null => {
+    switch (op.tipo) {
+        case 'Venta':
+            return route('ventas.show', { id: op.id });
+        case 'Compra':
+            return route('comprar.show', op.id);
+        case 'Remesa':
+            return route('transacciones.remesa.show', op.id);
+        case 'Gasto':
+        case 'Ingreso':
+        case 'Transferencia':
+            return route('transacciones.show', op.id);
+        default:
+            return null;
+    }
+};
+
 // Cuenta Envía / Cuenta que Recibe (columnas de la tabla, no del detalle expandido):
 // Gasto solo llena origen, Ingreso solo destino, Transferencia llena ambos — mismo dato que
 // ya arma detalle_movimiento.origen/destino en el backend, acá solo se lee para la fila
@@ -233,6 +253,18 @@ const cuentaEnviaRemesa = (op: Operacion) => remesaLeg(op, 'Salida')?.nombre ?? 
 const montoEnviaRemesa = (op: Operacion) => {
     const leg = remesaLeg(op, 'Salida');
     return leg ? formatMonto(Math.abs((leg.saldo_posterior ?? 0) - (leg.saldo_anterior ?? 0)), leg.moneda ?? op.moneda) : '—';
+};
+
+// Pago al mensajero (tercera pata, opcional): sale de su propia cuenta y no entra en el monto
+// de "Cuenta Envía" (ese es solo la Salida al destinatario). Se muestra aparte para que no
+// pase desapercibido. `monto` lo manda el backend; la resta de saldos es el respaldo para
+// datos que lleguen sin él.
+const montoMensajeroRemesa = (op: Operacion) => {
+    const leg = remesaLeg(op, 'Mensajero');
+    if (!leg) return null;
+    const monto = leg.monto ?? Math.abs((leg.saldo_posterior ?? 0) - (leg.saldo_anterior ?? 0));
+
+    return monto > 0 ? formatMonto(monto, leg.moneda ?? op.moneda) : null;
 };
 
 const cuentaRecibeRemesa = (op: Operacion) => remesaLeg(op, 'Entrada')?.nombre ?? '—';
@@ -574,7 +606,9 @@ export default function RastreoOperacionesPage({
             return partes.length > 0 ? partes.join(', ') : '—';
         }
         if (op.tipo === 'Remesa') {
-            return montoEnviaRemesa(op);
+            const mensajero = montoMensajeroRemesa(op);
+
+            return mensajero ? `${montoEnviaRemesa(op)}, Mensajero: ${mensajero}` : montoEnviaRemesa(op);
         }
 
         return montoEnvia(op);
@@ -894,9 +928,21 @@ export default function RastreoOperacionesPage({
                                                                 ) : (
                                                                     <span className="w-4" />
                                                                 )}
-                                                                <Badge className={colorTipo(op.tipo)}>
-                                                                    {op.referencia}
-                                                                </Badge>
+                                                                {rutaOperacion(op) ? (
+                                                                    // El clic en la fila expande el detalle; el enlace no debe expandirla.
+                                                                    <Link
+                                                                        href={rutaOperacion(op)!}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        title="Ver la operación completa"
+                                                                    >
+                                                                        <Badge className={`gap-1 hover:underline ${colorTipo(op.tipo)}`}>
+                                                                            {op.referencia}
+                                                                            <ArrowUpRight className="h-3 w-3" />
+                                                                        </Badge>
+                                                                    </Link>
+                                                                ) : (
+                                                                    <Badge className={colorTipo(op.tipo)}>{op.referencia}</Badge>
+                                                                )}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 text-sm whitespace-nowrap">
@@ -934,7 +980,14 @@ export default function RastreoOperacionesPage({
                                                                     {pagosCompraConOrigen(op).length === 0 && montoPendienteCompra(op) === 0 && '—'}
                                                                 </div>
                                                             ) : op.tipo === 'Remesa' ? (
-                                                                montoEnviaRemesa(op)
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    <span>{montoEnviaRemesa(op)}</span>
+                                                                    {montoMensajeroRemesa(op) && (
+                                                                        <Badge className="border-amber-400/30 bg-amber-500/10 font-normal whitespace-nowrap text-amber-700 dark:text-amber-300">
+                                                                            Mensajero: {montoMensajeroRemesa(op)}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
                                                             ) : (
                                                                 montoEnvia(op)
                                                             )}

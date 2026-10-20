@@ -315,6 +315,7 @@ class DetalleOperacionService
                 'saldo_anterior' => (float) $remesa->entrada_saldo_anterior,
                 'saldo_posterior' => (float) $remesa->entrada_saldo_posterior,
                 'moneda' => $remesa->entrada_moneda,
+                'monto' => (float) $remesa->entrada_monto,
             ],
             [
                 'etiqueta' => 'Salida',
@@ -323,6 +324,7 @@ class DetalleOperacionService
                 'saldo_anterior' => (float) $remesa->salida_saldo_anterior,
                 'saldo_posterior' => (float) $remesa->salida_saldo_posterior,
                 'moneda' => $remesa->salida_moneda,
+                'monto' => (float) $remesa->salida_monto,
             ],
         ];
 
@@ -334,6 +336,7 @@ class DetalleOperacionService
                 'saldo_anterior' => (float) $remesa->mensajero_saldo_anterior,
                 'saldo_posterior' => (float) $remesa->mensajero_saldo_posterior,
                 'moneda' => $remesa->mensajero_moneda,
+                'monto' => (float) $remesa->mensajero_monto,
             ];
         }
 

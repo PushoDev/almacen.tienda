@@ -322,6 +322,16 @@ Pantalla puramente informativa (dashboard) — no tiene create/edit/show/update/
 | POST | `/notifications/{id}/read` | `NotificationController@markAsRead` | JSON |
 | POST | `/notifications/mark-all-read` | `NotificationController@markAllAsRead` | JSON |
 
+### Avisos push del navegador (2026-10-15)
+
+Grupo `auth` + `verified` con prefijo `push` y **sin** `requiere.turno` (activar los avisos no depende del turno).
+
+| Método | Ruta | Controlador@Método | Respuesta |
+|--------|------|-------------------|-----------|
+| GET | `/push/config` | `PushSubscriptionController@config` | JSON `{habilitado, public_key}` (clave VAPID pública) |
+| POST | `/push/suscripciones` | `PushSubscriptionController@store` | JSON; guarda o actualiza la suscripción de este dispositivo |
+| DELETE | `/push/suscripciones` | `PushSubscriptionController@destroy` | JSON; elimina la suscripción por `endpoint` |
+
 ---
 
 ## Settings (Ajustes de Perfil)
@@ -339,21 +349,9 @@ Pantalla puramente informativa (dashboard) — no tiene create/edit/show/update/
 
 ---
 
-## API Pública (catálogo sin autenticación)
+## API Pública (catálogo sin autenticación) — RETIRADA (2026-10-15)
 
-Definida en `routes/web.php` con prefijo `/api/tienda` y middleware `throttle:60,1`.
-
-| Método | Ruta | Controlador@Método | Descripción |
-|--------|------|-------------------|-------------|
-| GET | `/api/tienda/almacenes` | `CatalogoPublicoController@indexAlmacenes` | Lista almacenes activos |
-| GET | `/api/tienda/almacenes/{id}` | `CatalogoPublicoController@showAlmacen` | Detalle de almacén |
-| GET | `/api/tienda/almacenes/{id}/productos` | `CatalogoPublicoController@productosPorAlmacen` | Productos del almacén con stock |
-| GET | `/api/tienda/productos` | `CatalogoPublicoController@searchProductos` | Búsqueda de productos |
-| GET | `/api/tienda/productos/{id}` | `CatalogoPublicoController@showProducto` | Detalle de producto |
-| GET | `/api/tienda/productos/{id}/stock` | `CatalogoPublicoController@stockPorProducto` | Stock por almacén |
-| GET | `/api/tienda/categorias` | `CatalogoPublicoController@indexCategorias` | Categorías |
-| GET | `/api/tienda/docs/openapi.json` | `CatalogoPublicoController@openApiSpec` | Especificación OpenAPI |
-| GET | `/api/tienda/docs` | `CatalogoPublicoController@swaggerUi` | Swagger UI |
+Las rutas `/api/tienda/*` y sus controladores (`CatalogoPublicoController`, `EcommerceController`) se eliminaron por decisión del cliente. Ya no existe ninguna ruta pública de catálogo; `routes/api.php` solo tiene `POST /telegram/webhook`.
 
 ---
 

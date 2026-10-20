@@ -226,19 +226,25 @@ class ResumenAlmacenService
      */
     private function ventasPorDia(int $almacenId): array
     {
-        $hoy = now()->startOfDay();
+        // Días del negocio (Cuba), no UTC. Se suma por venta en SQL y se agrupa por día en PHP,
+        // porque DATE(created_at) en SQL agruparía por día UTC.
+        $hoy = Carbon::parse(FechaNegocio::ahora()->toDateString())->startOfDay();
         $desde = $hoy->copy()->subDays(self::DIAS_HISTORIAL_VENTAS - 1);
 
         $dias = DB::table('ventas as v')
             ->join('venta_detalles as d', 'd.venta_id', '=', 'v.id')
             ->where('v.almacen_id', $almacenId)
             ->where('v.estado', 'completada')
-            ->where('v.created_at', '>=', $desde)
-            ->groupBy(DB::raw('DATE(v.created_at)'))
-            ->orderBy(DB::raw('DATE(v.created_at)'))
-            ->selectRaw('DATE(v.created_at) as fecha, SUM(d.subtotal) as venta, SUM(d.costo_unitario * d.cantidad) as costo')
+            ->where('v.created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde->toDateString()))
+            ->groupBy('v.id', 'v.created_at')
+            ->selectRaw('v.created_at, SUM(d.subtotal) as venta, SUM(d.costo_unitario * d.cantidad) as costo')
             ->get()
-            ->keyBy('fecha');
+            ->groupBy(fn ($venta) => FechaNegocio::diaDe($venta->created_at))
+            ->map(fn ($ventasDelDia) => (object) [
+                'venta' => $ventasDelDia->sum('venta'),
+                'costo' => $ventasDelDia->sum('costo'),
+            ])
+            ->sortKeys();
 
         if ($dias->isEmpty()) {
             return [];

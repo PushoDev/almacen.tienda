@@ -890,7 +890,9 @@ class CompraController extends Controller
                         'cantidad' => $producto->pivot->cantidad,
                         'precio' => $producto->pivot->precio,
                     ],
+                    // `id` hace falta para precargar el almacén de cada línea en el diálogo "Editar Compra".
                     'almacen' => [
+                        'id' => $almacen?->id,
                         'nombre_almacen' => $almacen?->nombre_almacen ?? 'N/A',
                     ],
                     'es_producto_nuevo' => $producto->pivot->es_producto_nuevo === null

@@ -20,6 +20,13 @@ class ProfileController extends Controller
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
             'telegramToken' => $request->user()->telegram_link_token,
+            'telegramVinculos' => $request->user()->telegramVinculos
+                ->map(fn ($vinculo) => [
+                    'id' => $vinculo->id,
+                    'nombre' => $vinculo->nombre,
+                    'vinculado_en' => $vinculo->vinculado_en?->toIso8601String(),
+                ])
+                ->values(),
         ]);
     }
 
@@ -59,12 +66,23 @@ class ProfileController extends Controller
         return to_route('profile.edit');
     }
 
+    /**
+     * Desconecta a todas las personas vinculadas y anula el código.
+     */
     public function disconnectTelegram(Request $request): RedirectResponse
     {
-        $request->user()->update([
-            'telegram_chat_id' => null,
-            'telegram_link_token' => null,
-        ]);
+        $request->user()->telegramVinculos()->delete();
+        $request->user()->update(['telegram_link_token' => null]);
+
+        return to_route('profile.edit');
+    }
+
+    /**
+     * Desconecta a una sola persona (un responsable de turno). El código sigue sirviendo para las demás.
+     */
+    public function disconnectTelegramVinculo(Request $request, int $vinculo): RedirectResponse
+    {
+        $request->user()->telegramVinculos()->findOrFail($vinculo)->delete();
 
         return to_route('profile.edit');
     }

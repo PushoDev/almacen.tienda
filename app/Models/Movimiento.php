@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\FechaNegocio;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -76,8 +77,8 @@ class Movimiento extends Model
             ->when($filtros['almacen_destino_id'] ?? null, fn (Builder $query, int $id) => $query->where('almacen_destino_id', $id))
             ->when($userAlmacenesIds && ($filtros['sentido'] ?? null) === 'salientes', fn (Builder $query) => $query->whereIn('almacen_origen_id', $userAlmacenesIds))
             ->when($userAlmacenesIds && ($filtros['sentido'] ?? null) === 'entrantes', fn (Builder $query) => $query->whereIn('almacen_destino_id', $userAlmacenesIds))
-            ->when($filtros['desde'] ?? null, fn (Builder $query, string $desde) => $query->whereDate('created_at', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn (Builder $query, string $hasta) => $query->whereDate('created_at', '<=', $hasta))
+            ->when($filtros['desde'] ?? null, fn (Builder $query, string $desde) => $query->where('created_at', '>=', FechaNegocio::inicioDelDiaUtc($desde)))
+            ->when($filtros['hasta'] ?? null, fn (Builder $query, string $hasta) => $query->where('created_at', '<=', FechaNegocio::finDelDiaUtc($hasta)))
             ->when(trim($filtros['buscar'] ?? '') !== '', function (Builder $query) use ($filtros) {
                 $termino = trim($filtros['buscar']);
 

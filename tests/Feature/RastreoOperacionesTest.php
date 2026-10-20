@@ -171,20 +171,21 @@ test('el filtro por fecha (un solo día) en el reporte aplica a Venta, Gasto, In
 
     $cuentaUsd = crearCuentaEnMoneda(crearMonedaUsd());
 
-    Venta::factory()->create(['created_at' => '2026-06-15']);
-    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-06-15']);
-    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-06-15']);
+    // Mediodía UTC: cae en el mismo día en UTC y en Cuba (a las 00:00 UTC ya sería el día anterior allá).
+    Venta::factory()->create(['created_at' => '2026-06-15 12:00:00']);
+    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-06-15 12:00:00']);
+    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-06-15 12:00:00']);
     MovimientoFinanciero::factory()->transferencia()->create([
-        'fecha_operacion' => '2026-06-15',
+        'fecha_operacion' => '2026-06-15 12:00:00',
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
 
-    Venta::factory()->create(['created_at' => '2026-07-30']);
-    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-07-30']);
-    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-07-30']);
+    Venta::factory()->create(['created_at' => '2026-07-30 12:00:00']);
+    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-07-30 12:00:00']);
+    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-07-30 12:00:00']);
     MovimientoFinanciero::factory()->transferencia()->create([
-        'fecha_operacion' => '2026-07-30',
+        'fecha_operacion' => '2026-07-30 12:00:00',
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
@@ -1200,6 +1201,55 @@ test('el reporte incluye una Remesa (Operación Múltiple) en el listado, con el
     expect($salida['nombre'])->toBe($cuentaSalida->nombre_cuenta);
     expect($salida['saldo_anterior'])->toEqual(300.0);
     expect($salida['saldo_posterior'])->toEqual(205.0);
+
+    // Sin mensajero no hay tercera pata, pero cada pata presente trae su monto.
+    expect($movimientos->firstWhere('etiqueta', 'Mensajero'))->toBeNull();
+    expect($entrada['monto'])->toEqual(100.0);
+    expect($salida['monto'])->toEqual(95.0);
+});
+
+test('la Remesa con mensajero manda en el detalle el monto pagado al mensajero', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaEntrada = crearCuentaEnMoneda(crearMonedaUsd());
+    $cuentaSalida = crearCuentaEnMoneda(crearMonedaUsd());
+    $cuentaMensajero = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $remesa = Remesa::create([
+        'user_id' => $admin->id,
+        'entrada_tipo' => 'cuenta',
+        'entrada_cuenta_id' => $cuentaEntrada->id,
+        'entrada_monto' => 50,
+        'entrada_moneda' => 'USD',
+        'entrada_saldo_anterior' => 100,
+        'entrada_saldo_posterior' => 150,
+        'salida_tipo' => 'cuenta',
+        'salida_cuenta_id' => $cuentaSalida->id,
+        'salida_monto' => 39250,
+        'salida_moneda' => 'CUP',
+        'salida_saldo_anterior' => 73989,
+        'salida_saldo_posterior' => 34739,
+        'mensajero_cuenta_id' => $cuentaMensajero->id,
+        'mensajero_monto' => 1000,
+        'mensajero_moneda' => 'CUP',
+        'mensajero_saldo_anterior' => 5000,
+        'mensajero_saldo_posterior' => 4000,
+        'fecha_operacion' => now(),
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $remesa->id);
+    $mensajero = collect($fila['detalle_remesa']['movimientos_saldo'])->firstWhere('etiqueta', 'Mensajero');
+
+    expect($mensajero)->not->toBeNull();
+    expect($mensajero['nombre'])->toBe($cuentaMensajero->nombre_cuenta);
+    expect($mensajero['monto'])->toEqual(1000.0);
+    expect($mensajero['moneda'])->toBe('CUP');
 });
 
 test('el filtro por tipo=Remesa aísla la Operación Múltiple del resto del listado', function () {
@@ -1441,4 +1491,44 @@ test('el almacén para los combobox de filtro se manda a todos los roles', funct
     $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
 
     expect(collect($response->json('props.almacenes'))->pluck('nombre'))->toContain('Almacén Central');
+});
+
+test('una venta con varios destinatarios aparece una sola vez, con o sin búsqueda', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $venta = Venta::factory()->create();
+    foreach (['Ana', 'Anabel'] as $nombre) {
+        DestinatarioVenta::create(['venta_id' => $venta->id, 'nombre' => $nombre, 'apellidos' => 'Lopez']);
+    }
+
+    foreach ([[], ['buscar' => 'Ana']] as $filtros) {
+        $respuesta = $this->get(route('reportes.rastreo_operaciones', $filtros), ['X-Inertia' => 'true']);
+        $operaciones = collect($respuesta->json('props.operaciones.data'));
+
+        expect($operaciones)->toHaveCount(1)
+            ->and($respuesta->json('props.operaciones.total'))->toBe(1);
+    }
+});
+
+test('operaciones con el mismo instante se ordenan por tipo e id y las páginas no repiten ni omiten filas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $instante = now()->subHour()->startOfSecond();
+    Venta::factory()->count(30)->create(['created_at' => $instante]);
+
+    $ids = [];
+    foreach ([1, 2] as $pagina) {
+        $respuesta = $this->get(route('reportes.rastreo_operaciones', ['page' => $pagina]), ['X-Inertia' => 'true']);
+        $ids = array_merge($ids, collect($respuesta->json('props.operaciones.data'))->pluck('id')->all());
+    }
+
+    expect($ids)->toHaveCount(30)
+        ->and(array_unique($ids))->toHaveCount(30)
+        ->and($ids)->toBe(collect($ids)->sortDesc()->values()->all());
 });

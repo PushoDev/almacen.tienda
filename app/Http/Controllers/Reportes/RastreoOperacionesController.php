@@ -10,6 +10,7 @@ use App\Models\Producto;
 use App\Models\Remesa;
 use App\Models\Venta;
 use App\Services\DetalleOperacionService;
+use App\Services\FechaNegocio;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -87,8 +88,11 @@ class RastreoOperacionesController extends Controller
             // que 'buscar' también encuentre por el nombre de quien atendió, no solo por la
             // cuenta de usuario ('users.name').
             ->leftJoin('turnos_vendedor as turno_venta', 'turno_venta.id', '=', 'ventas.turno_vendedor_id')
+            // distinct(): destinatarios_venta no tiene unique en venta_id, y el leftJoin repetiría
+            // la fila de una venta con varios destinatarios (en la tabla y al paginar).
+            ->distinct()
             ->select('ventas.id', 'ventas.created_at as fecha', DB::raw("'Venta' as tipo"))
-            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('ventas.created_at', $request->input('fecha')))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereBetween('ventas.created_at', FechaNegocio::rangoDelDiaUtc($request->input('fecha'))))
             ->when($userIdFiltro, fn ($q) => $q->where('ventas.user_id', $userIdFiltro))
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('users.name', 'like', "%{$buscar}%")
@@ -213,7 +217,11 @@ class RastreoOperacionesController extends Controller
         $pagina = DB::query()
             ->fromSub($unionQuery, 'operaciones_u')
             ->when($request->filled('tipo'), fn ($q) => $q->where('tipo', $request->input('tipo')))
+            // Desempate (tipo, id): varias operaciones comparten el mismo instante y, sin él, el
+            // orden entre páginas no es estable (una fila puede repetirse u omitirse).
             ->orderByDesc('fecha')
+            ->orderBy('tipo')
+            ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString();
 
@@ -352,7 +360,7 @@ class RastreoOperacionesController extends Controller
             ->leftJoin('proveedors as proveedor_destino', 'proveedor_destino.id', '=', 'mf.proveedor_destino_id')
             ->where('mf.tipo_movimiento_id', $tipoMovimientoId)
             ->select('mf.id', 'mf.fecha_operacion as fecha', DB::raw("'{$etiqueta}' as tipo"))
-            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('mf.fecha_operacion', $request->input('fecha')))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereBetween('mf.fecha_operacion', FechaNegocio::rangoDelDiaUtc($request->input('fecha'))))
             ->when($userIdFiltro, fn ($q) => $q->where('mf.user_id', $userIdFiltro))
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('mf.descripcion', 'like', "%{$buscar}%")
@@ -507,7 +515,7 @@ class RastreoOperacionesController extends Controller
             ->leftJoin('users', 'users.id', '=', 'a.user_id')
             ->leftJoin('cuentas', 'cuentas.id', '=', 'a.cuenta_id')
             ->select('a.id', 'a.created_at as fecha', DB::raw("'Ajuste' as tipo"))
-            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('a.created_at', $request->input('fecha')))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereBetween('a.created_at', FechaNegocio::rangoDelDiaUtc($request->input('fecha'))))
             ->when($userIdFiltro, fn ($q) => $q->where('a.user_id', $userIdFiltro))
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('a.motivo', 'like', "%{$buscar}%")
@@ -567,7 +575,7 @@ class RastreoOperacionesController extends Controller
             ->leftJoin('proveedors as proveedor_entrada', 'proveedor_entrada.id', '=', 'remesas.entrada_proveedor_id')
             ->leftJoin('proveedors as proveedor_salida', 'proveedor_salida.id', '=', 'remesas.salida_proveedor_id')
             ->select('remesas.id', 'remesas.fecha_operacion as fecha', DB::raw("'Remesa' as tipo"))
-            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('remesas.fecha_operacion', $request->input('fecha')))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereBetween('remesas.fecha_operacion', FechaNegocio::rangoDelDiaUtc($request->input('fecha'))))
             ->when($userIdFiltro, fn ($q) => $q->where('remesas.user_id', $userIdFiltro))
             ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('users.name', 'like', "%{$buscar}%")
