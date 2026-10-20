@@ -213,6 +213,8 @@ Positivo = cliente pagó a tasa mayor que oficial (ganancia). Negativo = pérdid
 
 Webhook autenticado por `X-Telegram-Bot-Api-Secret-Token`.
 
+> **2026-10-20:** el "hoy" de `/reporte` y `/estadocierres`, los filtros hoy/3d/5d/mes de cierres y movimientos, las horas que muestra el bot y el sello «🕐» de las notificaciones (Cierre de Caja, Remesa, Movimiento Financiero, Cierres Pendientes, Venta Devuelta, Venta Especial) y de la leyenda del backup usan la hora de Cuba (`FechaNegocio`), no UTC.
+
 **Comandos:**
 - `/vincular CODIGO`: vincula cuenta de usuario con chat de Telegram.
 - `/start`: saludo + estado.
@@ -243,6 +245,8 @@ Webhook autenticado por `X-Telegram-Bot-Api-Secret-Token`.
 | `MovimientoStockNotification` | `en_transito`: almacén destino + admin/moderador; `recibido_parcial` y `rechazado`: almacén origen + admin/moderador; creado, editado y recibido completo, ninguno |
 
 Sin push, solo campana: `VentaCreadaNotification`, `MovimientoFinancieroNotification`, `CambioPrecioVendedorNotification` y `RemesaNotification`. Reglas de volumen: ver nota del 2026-10-15 en `ESTADO_DESARROLLO.md`.
+
+**Cierre de los push (2026-10-20):** (1) el usuario puede apagar y encender los avisos de ese dispositivo con el interruptor "Avisos en este dispositivo" del panel de la campana (`components/Notifications/avisos-push-switch.tsx`); apagar guarda `avisos-push-desactivados` en `localStorage` para que `use-push-notifications.ts` no se vuelva a suscribir solo al recargar, y `activar()` devuelve `'activado' | 'bloqueado' | 'error'` (si el navegador rechaza el registro — `AbortError`, p. ej. Brave con el push de Google desactivado — el diálogo muestra el paso `error`). (2) `CambioPrecioVendedorNotification::notificarAgrupado()` agrupa en un solo aviso sin leer (con contador `cantidad`) los cambios de precio del mismo vendedor y almacén de la última hora; un aviso ya leído no se reabre. (3) `VAPID_SUBJECT` es obligatorio para Safari/iPhone y se pone junto a las claves; en el servidor, `php artisan webpush:vapid` genera las claves y el `.env` debe terminar en salto de línea antes de añadirle algo con `>>`.
 
 ---
 
@@ -319,10 +323,13 @@ El cliente decidió no usar el ecommerce. Se eliminaron el prefijo `/api/tienda/
 - **Datos sensibles**: `precio_compra_producto` y `costo_unitario` solo se exponen a `admin` y `moderador` en respuestas JSON.
 - **Nombres en español**: modelos, columnas, rutas y vistas siguen nomenclatura en español.
 - **Rutas modularizadas**: `routes/web.php` incluye archivos de subdirectorio (`crud/`, `acciones/`, `shop/`, `empleados/`).
+- **Zona horaria de negocio (2026-10-20)**: la BD y `config('app.timezone')` están en UTC; el día que el usuario elige en un filtro, el "hoy" y las horas que se muestran son los de Cuba (`config('app.business_timezone')`, `America/Havana`, sobrescribible con `APP_BUSINESS_TIMEZONE`). Usar `App\Services\FechaNegocio` para columnas **timestamp**: `inicioDelDiaUtc()` / `finDelDiaUtc()` / `rangoDelDiaUtc()` en lugar de `whereDate`, `ahora()` en lugar de `now()` para "hoy" y para mostrar horas, `diaDe()` para agrupar por día. Las columnas `date` (p. ej. `compras.fecha_compra`) ya son el día del negocio y siguen con `whereDate`. **No agrupar con `DATE(created_at)` en SQL** (agrupa por día UTC): sumar por venta y agrupar en PHP con `diaDe()`. Pendiente: `DashboardStatsService::applyPeriodFilter()` y los demás `DATE()`.
 
 ---
 
 ## Reportes — Rastreo de Operaciones (`Reportes/Report/RastreoOperaciones.tsx`)
+
+> **2026-10-20:** la subconsulta de ventas lleva `distinct()` (`destinatarios_venta` no tiene `unique` en `venta_id`), el orden es `fecha DESC, tipo, id DESC` (las páginas ya no repiten ni omiten filas con el mismo instante) y el filtro de fecha usa el día de Cuba (`FechaNegocio::rangoDelDiaUtc()`) en las columnas timestamp; `compras.fecha_compra` (columna `date`) sigue con `whereDate`.
 
 El reporte prioritario del cliente dentro del módulo Reportes (los otros 14 reportes viven en `ReporteController`; este tiene su propio controlador: `app/Http/Controllers/Reportes/RastreoOperacionesController.php`). Unifica 5 tipos de operación en una sola tabla tipo "partida doble":
 
@@ -434,10 +441,13 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 | `DetalleOperacionService` | Detalle de operaciones para Cuentas/Clientes/Proveedores y Rastreo de Operaciones (sin documentar por el cliente, ver `ESTADO_DESARROLLO.md`) |
 | `MetodosPagoService` | Métodos (efectivo / transferencia) y vías de pago (Zelle, EnZona, Transfermóvil…) que admite cada moneda: catálogo, configuración, resumen y guardado desde el CRUD de Monedas |
 | `CatalogoTarjetasService` | Catálogo de bancos/tarjetas para las cuentas (`cuentas.tipo_banco`) |
+| `FechaNegocio` | Zona horaria de negocio (Cuba, 2026-10-20): convierte el día elegido en un filtro al rango UTC con que se guardan los timestamps (`inicioDelDiaUtc`, `finDelDiaUtc`, `rangoDelDiaUtc`, `inicioDeHaceDiasUtc`, `rangoDelMesActualUtc`) y expone `ahora()`, `aZonaDelNegocio()` y `diaDe()` |
 
 ---
 
 ## Branch Actual
+
+**Actualización 2026-10-20** (lo más reciente): avisos push cerrados (interruptor en la campana, agrupado de avisos de cambio de precio, `VAPID_SUBJECT`); Rastreo con `distinct()` y orden `fecha, tipo, id`; **zona horaria de negocio** (`FechaNegocio`, ver "Patrones y Convenciones") aplicada a filtros por fecha, 2 gráficas, el "hoy" y las horas del bot de Telegram; Empleados, pasos 3 y 4 verificados como hechos (quedan 5–7); suite completa 977 verdes. Resumen: `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md`.
 
 **Actualización 2026-10-14** (lo más reciente; el detalle de 09-26 a 10-13 está en el historial de `docs/ESTADO_DESARROLLO.md`):
 
