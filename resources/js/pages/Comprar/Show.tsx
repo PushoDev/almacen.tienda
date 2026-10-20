@@ -107,7 +107,9 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                     {compra.estado === 'aprobada'
                         ? 'Los productos han sido registrados en el inventario y están disponibles en sus almacenes.'
                         : compra.estado === 'pendiente'
-                          ? 'El dinero ya se movió, pero el stock solo se sumará al aprobar esta compra.'
+                          ? compra.flujo === 'casillero'
+                              ? 'El dinero ya se movió, pero el stock solo se sumará cuando la mercancía llegue al almacén.'
+                              : 'El dinero ya se movió, pero el stock solo se sumará al aprobar esta compra.'
                           : 'Esta compra fue anulada y no afecta el inventario.'}
                 </p>
 

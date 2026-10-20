@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Clock, Pencil, XCircle } from 'lucide-react';
+import { Link } from '@inertiajs/react';
+import { CheckCircle2, Clock, Pencil, ShoppingBasket, XCircle } from 'lucide-react';
 import { CompraDetalle, EstadoCompra, formatearMoneda } from './tipos-compra';
 
 export const ESTADO_COMPRA_CONFIG: Record<EstadoCompra, { label: string; icon: typeof Clock; classes: string; iconClasses: string }> = {
@@ -72,6 +73,8 @@ const resumenAnulacion = (compra: CompraDetalle): string[] => {
 
 /** Banner de estado (pendiente / aprobada / anulada) y, si está pendiente, sus tres acciones. */
 export default function CompraEstadoBanner({ compra, onEditar, onAprobar, onAnular }: CompraEstadoBannerProps) {
+    // Una compra del casillero pendiente no se edita ni se aprueba aquí: se gestiona en el Casillero de Compras.
+    const enCasillero = compra.flujo === 'casillero' && compra.estado === 'pendiente';
     const estado = ESTADO_COMPRA_CONFIG[compra.estado];
     const EstadoIcon = estado.icon;
     const resumen = resumenAnulacion(compra);
@@ -81,9 +84,10 @@ export default function CompraEstadoBanner({ compra, onEditar, onAprobar, onAnul
             <div className="flex items-center gap-3">
                 <EstadoIcon className={cn('h-6 w-6 shrink-0', estado.iconClasses)} />
                 <div>
-                    <p className="font-semibold">{estado.label}</p>
+                    <p className="font-semibold">{enCasillero ? 'En el casillero (Panamá)' : estado.label}</p>
                     <p className="text-sm opacity-90">
-                        {compra.estado === 'pendiente' && 'El stock aún no se sumó a los almacenes — falta aprobar esta compra.'}
+                        {enCasillero && 'Pagada y sin stock: el inventario se suma cuando la mercancía llegue al almacén.'}
+                        {compra.estado === 'pendiente' && !enCasillero && 'El stock aún no se sumó a los almacenes — falta aprobar esta compra.'}
                         {compra.estado === 'aprobada' && 'El stock ya está disponible en los almacenes indicados.'}
                         {compra.estado === 'anulada' &&
                             (compra.tipo_anulacion === 'fondo'
@@ -103,7 +107,22 @@ export default function CompraEstadoBanner({ compra, onEditar, onAprobar, onAnul
                 </div>
             </div>
 
-            {compra.estado === 'pendiente' && (
+            {enCasillero && (
+                <div className="flex flex-wrap gap-2">
+                    <Button asChild size="sm" className="bg-sky-600 hover:bg-sky-700">
+                        <Link href={route('casillero.index')}>
+                            <ShoppingBasket className="mr-1.5 h-4 w-4" />
+                            Ir al Casillero
+                        </Link>
+                    </Button>
+                    <Button size="sm" variant="destructive" className="cursor-pointer" onClick={onAnular}>
+                        <XCircle className="mr-1.5 h-4 w-4" />
+                        Anular
+                    </Button>
+                </div>
+            )}
+
+            {compra.estado === 'pendiente' && !enCasillero && (
                 <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" className="cursor-pointer" onClick={onEditar}>
                         <Pencil className="mr-1.5 h-4 w-4" />

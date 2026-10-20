@@ -7,8 +7,10 @@ import type { PageProps as InertiaPageProps } from '@inertiajs/core';
 import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
+    CalendarIcon,
     ChartNoAxesCombinedIcon,
     Contact,
+    DollarSignIcon,
     FileText,
     HandCoins,
     Landmark,
@@ -16,12 +18,9 @@ import {
     Package,
     Repeat,
     ShoppingBasket,
-    ShoppingCart,
     StoreIcon,
     Truck,
     Users,
-    CalendarIcon,
-    DollarSignIcon,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -40,7 +39,7 @@ const allNavItems: NavItem[] = [
     },
     {
         title: 'Casillero de Compras',
-        href: '#', // TODO: Agregar enlace cuando se implemente la funcionalidad
+        href: '/casillero',
         icon: ShoppingBasket,
         roles: ['admin'],
     },
@@ -98,7 +97,6 @@ const allNavItems: NavItem[] = [
         href: '/transacciones/envios',
         icon: Truck,
         roles: ['admin', 'moderador', 'vendedor'],
-
     },
     {
         title: 'Clientes Asociados',

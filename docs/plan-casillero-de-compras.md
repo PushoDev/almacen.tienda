@@ -84,17 +84,6 @@ Costo final de cada unidad que entra al stock: **$10 de compra + $5 de contenedo
 
 Las 2 unidades que volvieron al casillero siguen costando $10 cada una más su estadía, y recibirán los cargos de su próximo contenedor.
 
----|---|
-| Transporte marítimo y otros cargos del contenedor | $50 |
-| Llegan al almacén | 10 unidades (las otras 2 fueron un error de conteo) |
-| Las 2 que faltan | **vuelven al casillero** |
-
-Cargos que se reparten entre las **10 que llegaron**: $50 del contenedor, más los $10 de estadía de esa compra que corresponden a ellas.
-
-Costo final de cada unidad que entra al stock: **$10 de compra + $6 de cargos = $16** (con un solo producto el reparto es directo; con varios productos, ver **Por confirmar**).
-
-Las 2 unidades que volvieron al casillero siguen costando $10 cada una más lo que acumulen de estadía, y recibirán los cargos de su próximo contenedor.
-
 ---
 
 ## 4. Cómo se construirá: poco a poco
@@ -119,10 +108,12 @@ Lo que **no** se toca mientras tanto: las compras ya hechas (siguen como están,
 2. ~~Revisión de faltantes~~ **Confirmado (2026-10-19):** se cuenta una sola vez, cuando llega el camión al almacén y antes de sumar al stock.
 2b. **Sobrantes.** Si en el conteo hay más unidades de las anotadas, ¿qué pasó normalmente? Por ejemplo: eran unidades que estaban en Panamá y se mandaron por error sin anotar, o es mercancía que no se había pagado. Según eso se decide si el sobrante se descuenta del casillero, se compra aparte o se registra como diferencia.
 3. ~~Moneda de los cargos~~ **Confirmado (2026-10-19):** en Panamá los cargos son en USD; en Cuba el transporte es en CUP, con tasa de cambio editable (se conviene con el chofer), como en el resto del sistema. Se guarda el monto original, la tasa usada y el equivalente en USD.
-4. **Importación de Excel.** Hoy crea inventario directamente. ¿Se queda como carga directa de inventario o también pasa por el casillero?
-5. **Compras pendientes de hoy.** Las que estén pendientes de aprobar cuando se active el cambio: ¿se aprueban antes o pasan al casillero?
+4. **Importación de Excel.** Hoy crea inventario directamente. ¿Se queda como carga directa de inventario o también pasa por el casillero? **Supuesto de trabajo (2026-10-20, a confirmar):** se queda como carga directa; se revisa en la Fase 5.
+5. **Compras pendientes de hoy.** Las que estén pendientes de aprobar cuando se active el cambio: ¿se aprueban antes o pasan al casillero? **Supuesto de trabajo (2026-10-20, a confirmar):** se aprueban antes del cambio.
 6. ~~Quién usa el casillero~~ **Decidido (2026-10-19):** solo el administrador. El moderador y el vendedor no lo ven.
-7. **Cómo se paga cada cargo.** ¿Cada cargo sale de una cuenta en el momento de anotarlo (como un gasto), o se anota primero y se paga después? Si sale de una cuenta, ¿de cuál y en qué moneda?
+7. **Cómo se paga cada cargo.** ¿Cada cargo sale de una cuenta en el momento de anotarlo (como un gasto), o se anota primero y se paga después? Si sale de una cuenta, ¿de cuál y en qué moneda? **Supuesto de trabajo (2026-10-20, a confirmar):** sale de una cuenta en el momento de anotarlo, como un Gasto; en Panamá, de una cuenta USD. Así quedó construido en la Fase 1.
+8. **Capital.** El dinero pagado por una compra que aún no está en stock sale de la cuenta y no figura en el inventario: el capital bajaría hasta que llegue. **Propuesta (2026-10-20, a confirmar):** la mercancía en el casillero y en contenedor suma al capital a costo, con la nota "incluye X en tránsito" (igual que el efectivo en tránsito, ADR 009). Se decide antes de la Fase 4.
+9. **Quién registra la compra.** Hoy Compras está abierto al moderador. **Construido en la Fase 1:** registrar una compra en el flujo casillero es solo del administrador; el registro clásico sigue como estaba.
 
 ---
 
@@ -135,3 +126,29 @@ Lo que hoy depende de que una compra aprobada sume al stock y habrá que revisar
 - Distribución de Costos: el reparto de cargos debe reutilizar su fórmula, no duplicarla.
 - Reportes de compras y Rastreo de Operaciones: hoy una compra aprobada equivale a inventario; habrá que distinguir "en casillero", "en tránsito" y "recibida".
 - Reglas de trabajo del proyecto: un ítem a la vez, sin tocar Compras ni sus reportes hasta empezar la fase correspondiente, y con migraciones nuevas solo aprobadas por el cliente.
+
+### Análisis de impacto (2026-10-20)
+
+Las Compras cambian de forma radical, así que **no se escriben tests que fijen el comportamiento actual de lo que se va a rehacer**: cada fase trae los suyos.
+
+| Grupo | Piezas |
+|---|---|
+| **Se rehace** | `CompraController` (`store`, `aprobar`, `anular`, `actualizar`); `Comprar/Index` y `Show` con sus 14 componentes en `components/compras/`; la edición de una compra pendiente y `compra_ediciones`; la anulación (reversión o fondo a favor) |
+| **Se reutiliza** | Pagos al proveedor (`procesarPagos`: pago en efectivo, deuda parcial, deuda del cliente-proveedor); la fórmula de Distribución de Costos; la creación de lotes, códigos y stock de `aprobar()` (pasa a la entrada final); la tasa editable por operación |
+| **Se ve afectado** | Distribución de Costos (74 menciones a compras); reportes y KPIs de compras (hoy **no filtran por estado**: cuentan pendientes y anuladas, y no tienen tests); Rastreo (58); Cuentas, Clientes y Proveedores `Show`; la cola de "prorrateo requerido"; `FusionLotesService`; comandos de backfill |
+| **No se ve afectado** | El valor del inventario sale de los lotes (`ValorInventarioService`); `precio_compra_producto` es el costo de la ficha, no la entidad Compra |
+
+Hallazgos que condicionan el diseño:
+
+1. **Distribución de Costos hace hoy lo mismo que los cargos del casillero** (reparte transporte y otros gastos sobre compras aprobadas). Para las compras nuevas lo reemplazan los cargos manuales; el módulo queda para las compras viejas y para los movimientos entre almacenes.
+2. **El capital** suma saldos, clientes e inventario y el efectivo en tránsito: pagar una compra que aún no está en stock lo bajaría (pregunta 8).
+3. **Las fichas del catálogo se crean al comprar** (la línea necesita `producto_id`): con el casillero habrá fichas sin stock durante semanas.
+4. **Las líneas se parten:** un contenedor lleva solo parte de una compra, así que hay que seguir las unidades por línea (en casillero, enviadas, recibidas) y no solo el estado de la compra.
+
+### Diseño de datos (Fase 1, construido el 2026-10-20)
+
+- **`compras`** gana `flujo` (`clasico` por defecto o `casillero`), `etapa` (`casillero`; `contenedor` y `recibida` en las fases siguientes) y `llegada_panama_at`. **No se toca el enum `estado`**: una compra del casillero es `pendiente` y pasa a `aprobada` solo cuando el stock entra al almacén (Fase 4); así Distribución de Costos (que exige `aprobada`) y el resto la tratan como "sin stock" sin cambios. Las compras existentes quedan como `clasico`.
+- **`casillero_cargos`** (`concepto`, `nota`, `moneda`, `monto`, `tasa_cambio`, `monto_usd`, `cuenta_id`, `movimiento_financiero_id`, `fecha`, `estado` activo/anulado) y el pivote **`casillero_cargo_compra`** (un cargo cubre una o varias compras).
+- **`App\Services\CasilleroService`:** `registrarCargo()` (valida que las compras estén en el casillero y que la cuenta sea USD con saldo suficiente; descuenta con un Gasto), `anularCargo()` (devuelve el dinero y cancela el Gasto, solo mientras todas sus compras sigan en el casillero) y `marcarLlegadaPanama()`.
+- **`CasilleroController`** (solo admin, rutas `casillero.*`): listado, cargos y llegada a Panamá. **`CompraController`:** `store()` acepta `flujo=casillero` (solo admin, almacén de cada línea opcional); `aprobar()` y `actualizar()` rechazan las compras del casillero; `anular()` las rechaza mientras tengan cargos activos.
+- **Falta de la Fase 1:** la pantalla `Casillero/Index` y el formulario de registro en `Comprar/Index` (el enlace del menú sigue en `#`). Tests: `CasilleroTest` (18).

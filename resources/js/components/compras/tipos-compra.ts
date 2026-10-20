@@ -27,6 +27,10 @@ export interface CompraDetalle {
     total_compra: number;
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
     estado: EstadoCompra;
+    /** `casillero`: pagada, sin stock y sin almacén hasta que la mercancía llegue (ver Casillero de Compras). */
+    flujo?: 'clasico' | 'casillero';
+    etapa?: string | null;
+    llegada_panama_at?: string | null;
     tipo_anulacion: TipoAnulacion;
     motivo_anulacion: string | null;
     es_parcial: boolean;

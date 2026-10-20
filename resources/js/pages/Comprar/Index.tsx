@@ -17,14 +17,15 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sileo-toaster';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
-import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { CalendarIcon, PlusCircle, ShoppingBasket } from 'lucide-react';
+import { CalendarIcon, Container, PlusCircle, ShoppingBasket } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 // =================================================================
@@ -32,7 +33,8 @@ import { useEffect, useRef, useState } from 'react';
 // =================================================================
 export interface ProductoComprarProps {
     id: number;
-    almacen_id: number;
+    /** null en una compra del casillero: el almacén se elige cuando la mercancía llega. */
+    almacen_id: number | null;
     producto: string;
     marca?: string;
     modelo?: string;
@@ -61,6 +63,10 @@ export default function ComprarPage() {
     const { props } = usePage();
     const { errors } = props;
     const comprasRecientes: CompraReciente[] = (props as any).compras_recientes ?? [];
+    // El casillero (compra pagada, sin stock y sin almacén hasta que llegue) lo registra solo el administrador.
+    const { auth } = usePage<SharedData>().props;
+    const puedeUsarCasillero = auth.user?.role === 'admin';
+    const [casillero, setCasillero] = useState(false);
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
@@ -86,6 +92,7 @@ export default function ComprarPage() {
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
 
     const { data, setData, post, processing } = useForm({
+        flujo: 'clasico' as 'clasico' | 'casillero',
         compra: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
@@ -128,11 +135,15 @@ export default function ComprarPage() {
     useEffect(() => {
         const productosParaBackend = productos.map((p) => ({
             ...p,
-            almacen_id: parseInt(p.almacen_id as any),
+            almacen_id: casillero ? null : p.almacen_id,
             codigo_barras: (p.codigo || '').trim(),
         }));
         setData('productos', productosParaBackend as ProductoComprarProps[]);
-    }, [productos]);
+    }, [productos, casillero]);
+
+    useEffect(() => {
+        setData('flujo', casillero ? 'casillero' : 'clasico');
+    }, [casillero]);
 
     useEffect(() => {
         const cargarDatos = async () => {
@@ -217,7 +228,9 @@ export default function ComprarPage() {
                 formularioRef.current?.reiniciar();
                 sileo.success({
                     title: 'Compra realizada exitosamente',
-                    description: 'Los productos han sido agregados al inventario.',
+                    description: casillero
+                        ? 'La compra quedó en el casillero: pagada y sin stock hasta que la mercancía llegue al almacén.'
+                        : 'Los productos han sido agregados al inventario.',
                 });
             },
             onError: (errors) => {
@@ -373,6 +386,33 @@ export default function ComprarPage() {
                                     />
                                     {errors.proveedor && <InputError message={errors.proveedor} />}
                                 </div>
+
+                                {/* Casillero: solo el administrador; la compra queda pagada, sin stock y sin almacén hasta que llegue */}
+                                {puedeUsarCasillero && (
+                                    <div
+                                        className={cn(
+                                            'flex items-center justify-between gap-4 rounded-lg border p-4 md:col-span-2',
+                                            casillero ? 'border-sky-400/40 bg-sky-500/10' : 'border-dashed',
+                                        )}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <Container
+                                                className={cn('mt-0.5 h-5 w-5 shrink-0', casillero ? 'text-sky-600' : 'text-muted-foreground')}
+                                            />
+                                            <div>
+                                                <Label htmlFor="enviar-casillero" className="text-sm font-medium">
+                                                    Enviar al casillero (Panamá)
+                                                </Label>
+                                                <p className="text-muted-foreground text-xs">
+                                                    {casillero
+                                                        ? 'La compra queda pagada pero no suma al inventario ni pide almacén: el stock entra cuando la mercancía llegue. La encuentras en el Casillero de Compras.'
+                                                        : 'Actívalo si la mercancía no va directo a un almacén sino que espera en Panamá.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Switch id="enviar-casillero" checked={casillero} onCheckedChange={setCasillero} />
+                                    </div>
+                                )}
                             </div>
                         </form>
                     </CardContent>
@@ -382,7 +422,8 @@ export default function ComprarPage() {
                     ref={formularioRef}
                     almacenes={almacens}
                     categorias={categorias}
-                    hayLineaSinAlmacen={productos.some((p) => !p.almacen_id)}
+                    hayLineaSinAlmacen={!casillero && productos.some((p) => !p.almacen_id)}
+                    almacenOpcional={casillero}
                     errorCategorias={errors.categorias}
                     onAgregar={agregarProducto}
                     onCrearAlmacen={() => setIsCrearAlmacenDialogOpen(true)}
@@ -393,6 +434,7 @@ export default function ComprarPage() {
                     productos={productos}
                     almacenes={almacens}
                     categorias={categorias}
+                    almacenOpcional={casillero}
                     onActualizar={actualizarProducto}
                     onEliminar={eliminarProducto}
                 />
@@ -410,7 +452,7 @@ export default function ComprarPage() {
                         onPermitirDeudaParcialChange={(permitir) => setData('permitir_deuda_parcial', permitir)}
                         totalCompra={parseFloat(calcularTotal())}
                         hayProductos={productos.length > 0}
-                        hayAlmacenInvalido={productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
+                        hayAlmacenInvalido={!casillero && productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
                         cuentas={cuentas}
                         clientes={clientes}
                         clientesFiltrados={filteredClientes}
@@ -425,17 +467,9 @@ export default function ComprarPage() {
                         onConfirmar={realizarCompra}
                     />
 
-                    <CompraCrearClienteDialog
-                        open={isCrearClienteDialogOpen}
-                        onOpenChange={setIsCrearClienteDialogOpen}
-                        onCreado={clienteCreado}
-                    />
+                    <CompraCrearClienteDialog open={isCrearClienteDialogOpen} onOpenChange={setIsCrearClienteDialogOpen} onCreado={clienteCreado} />
 
-                    <CompraCrearAlmacenDialog
-                        open={isCrearAlmacenDialogOpen}
-                        onOpenChange={setIsCrearAlmacenDialogOpen}
-                        onCreado={almacenCreado}
-                    />
+                    <CompraCrearAlmacenDialog open={isCrearAlmacenDialogOpen} onOpenChange={setIsCrearAlmacenDialogOpen} onCreado={almacenCreado} />
                 </div>
 
                 <CompraCrearCategoriaDialog
