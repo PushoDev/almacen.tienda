@@ -1,6 +1,8 @@
+import { LogoLoop } from '@/components/animated/logo-loop';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LOGOS_FOOTER } from '@/lib/logos-footer';
 import { Link } from '@inertiajs/react';
 import { BookOpen } from 'lucide-react';
 import { type PropsWithChildren } from 'react';
@@ -18,7 +20,7 @@ export default function AuthCardLayout({
     description?: string;
 }>) {
     return (
-        <div className="relative flex min-h-svh items-center justify-center p-6 pt-24 pb-28 md:p-10 md:pt-24 md:pb-28">
+        <div className="relative flex min-h-svh items-center justify-center p-6 pt-24 pb-44 md:p-10 md:pt-24 md:pb-44">
             {/* Imagen de fondo en toda la página */}
             <div className="image-background animate__animated animate__fadeIn absolute inset-0" />
             <div className="absolute inset-0 bg-black/20" />
@@ -72,7 +74,8 @@ export default function AuthCardLayout({
 
             {/* Pie de página: derechos a la izquierda, crédito del desarrollador a la derecha */}
             <footer className="bg-background/80 border-sidebar-accent/40 text-muted-foreground fixed inset-x-0 bottom-0 z-20 border-t text-xs backdrop-blur-md">
-                <div className="mx-auto flex min-h-12 w-full max-w-7xl flex-col items-center justify-between gap-1 px-4 py-2 sm:flex-row md:px-8">
+                <LogoLoop logos={LOGOS_FOOTER} logoHeight={36} gap={36} speed={50} ariaLabel="Bancos y vías de pago" className="py-3" />
+                <div className="border-sidebar-accent/40 mx-auto flex min-h-12 w-full max-w-7xl flex-col items-center justify-between gap-1 border-t px-4 py-2 sm:flex-row md:px-8">
                     <p>© {new Date().getFullYear()} Glorietashop. Derechos reservados.</p>
                     <p>
                         Creado por{' '}

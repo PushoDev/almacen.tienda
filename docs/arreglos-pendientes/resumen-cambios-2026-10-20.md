@@ -1,6 +1,6 @@
 # Resumen de la sesión — 2026-10-20
 
-Se cerró lo que quedaba de los **avisos push** (interruptor, agrupado de avisos de precio, `VAPID_SUBJECT`, error del diálogo), se arreglaron dos hallazgos del **Rastreo**, se definió una **zona horaria de negocio** (Cuba) para que los filtros por fecha, las gráficas y el bot de Telegram cuenten el día como lo cuenta el negocio, y se actualizó el servidor de **test**. Después se construyeron las **Fases 1 y 2 del Casillero de Compras** (la nueva forma de las compras, backend y pantallas) y se dejó anotada la idea de las **incidencias** (Amazon). Suite completa al cierre: **1.015 verdes** (977 antes del Casillero).
+Se cerró lo que quedaba de los **avisos push** (interruptor, agrupado de avisos de precio, `VAPID_SUBJECT`, error del diálogo), se arreglaron dos hallazgos del **Rastreo**, se definió una **zona horaria de negocio** (Cuba) para que los filtros por fecha, las gráficas y el bot de Telegram cuenten el día como lo cuenta el negocio, y se actualizó el servidor de **test**. Después se construyeron las **Fases 1 y 2 del Casillero de Compras** (la nueva forma de las compras, backend y pantallas) y se dejó anotada la idea de las **incidencias** (Amazon). Suite completa al cierre: **1.015 verdes** (977 antes del Casillero). Por la noche se **arregló `npm run types`** (vuelve a ser una verificación confiable) y se **rediseñó la pantalla de login** (barra superior, footer con cinta de logos, borde animado y correcciones del formulario).
 
 ## 1. Avisos push del navegador
 
@@ -98,12 +98,41 @@ Tests: `CasilleroTest` (19) y `ContenedorTest` (19). Verificado en el navegador 
 
 El cliente compra mucho en Amazon, va al casillero y en el camino pueden surgir inconvenientes (cancelación, paquete perdido, equivocado o dañado, devolución, faltante en el contenedor). **Idea:** una sola «Incidencia» sobre unidades de una línea de compra, válida en cualquier tramo, resuelta con reembolso, devolución en curso, reposición o pérdida asumida; la Fase 3 la reutiliza para los faltantes del conteo. Propuesta como Fase 2.5. **No se construyó nada**: quedaron escritas las preguntas 10 a 14 del plan (destino del reembolso, pérdida aparte o sumada al costo, reembolso por recibir y capital, envío de devolución y dos o tres casos reales). El cliente lo quiere hacer con calma: es el recorrido cotidiano del negocio y confirma el flujo completo antes del primer archivo.
 
+## 10. `npm run types` arreglado (noche)
+
+**Qué pasaba:** `resources/js/Components` era un **symlink a `components`** (versionado en git) y seis archivos importaban `@/Components/...`. `tsc` veía cada archivo dos veces (TS1149/TS1261) y abortaba antes de revisar nada: 1.968 líneas de error. Por eso la memoria decía «no confiar en `npm run types`».
+
+**Qué se hizo** (sin cambiar comportamiento salvo lo indicado):
+- Se cambiaron 12 imports `@/Components/...` por `@/components/...` y se **borró solo el symlink** (la carpeta real, 150 archivos, quedó intacta). Nada en `vite.config`, `components.json`, ESLint ni `tsconfig` lo usaba.
+- Con el compilador ya funcionando aparecieron **110 errores reales**, que se llevaron a **0** (`npm run types` termina con código 0):
+  - **Errores generales del servidor en formularios** (`form.errors.error`, `.message`, `.compra_ids`, `.precios_por_almacen`): nuevo `resources/js/lib/errores.ts` con `errorDe(errores, 'clave')`; lo usan los diálogos de Casillero, `compra-editar-dialog`, `Productos/Edit` y los 4 formularios de `Transacciones/forms`.
+  - **`usePage().props.auth`**: `types/global.d.ts` declara `sharedPageProps: SharedData` en `@inertiajs/core`, así que `auth.user` queda tipado en toda la app.
+  - **Fallos reales de código:** `Vendor/DetalleCierre.tsx` usaba `Button` sin importarlo; `Empleados/Edit.tsx` no importaba `TipoCuenta`; en `Cierres/Create.tsx` se comparaba un `venta_id` tipado como texto contra un número (el backend manda número).
+  - **Tipos alineados con el código:** estados `rechazada`/`solicitud_especial` en `Vendor/Show.tsx`; campos opcionales en Cierres/Clientes/Proveedores; `roles` en el menú del header; paginador por defecto de Productos; `tipo_titular` en `Transacciones/Index`; `tipo_moneda` en las cuentas del empleado.
+  - **recharts 3:** se reescribieron los tipos de `ChartTooltipContent` y `ChartLegendContent` (`components/ui/chart.tsx`) y se quitó `ChartProps` (ya no existe) en Logística; el `activeIndex` del Pie de `ProductosPorAlmacen` se pasa con un cast porque recharts 3 ya no lo admite.
+- **Cambios visibles:** se quitó `onPointerDownOutside` del diálogo de `TurnoBloqueante` (ese componente no lo admite, no hacía nada); `initialFocus` → `autoFocus` en el calendario de `Comprar/Index`; un `className` que el logo de login ignoraba.
+- **Sin tocar:** ESLint sigue con errores **previos** en archivos que se modificaron (`any`, variables sin usar) y Prettier marca 17 archivos que ya estaban sin formatear (no se reformatearon para no mezclar formato con los arreglos).
+- **Verificado:** `tsc`, ESLint y Prettier de los archivos nuevos. **No se probó en el navegador** cada página tocada.
+
+## 11. Pantalla de login rediseñada (noche)
+
+A pedido del cliente, pieza por pieza. Todo el layout compartido vive en `layouts/auth/auth-card-layout.tsx` (lo usan las 6 pantallas de `pages/auth/*`); el formulario, en `pages/auth/login.tsx`.
+- **Barra superior fija** (clara, translúcida, `backdrop-blur`): `public/logo.svg` + «Glorietashop» a la izquierda; a la derecha el botón **Documentación** (desactivado con «Próximamente» mientras `DOCUMENTACION_URL` sea `null`; cuando exista la página basta poner su dirección) y el selector de tema `AppearanceToggleDropdown` ya existente.
+- **Footer fijo** con el mismo estilo: arriba una **cinta de logos sin fin** y debajo «© año Glorietashop. Derechos reservados.» + «Creado por PushoDev.Tech» (enlace a pushodev.vercel.app).
+- **Cinta de logos:** `components/animated/logo-loop.tsx`, propio y en **CSS puro** (sin dependencias nuevas; **no** es el `LogoLoop` de React Bits: no tiene inclinación, arrastre ni `step`). Se detiene con el cursor encima, crece cada logo al pasarle el cursor, difumina los extremos y queda quieta con «reducir movimiento» (keyframes `logo-loop-desplazar` en `app.css`). La lista está en `lib/logos-footer.ts`: **39 imágenes** de `public/projects/` (`card_cubans`, `card_interacionales`, `metodos_pago`, `efectivo`, `monedas`), reducidas a **miniaturas recortadas de 96 px de alto en `public/projects/footer/`** (nombre `{carpeta}__{archivo}.webp`, ~291 KB en total frente a ~6 MB de los originales, que no se tocaron). Hay logos repetidos entre `efectivo` y `monedas` (CUP/EUR/USD).
+- **Borde animado:** el Card lleva `data-estado="indigo"` y la clase `spotlight-card` (el mismo destello giratorio de los widgets; el borde pasa por encima del torso de la mascota, ~2 px).
+- **Formulario (`login.tsx`):** orden de tabulación lógico (correo 1, contraseña 2, ojo 3, «¿Has olvidado…?» 4, recordar 5, botón 6); botón **mostrar/ocultar contraseña** (mismo patrón que `Empleados/Create`); checkbox con `onCheckedChange`; el mensaje `status` pasó **arriba** del formulario; limpieza de líneas en blanco; erratas corregidas («Autenticar», «Recordar», «¿Has olvidado…?»); placeholder de contraseña con puntos.
+- **Verificado:** `tsc`, ESLint y Prettier. **No visto en el navegador** (la sesión de admin redirige `/login` al dashboard): hay que mirarlo con la sesión cerrada, en claro, oscuro y móvil.
+- **Pendiente de decisión:** si se quita la mascota del Card ahora que hay logo en la barra (se dejó); si se quitan `efectivo` o `monedas` de la cinta por repetidas; logos a color (como está) o en gris.
+
 ## Pendiente
 
+- **Login:** verlo en el navegador y los puntos de decisión de la sección 11; dirección de la página de Documentación cuando exista.
 - **Casillero:** responder las preguntas abiertas del plan (reparto de cargos por valor o cantidad, sobrantes, capital, incidencias 10 a 14), luego la Fase 3 (llegada al almacén, tramo terrestre en CUP y faltantes) y la 4 (entrada al stock con el reparto de cargos). Los tests de este día no cubren el detalle de compra con fecha: el detalle de **cualquier** compra muestra la fecha un día antes (19 de octubre para una compra del 20), porque el frontend interpreta una fecha sin hora como UTC; es el mismo problema de zona horaria y de arreglo corto.
 - Probar el push de punta a punta en **Chrome** contra test (diálogo, "Activar", aviso real). Brave lo rechaza.
 - `DashboardStatsService` y los `DATE()` restantes con la zona de negocio.
 - Empleados pasos 5–7; Rastreo hallazgos 4–8.
 - Reportes: 7 por rediseñar y cuál ganancia es la oficial.
-- **Plan del Casillero de Compras** (`docs/plan-casillero-de-compras.md`): las líneas 87–96 tienen un bloque duplicado y roto (tabla del ejemplo repetida, con un cálculo distinto: $6 de cargos frente a $5 + $1). Limpiarlo antes de enseñárselo al cliente. Preguntas abiertas: reparto de cargos, sobrantes, Excel, compras pendientes y cómo se paga cada cargo.
+- **Plan del Casillero de Compras** (`docs/plan-casillero-de-compras.md`): el bloque duplicado y roto ya se limpió (verificado). Preguntas abiertas: reparto de cargos, sobrantes, Excel, compras pendientes y cómo se paga cada cargo.
 - Tipar dos `any` ya existentes: `NotificationBell.tsx:26` y `NotificationDropdown.tsx:20`.
+- ESLint (errores previos de `any` y variables sin usar en Movimientos, Productos, Vendor/Show, historial-comparaciones…) y Prettier (17 archivos sin formatear): se dejaron a propósito.

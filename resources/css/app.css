@@ -309,6 +309,34 @@
     }
 }
 
+/* Cinta de logos sin fin (components/animated/logo-loop.tsx): la pista lleva el contenido duplicado
+   y se desplaza justo la mitad de su ancho, así que el reinicio no se nota. La duración la calcula
+   el componente según el ancho real; se pausa con el cursor encima. */
+@keyframes logo-loop-desplazar {
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+.logo-loop-track {
+    animation: logo-loop-desplazar var(--logo-loop-duracion, 40s) linear infinite;
+}
+
+.logo-loop:hover .logo-loop-track {
+    animation-play-state: paused;
+}
+
+.logo-loop-fade {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .logo-loop-track {
+        animation: none;
+    }
+}
+
 /* Entrada con rebote de diálogos y modales (dialog.tsx / alert-dialog.tsx, utilidad
    `animate-dialog-bounce`): nace a 0.85 y no a 0.3 para que los formularios grandes no se vean
    diminutos, se pasa un poco de tamaño y se asienta. Usa las propiedades individuales `scale`
