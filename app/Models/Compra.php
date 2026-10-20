@@ -38,6 +38,9 @@ class Compra extends Model
 
     public const ETAPA_CASILLERO = 'casillero';
 
+    /** Todas sus unidades ya están asignadas a contenedores (ver App\Services\ContenedorService). */
+    public const ETAPA_CONTENEDOR = 'contenedor';
+
     protected $casts = [
         'receptor_saldo_anterior' => 'double',
         'receptor_saldo_posterior' => 'double',
@@ -65,6 +68,12 @@ class Compra extends Model
     public function esDelCasillero(): bool
     {
         return $this->flujo === self::FLUJO_CASILLERO;
+    }
+
+    /** Alguna unidad de esta compra ya está asignada a un contenedor. */
+    public function tieneUnidadesEnContenedor(): bool
+    {
+        return ContenedorLinea::whereIn('compra_producto_id', CompraProducto::where('compra_id', $this->id)->select('id'))->exists();
     }
 
     /** Cargos a mano sobre esta compra (estadía, etc.), activos o anulados. */

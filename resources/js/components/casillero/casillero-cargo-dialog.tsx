@@ -8,46 +8,62 @@ import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Loader2, Receipt } from 'lucide-react';
 import { useEffect } from 'react';
-import { CompraCasillero, CuentaUsdCasillero, formatearUsd } from './tipos-casillero';
+import { CuentaUsdCasillero, formatearUsd } from './tipos-casillero';
 
 interface CasilleroCargoDialogProps {
     open: boolean;
     onOpenChange: (abierto: boolean) => void;
-    /** Las compras sobre las que se anota el cargo (las marcadas en la lista). */
-    compras: CompraCasillero[];
     cuentas: CuentaUsdCasillero[];
     onGuardado: () => void;
+    /** Ruta que registra el cargo: la de las compras del casillero o la de un contenedor. */
+    url: string;
+    /** A qué queda ligado el cargo, en una frase ("la compra #3", "el contenedor MSC-001"). */
+    destino: string;
+    /** Solo cuando el cargo es sobre compras del casillero: las que se marcaron en la lista. */
+    compraIds?: number[];
+    conceptos?: string[];
 }
 
-const CONCEPTOS_SUGERIDOS = ['Estadía en Panamá', 'Otro cargo'];
+const CONCEPTOS_COMPRAS = ['Estadía en Panamá', 'Otro cargo'];
 
 const hoy = () => new Date().toLocaleDateString('en-CA');
 
-/** Anota un cargo a mano (p. ej. la estadía) sobre una o varias compras y lo paga ahora desde una cuenta USD. */
-export default function CasilleroCargoDialog({ open, onOpenChange, compras, cuentas, onGuardado }: CasilleroCargoDialogProps) {
+/** Anota un cargo a mano (estadía, transporte marítimo…) y lo paga ahora desde una cuenta USD, como un gasto. */
+export default function CasilleroCargoDialog({
+    open,
+    onOpenChange,
+    cuentas,
+    onGuardado,
+    url,
+    destino,
+    compraIds,
+    conceptos = CONCEPTOS_COMPRAS,
+}: CasilleroCargoDialogProps) {
     const form = useForm({
-        compra_ids: [] as number[],
-        concepto: CONCEPTOS_SUGERIDOS[0],
+        concepto: conceptos[0] ?? '',
         monto: '',
         cuenta_id: '',
         fecha: hoy(),
         nota: '',
     });
 
+    // Cada vez que se abre arranca limpio: lo escrito en un intento cancelado no debe colarse en el siguiente cargo.
     useEffect(() => {
         if (open) {
-            form.setData((anterior) => ({ ...anterior, compra_ids: compras.map((c) => c.id) }));
+            form.setData({ concepto: conceptos[0] ?? '', monto: '', cuenta_id: '', fecha: hoy(), nota: '' });
+            form.clearErrors();
         }
-        // Solo al abrir o cuando cambia la selección de compras.
+        // Solo al abrir.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, compras]);
+    }, [open]);
 
     const cuenta = cuentas.find((c) => String(c.id) === form.data.cuenta_id) ?? null;
     const monto = parseFloat(form.data.monto) || 0;
     const saldoInsuficiente = cuenta !== null && monto > cuenta.saldo_cuenta;
 
     const guardar = () => {
-        form.post(route('casillero.cargos.store'), {
+        form.transform((datos) => (compraIds ? { ...datos, compra_ids: compraIds } : datos));
+        form.post(url, {
             preserveScroll: true,
             onSuccess: () => {
                 sileo.success({ title: 'Cargo anotado', description: `${formatearUsd(monto)} salieron de ${cuenta?.nombre_cuenta ?? 'la cuenta'}.` });
@@ -66,10 +82,7 @@ export default function CasilleroCargoDialog({ open, onOpenChange, compras, cuen
                         <Receipt className="h-5 w-5 text-amber-600" />
                         Anotar cargo
                     </DialogTitle>
-                    <DialogDescription>
-                        Se paga ahora desde la cuenta, como un gasto, y queda ligado a {compras.length === 1 ? 'la compra' : 'las compras'}{' '}
-                        {compras.map((c) => `#${c.id}`).join(', ')}.
-                    </DialogDescription>
+                    <DialogDescription>Se paga ahora desde la cuenta, como un gasto, y queda ligado a {destino}.</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4">
@@ -77,7 +90,7 @@ export default function CasilleroCargoDialog({ open, onOpenChange, compras, cuen
                         <Label htmlFor="concepto">Concepto</Label>
                         <Input id="concepto" value={form.data.concepto} onChange={(e) => form.setData('concepto', e.target.value)} maxLength={120} />
                         <div className="flex flex-wrap gap-2">
-                            {CONCEPTOS_SUGERIDOS.map((sugerido) => (
+                            {conceptos.map((sugerido) => (
                                 <Button key={sugerido} type="button" variant="outline" size="sm" onClick={() => form.setData('concepto', sugerido)}>
                                     {sugerido}
                                 </Button>

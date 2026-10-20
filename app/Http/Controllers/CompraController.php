@@ -722,6 +722,10 @@ class CompraController extends Controller
             return back()->withErrors(['error' => 'Esta compra del casillero tiene cargos activos: anúlalos antes de anular la compra.']);
         }
 
+        if ($comprar->esDelCasillero() && $comprar->tieneUnidadesEnContenedor()) {
+            return back()->withErrors(['error' => 'Esta compra tiene unidades en un contenedor: sácalas del contenedor antes de anularla.']);
+        }
+
         $validated = $request->validate([
             'tipo_anulacion' => 'required|in:reversion,fondo',
             'motivo_anulacion' => 'required|string|max:500',

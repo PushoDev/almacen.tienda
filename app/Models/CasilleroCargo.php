@@ -24,6 +24,7 @@ class CasilleroCargo extends Model
 
     protected $fillable = [
         'user_id',
+        'contenedor_id',
         'concepto',
         'nota',
         'moneda',
@@ -47,6 +48,12 @@ class CasilleroCargo extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** Contenedor al que pertenece el cargo; null si es un cargo de compras del casillero. */
+    public function contenedor(): BelongsTo
+    {
+        return $this->belongsTo(Contenedor::class);
     }
 
     public function cuenta(): BelongsTo

@@ -12,7 +12,7 @@ import { Toaster } from '@/components/ui/sileo-toaster';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { PackagePlus, Receipt, ShoppingBasket } from 'lucide-react';
+import { Container, PackagePlus, Receipt, ShoppingBasket } from 'lucide-react';
 import { useState } from 'react';
 
 interface CasilleroIndexProps {
@@ -85,6 +85,11 @@ export default function CasilleroIndex({ compras, cuentas, resumen }: CasilleroI
                                     Anotar cargo{marcadas.length > 0 ? ` (${marcadas.length})` : ''}
                                 </Button>
                                 <Button asChild size="sm" className="gap-1.5 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
+                                    <Link href={route('casillero.contenedores.index')}>
+                                        <Container className="h-4 w-4" /> Contenedores
+                                    </Link>
+                                </Button>
+                                <Button asChild size="sm" className="gap-1.5 bg-white/20 text-white backdrop-blur-sm hover:bg-white/30">
                                     <Link href={route('comprar.index')}>
                                         <PackagePlus className="h-4 w-4" /> Registrar compra
                                     </Link>
@@ -116,9 +121,11 @@ export default function CasilleroIndex({ compras, cuentas, resumen }: CasilleroI
             <CasilleroCargoDialog
                 open={cargoAbierto}
                 onOpenChange={setCargoAbierto}
-                compras={marcadas}
                 cuentas={cuentas}
                 onGuardado={() => setSeleccionadas([])}
+                url={route('casillero.cargos.store')}
+                compraIds={marcadas.map((c) => c.id)}
+                destino={`${marcadas.length === 1 ? 'la compra' : 'las compras'} ${marcadas.map((c) => `#${c.id}`).join(', ')}`}
             />
             <CasilleroLlegadaDialog open={llegadaDe !== null} onOpenChange={(abierto) => !abierto && setLlegadaDe(null)} compra={llegadaDe} />
             <CasilleroAnularCargoDialog

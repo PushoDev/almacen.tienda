@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\CasilleroCargo;
 use App\Models\Compra;
+use App\Models\CompraProducto;
+use App\Models\ContenedorLinea;
 use App\Models\Cuenta;
 use App\Services\CasilleroService;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,12 +25,19 @@ class CasilleroController extends Controller
 
     public function index(): Response
     {
-        $compras = Compra::enCasillero()
+        $enCasillero = Compra::enCasillero()
             ->with(['cliente', 'productos.categoria', 'cargosCasillero' => fn ($q) => $q->where('casillero_cargos.estado', CasilleroCargo::ESTADO_ACTIVO)])
             ->orderBy('fecha_compra')
             ->orderBy('id')
-            ->get()
-            ->map(fn (Compra $compra) => $this->shapeCompra($compra));
+            ->get();
+
+        // Unidades de cada línea que ya subieron a un contenedor: no cuentan como esperando en Panamá.
+        $asignadas = ContenedorLinea::whereIn('compra_producto_id', CompraProducto::whereIn('compra_id', $enCasillero->pluck('id'))->select('id'))
+            ->selectRaw('compra_producto_id, SUM(cantidad) as total')
+            ->groupBy('compra_producto_id')
+            ->pluck('total', 'compra_producto_id');
+
+        $compras = $enCasillero->map(fn (Compra $compra) => $this->shapeCompra($compra, $asignadas));
 
         $cuentasUsd = Cuenta::query()
             ->whereHas('moneda', fn ($q) => $q->where('codigo_moneda', CasilleroService::MONEDA_CARGOS_PANAMA)->where('estado', true))
@@ -41,7 +51,8 @@ class CasilleroController extends Controller
             'cuentas' => $cuentasUsd,
             'resumen' => [
                 'compras' => $compras->count(),
-                'valor_mercancia_usd' => round($compras->sum('total_compra'), 2),
+                'unidades' => $compras->sum('unidades_en_casillero'),
+                'valor_mercancia_usd' => round($compras->sum('valor_en_casillero'), 2),
                 'cargos_usd' => round($compras->sum('cargos_usd'), 2),
             ],
         ]);
@@ -95,11 +106,27 @@ class CasilleroController extends Controller
     }
 
     /**
+     * @param  Collection<int, mixed>  $asignadas  unidades ya asignadas a contenedores, por línea de compra
      * @return array<string, mixed>
      */
-    private function shapeCompra(Compra $compra): array
+    private function shapeCompra(Compra $compra, Collection $asignadas): array
     {
         $cargos = $compra->cargosCasillero;
+
+        $productos = $compra->productos->map(function ($producto) use ($asignadas) {
+            $cantidad = (int) $producto->pivot->cantidad;
+
+            return [
+                'compra_producto_id' => (int) $producto->pivot->id,
+                'nombre_producto' => $producto->nombre_producto,
+                'marca_producto' => $producto->marca_producto,
+                'modelo_producto' => $producto->modelo_producto,
+                'categoria' => $producto->categoria?->nombre_categoria,
+                'cantidad' => $cantidad,
+                'en_casillero' => max(0, $cantidad - (int) ($asignadas[$producto->pivot->id] ?? 0)),
+                'precio' => (float) $producto->pivot->precio,
+            ];
+        })->values();
 
         return [
             'id' => $compra->id,
@@ -114,14 +141,9 @@ class CasilleroController extends Controller
                 'monto_usd' => $cargo->monto_usd,
                 'fecha' => $cargo->fecha->toDateString(),
             ])->values(),
-            'productos' => $compra->productos->map(fn ($producto) => [
-                'nombre_producto' => $producto->nombre_producto,
-                'marca_producto' => $producto->marca_producto,
-                'modelo_producto' => $producto->modelo_producto,
-                'categoria' => $producto->categoria?->nombre_categoria,
-                'cantidad' => (int) $producto->pivot->cantidad,
-                'precio' => (float) $producto->pivot->precio,
-            ])->values(),
+            'unidades_en_casillero' => $productos->sum('en_casillero'),
+            'valor_en_casillero' => round($productos->sum(fn (array $p) => $p['en_casillero'] * $p['precio']), 2),
+            'productos' => $productos,
         ];
     }
 }

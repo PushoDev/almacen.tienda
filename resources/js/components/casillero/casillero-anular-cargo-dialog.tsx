@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { sileo } from '@/lib/sileo';
 import { useForm } from '@inertiajs/react';
 import { Loader2, XCircle } from 'lucide-react';
+import { useEffect } from 'react';
 import { CargoCasillero, formatearUsd } from './tipos-casillero';
 
 interface CasilleroAnularCargoDialogProps {
@@ -16,6 +17,16 @@ interface CasilleroAnularCargoDialogProps {
 /** Anula un cargo: el dinero vuelve a la cuenta que lo pagó y el gasto queda cancelado. */
 export default function CasilleroAnularCargoDialog({ open, onOpenChange, cargo }: CasilleroAnularCargoDialogProps) {
     const form = useForm({ motivo: '' });
+
+    // Arranca limpio cada vez que se abre.
+    useEffect(() => {
+        if (open) {
+            form.reset();
+            form.clearErrors();
+        }
+        // Solo al abrir.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     const confirmar = () => {
         if (!cargo) return;

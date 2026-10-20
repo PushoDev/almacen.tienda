@@ -47,6 +47,7 @@ export default function CasilleroLista({ compras, seleccionadas, onAlternar, onA
                     {compras.map((compra) => {
                         const abierta = abiertas.includes(compra.id);
                         const unidades = compra.productos.reduce((total, p) => total + p.cantidad, 0);
+                        const enContenedor = unidades - compra.unidades_en_casillero;
 
                         return (
                             <Fragment key={compra.id}>
@@ -74,8 +75,16 @@ export default function CasilleroLista({ compras, seleccionadas, onAlternar, onA
                                             </Button>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-right">{unidades}</TableCell>
-                                    <TableCell className="text-right font-medium">{formatearUsd(compra.total_compra)}</TableCell>
+                                    <TableCell className="text-right">
+                                        {enContenedor > 0 ? (
+                                            <span title={`${enContenedor} ya subieron a un contenedor`}>
+                                                {compra.unidades_en_casillero} <span className="text-muted-foreground">de {unidades}</span>
+                                            </span>
+                                        ) : (
+                                            unidades
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">{formatearUsd(compra.valor_en_casillero)}</TableCell>
                                     <TableCell className="text-right">
                                         {compra.cargos_usd > 0 ? (
                                             <Badge className="border-amber-400/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
@@ -115,9 +124,12 @@ export default function CasilleroLista({ compras, seleccionadas, onAlternar, onA
                                                                     {producto.modelo_producto ? ` ${producto.modelo_producto}` : ''}
                                                                 </span>
                                                                 <span className="text-muted-foreground whitespace-nowrap">
-                                                                    {producto.cantidad} × {formatearUsd(producto.precio)} ={' '}
+                                                                    {producto.en_casillero < producto.cantidad
+                                                                        ? `${producto.en_casillero} de ${producto.cantidad}`
+                                                                        : producto.cantidad}{' '}
+                                                                    × {formatearUsd(producto.precio)} ={' '}
                                                                     <strong className="text-foreground">
-                                                                        {formatearUsd(producto.cantidad * producto.precio)}
+                                                                        {formatearUsd(producto.en_casillero * producto.precio)}
                                                                     </strong>
                                                                 </span>
                                                             </li>

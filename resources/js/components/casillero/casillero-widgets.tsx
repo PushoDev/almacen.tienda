@@ -14,7 +14,7 @@ export default function CasilleroWidgets({ resumen }: CasilleroWidgetsProps) {
         {
             titulo: 'Compras en el casillero',
             valor: String(resumen.compras),
-            detalle: 'Pagadas, sin stock y sin contenedor',
+            detalle: `${resumen.unidades} unidades pagadas, sin stock y sin contenedor`,
             icono: ShoppingBasket,
             estado: 'indigo' as const,
             borde: 'border-indigo-400/30 bg-indigo-500/5 dark:bg-indigo-500/10',
@@ -24,7 +24,7 @@ export default function CasilleroWidgets({ resumen }: CasilleroWidgetsProps) {
         {
             titulo: 'Mercancía pagada',
             valor: formatearUsd(resumen.valor_mercancia_usd),
-            detalle: 'A costo de compra, todavía fuera del inventario',
+            detalle: 'Lo que espera en Panamá, a costo de compra, fuera del inventario',
             icono: Banknote,
             estado: 'disponible' as const,
             borde: 'border-emerald-400/30 bg-emerald-500/5 dark:bg-emerald-500/10',
