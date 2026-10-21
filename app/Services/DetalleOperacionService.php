@@ -6,6 +6,7 @@ use App\Models\AjusteSaldoCuenta;
 use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
 use App\Models\Remesa;
+use App\Models\User;
 use App\Models\Venta;
 
 /**
@@ -18,6 +19,50 @@ use App\Models\Venta;
 class DetalleOperacionService
 {
     /**
+     * Ids de las cuentas cuyo saldo anterior/posterior puede ver quien mira el detalle; null = todas.
+     *
+     * @var array<int, int>|null
+     */
+    private ?array $cuentasConSaldoVisible = null;
+
+    /**
+     * Copia del servicio que respeta el acceso por cuenta de un empleado: de una cuenta que no es de acceso
+     * `completo` para un vendedor solo se ve lo que la operación generó (`monto`), nunca el saldo anterior ni el
+     * posterior. Admin, moderador o sin usuario ven todos los saldos.
+     */
+    public function paraUsuario(?User $usuario): static
+    {
+        $copia = clone $this;
+        $copia->cuentasConSaldoVisible = ($usuario === null || $usuario->isAdmin() || $usuario->isModerator())
+            ? null
+            : $usuario->cuentasCompletas()->pluck('cuentas.id')->map(fn ($id) => (int) $id)->all();
+
+        return $copia;
+    }
+
+    /**
+     * Cambia los saldos de una pata de tipo cuenta por la diferencia que generó la operación, cuando quien mira
+     * no tiene acceso completo a esa cuenta.
+     *
+     * @param  array{tipo: string, saldo_anterior: float|null, saldo_posterior: float|null, monto?: float|null}  $entidad
+     * @return array<string, mixed>
+     */
+    private function protegerSaldos(array $entidad, ?int $cuentaId): array
+    {
+        if ($this->cuentasConSaldoVisible === null || $entidad['tipo'] !== 'cuenta' || in_array($cuentaId, $this->cuentasConSaldoVisible, true)) {
+            return $entidad;
+        }
+
+        if ($entidad['saldo_anterior'] !== null && $entidad['saldo_posterior'] !== null) {
+            $entidad['monto'] = round($entidad['saldo_posterior'] - $entidad['saldo_anterior'], 2);
+        }
+        $entidad['saldo_anterior'] = null;
+        $entidad['saldo_posterior'] = null;
+
+        return $entidad;
+    }
+
+    /**
      * @return array{tipo: string, nombre: string, saldo_anterior: float|null, saldo_posterior: float|null, moneda: string|null}|null
      */
     public function entidadMovimiento($cuenta, $cliente, $proveedor, $saldoAnterior, $saldoPosterior, ?string $moneda): ?array
@@ -27,13 +72,13 @@ class DetalleOperacionService
             return null;
         }
 
-        return [
+        return $this->protegerSaldos([
             'tipo' => $cuenta ? 'cuenta' : ($cliente ? 'cliente' : 'proveedor'),
             'nombre' => $nombre,
             'saldo_anterior' => $saldoAnterior !== null ? (float) $saldoAnterior : null,
             'saldo_posterior' => $saldoPosterior !== null ? (float) $saldoPosterior : null,
             'moneda' => $moneda,
-        ];
+        ], $cuenta?->id);
     }
 
     /**
@@ -148,44 +193,44 @@ class DetalleOperacionService
             if ($pago->saldo_anterior === null) {
                 continue;
             }
-            $movimientosSaldo[] = [
+            $movimientosSaldo[] = $this->protegerSaldos([
                 'etiqueta' => 'Pago '.($i + 1),
                 'tipo' => $pago->cuenta_id ? 'cuenta' : 'cliente',
                 'nombre' => $pago->cuenta?->nombre_cuenta ?? $pago->cliente?->nombre_cliente ?? '—',
                 'saldo_anterior' => (float) $pago->saldo_anterior,
                 'saldo_posterior' => (float) $pago->saldo_posterior,
                 'moneda' => $pago->cuenta_id ? ($pago->moneda?->codigo_moneda ?? null) : 'USD',
-            ];
+            ], $pago->cuenta_id);
         }
         if ($venta->comision_saldo_anterior !== null) {
-            $movimientosSaldo[] = [
+            $movimientosSaldo[] = $this->protegerSaldos([
                 'etiqueta' => 'Comisión PV',
                 'tipo' => 'cuenta',
                 'nombre' => $venta->comisionCuenta?->nombre_cuenta ?? '—',
                 'saldo_anterior' => (float) $venta->comision_saldo_anterior,
                 'saldo_posterior' => (float) $venta->comision_saldo_posterior,
                 'moneda' => $venta->comisionCuenta?->moneda?->codigo_moneda ?? 'CUP',
-            ];
+            ], $venta->comision_cuenta_id);
         }
         if ($venta->gestor_saldo_anterior !== null) {
-            $movimientosSaldo[] = [
+            $movimientosSaldo[] = $this->protegerSaldos([
                 'etiqueta' => 'Gestor',
                 'tipo' => 'cuenta',
                 'nombre' => $venta->gestorCuenta?->nombre_cuenta ?? '—',
                 'saldo_anterior' => (float) $venta->gestor_saldo_anterior,
                 'saldo_posterior' => (float) $venta->gestor_saldo_posterior,
                 'moneda' => $venta->gestorCuenta?->moneda?->codigo_moneda ?? 'CUP',
-            ];
+            ], $venta->gestor_cuenta_id);
         }
         if ($venta->mensajero_saldo_anterior !== null) {
-            $movimientosSaldo[] = [
+            $movimientosSaldo[] = $this->protegerSaldos([
                 'etiqueta' => 'Mensajero',
                 'tipo' => 'cuenta',
                 'nombre' => $venta->mensajeroCuenta?->nombre_cuenta ?? '—',
                 'saldo_anterior' => (float) $venta->mensajero_saldo_anterior,
                 'saldo_posterior' => (float) $venta->mensajero_saldo_posterior,
                 'moneda' => $venta->mensajeroCuenta?->moneda?->codigo_moneda ?? 'CUP',
-            ];
+            ], $venta->mensajero_cuenta_id);
         }
 
         return [
