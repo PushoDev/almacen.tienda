@@ -63,18 +63,17 @@ export default function ComparacionMensual({
                                     const filaInventario = comparaciones.find((c) => c.moneda === 'INVENTARIO');
                                     const filaClientes = comparaciones.find((c) => c.moneda === 'CLIENTES');
 
+                                    // El mes anterior se convierte con la tasa de su propio cierre (no con la de hoy),
+                                    // igual que la tarjeta "Crecimiento del Capital del Mes": así los dos coinciden.
                                     const totalMesAnterior = comparaciones.reduce(
-                                        (sum, comp) => sum + comp.monto_anterior / (comp.tasa_cambio || 1),
-                                        0,
-                                    );
-                                    const totalDiferencia = comparaciones.reduce(
-                                        (sum, comp) => sum + comp.diferencia / (comp.tasa_cambio || 1),
+                                        (sum, comp) => sum + comp.monto_anterior / (comp.tasa_cambio_anterior || comp.tasa_cambio || 1),
                                         0,
                                     );
                                     const totalSaldoAcumulado = comparaciones.reduce(
                                         (sum, comp) => sum + comp.monto_actual / (comp.tasa_cambio || 1),
                                         0,
                                     );
+                                    const totalDiferencia = totalSaldoAcumulado - totalMesAnterior;
                                     // Lo que viaja en envíos sin confirmar, en USD (ya está dentro del Saldo Acumulado)
                                     const totalEnTransito = comparaciones.reduce(
                                         (sum, comp) => sum + (comp.en_transito ?? 0) / (comp.tasa_cambio || 1),

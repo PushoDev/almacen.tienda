@@ -50,7 +50,7 @@ Son dos medidas distintas:
 
 El puente llega a unos 900 USD del Excel. El crecimiento del capital calculado dentro del sistema es de 39.000 a 40.300 según la tasa del CUP que se use para septiembre, a unos 2.000–3.000 del Excel (la misma diferencia del capital).
 
-**Dos errores del 16-10 inflan los totales de gastos e ingresos** (no cambian el capital porque se anulan entre sí): el ingreso #1692 de 250.000 USD («ERROR AL MONTAR») y el gasto #1693 de 205.000.000 CUP. Se excluyeron de la tabla de arriba; con ellos, los gastos de octubre serían 291.553 en vez de 41.553.
+**Dos errores del 16-10 inflan los totales de gastos e ingresos** (son una corrección de moneda que deja el capital igual a la tasa de ese día, 820; no conviene anularlos, porque eso sí mueve los saldos de las cuentas): el ingreso #1692 de 250.000 USD («ERROR AL MONTAR») y el gasto #1693 de 205.000.000 CUP. Se excluyeron de la tabla de arriba; con ellos, los gastos de octubre serían 291.553 en vez de 41.553.
 
 ## 4. Qué hay que decidir o confirmar
 
@@ -63,12 +63,30 @@ El puente llega a unos 900 USD del Excel. El crecimiento del capital calculado d
 
 ## 5. Solución propuesta
 
-Nada de esto se ha aplicado todavía; cada punto espera la respuesta del cliente de la sección 4.
+**Ya aplicado en el Dashboard (21-10):** una tarjeta nueva, **«Crecimiento del Capital del Mes»**, debajo de «Ganancia Real de la Agencia». **No se cambió nada de lo que ya existía**: las dos tarjetas conviven para que el cliente vea los montos y decida cuál se queda. El resto de los puntos espera la respuesta de la sección 4.
+
+La tarjeta de ganancia que ya existía pasó a llamarse **«Ganancia de Ventas, Transferencias y Remesas»** y ahora suma también las remesas (+1.601,52 en octubre, a 3 USD del Excel); ya no cuenta transferencias anuladas. Gastos e ingresos no están ahí: se restan y suman en la tarjeta nueva.
+
+La tarjeta nueva muestra el capital de hoy, el cierre del mes anterior que guardó el sistema (cada moneda a la tasa de ese cierre, nunca un número escrito a mano) y el crecimiento del mes, con una tabla que explica de dónde viene: ganancia de ventas y transferencias, gastos, ingresos y otros efectos (tasas, inventario, ajustes).
+
+### Hoy contra ajustado
+
+Cifras de producción, con el CUP a 840.
+
+| Cifra | Hoy en el Dashboard | Ajustado (tarjeta nueva) | Excel |
+|---|---:|---:|---:|
+| Capital de hoy | 1.292.018,52 | 1.292.018,52 | 1.295.079,37 |
+| Mes anterior | 1.251.729,72 | 1.252.955,13 | 1.253.004,00 |
+| Crecimiento del mes | 40.288,80 | 39.063,39 | 42.075,37 |
+| Ganancia neta del mes (ventas y transferencias) | 63.042,90 | no cambia | — |
+
+- **Mes anterior, hoy:** la Comparación Mensual convierte el CUP de septiembre a la tasa de hoy; el ajuste usa el cierre guardado, a la tasa de ese cierre. Con el ajuste queda a 49 USD del Excel (antes, a 1.274).
+- **Crecimiento:** con el ajuste queda más lejos del Excel (3.012 en vez de 1.787), pero por una razón conocida: es la misma diferencia del capital (3.061, sección 2). Antes se compensaba por casualidad al revaluar el CUP de septiembre.
 
 | Tema | Solución | Efecto |
 |---|---|---|
-| Ganancia en el Dashboard | Mostrar como cifra principal el **crecimiento del capital del mes** (capital actual − cierre del mes anterior), que es lo que el Excel llama «Acumulado actual», y renombrar la tarjeta actual a «Ganancia de ventas y transferencias» para que no se lea como ganancia final. Opcionalmente, una línea «menos gastos» para llegar al mismo número | Las dos cifras dejan de contradecirse: cada una dice lo que mide |
-| Mes anterior | Usar siempre el cierre guardado por el sistema y no un número escrito a mano en el Excel | El «Mes anterior» y el acumulado salen siempre de la misma fuente |
+| Ganancia en el Dashboard | **Hecho como tarjeta aparte** (arriba). Queda por decidir si la tarjeta actual se mantiene, se renombra a «Ganancia de ventas y transferencias» o se retira | Las dos cifras dejan de contradecirse: cada una dice lo que mide |
+| Mes anterior | **Hecho:** la tarjeta nueva usa siempre el cierre guardado por el sistema | El «Mes anterior» y el crecimiento salen siempre de la misma fuente |
 | Compra #31 | Aprobarla (o anularla si no se hizo). Para que no vuelva a pasar, mostrar en el Dashboard una línea «Inventario pendiente de aprobar» | El inventario del sistema sube 3.000 y coincide con el Excel; el capital no cambia (queda como deuda con ANDY) |
 | LINYI | Si el saldo de +1.437,80 es real, registrarlo como saldo del cliente LINYI | Cierra 1.438 USD de la diferencia de capital |
 | Cuentas | Con la lista de equivalencias, comparar cuenta por cuenta y corregir las que difieran | Cierra los 1.405 USD sin ubicar |
