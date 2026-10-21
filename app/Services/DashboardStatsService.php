@@ -210,19 +210,21 @@ class DashboardStatsService
                 ->where('moneda_codigo', $codigo)
                 ->first();
 
+            // Cierre del mes anterior: su monto y la tasa con que quedó guardado (para convertirlo a USD sin
+            // revaluarlo a la tasa de hoy).
+            $ultimaFila = HistorialComparacionMensual::where('user_id', $userId)
+                ->where('moneda_codigo', $codigo)
+                ->where('mes_comparado', '<', $mesActual)
+                ->orderByDesc('mes_comparado')
+                ->first();
+            $tasaCambioAnterior = $ultimaFila && (float) $ultimaFila->tasa_cambio_usada > 0 ? (float) $ultimaFila->tasa_cambio_usada : null;
+
             if ($filaExistente) {
                 $saldoInicioMes = (float) $filaExistente->saldo_inicio_mes;
                 $montoAnterior = (float) $filaExistente->monto_anterior;
             } else {
                 // Primer acceso del mes: se guarda como referencia histórica (ya no se usa en el cálculo de abajo).
                 $saldoInicioMes = $valorEnVivo;
-
-                $ultimaFila = HistorialComparacionMensual::where('user_id', $userId)
-                    ->where('moneda_codigo', $codigo)
-                    ->where('mes_comparado', '<', $mesActual)
-                    ->orderByDesc('mes_comparado')
-                    ->first();
-
                 $montoAnterior = $ultimaFila ? (float) $ultimaFila->monto_actual : 0.0;
             }
 
@@ -273,6 +275,9 @@ class DashboardStatsService
                 // Parte de `monto_actual` que viaja en envíos sin confirmar (ya está sumada)
                 'en_transito' => $transitoPorCodigo[$codigo] ?? 0.0,
                 'tasa_cambio' => $tasaEfectiva,
+                // Tasa con que quedó guardado el cierre del mes anterior (null sin cierre): el "Mes Anterior" de
+                // Totales se convierte con esta, igual que la tarjeta "Crecimiento del Capital del Mes".
+                'tasa_cambio_anterior' => $tasaCambioAnterior,
                 // Solo viene poblado (>1 elemento) cuando este código combina 2+ monedas reales
                 // distintas (ej. CUP efectivo/tarjeta) — el frontend lo usa para ofrecer un
                 // desglose expandible en vez de mostrar solo el número ya combinado.
@@ -284,14 +289,15 @@ class DashboardStatsService
     }
 
     /**
-     * Ganancia real de la agencia en lo que va del mes en curso, desglosada por
-     * fuente. Compras/Gasto/Ingreso no tienen margen posible (ver análisis en
+     * Ganancia de las operaciones de la agencia en lo que va del mes en curso, desglosada por
+     * fuente, antes de gastos e ingresos. Compras/Gasto/Ingreso no tienen margen posible (ver análisis en
      * docs/arreglos-pendientes/dashboard-resumen-financiero-2026-08-12.md, Fase
-     * 4b) — solo Ventas y Transferencias pueden generar ganancia real, cada una
-     * ya calculada y guardada por su propio controller al momento de la
+     * 4b) — solo Ventas, Transferencias y Remesas pueden generar ganancia: Ventas y Transferencias ya vienen
+     * calculadas y guardadas por su propio controller al momento de la
      * operación (`ventas.ganancia_neta` en `VentaController::aprobarVenta()`,
      * `movimientos_financieros.ganancia_perdida_cambiaria` en
-     * `TransferenciaController::store()`) — acá solo se suman.
+     * `TransferenciaController::store()`) — acá solo se suman; la de Remesas no se guarda y se calcula al vuelo
+     * (`gananciaRemesas()`).
      */
     public function getGananciaAgenciaMes(): array
     {
@@ -304,13 +310,135 @@ class DashboardStatsService
 
         $gananciaTransferencias = (float) DB::table('movimientos_financieros')
             ->where('tipo_movimiento_id', 3) // Transferencia Interna
+            ->where('estado', 'completado')
             ->where('fecha_operacion', '>=', $inicioMes)
             ->sum('ganancia_perdida_cambiaria');
+
+        $gananciaRemesas = $this->gananciaRemesas($inicioMes);
 
         return [
             'ganancia_ventas' => round($gananciaVentas, 2),
             'ganancia_transferencias' => round($gananciaTransferencias, 2),
-            'ganancia_neta_total' => round($gananciaVentas + $gananciaTransferencias, 2),
+            'ganancia_remesas' => round($gananciaRemesas, 2),
+            'ganancia_neta_total' => round($gananciaVentas + $gananciaTransferencias + $gananciaRemesas, 2),
+        ];
+    }
+
+    /**
+     * Margen de las remesas (Operaciones Múltiples) completadas desde `$inicioMes`: lo que entra menos lo que sale
+     * y lo que cobra el mensajero, todo en USD con la tasa oficial de cada moneda en el momento de la remesa
+     * (historial de tasas; sin historial, la tasa actual). Las remesas no guardan su margen, por eso se calcula
+     * aquí; el historial de tasas se carga una sola vez para no consultar por remesa.
+     */
+    private function gananciaRemesas(Carbon $inicioMes): float
+    {
+        $remesas = DB::table('remesas')
+            ->where('estado', 'completado')
+            ->where('fecha_operacion', '>=', $inicioMes)
+            ->get(['fecha_operacion', 'entrada_monto', 'entrada_moneda', 'salida_monto', 'salida_moneda', 'mensajero_monto', 'mensajero_moneda']);
+
+        if ($remesas->isEmpty()) {
+            return 0.0;
+        }
+
+        $monedas = Moneda::orderBy('id')->get()->unique('codigo_moneda')->keyBy('codigo_moneda');
+        $cambios = DB::table('historial_tasa_cambios')
+            ->orderBy('created_at')
+            ->get(['moneda_id', 'tasa_anterior', 'tasa_nueva', 'created_at'])
+            ->groupBy('moneda_id');
+
+        $aUsd = function (mixed $monto, ?string $codigo, string $momento) use ($monedas, $cambios): float {
+            $monto = (float) $monto;
+            $moneda = $codigo === null ? null : $monedas->get($codigo);
+
+            if ($monto === 0.0 || $moneda === null) {
+                return $monto;
+            }
+
+            $historial = $cambios->get($moneda->id, collect());
+            $cambio = $historial->last(fn ($fila) => $fila->created_at <= $momento);
+            $tasa = (float) ($cambio?->tasa_nueva ?? $historial->first()?->tasa_anterior ?? $moneda->tasa_cambio);
+
+            return $tasa > 0 ? $monto / $tasa : 0.0;
+        };
+
+        return (float) $remesas->sum(function ($remesa) use ($aUsd) {
+            $momento = Carbon::parse($remesa->fecha_operacion)->toDateTimeString();
+
+            return $aUsd($remesa->entrada_monto, $remesa->entrada_moneda, $momento)
+                - $aUsd($remesa->salida_monto, $remesa->salida_moneda, $momento)
+                - $aUsd($remesa->mensajero_monto, $remesa->mensajero_moneda, $momento);
+        });
+    }
+
+    /**
+     * Crecimiento del capital del mes en curso: el capital de hoy menos el cierre del mes anterior que guardó el
+     * sistema (`historial_comparacion_mensuals`, cada fila a la tasa con que quedó guardada), con el puente hacia
+     * la ganancia de ventas, transferencias y remesas, los gastos y los ingresos del mes. Es el equivalente del
+     * «Acumulado actual» del Excel; `otros_efectos` es lo que queda (tasas, inventario, ajustes).
+     *
+     * La fila congelada `PROVEEDORES` queda fuera: los proveedores ya no suman al capital. Sin cierre del mes
+     * anterior, `cierre_mes_anterior`, `crecimiento` y `otros_efectos` son null.
+     *
+     * @return array{mes_anterior: string, capital_actual: float, cierre_mes_anterior: float|null, crecimiento: float|null, margen_ventas: float, comision_ventas: float, cambiaria_y_ajustes_ventas: float, ganancia_ventas: float, ganancia_transferencias: float, ganancia_remesas: float, ganancia_operaciones: float, gastos: float, ingresos: float, otros_efectos: float|null}
+     */
+    public function getCrecimientoCapitalMes(): array
+    {
+        $capitalActual = (float) $this->getResumenFinancieroCompacto()['capital_financiero'];
+        $mesAnterior = now()->startOfMonth()->subMonth()->toDateString();
+
+        $filasCierre = HistorialComparacionMensual::whereNull('user_id')
+            ->whereDate('mes_comparado', $mesAnterior)
+            ->where('moneda_codigo', '!=', 'PROVEEDORES')
+            ->get();
+
+        $cierreMesAnterior = $filasCierre->isEmpty()
+            ? null
+            : round($filasCierre->sum(fn ($fila) => (float) $fila->tasa_cambio_usada > 0
+                ? (float) $fila->monto_actual / (float) $fila->tasa_cambio_usada
+                : 0.0), 2);
+
+        [$desde, $hasta] = FechaNegocio::rangoDelMesActualUtc();
+        $totales = DB::table('movimientos_financieros')
+            ->whereIn('tipo_movimiento_id', [1, 2]) // 1 = Gasto, 2 = Ingreso
+            ->where('estado', 'completado')
+            ->whereBetween('fecha_operacion', [$desde, $hasta])
+            ->selectRaw('tipo_movimiento_id, SUM(monto_usd) as total')
+            ->groupBy('tipo_movimiento_id')
+            ->pluck('total', 'tipo_movimiento_id');
+
+        $gastos = (float) ($totales[1] ?? 0);
+        $ingresos = (float) ($totales[2] ?? 0);
+        $gananciaMes = $this->getGananciaAgenciaMes();
+        $ganancia = $gananciaMes['ganancia_neta_total'];
+        $crecimiento = $cierreMesAnterior === null ? null : round($capitalActual - $cierreMesAnterior, 2);
+
+        // Peldaños de la ganancia de ventas (mismo conjunto de ventas que `getGananciaAgenciaMes()`): margen y
+        // comisión salen de las ventas; lo que falta hasta la ganancia guardada es la diferencia cambiaria y los
+        // ajustes, que se muestran juntos para que la escalera siempre cierre.
+        $ventas = DB::table('ventas')
+            ->where('estado', 'completada')
+            ->where('updated_at', '>=', now()->startOfMonth())
+            ->selectRaw('COALESCE(SUM(total_ganancia), 0) as margen, COALESCE(SUM(total_comision), 0) as comision')
+            ->first();
+        $margenVentas = (float) $ventas->margen;
+        $comisionVentas = (float) $ventas->comision;
+
+        return [
+            'mes_anterior' => $mesAnterior,
+            'capital_actual' => round($capitalActual, 2),
+            'cierre_mes_anterior' => $cierreMesAnterior,
+            'crecimiento' => $crecimiento,
+            'margen_ventas' => round($margenVentas, 2),
+            'comision_ventas' => round($comisionVentas, 2),
+            'cambiaria_y_ajustes_ventas' => round($gananciaMes['ganancia_ventas'] - ($margenVentas - $comisionVentas), 2),
+            'ganancia_ventas' => $gananciaMes['ganancia_ventas'],
+            'ganancia_transferencias' => $gananciaMes['ganancia_transferencias'],
+            'ganancia_remesas' => $gananciaMes['ganancia_remesas'],
+            'ganancia_operaciones' => $ganancia,
+            'gastos' => round($gastos, 2),
+            'ingresos' => round($ingresos, 2),
+            'otros_efectos' => $crecimiento === null ? null : round($crecimiento - ($ganancia - $gastos + $ingresos), 2),
         ];
     }
 

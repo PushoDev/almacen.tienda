@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 import ComparacionMensualCard from './Dashboard/layout/ComparacionMensual';
+import CrecimientoCapitalMesCard from './Dashboard/layout/CrecimientoCapitalMes';
 import EstadosFinancieros from './Dashboard/layout/EstadosFinancieros';
 import GraficoComprasVentas from './Dashboard/layout/GraficoComprasVentas';
 import HistorialCambiosTasa from './Dashboard/layout/HistorialCambiosTasa';
@@ -23,6 +24,7 @@ import OpcionesRapidas from './Dashboard/layout/OpcionesRapidas';
 import ResumenFinancieroCard from './Dashboard/layout/ResumenFinanciero';
 import type {
     ComparacionMensual,
+    CrecimientoCapitalMes,
     GananciaAgenciaMes,
     HistorialCambio,
     HistorialCostoPrecioItem,
@@ -48,6 +50,7 @@ export default function Dashboard({
     statsCostoPrecio,
     resumenFinanciero,
     gananciaAgenciaMes,
+    crecimientoCapitalMes,
 }: {
     userRole: 'admin' | 'moderador' | 'vendedor';
     montosPorMoneda?: MontoPorMoneda[];
@@ -58,6 +61,7 @@ export default function Dashboard({
     statsCostoPrecio?: StatsCostoPrecio;
     resumenFinanciero?: ResumenFinanciero | null;
     gananciaAgenciaMes?: GananciaAgenciaMes | null;
+    crecimientoCapitalMes?: CrecimientoCapitalMes | null;
 }) {
     // Un middleware de rol redirige acá con un aviso cuando alguien abre una sección sin permiso.
     const { flash } = usePage<{ flash?: { error?: string } }>().props;
@@ -119,15 +123,15 @@ export default function Dashboard({
                                         <Coins className="h-5 w-5" />
                                     </div>
                                     <div>
-                                        <CardTitle className="text-white">Ganancia Real de la Agencia</CardTitle>
+                                        <CardTitle className="text-white">Ganancia de Ventas, Transferencias y Remesas</CardTitle>
                                         <CardDescription className="text-amber-100">
-                                            Ganancia neta del mes en curso, en USD, desglosada por fuente
+                                            Ganancia de las operaciones del mes en curso, en USD, antes de gastos e ingresos
                                         </CardDescription>
                                     </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="pt-6">
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                     <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
                                         <p className="text-muted-foreground text-xs">Ganancia de Ventas</p>
                                         <p
@@ -162,8 +166,25 @@ export default function Dashboard({
                                         </p>
                                         <p className="text-muted-foreground mt-1 text-xs">Tasa aplicada vs. oficial de ese momento</p>
                                     </div>
+                                    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+                                        <p className="text-muted-foreground text-xs">Ganancia de Remesas</p>
+                                        <p
+                                            className={`mt-1 text-xl font-semibold ${gananciaAgenciaMes.ganancia_remesas >= 0
+                                                    ? 'text-green-600 dark:text-green-400'
+                                                    : 'text-red-600 dark:text-red-400'
+                                                }`}
+                                        >
+                                            {gananciaAgenciaMes.ganancia_remesas >= 0 ? '+' : ''}
+                                            {gananciaAgenciaMes.ganancia_remesas.toLocaleString('es-ES', {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                            })}{' '}
+                                            USD
+                                        </p>
+                                        <p className="text-muted-foreground mt-1 text-xs">Entra − sale − mensajero, a la tasa de cada momento</p>
+                                    </div>
                                     <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
-                                        <p className="text-amber-800 text-xs dark:text-amber-300">Ganancia Neta del Mes</p>
+                                        <p className="text-amber-800 text-xs dark:text-amber-300">Ganancia de Operaciones</p>
                                         <p
                                             className={`mt-1 flex items-center gap-1 text-xl font-bold ${gananciaAgenciaMes.ganancia_neta_total >= 0
                                                     ? 'text-green-600 dark:text-green-400'
@@ -182,18 +203,27 @@ export default function Dashboard({
                                             })}{' '}
                                             USD
                                         </p>
-                                        <p className="text-amber-800/70 mt-1 text-xs dark:text-amber-300/70">Ganancia de Ventas + Transferencias</p>
+                                        <p className="text-amber-800/70 mt-1 text-xs dark:text-amber-300/70">Ventas + Transferencias + Remesas</p>
                                     </div>
                                 </div>
                                 <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
                                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
                                     <span>
-                                        Compras, Gastos e Ingresos no generan margen (se pagan sin conversión de moneda), por eso no aparecen acá —
-                                        solo Ventas y Transferencias pueden dar ganancia o pérdida real.
+                                        Compras no generan margen y los Gastos e Ingresos no son ganancia de una operación: se restan y suman en
+                                        «Crecimiento del Capital del Mes», más abajo, que llega hasta el crecimiento real del capital.
                                     </span>
                                 </div>
                             </CardContent>
                         </Card>
+                    </div>
+                )}
+
+                {/* Crecimiento del capital del mes (capital de hoy − cierre guardado del mes anterior) — Solo Admin y Moderador.
+                    Tarjeta aparte de "Ganancia de Ventas, Transferencias y Remesas" a propósito: aquella llega hasta la ganancia de operaciones;
+                    esta es la cifra comparable con el "Acumulado actual" del Excel (incluye gastos, ingresos y tasas). */}
+                {userRole !== 'vendedor' && crecimientoCapitalMes && (
+                    <div className="animate__animated animate__fadeIn">
+                        <CrecimientoCapitalMesCard crecimientoCapitalMes={crecimientoCapitalMes} />
                     </div>
                 )}
 
