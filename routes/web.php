@@ -78,6 +78,8 @@ Route::middleware(['auth', 'verified', 'requiere.turno'])->group(function () {
     require __DIR__.'/acciones/logistica.php';
     // Comprar Productos
     require __DIR__.'/acciones/compras.php';
+    // Casillero de Compras (solo admin)
+    require __DIR__.'/acciones/casillero.php';
 
     // Transacciones
     require __DIR__.'/acciones/transacciones.php';

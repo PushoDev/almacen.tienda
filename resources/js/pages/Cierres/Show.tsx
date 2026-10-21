@@ -527,6 +527,7 @@ export default function Show({
         precio_base: number;
         precio_venta: number;
         total: number;
+        comision: number;
     }> = lineasProductosRaw.map((p: any) => ({
         id: p.id || 0,
         almacen_id: p.almacen_id,

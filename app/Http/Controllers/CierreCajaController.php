@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\CierreCajaNotification;
 use App\Services\CatalogoTarjetasService;
+use App\Services\FechaNegocio;
 use App\Services\MetodosPagoService;
 use App\Services\NotificationService;
 use Carbon\Carbon;
@@ -54,11 +55,11 @@ class CierreCajaController extends Controller
 
         // Filtros
         if ($request->has('fecha_desde') && $request->fecha_desde) {
-            $query->whereDate('fecha_cierre', '>=', $request->fecha_desde);
+            $query->where('fecha_cierre', '>=', FechaNegocio::inicioDelDiaUtc($request->fecha_desde));
         }
 
         if ($request->has('fecha_hasta') && $request->fecha_hasta) {
-            $query->whereDate('fecha_cierre', '<=', $request->fecha_hasta);
+            $query->where('fecha_cierre', '<=', FechaNegocio::finDelDiaUtc($request->fecha_hasta));
         }
 
         // Filtro por vendedor — relevante para admin/moderador (un vendedor ya está

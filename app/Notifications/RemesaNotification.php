@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
 use App\Models\Remesa;
+use App\Services\FechaNegocio;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
@@ -69,7 +70,7 @@ class RemesaNotification extends Notification
         }
 
         $texto .= "👤 Registrado por: {$this->remesa->user->name}\n";
-        $texto .= '🕐 '.now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.FechaNegocio::ahora()->format('d/m/Y H:i');
 
         return [
             'text' => $texto,

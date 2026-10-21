@@ -47,6 +47,8 @@ export interface ComparacionMensual {
     /** Parte de `monto_actual` que viaja en envíos de dinero sin confirmar (ya está sumada). */
     en_transito?: number;
     tasa_cambio: number;
+    /** Tasa con que quedó guardado el cierre del mes anterior; null si no hay cierre. */
+    tasa_cambio_anterior?: number | null;
     // Más de 1 elemento cuando este código combina 2+ monedas reales distintas con tasas
     // propias (ej. CUP efectivo/tarjeta) — se usa para ofrecer un desglose expandible.
     detalle: ComparacionMensualDetalle[];
@@ -139,5 +141,28 @@ export interface ResumenFinanciero {
 export interface GananciaAgenciaMes {
     ganancia_ventas: number;
     ganancia_transferencias: number;
+    /** Margen de las remesas: lo que entra menos lo que sale y el mensajero, a la tasa de cada momento. */
+    ganancia_remesas: number;
     ganancia_neta_total: number;
+}
+
+/** Capital de hoy contra el cierre del mes anterior guardado por el sistema, con el puente hacia la ganancia. */
+export interface CrecimientoCapitalMes {
+    /** Primer día del mes anterior (`YYYY-MM-DD`). */
+    mes_anterior: string;
+    capital_actual: number;
+    cierre_mes_anterior: number | null;
+    crecimiento: number | null;
+    margen_ventas: number;
+    comision_ventas: number;
+    /** Diferencia cambiaria y ajustes de las ventas: lo que falta del margen menos la comisión hasta la ganancia de ventas. */
+    cambiaria_y_ajustes_ventas: number;
+    ganancia_ventas: number;
+    ganancia_transferencias: number;
+    ganancia_remesas: number;
+    /** Ganancia de ventas, transferencias y remesas, antes de gastos e ingresos. */
+    ganancia_operaciones: number;
+    gastos: number;
+    ingresos: number;
+    otros_efectos: number | null;
 }

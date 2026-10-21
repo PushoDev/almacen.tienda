@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
 use App\Notifications\Concerns\EnviaAvisoPush;
+use App\Services\FechaNegocio;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -79,7 +80,7 @@ class CierreCajaNotification extends Notification
         $texto .= $esDescuadre
             ? "❌ Descuadre: $ {$diferencia}\n"
             : "✅ Sin descuadre\n";
-        $texto .= '🕐 '.now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.FechaNegocio::ahora()->format('d/m/Y H:i');
 
         return [
             'text' => $texto,

@@ -23,6 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { errorDe } from '@/lib/errores';
 import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
 import { useForm } from '@inertiajs/react';
@@ -395,9 +396,9 @@ export default function TransferenciaForm({ soloCuentas }: { soloCuentas: boolea
                         </ResumenDato>
                     )}
 
-                    {errors.message && (
+                    {errorDe(errors, 'message') && (
                         <p role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
-                            {errors.message}
+                            {errorDe(errors, 'message')}
                         </p>
                     )}
 

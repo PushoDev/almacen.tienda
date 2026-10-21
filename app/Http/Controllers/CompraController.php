@@ -191,7 +191,13 @@ class CompraController extends Controller
      */
     public function store(Request $request): Response|RedirectResponse
     {
-        $validated = $request->validate($this->reglasProductosYPagos());
+        $esCasillero = $request->input('flujo') === Compra::FLUJO_CASILLERO;
+
+        if ($esCasillero && ! $request->user()->isAdmin()) {
+            abort(403, 'Solo el administrador registra compras en el casillero.');
+        }
+
+        $validated = $request->validate($this->reglasProductosYPagos(casillero: $esCasillero));
 
         $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
 
@@ -216,9 +222,10 @@ class CompraController extends Controller
                 'total_compra' => $total,
                 'tipo_compra' => $validated['compra'],
                 // Nace pendiente: el dinero ya se movió (arriba), pero el stock (ProductoCodigo /
-                // AlmacenProducto) queda diferido hasta aprobar() — ver ese método.
+                // AlmacenProducto) queda diferido hasta aprobar() — ver ese método. Una compra
+                // del casillero tampoco se aprueba: el stock entra al llegar al almacén.
                 'estado' => 'pendiente',
-            ];
+            ] + ($esCasillero ? ['flujo' => Compra::FLUJO_CASILLERO, 'etapa' => Compra::ETAPA_CASILLERO] : []);
 
             $compra = Compra::create($compraData);
 
@@ -250,11 +257,12 @@ class CompraController extends Controller
      *
      * @return array<string, string>
      */
-    private function reglasProductosYPagos(bool $incluirProveedor = true): array
+    private function reglasProductosYPagos(bool $incluirProveedor = true, bool $casillero = false): array
     {
         $reglas = [
             'productos' => 'required|array|min:1',
-            'productos.*.almacen_id' => 'required|integer|exists:almacens,id',
+            // En el casillero el almacén de destino se elige al llegar la mercancía, no al comprar.
+            'productos.*.almacen_id' => ($casillero ? 'nullable' : 'required').'|integer|exists:almacens,id',
             'productos.*.producto' => 'required|string|max:255',
             'productos.*.marca' => 'nullable|string|max:255',
             'productos.*.modelo' => 'nullable|string|max:255',
@@ -496,8 +504,8 @@ class CompraController extends Controller
             ]);
             $producto->save();
 
-            // Castear almacen_id a integer
-            $almacenId = (int) $item['almacen_id'];
+            // Castear almacen_id a integer (null en el casillero: el almacén se elige al llegar)
+            $almacenId = isset($item['almacen_id']) ? (int) $item['almacen_id'] : null;
             $lineaCantidad = (int) $item['cantidad'];
             $lineaPrecio = (float) $item['precio'];
             $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
@@ -526,7 +534,10 @@ class CompraController extends Controller
                     'cantidad' => $item['cantidad'],
                     'precio' => $item['precio'],
                 ],
-                'almacen' => Almacen::find($almacenId),
+                // Sin almacén (casillero) la vista espera igual un objeto, como en show().
+                'almacen' => $almacenId === null
+                    ? ['id' => null, 'nombre_almacen' => 'Se elige al llegar']
+                    : Almacen::find($almacenId),
                 'es_producto_nuevo' => $isNew,
             ];
         }
@@ -587,6 +598,10 @@ class CompraController extends Controller
     {
         if ($comprar->estado !== 'pendiente') {
             return back()->withErrors(['error' => 'Solo se puede aprobar una compra pendiente.']);
+        }
+
+        if ($comprar->esDelCasillero()) {
+            return back()->withErrors(['error' => 'Una compra del casillero no se aprueba: el stock entra al llegar al almacén.']);
         }
 
         try {
@@ -703,6 +718,14 @@ class CompraController extends Controller
             return back()->withErrors(['error' => 'Solo se puede anular una compra pendiente.']);
         }
 
+        if ($comprar->esDelCasillero() && $comprar->cargosCasillero()->where('casillero_cargos.estado', 'activo')->exists()) {
+            return back()->withErrors(['error' => 'Esta compra del casillero tiene cargos activos: anúlalos antes de anular la compra.']);
+        }
+
+        if ($comprar->esDelCasillero() && $comprar->tieneUnidadesEnContenedor()) {
+            return back()->withErrors(['error' => 'Esta compra tiene unidades en un contenedor: sácalas del contenedor antes de anularla.']);
+        }
+
         $validated = $request->validate([
             'tipo_anulacion' => 'required|in:reversion,fondo',
             'motivo_anulacion' => 'required|string|max:500',
@@ -773,6 +796,10 @@ class CompraController extends Controller
     {
         if ($comprar->estado !== 'pendiente') {
             return back()->withErrors(['error' => 'Solo se puede editar una compra pendiente.']);
+        }
+
+        if ($comprar->esDelCasillero()) {
+            return back()->withErrors(['error' => 'Una compra del casillero no se edita desde aquí: se gestiona en el Casillero de Compras.']);
         }
 
         $validated = $request->validate($this->reglasProductosYPagos(incluirProveedor: false) + [
@@ -873,7 +900,7 @@ class CompraController extends Controller
             ->with('categoria')
             ->withPivot('cantidad', 'precio', 'almacen_id', 'es_producto_nuevo')
             ->get()
-            ->map(function ($producto) {
+            ->map(function ($producto) use ($comprar) {
                 $almacen = $producto->pivot->almacen_id
                     ? Almacen::find($producto->pivot->almacen_id)
                     : null;
@@ -893,7 +920,7 @@ class CompraController extends Controller
                     // `id` hace falta para precargar el almacén de cada línea en el diálogo "Editar Compra".
                     'almacen' => [
                         'id' => $almacen?->id,
-                        'nombre_almacen' => $almacen?->nombre_almacen ?? 'N/A',
+                        'nombre_almacen' => $almacen?->nombre_almacen ?? ($comprar->esDelCasillero() ? 'Se elige al llegar' : 'N/A'),
                     ],
                     'es_producto_nuevo' => $producto->pivot->es_producto_nuevo === null
                         ? null
@@ -921,6 +948,9 @@ class CompraController extends Controller
             'total_compra' => (float) $compra->total_compra,
             'tipo_compra' => $compra->tipo_compra,
             'estado' => $compra->estado,
+            'flujo' => $compra->flujo,
+            'etapa' => $compra->etapa,
+            'llegada_panama_at' => $compra->llegada_panama_at?->toDateString(),
             'tipo_anulacion' => $compra->tipo_anulacion,
             'motivo_anulacion' => $compra->motivo_anulacion,
             'es_parcial' => $compra->es_parcial,

@@ -78,6 +78,13 @@ Pagos múltiples soportados en `compra_pago`.
 - `user_id` (nullable, agregado 2026-08-06): quién registró la compra. Histórico queda en `null` — se captura desde `CompraController::store()` de ahora en adelante. Se agregó para poder acotar Compras por usuario en el reporte Rastreo de Operaciones (ver más abajo), no había forma de hacerlo antes.
 - **`compra_producto`** (pivot con `productos`): desde el 2026-08-10 tiene `id` autoincremental como clave primaria (antes era compuesta `(compra_id, producto_id)`). El mismo producto puede aparecer en **varias líneas** de una misma compra (p. ej. mandado a dos almacenes distintos, o distinto color) — `CompraController::store()` ya no las fusiona ni promedia el precio entre ellas, cada línea del carrito queda como su propia fila. `TransaccionController` (distribución de costos y de gastos de transportación) y los reportes que cuentan "veces comprado" ya están adaptados para no asumir una fila por producto por compra.
 
+#### Casillero de Compras — la nueva forma de las compras (Fases 1 y 2, 2026-10-20)
+Detalle y plan completo en `docs/plan-casillero-de-compras.md`. La mercancía (muchas veces comprada en Amazon) espera en Panamá, sale en **contenedores** hacia el Mariel y **entra al stock una sola vez, al llegar al almacén**. Solo el administrador lo usa.
+- **`compras`:** `flujo` (`clasico` por defecto o `casillero`), `etapa` (`casillero` mientras le quede alguna unidad sin contenedor, `contenedor` cuando todas están asignadas) y `llegada_panama_at`. **No se tocó el enum `estado`:** una compra del casillero es `pendiente` hasta que entre al stock (Fase 4), así Distribución de Costos y los reportes la tratan como sin stock. `aprobar()` y `actualizar()` la rechazan; `anular()` la rechaza con cargos activos o con unidades en un contenedor. Sus líneas llevan `almacen_id` nulo (el almacén se elige al llegar).
+- **`casillero_cargos`** (+ pivote `casillero_cargo_compra`): cargo a mano (estadía en Panamá, transporte marítimo…) con `monto`, `moneda`, `tasa_cambio`, `monto_usd`, `cuenta_id`, `movimiento_financiero_id` y `estado` (activo/anulado). Cuelga de compras (pivote) o de un contenedor (`contenedor_id`). Se paga en el momento con un Gasto desde una cuenta USD con saldo suficiente y se anula devolviendo el dinero. **Regla de diseño: un cargo es una suma que se reparte entre los productos al entrar al stock (Fase 4), solo entre las unidades que llegaron** (propuesta: por valor, fórmula de Distribución de Costos).
+- **`contenedores`** (`nombre`, `notas`, `fecha_salida`, `estado` abierto/cancelado) y **`contenedor_lineas`** (unidades de cada línea de `compra_producto` por contenedor; una fila por contenedor y línea). `asignarUnidades` reemplaza la cantidad; cancelar devuelve las unidades al casillero y no se puede con cargos activos.
+- **Idea, sin construir:** «Incidencias» sobre unidades de una línea (cancelación, no llega, equivocado o dañado, devolución, faltante en el contenedor) con resolución por reembolso, devolución, reposición o pérdida; propuesta como Fase 2.5 y reutilizada por la Fase 3 para los faltantes.
+
 ### Venta (`ventas`)
 
 **Flujo de estados:**
@@ -213,6 +220,8 @@ Positivo = cliente pagó a tasa mayor que oficial (ganancia). Negativo = pérdid
 
 Webhook autenticado por `X-Telegram-Bot-Api-Secret-Token`.
 
+> **2026-10-20:** el "hoy" de `/reporte` y `/estadocierres`, los filtros hoy/3d/5d/mes de cierres y movimientos, las horas que muestra el bot y el sello «🕐» de las notificaciones (Cierre de Caja, Remesa, Movimiento Financiero, Cierres Pendientes, Venta Devuelta, Venta Especial) y de la leyenda del backup usan la hora de Cuba (`FechaNegocio`), no UTC.
+
 **Comandos:**
 - `/vincular CODIGO`: vincula cuenta de usuario con chat de Telegram.
 - `/start`: saludo + estado.
@@ -244,6 +253,8 @@ Webhook autenticado por `X-Telegram-Bot-Api-Secret-Token`.
 
 Sin push, solo campana: `VentaCreadaNotification`, `MovimientoFinancieroNotification`, `CambioPrecioVendedorNotification` y `RemesaNotification`. Reglas de volumen: ver nota del 2026-10-15 en `ESTADO_DESARROLLO.md`.
 
+**Cierre de los push (2026-10-20):** (1) el usuario puede apagar y encender los avisos de ese dispositivo con el interruptor "Avisos en este dispositivo" del panel de la campana (`components/Notifications/avisos-push-switch.tsx`); apagar guarda `avisos-push-desactivados` en `localStorage` para que `use-push-notifications.ts` no se vuelva a suscribir solo al recargar, y `activar()` devuelve `'activado' | 'bloqueado' | 'error'` (si el navegador rechaza el registro — `AbortError`, p. ej. Brave con el push de Google desactivado — el diálogo muestra el paso `error`). (2) `CambioPrecioVendedorNotification::notificarAgrupado()` agrupa en un solo aviso sin leer (con contador `cantidad`) los cambios de precio del mismo vendedor y almacén de la última hora; un aviso ya leído no se reabre. (3) `VAPID_SUBJECT` es obligatorio para Safari/iPhone y se pone junto a las claves; en el servidor, `php artisan webpush:vapid` genera las claves y el `.env` debe terminar en salto de línea antes de añadirle algo con `>>`.
+
 ---
 
 ## API Pública y Ecommerce — RETIRADOS (2026-10-15)
@@ -258,7 +269,9 @@ El cliente decidió no usar el ecommerce. Se eliminaron el prefijo `/api/tienda/
 |---|---|
 | `AdminController` | Dashboard, tasas de cambio (USD y MLC), historial de comparaciones mensuales, estadísticas costo/precio |
 | `VentaController` | POS completo: crear venta, aprobar, anular, listado, reporte diario, datos JSON para el frontend |
-| `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías |
+| `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías; `store()` acepta `flujo=casillero` (solo admin) |
+| `CasilleroController` | Casillero de Compras (solo admin): listado de lo que espera en Panamá, cargos a mano, anular cargo y llegada a Panamá (`casillero.*`) |
+| `ContenedorController` | Contenedores del casillero (solo admin): crear, editar, asignar unidades, cargos y cancelar (`casillero.contenedores.*`) |
 | `ProductoController` | CRUD de productos, búsqueda, transferencia de códigos, import/export Excel, detección/fusión de duplicados |
 | `ImportacionBorradorController` | Importación de Excel en dos pasos: subir → borrador editable (hoja `Productos/Importaciones/Revisar.tsx`) → confirmar; admin/moderador, con bloqueo de fila al confirmar |
 | `ImportacionProductoController` | Historial de importaciones (listado, detalle por fila) y deshacer una importación completa (solo admin, motivo + contraseña) |
@@ -319,10 +332,15 @@ El cliente decidió no usar el ecommerce. Se eliminaron el prefijo `/api/tienda/
 - **Datos sensibles**: `precio_compra_producto` y `costo_unitario` solo se exponen a `admin` y `moderador` en respuestas JSON.
 - **Nombres en español**: modelos, columnas, rutas y vistas siguen nomenclatura en español.
 - **Rutas modularizadas**: `routes/web.php` incluye archivos de subdirectorio (`crud/`, `acciones/`, `shop/`, `empleados/`).
+- **Zona horaria de negocio (2026-10-20)**: la BD y `config('app.timezone')` están en UTC; el día que el usuario elige en un filtro, el "hoy" y las horas que se muestran son los de Cuba (`config('app.business_timezone')`, `America/Havana`, sobrescribible con `APP_BUSINESS_TIMEZONE`). Usar `App\Services\FechaNegocio` para columnas **timestamp**: `inicioDelDiaUtc()` / `finDelDiaUtc()` / `rangoDelDiaUtc()` en lugar de `whereDate`, `ahora()` en lugar de `now()` para "hoy" y para mostrar horas, `diaDe()` para agrupar por día. Las columnas `date` (p. ej. `compras.fecha_compra`) ya son el día del negocio y siguen con `whereDate`. **No agrupar con `DATE(created_at)` en SQL** (agrupa por día UTC): sumar por venta y agrupar en PHP con `diaDe()`. Pendiente: `DashboardStatsService::applyPeriodFilter()` y los demás `DATE()`.
+- **Tipos del frontend (2026-10-20, noche)**: `npm run types` (`tsc --noEmit`) funciona y termina con 0 errores; correrlo al tocar `.tsx`. Los props compartidos de Inertia están declarados una vez en `resources/js/types/global.d.ts` (`sharedPageProps: SharedData`), por lo que `usePage().props.auth.user` ya viene tipado: no hace falta castear a `any`. Los errores generales del servidor en un `useForm` (`error`, `message`, campos no declarados) se leen con `errorDe(form.errors, 'clave')` de `resources/js/lib/errores.ts`. No volver a crear un symlink `resources/js/Components` (rompió `tsc` durante meses).
+- **Pantallas de auth (2026-10-20, noche)**: las 6 páginas de `pages/auth/*` pasan por `layouts/auth-layout.tsx` → `layouts/auth/auth-card-layout.tsx`, que pone fondo con imagen, **barra superior** (logo, botón «Documentación» —desactivado mientras `DOCUMENTACION_URL` sea `null`— y el selector de tema `AppearanceToggleDropdown`), el Card con la mascota «bleed» y el borde animado `spotlight-card` (`data-estado="indigo"`), y un **footer** con la cinta de logos `components/animated/logo-loop.tsx` (CSS puro; lista en `lib/logos-footer.ts`; miniaturas en `public/projects/footer/` con nombre `{carpeta}__{archivo}.webp`, generadas a 96 px de alto desde `card_cubans`, `card_interacionales`, `metodos_pago`, `efectivo` y `monedas`) y los derechos. Si se agrega un banco o vía de pago nuevo, hay que sumar su miniatura y una línea en `logos-footer.ts`.
 
 ---
 
 ## Reportes — Rastreo de Operaciones (`Reportes/Report/RastreoOperaciones.tsx`)
+
+> **2026-10-20:** la subconsulta de ventas lleva `distinct()` (`destinatarios_venta` no tiene `unique` en `venta_id`), el orden es `fecha DESC, tipo, id DESC` (las páginas ya no repiten ni omiten filas con el mismo instante) y el filtro de fecha usa el día de Cuba (`FechaNegocio::rangoDelDiaUtc()`) en las columnas timestamp; `compras.fecha_compra` (columna `date`) sigue con `whereDate`.
 
 El reporte prioritario del cliente dentro del módulo Reportes (los otros 14 reportes viven en `ReporteController`; este tiene su propio controlador: `app/Http/Controllers/Reportes/RastreoOperacionesController.php`). Unifica 5 tipos de operación en una sola tabla tipo "partida doble":
 
@@ -330,7 +348,7 @@ El reporte prioritario del cliente dentro del módulo Reportes (los otros 14 rep
 - Columnas: `Referencia | Cuenta Envía | Monto | Cuenta que Recibe | Monto | Tasa de la Operación | Detalles` — `Tipo` fusionado como badge dentro de `Referencia`. En Venta y Compra, cuando hay varios pagos, cada columna de cuenta/monto/tasa muestra un `Badge` por pago, alineados por índice y coloreados con `colorPago()` para identificar visualmente qué monto/tasa corresponde a qué cuenta.
 - **Compra es admin/moderador-only** dentro de este reporte: dato de costo, y no hay forma de acotar "solo mis compras" para vendedor en filas históricas (`compras.user_id` es nullable, capturado solo desde 2026-08-06 en adelante).
 - **Saldo anterior/posterior (2026-09-01):** cada fila expandida de Venta/Compra muestra ahora `movimientos_saldo` — una tarjeta `EntidadMovimientoCard` (mismo componente que ya usaban Gasto/Ingreso/Transferencia) por cada pata tocada: en Venta, cada pago + comisión PV + gestor + mensajero; en Compra, el receptor (proveedor/cliente) + cada pago. El dato vive en `pago_ventas`/`ventas`/`compra_pago`/`compras` (columnas `saldo_anterior`/`saldo_posterior`, nulas en operaciones de antes de esta fecha). Una Venta anulada también muestra el motivo/detalle de anulación en una tarjeta dedicada, sin pisar el snapshot de saldo de la aprobación original. El mismo dato se replicó además en el historial propio de `Cuentas/Show.tsx`, `Clientes/Show.tsx` y `Proveedores/Show.tsx` (Fase 4, misma iniciativa). Ver `docs/arreglos-pendientes/resumen-cambios-2026-09-01.md` y memoria `project_saldo_anterior_posterior_operaciones`.
-- Filtros: fecha, tipo, usuario, búsqueda de texto libre, búsqueda exacta por número de referencia (`34` encuentra `Venta #34`/`Gasto #34` sin saber el tipo), y tres combobox multiselect con chips (Cliente/Proveedor/Cuenta) — cada uno aplica solo a los tipos donde el dato tiene sentido (p. ej. Proveedor nunca aplica a Venta).
+- Filtros: fecha, tipo, usuario, búsqueda de texto libre, búsqueda exacta por número de referencia (`34` encuentra `Venta #34`/`Gasto #34` sin saber el tipo), y combobox multiselect con chips (Cliente/Cuenta, más Producto y Almacén) — cada uno aplica solo a los tipos donde el dato tiene sentido (p. ej. Cliente nunca aplica a un Ajuste). **Desde 2026-10-21 no hay filtro «Proveedor»:** el historial que apuntaba a proveedores pasó a los clientes del mismo nombre (migración `pasar_historial_de_proveedores_a_clientes`). En la tabla, un Gasto/Ingreso/Transferencia anulado muestra «Anulada» en Detalles. Para un vendedor, de una cuenta que no es de acceso `completo` el detalle muestra lo que la operación generó (`monto`) y no el saldo anterior/posterior (`DetalleOperacionService::paraUsuario()`).
 - Costo/margen y widgets KPI gateados por rol; vendedor scoped a sus propias operaciones.
 - **Pendiente conocido:** el botón "Exportar PDF" (`exportToPDF` en el mismo `.tsx`) sigue generando el set de columnas viejo (`Fecha, Tipo, Referencia, Usuario, Monto, Detalles`), desincronizado de la tabla en pantalla desde que esta se rediseñó.
 - Ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md` para el plan de fases completo y `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md` para el resto del módulo Reportes (14 reportes aún sin trabajar, ordenados por el cliente uno a uno). **Prioridad baja desde 2026-09-05** — el cliente confirmó que estos se trabajan solo bajo petición explícita, no proactivamente.
@@ -404,6 +422,9 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 | `getResumenClientes()` | Datos agregados de clientes | `total_clientes`, `total_fondo`, `total_deuda`, `balance_neto`, `por_estado` |
 | ~~`getResumenProveedores()`~~ | **Eliminado el 2026-10-14**: el capital ya no suma `proveedors` | — |
 | `getResumenProductos()` | Datos agregados de productos | `total_productos`, `total_unidades`, `total_importe_global`, `productos_stock_bajo`, `valor_stock_bajo`, `por_stock` |
+| `actualizarComparacionMensual(?userId)` | Comparación Mensual por moneda (más `INVENTARIO` y `CLIENTES`) contra el cierre del mes anterior | Por fila: `monto_actual`, `monto_anterior`, `diferencia`, `tasa_cambio` y **`tasa_cambio_anterior`** (tasa del cierre, desde el 2026-10-21) |
+| `getGananciaAgenciaMes()` | Ganancia de **operaciones** del mes, antes de gastos e ingresos | `ganancia_ventas`, `ganancia_transferencias` (solo `completado`), `ganancia_remesas` (al vuelo: entra − sale − mensajero con la tasa del historial de cada momento) y `ganancia_neta_total` |
+| `getCrecimientoCapitalMes()` | **Crecimiento del capital** del mes: capital de hoy − cierre del mes anterior guardado (cada moneda a su tasa de cierre; sin la fila `PROVEEDORES`) y el puente a la ganancia | `capital_actual`, `cierre_mes_anterior`, `crecimiento`, escalera (`margen_ventas`, `comision_ventas`, `cambiaria_y_ajustes_ventas`, `ganancia_ventas`, `ganancia_transferencias`, `ganancia_remesas`, `ganancia_operaciones`), `gastos`, `ingresos`, `otros_efectos` (null sin cierre) |
 | `getResumenPorMonedaPerm()` | Saldo de cuentas permanentes agrupado por moneda | `[codigo => {original, equivalente, cantidad, simbolo}]` |
 | `getMonedaPrincipal()` | Moneda principal del sistema (fallback primera activa, último `$/USD`) | `['simbolo', 'codigo']` |
 | `getBalancesPorMoneda()` | Saldo de todas las monedas activas | `[{codigo, nombre, simbolo, saldo, tasa, principal}]` |
@@ -431,13 +452,26 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 | `ValorInventarioService` | Única fuente del valor de costo del inventario (costo real por lote); lo usan Productos, Dashboard/Logística, el reporte Valor del Inventario y el Excel |
 | `ResumenAlmacenService` | Datos de la card "Resumen por Almacén" de Logística |
 | `ImportacionProductosService` | Ejecuta una importación de Excel (un lote `IMP-…` por fila, una transacción por fila) y la deja en el historial; lo usan `ProductoController::import` y la confirmación de un borrador |
-| `DetalleOperacionService` | Detalle de operaciones para Cuentas/Clientes/Proveedores y Rastreo de Operaciones (sin documentar por el cliente, ver `ESTADO_DESARROLLO.md`) |
+| `DetalleOperacionService` | Detalle de operaciones para Cuentas/Clientes/Proveedores y Rastreo de Operaciones (sin documentar por el cliente, ver `ESTADO_DESARROLLO.md`). **`paraUsuario(?User)` (2026-10-21)** devuelve una copia que, para un vendedor, quita el saldo anterior/posterior de las cuentas que no son `completo` para él y manda `monto` (lo que generó la operación); solo el Rastreo lo usa por ahora |
 | `MetodosPagoService` | Métodos (efectivo / transferencia) y vías de pago (Zelle, EnZona, Transfermóvil…) que admite cada moneda: catálogo, configuración, resumen y guardado desde el CRUD de Monedas |
 | `CatalogoTarjetasService` | Catálogo de bancos/tarjetas para las cuentas (`cuentas.tipo_banco`) |
+| `CasilleroService` | Casillero de Compras: `registrarCargo` (sobre compras del casillero), `registrarCargoContenedor`, `anularCargo` y `marcarLlegadaPanama`; cada cargo se paga con un Gasto (tipo 1) desde una cuenta USD |
+| `ContenedorService` | Contenedores: `crear`, `actualizar`, `asignarUnidades` (reemplaza la cantidad; recalcula la `etapa` de cada compra), `cancelar` y `unidadesEnCasillero` |
+| `FechaNegocio` | Zona horaria de negocio (Cuba, 2026-10-20): convierte el día elegido en un filtro al rango UTC con que se guardan los timestamps (`inicioDelDiaUtc`, `finDelDiaUtc`, `rangoDelDiaUtc`, `inicioDeHaceDiasUtc`, `rangoDelMesActualUtc`) y expone `ahora()`, `aZonaDelNegocio()` y `diaDe()` |
 
 ---
 
 ## Branch Actual
+
+**Actualización 2026-10-21, tarde** (lo más reciente): **conciliación del Excel con el sistema** (`docs/conciliacion-excel-vs-sistema-2026-10-21.md`: el capital cuadra al 0,24 %) y **Dashboard**: tarjeta nueva «Crecimiento del Capital del Mes» (`Dashboard/layout/CrecimientoCapitalMes.tsx`, `DashboardStatsService::getCrecimientoCapitalMes()`: capital de hoy − cierre del mes anterior guardado en `historial_comparacion_mensuals`, con escalera de ganancia de ventas, transferencias, remesas, gastos, ingresos y otros efectos); la tarjeta de ganancia pasa a «Ganancia de Ventas, Transferencias y Remesas» (`getGananciaAgenciaMes()` suma `ganancia_remesas`, calculada al vuelo con `historial_tasa_cambios`, y ya no cuenta transferencias anuladas; la clave `ganancia_ventas_transferencias` es ahora `ganancia_operaciones`); la Comparación Mensual trae `tasa_cambio_anterior` por fila y convierte el «Mes anterior» con la tasa de su cierre. Detalle en `docs/arreglos-pendientes/resumen-cambios-2026-10-21.md` (secciones 9 a 12).
+
+**Actualización 2026-10-21:** **BD de desarrollo reemplazada** por el dump de producción `docs/backup/backup_2026-10-21_03-49.sql` (más las 8 migraciones que no trae) y **Rastreo de Operaciones, hallazgos 4, 5, 6 y 8**: «Anulada» en la fila de los movimientos anulados, migración `pasar_historial_de_proveedores_a_clientes` (61 movimientos y 5 remesas pasan al cliente del mismo nombre) con el filtro «Proveedor» quitado, `DetalleOperacionService::paraUsuario()` para los saldos del vendedor y banner con los tipos reales. El PDF del Rastreo (hallazgo 7) queda para después. Detalle en `docs/arreglos-pendientes/resumen-cambios-2026-10-21.md`.
+
+**Actualización 2026-10-20, noche:** **`npm run types` arreglado** (se borró el symlink `resources/js/Components`; 110 errores corregidos, ver «Tipos del frontend» en Patrones y Convenciones) y **login rediseñado** (barra superior, footer con cinta de logos, borde animado, formulario corregido; ver «Pantallas de auth»). Detalle en `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md` (secciones 10 y 11). El cliente dio por resuelto el login (visto y decidido) el 2026-10-21.
+
+**Actualización 2026-10-20, tarde** (lo más reciente): **Casillero de Compras, Fases 1 y 2** — ver «Casillero de Compras» en la entidad Compra, `docs/plan-casillero-de-compras.md` y `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md` (secciones 7 a 9). Suite completa 1.015 verdes. Siguen, con calma: incidencias (idea), llegada al almacén y entrada al stock con el reparto de cargos.
+
+**Actualización 2026-10-20** (mañana): avisos push cerrados (interruptor en la campana, agrupado de avisos de cambio de precio, `VAPID_SUBJECT`); Rastreo con `distinct()` y orden `fecha, tipo, id`; **zona horaria de negocio** (`FechaNegocio`, ver "Patrones y Convenciones") aplicada a filtros por fecha, 2 gráficas, el "hoy" y las horas del bot de Telegram; Empleados, pasos 3 y 4 verificados como hechos (quedan 5–7); suite completa 977 verdes. Resumen: `docs/arreglos-pendientes/resumen-cambios-2026-10-20.md`.
 
 **Actualización 2026-10-14** (lo más reciente; el detalle de 09-26 a 10-13 está en el historial de `docs/ESTADO_DESARROLLO.md`):
 

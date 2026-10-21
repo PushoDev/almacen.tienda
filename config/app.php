@@ -69,6 +69,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Business Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Zona horaria del negocio (Cuba). La base de datos guarda los instantes en UTC
+    | ("timezone" de arriba), pero el día que el usuario elige en un filtro de fecha
+    | es el día de esta zona. Ver App\Services\FechaNegocio.
+    |
+    */
+
+    'business_timezone' => env('APP_BUSINESS_TIMEZONE', 'America/Havana'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

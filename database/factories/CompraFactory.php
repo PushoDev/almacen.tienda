@@ -20,6 +20,16 @@ class CompraFactory extends Factory
         ];
     }
 
+    /** Compra del flujo casillero esperando en Panamá: pendiente, sin stock y sin contenedor. */
+    public function casillero(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'estado' => 'pendiente',
+            'flujo' => 'casillero',
+            'etapa' => 'casillero',
+        ]);
+    }
+
     public function credito(): static
     {
         return $this->state(fn (array $attributes) => [

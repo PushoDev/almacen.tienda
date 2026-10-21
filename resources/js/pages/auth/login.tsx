@@ -1,10 +1,11 @@
 import { Head, useForm } from '@inertiajs/react';
-import { DoorOpen, LoaderCircle } from 'lucide-react';
-import { FormEventHandler } from 'react';
+import { DoorOpen, Eye, EyeOff, LoaderCircle } from 'lucide-react';
+import { FormEventHandler, useState } from 'react';
 
 import { LiquidButton } from '@/components/animated/liquid-button';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
         remember: false,
     });
 
+    const [showPassword, setShowPassword] = useState(false);
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         post(route('login'), {
@@ -36,9 +39,10 @@ export default function Login({ status, canResetPassword }: LoginProps) {
     };
 
     return (
-
-        <AuthLayout title="🔑 Authentificar su Cuenta" description="Introduzca sus credenciales para acceder al sistema">
+        <AuthLayout title="🔑 Autenticar su Cuenta" description="Introduzca sus credenciales para acceder al sistema">
             <Head title="Log in - 🏪🛒" />
+
+            {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
 
             <form className="animate__animated animate__fadeInUp flex flex-col gap-6" onSubmit={submit}>
                 <div className="grid gap-6">
@@ -63,22 +67,35 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         <div className="flex items-center">
                             <Label htmlFor="password">🔐 Contraseña</Label>
                             {canResetPassword && (
-                                <TextLink href={route('password.request')} className="ml-auto text-sm" tabIndex={5}>
-                                    Has olvidado tu contraseña?
+                                <TextLink href={route('password.request')} className="ml-auto text-sm" tabIndex={4}>
+                                    ¿Has olvidado tu contraseña?
                                 </TextLink>
                             )}
                         </div>
-                        <Input
-                            id="password"
-                            type="password"
-                            required
-                            tabIndex={2}
-                            autoComplete="current-password"
-                            value={data.password}
-                            onChange={(e) => setData('password', e.target.value)}
-                            placeholder="Contra************seña"
-                            className="border-sidebar-accent"
-                        />
+                        <div className="relative">
+                            <Input
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                required
+                                tabIndex={2}
+                                autoComplete="current-password"
+                                value={data.password}
+                                onChange={(e) => setData('password', e.target.value)}
+                                placeholder="••••••••••••"
+                                className="border-sidebar-accent pr-10"
+                            />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                tabIndex={3}
+                                onClick={() => setShowPassword((prev) => !prev)}
+                                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 h-8 w-8 -translate-y-1/2"
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                <span className="sr-only">{showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}</span>
+                            </Button>
+                        </div>
                         <InputError message={errors.password} />
                     </div>
 
@@ -87,28 +104,24 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             id="remember"
                             name="remember"
                             checked={data.remember}
-                            onClick={() => setData('remember', !data.remember)}
-                            tabIndex={3}
+                            onCheckedChange={(checked) => setData('remember', checked === true)}
+                            tabIndex={5}
                         />
-                        <Label htmlFor="remember">Recuerdar mi Cuenta</Label>
+                        <Label htmlFor="remember">Recordar mi Cuenta</Label>
                     </div>
 
                     <LiquidButton
-                        tabIndex={4}
+                        tabIndex={6}
                         type="submit"
-                        className="border-sidebar  cursor-pointer border-1 hover:animate-pulse dark:text-white"
+                        className="border-sidebar cursor-pointer border-1 hover:animate-pulse dark:text-white"
                         disabled={processing}
                     >
                         {processing && <LoaderCircle className="h-4 w-4" />}
                         <DoorOpen />
                         Loguearse
                     </LiquidButton>
-
-
                 </div>
             </form>
-
-            {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
         </AuthLayout>
     );
 }

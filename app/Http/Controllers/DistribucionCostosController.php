@@ -20,6 +20,7 @@ use App\Models\Movimiento;
 use App\Models\MovimientoFinanciero;
 use App\Models\MovimientoSeguimiento;
 use App\Models\Producto;
+use App\Services\FechaNegocio;
 use App\Services\FusionLotesService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -160,7 +161,7 @@ class DistribucionCostosController extends Controller
                             ->orWhere('almacen_destino_id', $movAlmacenId);
                     });
                 })
-                ->when($movFecha !== '', fn ($q) => $q->whereDate('fecha_envio', $movFecha));
+                ->when($movFecha !== '', fn ($q) => $q->whereBetween('fecha_envio', FechaNegocio::rangoDelDiaUtc($movFecha)));
         };
 
         $movimientos = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
@@ -1000,7 +1001,7 @@ class DistribucionCostosController extends Controller
             ->when($movimientoId !== '', fn ($query) => $query->whereHas('movimientos', fn ($q) => $q->where('movimiento_id', $movimientoId)))
             ->when($tipo === 'compras', fn ($query) => $query->whereHas('compras'))
             ->when($tipo === 'movimientos', fn ($query) => $query->whereHas('movimientos'))
-            ->when($fecha !== '', fn ($query) => $query->whereDate('created_at', $fecha))
+            ->when($fecha !== '', fn ($query) => $query->whereBetween('created_at', FechaNegocio::rangoDelDiaUtc($fecha)))
             ->orderByDesc('created_at')
             ->paginate(10)
             ->withQueryString();

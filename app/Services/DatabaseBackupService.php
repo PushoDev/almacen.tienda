@@ -93,7 +93,7 @@ class DatabaseBackupService
                 Telegram::sendDocument([
                     'chat_id' => $admin->chatTelegramPrincipal(),
                     'document' => InputFile::create($rutaAbsoluta, basename($rutaRelativa)),
-                    'caption' => 'Backup automático de la base de datos — '.now()->format('d/m/Y H:i'),
+                    'caption' => 'Backup automático de la base de datos — '.FechaNegocio::ahora()->format('d/m/Y H:i'),
                 ]);
             } catch (Throwable $e) {
                 Log::error("DatabaseBackupService: fallo al enviar por Telegram a admin {$admin->id}: ".$e->getMessage());

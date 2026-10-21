@@ -97,9 +97,8 @@ interface RastreoOperacionesPageProps {
     operaciones: PaginatedOperaciones;
     usuarios: User[];
     clientes: EntidadFiltro[];
-    proveedores: EntidadFiltro[];
     cuentas: EntidadFiltro[];
-    // Almacén: mismo criterio que clientes/proveedores/cuentas (volumen chico, ~23 registros,
+    // Almacén: mismo criterio que clientes/cuentas (volumen chico, ~23 registros,
     // lista completa). Producto NO viene como prop — el catálogo es demasiado grande (~666),
     // se busca por el endpoint `reportes.rastreo_operaciones.productos_buscar`.
     almacenes: EntidadFiltro[];
@@ -109,12 +108,10 @@ interface RastreoOperacionesPageProps {
         tipo?: string;
         buscar?: string;
         cliente_ids?: string[];
-        proveedor_ids?: string[];
         cuenta_ids?: string[];
         producto_ids?: string[];
         almacen_ids?: string[];
         cliente_direccion?: Direccion;
-        proveedor_direccion?: Direccion;
         cuenta_direccion?: Direccion;
     };
     puedeVerCosto: boolean;
@@ -246,7 +243,7 @@ const cuentaRecibeCompra = (op: Operacion) => op.detalle_compra?.proveedor ?? op
 // RastreoOperacionesController::construirSubqueryRemesa(). El monto de cada pata se deriva
 // del propio saldo_anterior/saldo_posterior que ya trae movimientos_saldo (sin pedirle un
 // campo nuevo a detalleRemesa(), que es compartido con Cuentas/Clientes/Proveedores Show).
-const remesaLeg = (op: Operacion, etiqueta: 'Entrada' | 'Salida') => op.detalle_remesa?.movimientos_saldo.find((m) => m.etiqueta === etiqueta);
+const remesaLeg = (op: Operacion, etiqueta: 'Entrada' | 'Salida' | 'Mensajero') => op.detalle_remesa?.movimientos_saldo.find((m) => m.etiqueta === etiqueta);
 
 const cuentaEnviaRemesa = (op: Operacion) => remesaLeg(op, 'Salida')?.nombre ?? '—';
 
@@ -364,7 +361,7 @@ function ComboboxFiltro({
     items: { value: number; label: string }[];
     selected: number[];
     onChange: (ids: number[]) => void;
-    // Envía/Recibe/Cualquiera — solo tiene sentido para Cliente/Proveedor/Cuenta (dinero).
+    // Envía/Recibe/Cualquiera — solo tiene sentido para Cliente/Cuenta (dinero).
     // Producto y Almacén no tienen ese concepto, así que se omiten los dos juntos.
     direccion?: Direccion;
     onDireccionChange?: (d: Direccion) => void;
@@ -434,7 +431,6 @@ export default function RastreoOperacionesPage({
     operaciones,
     usuarios,
     clientes,
-    proveedores,
     cuentas,
     almacenes,
     filtros,
@@ -447,17 +443,14 @@ export default function RastreoOperacionesPage({
     const [tipo, setTipo] = useState(filtros.tipo || 'all');
     const [buscar, setBuscar] = useState(filtros.buscar || '');
     const [clienteIds, setClienteIds] = useState<number[]>((filtros.cliente_ids || []).map(Number));
-    const [proveedorIds, setProveedorIds] = useState<number[]>((filtros.proveedor_ids || []).map(Number));
     const [cuentaIds, setCuentaIds] = useState<number[]>((filtros.cuenta_ids || []).map(Number));
     const [productoIds, setProductoIds] = useState<number[]>((filtros.producto_ids || []).map(Number));
     const [almacenIds, setAlmacenIds] = useState<number[]>((filtros.almacen_ids || []).map(Number));
     const [clienteDireccion, setClienteDireccion] = useState<Direccion>(filtros.cliente_direccion || 'cualquiera');
-    const [proveedorDireccion, setProveedorDireccion] = useState<Direccion>(filtros.proveedor_direccion || 'cualquiera');
     const [cuentaDireccion, setCuentaDireccion] = useState<Direccion>(filtros.cuenta_direccion || 'cualquiera');
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     const clienteItems = clientes.map((c) => ({ value: c.id, label: c.nombre }));
-    const proveedorItems = proveedores.map((p) => ({ value: p.id, label: p.nombre }));
     const cuentaItems = cuentas.map((c) => ({ value: c.id, label: c.nombre }));
     const almacenItems = almacenes.map((a) => ({ value: a.id, label: a.nombre }));
 
@@ -524,12 +517,10 @@ export default function RastreoOperacionesPage({
         tipo: tipo === 'all' ? '' : tipo,
         buscar,
         cliente_ids: clienteIds,
-        proveedor_ids: proveedorIds,
         cuenta_ids: cuentaIds,
         producto_ids: productoIds,
         almacen_ids: almacenIds,
         cliente_direccion: clienteDireccion,
-        proveedor_direccion: proveedorDireccion,
         cuenta_direccion: cuentaDireccion,
         page,
     });
@@ -644,6 +635,11 @@ export default function RastreoOperacionesPage({
         return montoRecibeMovimiento(op);
     };
 
+    // Un Gasto/Ingreso/Transferencia anulado se marca en la fila; el detalle expandido
+    // sigue mostrando su descripción original y el motivo de la anulación.
+    const textoDetalles = (op: Operacion): string =>
+        op.detalle_movimiento?.info_general.estado === 'cancelado' ? 'Anulada' : op.descripcion || '-';
+
     const textoTasa = (op: Operacion): string => {
         if (op.tipo === 'Venta') {
             return op.detalle_venta?.pagos.map((p) => String(p.tasa_cambio)).join(', ') || '—';
@@ -678,7 +674,7 @@ export default function RastreoOperacionesPage({
                 textoCuentaRecibe(op),
                 textoMontoRecibe(op),
                 textoTasa(op),
-                op.descripcion || '-',
+                textoDetalles(op),
             ]);
 
             autoTable(doc, {
@@ -709,8 +705,8 @@ export default function RastreoOperacionesPage({
                         title="Auditoría General de Operaciones"
                         description={
                             puedeVerCosto
-                                ? 'Ventas, Gastos, Ingresos, Transferencias, Compras y Operaciones Múltiples del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
-                                : 'Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
+                                ? 'Ventas, Gastos, Ingresos, Transferencias, Compras, Operaciones Múltiples y Ajustes de saldo del sistema, con detalle completo por operación.'
+                                : 'Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación.'
                         }
                     />
                     <History
@@ -742,7 +738,7 @@ export default function RastreoOperacionesPage({
                                     <p className="text-muted-foreground text-sm font-medium">{label}</p>
                                 </div>
                                 <Badge className={`gap-1 border-0 px-3 py-1 text-xl font-black text-white shadow-md ${cifra}`}>
-                                    {conteoPorTipo[tipo].toLocaleString('es-ES')}
+                                    {(conteoPorTipo[tipo] ?? 0).toLocaleString('es-ES')}
                                 </Badge>
                             </SpotlightCard>
                         ))}
@@ -822,15 +818,6 @@ export default function RastreoOperacionesPage({
                                 direccion={clienteDireccion}
                                 onDireccionChange={setClienteDireccion}
                                 placeholder="Buscar cliente..."
-                            />
-                            <ComboboxFiltro
-                                label="Proveedor"
-                                items={proveedorItems}
-                                selected={proveedorIds}
-                                onChange={(ids) => handleMultiFiltroChange(proveedorIds, ids, setProveedorIds, 'proveedor_ids')}
-                                direccion={proveedorDireccion}
-                                onDireccionChange={setProveedorDireccion}
-                                placeholder="Buscar proveedor..."
                             />
                             <ComboboxFiltro
                                 label="Cuenta"
@@ -1053,7 +1040,7 @@ export default function RastreoOperacionesPage({
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-muted-foreground">
-                                                            {op.descripcion || '-'}
+                                                            {textoDetalles(op)}
                                                         </td>
                                                     </tr>
                                                     {esColapsable && expandida && (

@@ -464,3 +464,88 @@ test('el listado de disponibles incluye las fichas agotadas con precio y omite l
             && ! $porId->has($agotadaSinPrecio->id);
     }));
 });
+
+// ─── Aviso de cambio de precio: se agrupa una ráfaga del mismo vendedor y almacén ────
+
+function cambiarPrecioComoVendedor(User $vendedor, Producto $producto, Almacen $almacen, float $precio): void
+{
+    test()->actingAs($vendedor)
+        ->putJson(route('disponibles.update', $producto->id), ['precio_venta' => $precio, 'almacen_id' => $almacen->id])
+        ->assertOk();
+}
+
+test('una ráfaga de cambios de precio del mismo vendedor y almacén deja un solo aviso con contador', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    crearTurnoActivo($vendedor);
+
+    $productos = Producto::factory()->count(5)->create(['precio_compra_producto' => 10]);
+
+    foreach ($productos as $indice => $producto) {
+        cambiarPrecioComoVendedor($vendedor, $producto, $almacen, 20 + $indice);
+    }
+
+    $avisos = $admin->unreadNotifications()->get();
+
+    expect($avisos)->toHaveCount(1)
+        ->and($avisos->first()->data['cantidad'])->toBe(5)
+        ->and($avisos->first()->data['producto_id'])->toBe($productos->last()->id)
+        ->and($avisos->first()->data['message'])->toContain('5 productos');
+    expect(PrecioHistorial::count())->toBe(5);
+});
+
+test('un aviso de cambio de precio ya leído no se reabre: el siguiente cambio crea uno nuevo', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    crearTurnoActivo($vendedor);
+
+    [$primero, $segundo] = Producto::factory()->count(2)->create(['precio_compra_producto' => 10]);
+
+    cambiarPrecioComoVendedor($vendedor, $primero, $almacen, 20);
+    $admin->unreadNotifications->markAsRead();
+    cambiarPrecioComoVendedor($vendedor, $segundo, $almacen, 21);
+
+    expect($admin->unreadNotifications()->count())->toBe(1)
+        ->and($admin->notifications()->count())->toBe(2)
+        ->and($admin->unreadNotifications->first()->data['cantidad'])->toBe(1);
+});
+
+test('los cambios de otro almacén o de otro vendedor no se mezclan en el mismo aviso', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+    $vendedor->almacenes()->attach([$almacenA->id, $almacenB->id]);
+    $otroVendedor->almacenes()->attach($almacenA->id);
+    crearTurnoActivo($vendedor);
+    crearTurnoActivo($otroVendedor);
+
+    $producto = Producto::factory()->create(['precio_compra_producto' => 10]);
+
+    cambiarPrecioComoVendedor($vendedor, $producto, $almacenA, 20);
+    cambiarPrecioComoVendedor($vendedor, $producto, $almacenB, 21);
+    cambiarPrecioComoVendedor($otroVendedor, $producto, $almacenA, 22);
+
+    expect($admin->unreadNotifications()->count())->toBe(3);
+});
+
+test('el aviso de cambio de precio no se agrupa si pasó más de una hora desde el anterior', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    crearTurnoActivo($vendedor);
+
+    [$primero, $segundo] = Producto::factory()->count(2)->create(['precio_compra_producto' => 10]);
+
+    cambiarPrecioComoVendedor($vendedor, $primero, $almacen, 20);
+    $this->travel(61)->minutes();
+    cambiarPrecioComoVendedor($vendedor, $segundo, $almacen, 21);
+
+    expect($admin->unreadNotifications()->count())->toBe(2);
+});

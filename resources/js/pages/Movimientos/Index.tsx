@@ -80,6 +80,7 @@ interface MovimientoSeguimiento {
 }
 
 interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
+    id: number;
     stock_total: number;
     stock_en_transito: number;
     stock_disponible: number;

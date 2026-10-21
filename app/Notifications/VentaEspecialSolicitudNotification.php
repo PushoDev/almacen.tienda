@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Channels\TelegramChannel;
 use App\Notifications\Concerns\EnviaAvisoPush;
+use App\Services\FechaNegocio;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -53,7 +54,7 @@ class VentaEspecialSolicitudNotification extends Notification
         $texto .= "👤 Vendedor: {$this->venta->usuario->name}\n";
         $texto .= "📝 Motivo: {$this->venta->nota_venta_especial}\n";
         $texto .= "💵 Total: $ {$this->venta->total}\n";
-        $texto .= '🕐 '.now()->format('d/m/Y H:i');
+        $texto .= '🕐 '.FechaNegocio::ahora()->format('d/m/Y H:i');
 
         return [
             'text' => $texto,

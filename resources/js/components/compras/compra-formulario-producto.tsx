@@ -166,6 +166,8 @@ interface CompraFormularioProductoProps {
     categorias: CategoriasProps[];
     /** Alguna línea de la lista quedó sin almacén (se avisa debajo del selector de almacén). */
     hayLineaSinAlmacen: boolean;
+    /** Compra del casillero: el almacén se elige cuando la mercancía llega, así que no se pide al comprar. */
+    almacenOpcional?: boolean;
     errorCategorias?: string;
     onAgregar: (linea: NuevaLineaCompra) => void;
     onCrearAlmacen: () => void;
@@ -181,6 +183,7 @@ export default function CompraFormularioProducto({
     almacenes,
     categorias,
     hayLineaSinAlmacen,
+    almacenOpcional = false,
     errorCategorias,
     onAgregar,
     onCrearAlmacen,
@@ -294,17 +297,19 @@ export default function CompraFormularioProducto({
         const cantidad = parseInt(borrador.cantidad) || 0;
         const precio = parseFloat(borrador.precio) || 0;
 
-        if (!borrador.producto || !borrador.categoria || cantidad <= 0 || precio <= 0 || !borrador.almacen_id) {
+        if (!borrador.producto || !borrador.categoria || cantidad <= 0 || precio <= 0 || (!almacenOpcional && !borrador.almacen_id)) {
             sileo.warning({
                 title: 'Faltan datos',
-                description: 'Completa los campos obligatorios (Producto, Categoría, Cantidad, Precio y Almacén).',
+                description: almacenOpcional
+                    ? 'Completa los campos obligatorios (Producto, Categoría, Cantidad y Precio).'
+                    : 'Completa los campos obligatorios (Producto, Categoría, Cantidad, Precio y Almacén).',
             });
 
             return;
         }
 
         onAgregar({
-            almacen_id: parseInt(borrador.almacen_id),
+            almacen_id: almacenOpcional || !borrador.almacen_id ? null : parseInt(borrador.almacen_id),
             producto: borrador.producto,
             marca: borrador.marca,
             modelo: borrador.modelo,
@@ -507,49 +512,61 @@ export default function CompraFormularioProducto({
                 <FieldSet>
                     <FieldLegend>Destino y Categoría</FieldLegend>
                     <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <Field>
-                            <FieldLabel htmlFor="almacen_id">Almacén Destino *</FieldLabel>
-                            <Combobox
-                                items={almacenes}
-                                itemToStringLabel={(item) => item.nombre_almacen}
-                                itemToStringValue={(item) => item.nombre_almacen}
-                                value={almacenSeleccionado}
-                                onValueChange={(almacen) => seleccionarAlmacen(almacen ? almacen.id.toString() : '')}
-                            >
-                                <ComboboxInput
-                                    placeholder={ultimoAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
-                                    showClear={!!borrador.almacen_id}
-                                    className="uppercase"
-                                />
-                                <ComboboxContent>
-                                    <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
-                                    <ComboboxList>
-                                        {(almacen) => (
-                                            <ComboboxItem key={almacen.id} value={almacen}>
-                                                <div className="flex items-center gap-2 uppercase">
-                                                    <Warehouse className="h-4 w-4 text-gray-500" />
-                                                    <span>{almacen.nombre_almacen}</span>
-                                                    {almacen.tipo_almacen && (
-                                                        <Badge variant="outline" className="ml-auto text-xs">
-                                                            {almacen.tipo_almacen}
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                            </ComboboxItem>
-                                        )}
-                                    </ComboboxList>
-                                    <Separator className="my-2" />
-                                    <div
-                                        className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
-                                        onClick={onCrearAlmacen}
-                                    >
-                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                        <span className="font-medium">Crear nuevo almacén</span>
-                                    </div>
-                                </ComboboxContent>
-                            </Combobox>
-                            {!borrador.almacen_id && hayLineaSinAlmacen && <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>}
-                        </Field>
+                        {almacenOpcional && (
+                            <Field>
+                                <FieldLabel>Almacén Destino</FieldLabel>
+                                <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2.5 text-sm">
+                                    Se elige cuando la mercancía llegue al almacén.
+                                </p>
+                            </Field>
+                        )}
+                        {!almacenOpcional && (
+                            <Field>
+                                <FieldLabel htmlFor="almacen_id">Almacén Destino *</FieldLabel>
+                                <Combobox
+                                    items={almacenes}
+                                    itemToStringLabel={(item) => item.nombre_almacen}
+                                    itemToStringValue={(item) => item.nombre_almacen}
+                                    value={almacenSeleccionado}
+                                    onValueChange={(almacen) => seleccionarAlmacen(almacen ? almacen.id.toString() : '')}
+                                >
+                                    <ComboboxInput
+                                        placeholder={ultimoAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
+                                        showClear={!!borrador.almacen_id}
+                                        className="uppercase"
+                                    />
+                                    <ComboboxContent>
+                                        <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                        <ComboboxList>
+                                            {(almacen) => (
+                                                <ComboboxItem key={almacen.id} value={almacen}>
+                                                    <div className="flex items-center gap-2 uppercase">
+                                                        <Warehouse className="h-4 w-4 text-gray-500" />
+                                                        <span>{almacen.nombre_almacen}</span>
+                                                        {almacen.tipo_almacen && (
+                                                            <Badge variant="outline" className="ml-auto text-xs">
+                                                                {almacen.tipo_almacen}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </ComboboxItem>
+                                            )}
+                                        </ComboboxList>
+                                        <Separator className="my-2" />
+                                        <div
+                                            className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
+                                            onClick={onCrearAlmacen}
+                                        >
+                                            <PlusCircle className="mr-2 h-4 w-4" />
+                                            <span className="font-medium">Crear nuevo almacén</span>
+                                        </div>
+                                    </ComboboxContent>
+                                </Combobox>
+                                {!borrador.almacen_id && hayLineaSinAlmacen && (
+                                    <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
+                                )}
+                            </Field>
+                        )}
 
                         <Field>
                             <FieldLabel htmlFor="categorias">Categoría *</FieldLabel>

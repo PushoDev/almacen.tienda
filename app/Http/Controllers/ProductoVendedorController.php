@@ -193,13 +193,14 @@ class ProductoVendedorController extends Controller
                 $almacen = Almacen::find($almacenId);
                 $admins = User::where('role', 'admin')->get();
                 foreach ($admins as $admin) {
-                    $admin->notify(new CambioPrecioVendedorNotification(
+                    CambioPrecioVendedorNotification::notificarAgrupado(
+                        $admin,
                         $producto,
                         $almacen,
                         $user,
                         $precioAnterior ?? 0,
                         $precioVenta
-                    ));
+                    );
                 }
             }
         }
@@ -385,7 +386,7 @@ class ProductoVendedorController extends Controller
         if (! in_array($user->role, ['admin', 'moderador'])) {
             $almacen = Almacen::find($almacenId);
             foreach (User::where('role', 'admin')->get() as $admin) {
-                $admin->notify(new CambioPrecioVendedorNotification($fichas->first(), $almacen, $user, 0, $precioVenta));
+                CambioPrecioVendedorNotification::notificarAgrupado($admin, $fichas->first(), $almacen, $user, 0, $precioVenta);
             }
         }
 

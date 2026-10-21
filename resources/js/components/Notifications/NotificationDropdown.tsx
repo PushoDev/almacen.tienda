@@ -1,5 +1,5 @@
-import { Badge } from '@/Components/ui/badge';
-import { Button } from '@/Components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -7,12 +7,13 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from '@/Components/ui/dropdown-menu';
-import { ScrollArea } from '@/Components/ui/scroll-area';
+} from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Link } from '@inertiajs/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, Check } from 'lucide-react';
 import React from 'react';
+import AvisosPushSwitch from './avisos-push-switch';
 import { NotificationItem } from './NotificationItem';
 
 interface NotificationDropdownProps {
@@ -77,6 +78,8 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                         {isLoading && <div className="text-muted-foreground p-4 text-center text-xs">Actualizando...</div>}
                     </div>
                 </ScrollArea>
+                <DropdownMenuSeparator />
+                <AvisosPushSwitch />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                     <Link

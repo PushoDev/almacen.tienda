@@ -171,20 +171,21 @@ test('el filtro por fecha (un solo día) en el reporte aplica a Venta, Gasto, In
 
     $cuentaUsd = crearCuentaEnMoneda(crearMonedaUsd());
 
-    Venta::factory()->create(['created_at' => '2026-06-15']);
-    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-06-15']);
-    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-06-15']);
+    // Mediodía UTC: cae en el mismo día en UTC y en Cuba (a las 00:00 UTC ya sería el día anterior allá).
+    Venta::factory()->create(['created_at' => '2026-06-15 12:00:00']);
+    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-06-15 12:00:00']);
+    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-06-15 12:00:00']);
     MovimientoFinanciero::factory()->transferencia()->create([
-        'fecha_operacion' => '2026-06-15',
+        'fecha_operacion' => '2026-06-15 12:00:00',
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
 
-    Venta::factory()->create(['created_at' => '2026-07-30']);
-    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-07-30']);
-    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-07-30']);
+    Venta::factory()->create(['created_at' => '2026-07-30 12:00:00']);
+    MovimientoFinanciero::factory()->gasto()->create(['fecha_operacion' => '2026-07-30 12:00:00']);
+    MovimientoFinanciero::factory()->ingreso()->create(['fecha_operacion' => '2026-07-30 12:00:00']);
     MovimientoFinanciero::factory()->transferencia()->create([
-        'fecha_operacion' => '2026-07-30',
+        'fecha_operacion' => '2026-07-30 12:00:00',
         'cuenta_origen_id' => $cuentaUsd->id,
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
@@ -1058,20 +1059,18 @@ test('el filtro por cuenta_ids encuentra una Venta pagada con esa cuenta (vía p
     expect($ids)->toContain($venta->id);
 });
 
-test('las listas de clientes, proveedores y cuentas para los combobox de filtro se mandan a todos los roles', function () {
+test('las listas de clientes y cuentas para los combobox de filtro se mandan a todos los roles', function () {
     $vendedor = User::factory()->vendedor()->create();
     $this->actingAs($vendedor);
 
     crearTiposMovimientoFinanciero();
 
     Cliente::factory()->create();
-    Proveedor::factory()->create();
     crearCuentaEnMoneda(crearMonedaUsd());
 
     $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
 
     expect($response->json('props.clientes'))->not->toBeEmpty();
-    expect($response->json('props.proveedores'))->not->toBeEmpty();
     expect($response->json('props.cuentas'))->not->toBeEmpty();
 });
 
@@ -1350,22 +1349,22 @@ test('un moderador sí ve las Remesas en el reporte, igual que admin', function 
     expect($response->json('props.conteoPorTipo.Remesa'))->toBe(1);
 });
 
-test('proveedor_direccion=envia siempre da cero resultados, sin importar el tipo (un proveedor nunca "envía")', function () {
+test('el Rastreo ya no ofrece el filtro Proveedor: no manda la lista y ignora proveedor_ids', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
     crearTiposMovimientoFinanciero();
 
     $proveedor = Proveedor::factory()->create();
-    Compra::factory()->create(['proveedor_id' => $proveedor->id, 'tipo_compra' => 'deuda_proveedor']);
-    MovimientoFinanciero::factory()->gasto()->create(['proveedor_destino_id' => $proveedor->id]);
+    $gasto = MovimientoFinanciero::factory()->gasto()->create();
 
     $response = $this->get(route('reportes.rastreo_operaciones', [
         'proveedor_ids' => [$proveedor->id],
         'proveedor_direccion' => 'envia',
     ]), ['X-Inertia' => 'true']);
 
-    expect(collect($response->json('props.operaciones.data')))->toHaveCount(0);
+    expect($response->json('props'))->not->toHaveKey('proveedores')
+        ->and(collect($response->json('props.operaciones.data'))->pluck('id'))->toContain($gasto->id);
 });
 
 // ==========================================================================
@@ -1490,4 +1489,182 @@ test('el almacén para los combobox de filtro se manda a todos los roles', funct
     $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
 
     expect(collect($response->json('props.almacenes'))->pluck('nombre'))->toContain('Almacén Central');
+});
+
+test('una venta con varios destinatarios aparece una sola vez, con o sin búsqueda', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $venta = Venta::factory()->create();
+    foreach (['Ana', 'Anabel'] as $nombre) {
+        DestinatarioVenta::create(['venta_id' => $venta->id, 'nombre' => $nombre, 'apellidos' => 'Lopez']);
+    }
+
+    foreach ([[], ['buscar' => 'Ana']] as $filtros) {
+        $respuesta = $this->get(route('reportes.rastreo_operaciones', $filtros), ['X-Inertia' => 'true']);
+        $operaciones = collect($respuesta->json('props.operaciones.data'));
+
+        expect($operaciones)->toHaveCount(1)
+            ->and($respuesta->json('props.operaciones.total'))->toBe(1);
+    }
+});
+
+test('operaciones con el mismo instante se ordenan por tipo e id y las páginas no repiten ni omiten filas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $instante = now()->subHour()->startOfSecond();
+    Venta::factory()->count(30)->create(['created_at' => $instante]);
+
+    $ids = [];
+    foreach ([1, 2] as $pagina) {
+        $respuesta = $this->get(route('reportes.rastreo_operaciones', ['page' => $pagina]), ['X-Inertia' => 'true']);
+        $ids = array_merge($ids, collect($respuesta->json('props.operaciones.data'))->pluck('id')->all());
+    }
+
+    expect($ids)->toHaveCount(30)
+        ->and(array_unique($ids))->toHaveCount(30)
+        ->and($ids)->toBe(collect($ids)->sortDesc()->values()->all());
+});
+
+test('un Gasto, Ingreso o Transferencia anulado llega con estado cancelado en el detalle y conserva su descripción original', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaOrigen = crearCuentaEnMoneda(crearMonedaUsd());
+    $cuentaDestino = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $anulados = [
+        MovimientoFinanciero::factory()->gasto()->create(['estado' => 'cancelado', 'descripcion' => 'Gasto anulado']),
+        MovimientoFinanciero::factory()->ingreso()->create(['estado' => 'cancelado', 'descripcion' => 'Ingreso anulado']),
+        MovimientoFinanciero::factory()->transferencia()->create([
+            'estado' => 'cancelado',
+            'descripcion' => 'Transferencia anulada',
+            'cuenta_origen_id' => $cuentaOrigen->id,
+            'cuenta_destino_id' => $cuentaDestino->id,
+        ]),
+    ];
+    $vigente = MovimientoFinanciero::factory()->gasto()->create(['estado' => 'completado', 'descripcion' => 'Gasto vigente']);
+
+    $respuesta = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $filas = collect($respuesta->json('props.operaciones.data'));
+
+    foreach ($anulados as $movimiento) {
+        $fila = $filas->firstWhere('id', $movimiento->id);
+        expect($fila['detalle_movimiento']['info_general']['estado'])->toBe('cancelado')
+            ->and($fila['descripcion'])->toBe($movimiento->descripcion);
+    }
+    expect($filas->firstWhere('id', $vigente->id)['detalle_movimiento']['info_general']['estado'])->toBe('completado');
+});
+
+test('un vendedor ve el saldo anterior y posterior solo de sus cuentas completo; de las demás ve lo que generó la venta', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    crearTiposMovimientoFinanciero();
+
+    $monedaUsd = crearMonedaUsd();
+    $cuentaCompleta = crearCuentaEnMoneda($monedaUsd);
+    $cuentaCobro = crearCuentaEnMoneda($monedaUsd);
+    $cuentaAjena = crearCuentaEnMoneda(crearMoneda('CUP', 380));
+    $vendedor->cuentas()->attach($cuentaCompleta->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+    $vendedor->cuentas()->attach($cuentaCobro->id, ['acceso' => Cuenta::ACCESO_COBRO]);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $vendedor->id,
+        'comision_cuenta_id' => $cuentaAjena->id,
+        'comision_saldo_anterior' => 5000,
+        'comision_saldo_posterior' => 4000,
+    ]);
+    foreach ([[$cuentaCompleta, 100, 150], [$cuentaCobro, 900, 960]] as [$cuenta, $anterior, $posterior]) {
+        PagoVenta::create([
+            'venta_id' => $venta->id,
+            'tipo_pago' => 'efectivo',
+            'moneda_id' => $monedaUsd->id,
+            'cuenta_id' => $cuenta->id,
+            'monto' => $posterior - $anterior,
+            'tasa_cambio_aplicada' => 1,
+            'monto_equivalente' => $posterior - $anterior,
+            'saldo_anterior' => $anterior,
+            'saldo_posterior' => $posterior,
+        ]);
+    }
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+    $movimientos = collect($fila['detalle_venta']['movimientos_saldo']);
+
+    $completa = $movimientos->firstWhere('etiqueta', 'Pago 1');
+    expect($completa['saldo_anterior'])->toEqual(100.0)
+        ->and($completa['saldo_posterior'])->toEqual(150.0);
+
+    $cobro = $movimientos->firstWhere('etiqueta', 'Pago 2');
+    expect($cobro['nombre'])->toBe($cuentaCobro->nombre_cuenta)
+        ->and($cobro['saldo_anterior'])->toBeNull()
+        ->and($cobro['saldo_posterior'])->toBeNull()
+        ->and($cobro['monto'])->toEqual(60.0);
+
+    $ajena = $movimientos->firstWhere('etiqueta', 'Comisión PV');
+    expect($ajena['saldo_anterior'])->toBeNull()
+        ->and($ajena['saldo_posterior'])->toBeNull()
+        ->and($ajena['monto'])->toEqual(-1000.0);
+});
+
+test('en una Transferencia de un vendedor el destino que no es de acceso completo muestra solo lo que generó', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    crearTiposMovimientoFinanciero();
+
+    $monedaUsd = crearMonedaUsd();
+    $origen = crearCuentaEnMoneda($monedaUsd);
+    $destino = crearCuentaEnMoneda($monedaUsd);
+    $vendedor->cuentas()->attach($origen->id, ['acceso' => Cuenta::ACCESO_COMPLETO]);
+
+    $transferencia = MovimientoFinanciero::factory()->transferencia()->create([
+        'user_id' => $vendedor->id,
+        'cuenta_origen_id' => $origen->id,
+        'cuenta_destino_id' => $destino->id,
+        'saldo_anterior_origen' => 1000,
+        'saldo_posterior_origen' => 900,
+        'saldo_anterior_destino' => 400,
+        'saldo_posterior_destino' => 500,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $detalle = collect($response->json('props.operaciones.data'))->firstWhere('id', $transferencia->id)['detalle_movimiento'];
+
+    expect($detalle['origen']['saldo_anterior'])->toEqual(1000.0)
+        ->and($detalle['origen']['saldo_posterior'])->toEqual(900.0)
+        ->and($detalle['destino']['saldo_anterior'])->toBeNull()
+        ->and($detalle['destino']['saldo_posterior'])->toBeNull()
+        ->and($detalle['destino']['monto'])->toEqual(100.0);
+});
+
+test('un admin sigue viendo el saldo anterior y posterior de todas las cuentas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $monedaUsd = crearMonedaUsd();
+    $transferencia = MovimientoFinanciero::factory()->transferencia()->create([
+        'cuenta_origen_id' => crearCuentaEnMoneda($monedaUsd)->id,
+        'cuenta_destino_id' => crearCuentaEnMoneda($monedaUsd)->id,
+        'saldo_anterior_destino' => 400,
+        'saldo_posterior_destino' => 500,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $detalle = collect($response->json('props.operaciones.data'))->firstWhere('id', $transferencia->id)['detalle_movimiento'];
+
+    expect($detalle['destino']['saldo_anterior'])->toEqual(400.0)
+        ->and($detalle['destino']['saldo_posterior'])->toEqual(500.0)
+        ->and($detalle['destino'])->not->toHaveKey('monto');
 });

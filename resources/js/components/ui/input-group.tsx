@@ -102,7 +102,10 @@ function InputGroupButton({
   size = "xs",
   ...props
 }: Omit<React.ComponentProps<typeof Button>, "size"> &
-  VariantProps<typeof inputGroupButtonVariants>) {
+  VariantProps<typeof inputGroupButtonVariants> & {
+    /** Lo usa el Combobox (base-ui) para elegir el elemento que se renderiza. */
+    render?: React.ReactElement
+  }) {
   return (
     <Button
       type={type}
