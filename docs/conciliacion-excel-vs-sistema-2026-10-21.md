@@ -50,16 +50,16 @@ Son dos medidas distintas:
 
 El puente llega a unos 900 USD del Excel. El crecimiento del capital calculado dentro del sistema es de 39.000 a 40.300 según la tasa del CUP que se use para septiembre, a unos 2.000–3.000 del Excel (la misma diferencia del capital).
 
-**Dos errores del 16-10 inflan los totales de gastos e ingresos** (son una corrección de moneda que deja el capital igual a la tasa de ese día, 820; no conviene anularlos, porque eso sí mueve los saldos de las cuentas): el ingreso #1692 de 250.000 USD («ERROR AL MONTAR») y el gasto #1693 de 205.000.000 CUP. Se excluyeron de la tabla de arriba; con ellos, los gastos de octubre serían 291.553 en vez de 41.553.
+**Dos movimientos del 16-10 inflan los totales de gastos e ingresos:** el ingreso #1692 de 250.000 USD («ERROR AL MONTAR») y el gasto #1693 de 205.000.000 CUP. Son la reversión de la **transferencia equivocada #1672** (se montaron 250.000 USD en vez de CUP): los tres movimientos solo son neutros **juntos**. Anular únicamente el par #1692/#1693 deja viva la #1672 y baja el capital 5.952,38 (a la tasa de 840). Lo recomendado es anular **las tres a la vez** (no se ha probado). Se excluyeron de la tabla de arriba; con ellos, los gastos de octubre serían 291.553 en vez de 41.553.
 
 ## 4. Qué hay que decidir o confirmar
 
 - [ ] **Tarjeta «Ganancia Neta del Mes» del Dashboard:** ¿que muestre el crecimiento del capital (como el Excel), la ganancia neta menos gastos, o que solo cambie de nombre?
-- [ ] **Compra #31** (3 antenas, 3.000 USD): ¿se aprueba o se descarta? Está registrada como compra a crédito con ANDY; al aprobarla el inventario sube 3.000 y la deuda con ANDY aumenta lo mismo, así que el capital no cambia. ¿Cómo se pagó en realidad?
+- [ ] **Compra #31** (3 antenas, 3.000 USD): ¿se aprueba o se descarta? **Resuelto el 21-10:** se aprobó. La deuda con ANDY ya se había registrado al crear la compra y se pagó con la transferencia #1851; por eso, al aprobar, el inventario subió 3.000 y el capital subió 3.000.
 - [ ] **LINYI:** ¿el saldo de +1.437,80 es real? Si lo es, hay que registrarlo en el sistema.
 - [ ] **Cuentas:** una lista de equivalencias entre las cuentas del Excel y las del sistema, para cerrar los 1.405 USD sin ubicar.
 - [ ] **Comisión:** el Excel registra 3.883 y el sistema 5.131 en octubre. ¿Cuándo anota el Excel la comisión: al vender o al pagarla?
-- [ ] **Errores del 16-10** (#1692 y #1693): ¿se corrigen o se dejan?
+- [ ] **Errores del 16-10** (#1672, #1692 y #1693): ¿se anulan las tres juntas o se dejan?
 
 ## 5. Solución propuesta
 
@@ -87,11 +87,11 @@ Cifras de producción, con el CUP a 840.
 |---|---|---|
 | Ganancia en el Dashboard | **Hecho como tarjeta aparte** (arriba). Queda por decidir si la tarjeta actual se mantiene, se renombra a «Ganancia de ventas y transferencias» o se retira | Las dos cifras dejan de contradecirse: cada una dice lo que mide |
 | Mes anterior | **Hecho:** la tarjeta nueva usa siempre el cierre guardado por el sistema | El «Mes anterior» y el crecimiento salen siempre de la misma fuente |
-| Compra #31 | Aprobarla (o anularla si no se hizo). Para que no vuelva a pasar, mostrar en el Dashboard una línea «Inventario pendiente de aprobar» | El inventario del sistema sube 3.000 y coincide con el Excel; el capital no cambia (queda como deuda con ANDY) |
+| Compra #31 | **Hecho:** se aprobó el 21-10. Para que no vuelva a pasar, mostrar en el Dashboard una línea «Inventario pendiente de aprobar» | El inventario y el capital subieron 3.000 (la deuda con ANDY ya estaba pagada); la diferencia de capital con el Excel quedó en 60,85 USD |
 | LINYI | Si el saldo de +1.437,80 es real, registrarlo como saldo del cliente LINYI | Cierra 1.438 USD de la diferencia de capital |
 | Cuentas | Con la lista de equivalencias, comparar cuenta por cuenta y corregir las que difieran | Cierra los 1.405 USD sin ubicar |
 | Comisión | Cuando se sepa si el Excel la anota al vender o al pagar, alinear el criterio o mostrar ambas cifras | Explica los 1.248 USD de diferencia |
-| Errores del 16-10 | Anular el ingreso #1692 y el gasto #1693 | Los totales de gastos e ingresos de octubre dejan de estar inflados; el capital no cambia |
+| Errores del 16-10 | Anular **las tres juntas**: la transferencia #1672, el ingreso #1692 y el gasto #1693 (probar primero en desarrollo) | Los totales de gastos e ingresos de octubre dejan de estar inflados; el capital no cambia si se anulan las tres |
 | Control mensual | Repetir esta conciliación al cerrar cada mes, con el capital del sistema contra el del Excel | Las diferencias se ven en días y no en semanas |
 
 Con estos puntos aplicados, la diferencia de capital debería quedar por debajo de 100 USD.

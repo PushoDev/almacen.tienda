@@ -85,7 +85,8 @@ El cliente comparaba producción con un Excel que llevaba antes y veía «una gr
 - **Trampa del Excel:** en `REGISTRO` las fechas con día ≤ 12 están guardadas con **mes y día invertidos**; se corrigieron y validaron con los códigos `MDIN` (6.158 de 6.158). Se leyó con `openpyxl` en un entorno virtual fuera del proyecto (`/home/pushodev/.venvs/openpyxl`, `read_only=True`).
 - **Inventario:** 437 de 504 productos coinciden exactamente en cantidad y costo; el resto son nombres repartidos distinto (variantes «[POR AJUSTAR]»).
 - **Comisión:** el Excel registra 3.883 y el sistema 5.131 en octubre; no se verificó por qué (el Excel la anota aparte, quizá al pagarla).
-- **Errores del 16-10 (#1692 y #1693):** ingreso de 250.000 USD («ERROR AL MONTAR») y gasto de 205.000.000 CUP, una corrección de moneda que solo es neutra a la tasa de ese día (820). Inflan los totales de gastos e ingresos (291.553 y 271.485 en vez de 41.553 y 21.485). **No conviene anularlos**: al anular los dos en la BD de desarrollo el capital bajó 5.952,38 (250.000 − 205.000.000/840) porque las cuentas volvieron al estado previo a la corrección. Idea sin diseñar: una marca de «corrección» para excluirlos de los totales.
+- **Errores del 16-10 (#1692 y #1693):** ingreso de 250.000 USD («ERROR AL MONTAR») y gasto de 205.000.000 CUP, la reversión de la **transferencia equivocada #1672** (250.000 USD en vez de CUP). Inflan los totales de gastos e ingresos (291.553 y 271.485 en vez de 41.553 y 21.485). Los tres movimientos (#1672, #1692, #1693) solo son neutros **juntos**: al anular únicamente el par #1692/#1693 en la BD de desarrollo el capital bajó 5.952,38 (a la tasa de 840), porque la #1672 seguía viva. Lo recomendado es anular las tres a la vez (no probado; probar primero en desarrollo). Idea sin diseñar: una marca de «corrección» para excluirlos de los totales.
+- **Compra #31 (corrección):** una versión anterior de este documento decía que al aprobarla «la deuda con ANDY aumenta». Es incorrecto: la deuda se registró al crear la compra y se pagó con la transferencia #1851; al aprobar, el inventario y el capital subieron 3.000 (capital 1.295.018,52; diferencia con el Excel 60,85 USD, ver `docs/conciliacion-diferencia-restante-2026-10-21.md`).
 
 ## 10. Dashboard: tarjetas nuevas y correcciones
 
@@ -117,6 +118,22 @@ Se recargó dos veces `docs/backup/backup_2026-10-21_03-49.sql` + `migrate`. La 
 - El cliente decide qué tarjeta del Dashboard se queda y con qué nombre; si la cifra de ganancia debe ser el crecimiento del capital.
 - Guardar el margen de cada remesa (columna + relleno) cuando confirme el criterio.
 - Ingresos y gastos incluyen ajustes y correcciones (6.571,57 de los ingresos de octubre son «ajustes/errores»): decidir si se separan (marca o tipo).
-- Compra #31 (3 antenas): aprobar o descartar y cómo se pagó; saldo de LINYI; lista de equivalencias de cuentas Excel↔sistema; criterio de la comisión del Excel.
-- Rastreo, hallazgo 7 (PDF); revisar la regla de saldos del vendedor en Cuentas y Clientes; pantallas que aún leen `proveedors`; desplegar en producción la migración del historial de proveedores (con respaldo).
+- Compra #31: **resuelta** (aprobada el 21-10). Siguen: saldo de LINYI; lista de equivalencias de cuentas Excel↔sistema; criterio de la comisión del Excel; compra #16 (120 USD) pendiente.
+- Anular #1672, #1692 y #1693 **juntas** (probar primero en desarrollo).
+- Rastreo, hallazgo 7 (PDF); revisar la regla de saldos del vendedor en Cuentas y Clientes; pantallas que aún leen `proveedors`.
 - Atribuir el resto de «Otros efectos».
+- Rama `test` sin `public/build` (su último commit lo borró): integrar `main` para arreglarla.
+- Sacar `docs/backup/` del repo y añadirlo a `.gitignore` (tiene el dump real de producción y el Excel del cliente, y están en GitHub y en el servidor).
+
+## 13. Despliegue a producción (2026-10-21)
+
+Desplegado y verificado: `/` y `/login` responden 200. Commit de `main`: `7cb62013` (con `public/build` compilado; antes el servidor estaba en `36bb86c0`). Las **9 migraciones** corrieron sin error: `push_subscriptions` (2), `telegram_vinculos`, Casillero (5) y `pasar_historial_de_proveedores_a_clientes`. Se generaron las claves VAPID (`php artisan webpush:vapid`) y se añadió `VAPID_SUBJECT`.
+
+Secuencia que funcionó: respaldo con `mysqldump`; `git checkout -- composer.lock` y `git pull origin main`; `composer install --no-dev --optimize-autoloader --no-scripts`; borrar la caché de `bootstrap/cache/`; `php artisan package:discover`; `migrate --force`; `webpush:vapid`; `optimize:clear` y `optimize`.
+
+Trampas encontradas (para la próxima vez):
+- **`git pull` abortaba** con «Your local changes to … composer.lock would be overwritten»: el `composer.lock` del servidor difería del repo. Se guardó una copia y se hizo `git checkout -- composer.lock`.
+- **Hostinger no tiene `proc_open`:** `composer install` va con `--no-scripts` y hay que correr `package:discover` a mano.
+- **El sitio dio 500 y `artisan` fallaba** con `Class "Instruckt\Laravel\InstrucktServiceProvider" not found`: `--no-dev` quitó los paquetes de desarrollo, pero `bootstrap/cache/packages.php` y `services.php` (caché sin versionar) seguían listándolos. Arreglo: `rm -f bootstrap/cache/{packages,services,events,config,routes-v7}.php`, luego `package:discover` y el resto. **Hacer esto siempre justo después de `composer install --no-dev`, antes de cualquier `artisan`.**
+- **Hay que activar los avisos push de nuevo en cada dispositivo** si las claves VAPID cambian.
+- Pendiente de verificar a mano en producción: Dashboard (las dos tarjetas nuevas), Rastreo (sin filtro «Proveedor», con «Anulada»), Logística (gráficas), Casillero y la entrega real de un aviso push en Chrome.
