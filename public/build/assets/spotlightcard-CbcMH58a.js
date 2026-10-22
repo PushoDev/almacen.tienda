@@ -1,0 +1,1 @@
+import{j as r}from"./app-Byx2Fh-J.js";import{a as s}from"./utils-CkYB-R1u.js";function p({estado:t,className:a,...o}){return r.jsx("div",{"data-estado":t,className:s("spotlight-card",a),...o})}export{p as S};
