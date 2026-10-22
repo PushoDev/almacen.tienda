@@ -14,6 +14,7 @@ use App\Models\TransferenciaPendiente;
 use App\Models\User;
 use App\Models\Venta;
 use App\Notifications\VentaEspecialDecisionNotification;
+use App\Services\AvisoVendedoresAlmacen;
 use App\Services\CodigoStockService;
 use App\Services\FechaNegocio;
 use App\Services\LoteConsumoService;
@@ -846,6 +847,8 @@ class TelegramWebhookController extends Controller
             'callback_query_id' => $callbackId,
             'text' => '❌ Rechazada',
         ]);
+
+        app(AvisoVendedoresAlmacen::class)->porVenta($venta, 'rechazada', $admin);
 
         try {
             Notification::send(collect([$venta->usuario]), new VentaEspecialDecisionNotification($venta, 'rechazada'));

@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Almacen;
+use App\Models\AlmacenProducto;
+use App\Models\Categoria;
 use App\Models\CierreCaja;
 use App\Models\Cliente;
 use App\Models\Cuenta;
@@ -632,6 +634,78 @@ test('el cierre de un admin lista las operaciones múltiples del turno con su re
         ->where('calculos.operaciones_multiples.resumen.total', 1)
         ->where('calculos.operaciones_multiples.resumen.entradas', [['moneda' => 'USD', 'monto' => 1000]])
         ->where('calculos.operaciones_multiples.resumen.salidas', [['moneda' => 'USD', 'monto' => 970]]));
+});
+
+test('el cierre del vendedor lista lo que otros vendieron de su almacén, marca lo revertido y deja fuera lo ajeno', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $admin = User::factory()->admin()->create();
+    crearTurnoActivo($vendedor);
+    $miAlmacen = Almacen::factory()->puntoVenta()->create();
+    $otroAlmacen = Almacen::factory()->puntoVenta()->create();
+    $vendedor->almacenes()->attach($miAlmacen->id);
+
+    $producto = Producto::factory()->create([
+        'nombre_producto' => 'Panel solar', 'categoria_id' => Categoria::factory()->create(['nombre_categoria' => 'Solar'])->id,
+        'marca_producto' => 'Acme', 'modelo_producto' => 'P-300',
+        'capacidad_producto' => null, 'color_producto' => 'N/A',
+    ]);
+    AlmacenProducto::create(['almacen_id' => $miAlmacen->id, 'producto_id' => $producto->id, 'cantidad' => 40]);
+    $conDetalle = function (array $atributos) use ($producto): Venta {
+        $venta = Venta::factory()->create($atributos);
+        $venta->detalles()->create([
+            'producto_id' => $producto->id, 'cantidad' => 3, 'precio_venta' => 20, 'subtotal' => 60,
+            'costo_unitario' => 10, 'ganancia' => 30, 'comision_unitaria' => 0,
+        ]);
+
+        return $venta;
+    };
+
+    $deOtro = $conDetalle(['user_id' => $admin->id, 'almacen_id' => $miAlmacen->id, 'estado' => 'completada']);
+    $revertida = $conDetalle(['user_id' => $admin->id, 'almacen_id' => $miAlmacen->id, 'estado' => 'cancelada']);
+    $conDetalle(['user_id' => $admin->id, 'almacen_id' => $miAlmacen->id, 'estado' => 'rechazada']);
+    $conDetalle(['user_id' => $admin->id, 'almacen_id' => $otroAlmacen->id, 'estado' => 'completada']);
+    $conDetalle(['user_id' => $vendedor->id, 'almacen_id' => $miAlmacen->id, 'estado' => 'completada']);
+
+    $this->actingAs($vendedor)->get(route('ventas.cierres.create'))->assertInertia(fn ($page) => $page
+        ->where('calculos.ventas_en_mi_almacen.visible', true)
+        ->has('calculos.ventas_en_mi_almacen.items', 2)
+        ->where('calculos.ventas_en_mi_almacen.items.0.venta_id', $revertida->id)
+        ->where('calculos.ventas_en_mi_almacen.items.0.revertida', true)
+        ->where('calculos.ventas_en_mi_almacen.items.1.venta_id', $deOtro->id)
+        ->where('calculos.ventas_en_mi_almacen.items.1.usuario_nombre', $admin->name)
+        ->where('calculos.ventas_en_mi_almacen.items.1.productos.0.nombre', 'Panel solar')
+        ->where('calculos.ventas_en_mi_almacen.items.1.productos.0.categoria', 'Solar')
+        ->where('calculos.ventas_en_mi_almacen.items.1.productos.0.marca', 'Acme')
+        ->where('calculos.ventas_en_mi_almacen.items.1.productos.0.modelo', 'P-300')
+        ->where('calculos.ventas_en_mi_almacen.items.1.productos.0.cantidad', 3)
+        ->where('calculos.ventas_en_mi_almacen.items.1.productos.0.stock_actual', 40)
+        ->where('calculos.ventas_en_mi_almacen.resumen', ['ventas' => 1, 'unidades' => 3]));
+});
+
+test('un admin que abre el cierre guardado de un vendedor ve lo que otros vendieron de su almacén', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $admin = User::factory()->admin()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    crearMonedaUsd();
+    $deOtro = Venta::factory()->create(['user_id' => $admin->id, 'almacen_id' => $almacen->id, 'estado' => 'completada']);
+    $cierre = CierreCaja::create([
+        'user_id' => $vendedor->id,
+        'estado' => 'aprobado',
+        'fecha_apertura' => now()->subHour(),
+        'fecha_cierre' => now()->addMinute(),
+    ]);
+
+    $this->actingAs($admin)->get(route('ventas.cierres.show', $cierre->id))->assertInertia(fn ($page) => $page
+        ->where('ventas_en_mi_almacen.visible', true)
+        ->where('ventas_en_mi_almacen.items.0.venta_id', $deOtro->id));
+});
+
+test('el cierre de un admin no trae la sección de ventas en el almacén del vendedor', function () {
+    $this->actingAs(User::factory()->admin()->create())->get(route('ventas.cierres.create'))
+        ->assertInertia(fn ($page) => $page
+            ->where('calculos.ventas_en_mi_almacen.visible', false)
+            ->where('calculos.ventas_en_mi_almacen.items', []));
 });
 
 test('la comparativa con el cierre anterior trae el logo de cada cuenta y marca la diferencia', function () {

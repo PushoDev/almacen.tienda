@@ -1,4 +1,11 @@
-import { CreadoPor, MarcaInformativa, TarjetaTurnos, type TurnoResumen } from '@/components/cierres/piezas';
+import {
+    CreadoPor,
+    MarcaInformativa,
+    TarjetaTurnos,
+    TarjetaVentasEnMiAlmacen,
+    type TurnoResumen,
+    type VentasEnMiAlmacen,
+} from '@/components/cierres/piezas';
 import HeadingSmall from '@/components/heading-small';
 import { ViaLogo } from '@/components/monedas/via-logo';
 import { type Banco, Insignia, type TipoEntidad } from '@/components/transacciones/entidad';
@@ -549,6 +556,7 @@ interface Calculos {
     turnos?: TurnoResumen[];
     turno_actual?: string | null;
     operaciones_multiples?: OperacionesMultiplesCierre;
+    ventas_en_mi_almacen?: VentasEnMiAlmacen;
     ventas_a_cuentas_total_usd?: number;
     ventas_a_clientes_total_usd?: number;
     ventas_a_cuentas_efectivo_usd?: number;
@@ -1898,6 +1906,8 @@ export default function Create({
 
                 {/* Turnos de este cierre: quién atendió ("Atendido por") y qué movió cada uno */}
                 <TarjetaTurnos turnos={calculos.turnos ?? []} nota={calculos.turno_actual ? `Atiende ahora: ${calculos.turno_actual}.` : undefined} />
+
+                <TarjetaVentasEnMiAlmacen datos={calculos.ventas_en_mi_almacen} />
 
                 {/* Transacciones del Turno: Gastos, Ingresos, Transferencias — propias y externas, unificado */}
                 <Card className="gap-0 overflow-hidden border-l-4 border-violet-500/30 py-0 shadow-sm transition-shadow hover:shadow-md">

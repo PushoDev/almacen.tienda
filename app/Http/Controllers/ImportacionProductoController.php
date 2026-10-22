@@ -9,6 +9,7 @@ use App\Models\ImportacionProducto;
 use App\Models\ImportacionProductoFila;
 use App\Models\LoteStock;
 use App\Models\ProductoCodigo;
+use App\Services\AvisoVendedoresAlmacen;
 use App\Services\CodigoStockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -220,6 +221,16 @@ class ImportacionProductoController extends Controller
                 ->withErrors(['revertir' => 'No se puede deshacer esta importación: parte de lo importado ya se movió o se modificó.'])
                 ->with('bloqueos_reversion', $bloqueos->values()->all());
         }
+
+        app(AvisoVendedoresAlmacen::class)->porCambioDeStock(
+            $importacion->almacen,
+            'importacion_revertida',
+            "importación #{$importacion->id}: se quitaron {$importacion->unidades_importadas} unidades",
+            $importacion->filas()->where('resultado', 'importada')->whereNotNull('producto_id')->get(['producto_id', 'cantidad'])
+                ->map(fn ($fila) => ['producto_id' => (int) $fila->producto_id, 'cantidad' => (int) $fila->cantidad])->all(),
+            route('productos.index'),
+            $request->user(),
+        );
 
         return back()->with('success', "Importación #{$importacion->id} deshecha: {$importacion->lotes_creados} lotes eliminados y {$importacion->unidades_importadas} unidades descontadas.");
     }

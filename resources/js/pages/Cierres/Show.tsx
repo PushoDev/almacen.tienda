@@ -1,5 +1,5 @@
 import { type ComparativaClienteItem, type ComparativaItem, type CuentaDeCobro, TarjetaComparativa } from '@/components/cierres/comparativa';
-import { TarjetaTurnos, type TurnoResumen } from '@/components/cierres/piezas';
+import { TarjetaTurnos, TarjetaVentasEnMiAlmacen, type TurnoResumen, type VentasEnMiAlmacen } from '@/components/cierres/piezas';
 import {
     type EnvioAbierto,
     type ItemMovimiento,
@@ -320,6 +320,8 @@ interface Props extends PageProps {
     envios_en_transito?: EnviosGuardados | null;
     /** Solo admin y moderador (`visible`); se recalcula por las fechas del cierre. */
     operaciones_multiples?: OperacionesMultiplesCierre;
+    /** Solo si el cierre es de un vendedor (`visible`); informativo, se recalcula por las fechas del cierre. */
+    ventas_en_mi_almacen?: VentasEnMiAlmacen;
     transacciones_externas?: Array<{
         hora: string;
         tipo: string;
@@ -386,6 +388,7 @@ export default function Show({
     envios_guardados = false,
     envios_en_transito = null,
     operaciones_multiples,
+    ventas_en_mi_almacen,
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
@@ -1471,6 +1474,8 @@ export default function Show({
 
                 {/* Turnos de este cierre: quién atendió ("Atendido por") y qué movió cada uno */}
                 <TarjetaTurnos turnos={turnos} nota={turno_cierre ? `Cerró el cierre: ${turno_cierre}.` : undefined} />
+
+                <TarjetaVentasEnMiAlmacen datos={ventas_en_mi_almacen} />
 
                 {/* Transacciones del Turno: Gastos, Ingresos, Transferencias, envíos en tránsito y Op. Múltiples */}
                 <TarjetaTransaccionesTurno

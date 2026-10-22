@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Almacen;
+use App\Models\AlmacenProducto;
 use App\Models\CierreCaja;
 use App\Models\Cliente;
 use App\Models\Cuenta;
@@ -388,6 +389,7 @@ class CierreCajaController extends Controller
                 'total_gastos' => $calculos['total_gastos_usd'] ?? 0,
                 'total_devoluciones' => $calculos['ventas_devueltas_total_usd'] ?? 0,
                 'operaciones_multiples' => $this->detalleOperacionesMultiples($user, $inicioTurno),
+                'ventas_en_mi_almacen' => $this->detalleVentasEnMiAlmacen($user, $inicioTurno),
                 // Resumen financiero
                 'ventas_brutas_usd' => $calculos['ventas_brutas_usd'] ?? 0,
                 'comisiones_pv_cup' => $calculos['comisiones_pv_cup'] ?? 0,
@@ -1117,6 +1119,7 @@ class CierreCajaController extends Controller
             'envios_en_transito' => $cierre->envios_en_transito,
             // Se recalculan por las fechas del cierre, como las ventas especiales
             'operaciones_multiples' => $this->detalleOperacionesMultiples($currentUser, $cierre->fecha_apertura, $cierre->fecha_cierre),
+            'ventas_en_mi_almacen' => $this->detalleVentasEnMiAlmacen($cierreUser ?? $currentUser, $cierre->fecha_apertura, $cierre->fecha_cierre),
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -2247,6 +2250,69 @@ class CierreCajaController extends Controller
                     $r->mensajero_cuenta_id ? ['moneda' => $r->mensajero_moneda, 'monto' => $r->mensajero_monto] : null,
                 ]))),
             ],
+        ];
+    }
+
+    /**
+     * Ventas que otra persona hizo desde los almacenes del vendedor en el periodo (su stock bajó sin que él
+     * las hiciera). Solo aplica a un vendedor: admin y moderador venden de todos los almacenes y no tienen
+     * "los suyos". Informativo: el dinero no entró a sus cuentas, así que NO entra en caja, comisiones ni saldo
+     * esperado. Las anuladas y devueltas se listan marcadas pero no suman; las rechazadas no se listan porque
+     * nunca descontaron stock.
+     *
+     * @return array{visible: bool, items: array<int, array<string, mixed>>, resumen: array{ventas: int, unidades: int}}
+     */
+    private function detalleVentasEnMiAlmacen(User $user, mixed $inicioTurno, mixed $finTurno = null): array
+    {
+        $vacio = ['visible' => false, 'items' => [], 'resumen' => ['ventas' => 0, 'unidades' => 0]];
+
+        if ($user->role !== 'vendedor') {
+            return $vacio;
+        }
+
+        $ventas = Venta::with(['usuario:id,name', 'almacen:id,nombre_almacen', 'detalles.producto.categoria'])
+            ->whereIn('almacen_id', $user->almacenes()->pluck('almacens.id'))
+            ->where('user_id', '!=', $user->id)
+            ->where('estado', '!=', 'rechazada')
+            ->when($inicioTurno, fn ($consulta) => $consulta->where('created_at', '>=', $inicioTurno))
+            ->when($finTurno, fn ($consulta) => $consulta->where('created_at', '<=', $finTurno))
+            ->orderByDesc('id')
+            ->get();
+
+        // Lo que hay hoy en el almacén de cada producto vendido: así el vendedor ve cómo quedó su inventario.
+        $stockActual = AlmacenProducto::whereIn('almacen_id', $ventas->pluck('almacen_id')->unique())
+            ->whereIn('producto_id', $ventas->flatMap(fn (Venta $venta) => $venta->detalles->pluck('producto_id'))->unique())
+            ->get(['almacen_id', 'producto_id', 'cantidad'])
+            ->mapWithKeys(fn ($fila) => ["{$fila->almacen_id}:{$fila->producto_id}" => (int) $fila->cantidad]);
+
+        $items = $ventas->map(fn (Venta $venta) => [
+            'venta_id' => $venta->id,
+            'fecha' => $venta->created_at->format('Y-m-d H:i'),
+            'usuario_nombre' => $venta->usuario?->name ?? 'Sistema',
+            'almacen' => $venta->almacen?->nombre_almacen,
+            'estado' => $venta->estado,
+            'revertida' => in_array($venta->estado, ['cancelada', 'devuelta'], true),
+            'unidades' => (int) $venta->detalles->sum('cantidad'),
+            'productos' => $venta->detalles->map(fn ($detalle) => [
+                'nombre' => $detalle->producto?->nombre_producto,
+                'codigo' => $detalle->producto?->codigo_producto,
+                'imagen_url' => $detalle->producto?->imagen_url,
+                'categoria' => $detalle->producto?->categoria?->nombre_categoria,
+                'marca' => $detalle->producto?->marca_producto,
+                'modelo' => $detalle->producto?->modelo_producto,
+                'capacidad' => $detalle->producto?->capacidad_producto,
+                'color' => $detalle->producto?->color_producto,
+                'cantidad' => (int) $detalle->cantidad,
+                'stock_actual' => $stockActual["{$venta->almacen_id}:{$detalle->producto_id}"] ?? 0,
+            ])->values()->all(),
+        ]);
+
+        $vigentes = $items->where('revertida', false);
+
+        return [
+            'visible' => true,
+            'items' => $items->values()->all(),
+            'resumen' => ['ventas' => $vigentes->count(), 'unidades' => (int) $vigentes->sum('unidades')],
         ];
     }
 
