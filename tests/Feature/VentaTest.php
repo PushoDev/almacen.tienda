@@ -3,6 +3,7 @@
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\AlmacenProductoCodigo;
+use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Cuenta;
 use App\Models\ImportacionProducto;
@@ -14,8 +15,13 @@ use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
+use App\Notifications\VentaDescontoDeTuCuentaNotification;
+use App\Notifications\VentaEnTuAlmacenNotification;
+use App\Services\AvisoVendedoresAlmacen;
 use App\Services\FusionLotesService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use NotificationChannels\WebPush\WebPushChannel;
 
 /**
  * Crea un producto con stock en un almacén y precio/comisión en producto_vendedors.
@@ -3304,4 +3310,282 @@ test('ventas.show manda tasa_comision en monedasSistema, null si la moneda no la
             return $usd !== null && $usd['tasa_comision'] === null
                 && $cup !== null && (float) $cup['tasa_comision'] === 395.0;
         }));
+});
+
+// ==========================================================================
+// AVISO AL VENDEDOR — alguien más vendió de su almacén (2026-10-22)
+// ==========================================================================
+
+/**
+ * Procesa una venta de 2 unidades como el usuario autenticado y devuelve el almacén usado.
+ */
+function venderDosUnidadesDelAlmacen(Almacen $almacen, ?Cuenta $cuenta = null): void
+{
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    $cuenta ??= crearCuentaUsd();
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 2, monedaPrincipal: $monedaUsd);
+    $payload['pagos'] = [[
+        'metodo' => 'efectivo',
+        'moneda_id' => $monedaUsd->id,
+        'monto' => 40,
+        'tasa_cambio' => 1,
+        'monto_equivalente' => 40,
+        'cuenta_id' => $cuenta->id,
+    ]];
+
+    test()->postJson(route('ventas.procesar'), $payload)->assertOk();
+}
+
+test('cuando un admin vende de un almacén, el vendedor dueño recibe el aviso y los demás no', function () {
+    Notification::fake();
+    $dueno = User::factory()->vendedor()->create();
+    $otroVendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $dueno->almacenes()->attach($almacen->id);
+
+    $this->actingAs(User::factory()->admin()->create());
+    venderDosUnidadesDelAlmacen($almacen);
+
+    Notification::assertSentTo($dueno, VentaEnTuAlmacenNotification::class, function ($notification) use ($dueno, $almacen) {
+        $datos = $notification->toArray($dueno);
+
+        return $datos['venta_id'] === Venta::first()->id
+            && $datos['almacen_id'] === $almacen->id
+            && str_contains($datos['message'], '2 ×')
+            && str_contains($datos['message'], $almacen->nombre_almacen);
+    });
+    Notification::assertNotSentTo($otroVendedor, VentaEnTuAlmacenNotification::class);
+});
+
+test('el vendedor que vende de su propio almacén no se avisa a sí mismo, pero sí a su compañero del almacén', function () {
+    Notification::fake();
+    $vendedor = User::factory()->vendedor()->create();
+    $companero = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $companero->almacenes()->attach($almacen->id);
+    $cuenta = crearCuentaUsd();
+    $vendedor->cuentas()->attach($cuenta->id);
+
+    $this->actingAs($vendedor);
+    crearTurnoActivo($vendedor);
+    venderDosUnidadesDelAlmacen($almacen, $cuenta);
+
+    Notification::assertNotSentTo($vendedor, VentaEnTuAlmacenNotification::class);
+    Notification::assertSentTo($companero, VentaEnTuAlmacenNotification::class);
+});
+
+test('el aviso al vendedor del almacén llega por la campana y por push', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs(User::factory()->admin()->create());
+    $venta = Venta::factory()->create();
+
+    expect((new VentaEnTuAlmacenNotification($venta))->via($vendedor))
+        ->toBe(['database', WebPushChannel::class]);
+});
+
+/**
+ * Crea una venta con una línea de 5 unidades en un almacén con stock descontado.
+ */
+function crearVentaConStockDescontado(Almacen $almacen, User $vendio, string $estado): Venta
+{
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20);
+    AlmacenProducto::where('producto_id', $producto->id)->update(['cantidad' => 95]);
+    $codigo->update(['cantidad' => 95]);
+
+    $venta = Venta::factory()->create(['user_id' => $vendio->id, 'almacen_id' => $almacen->id, 'estado' => $estado]);
+    $venta->detalles()->create([
+        'producto_id' => $producto->id, 'producto_codigo_id' => $codigo->id,
+        'cantidad' => 5, 'precio_venta' => 20, 'subtotal' => 100,
+        'costo_unitario' => 10, 'ganancia' => 50, 'comision_unitaria' => 0,
+    ]);
+
+    return $venta;
+}
+
+test('el aviso de venta detalla cada producto (marca, modelo, capacidad) y cómo quedó el inventario del almacén', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $bateria = Producto::factory()->create([
+        'nombre_producto' => 'Batería Litio', 'categoria_id' => Categoria::factory()->create(['nombre_categoria' => 'Energía'])->id,
+        'marca_producto' => 'Acme', 'modelo_producto' => 'X-200', 'capacidad_producto' => '5kWh', 'color_producto' => 'N/A',
+    ]);
+    $cable = Producto::factory()->create([
+        'nombre_producto' => 'Cable', 'categoria_id' => Categoria::factory()->create(['nombre_categoria' => 'Accesorios'])->id,
+        'marca_producto' => null, 'modelo_producto' => null, 'capacidad_producto' => null, 'color_producto' => null,
+    ]);
+    AlmacenProducto::create(['almacen_id' => $almacen->id, 'producto_id' => $bateria->id, 'cantidad' => 7]);
+    AlmacenProducto::create(['almacen_id' => $almacen->id, 'producto_id' => $cable->id, 'cantidad' => 0]);
+    $venta = Venta::factory()->create(['almacen_id' => $almacen->id]);
+    foreach ([[$bateria, 2], [$bateria, 1], [$cable, 4]] as [$producto, $cantidad]) {
+        $venta->detalles()->create([
+            'producto_id' => $producto->id, 'cantidad' => $cantidad, 'precio_venta' => 10, 'subtotal' => 10 * $cantidad,
+            'costo_unitario' => 5, 'ganancia' => 5 * $cantidad, 'comision_unitaria' => 0,
+        ]);
+    }
+
+    $datos = (new VentaEnTuAlmacenNotification($venta))->toArray($vendedor);
+
+    expect($datos['message'])->toContain('3 × Batería Litio (Energía · Acme · X-200 · 5kWh), ahora hay 7')
+        ->toContain('4 × Cable (Accesorios), ahora hay 0')
+        ->not->toContain('N/A')
+        ->and($datos['productos'])->toHaveCount(2)
+        ->and($datos['productos'][0])->toBe([
+            'producto_id' => $bateria->id, 'nombre' => 'Batería Litio', 'detalle' => 'Energía · Acme · X-200 · 5kWh', 'cantidad' => 3, 'stock_actual' => 7,
+        ]);
+});
+
+test('el servicio de aviso funciona sin sesión (rechazo por Telegram): avisa al dueño del almacén y no a quien rechazó ni a quien pidió', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $dueno = User::factory()->vendedor()->create();
+    $quienPidio = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $dueno->almacenes()->attach($almacen->id);
+    $quienPidio->almacenes()->attach($almacen->id);
+    $venta = crearVentaConStockDescontado($almacen, $quienPidio, 'rechazada');
+
+    expect(auth()->check())->toBeFalse();
+    app(AvisoVendedoresAlmacen::class)->porVenta($venta, 'rechazada', $admin);
+
+    Notification::assertSentTo($dueno, VentaEnTuAlmacenNotification::class, fn ($notification) => $notification->accion === 'rechazada'
+        && $notification->autor->is($admin));
+    Notification::assertNotSentTo($quienPidio, VentaEnTuAlmacenNotification::class);
+});
+
+test('cuando un admin anula una venta pendiente del almacén, el vendedor dueño recibe el aviso de cancelada', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $dueno = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $dueno->almacenes()->attach($almacen->id);
+    $venta = crearVentaConStockDescontado($almacen, $admin, 'pendiente');
+
+    $this->actingAs($admin)
+        ->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_pedido'])
+        ->assertOk();
+
+    Notification::assertSentTo($dueno, VentaEnTuAlmacenNotification::class, function ($notification) use ($dueno, $admin) {
+        $datos = $notification->toArray($dueno);
+
+        return $datos['accion'] === 'cancelada'
+            && $datos['hecho_por_id'] === $admin->id
+            && str_contains($datos['message'], 'el stock volvió');
+    });
+});
+
+test('cuando un admin devuelve una venta completada del almacén, el vendedor dueño recibe el aviso de devuelta', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $dueno = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $dueno->almacenes()->attach($almacen->id);
+    $venta = crearVentaConStockDescontado($almacen, $admin, 'completada');
+
+    $this->actingAs($admin)
+        ->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'solicitud_cliente'])
+        ->assertOk();
+
+    Notification::assertSentTo($dueno, VentaEnTuAlmacenNotification::class, fn ($notification) => $notification->accion === 'devuelta');
+});
+
+test('si el vendedor anula su propia venta no se avisa a sí mismo', function () {
+    Notification::fake();
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $venta = crearVentaConStockDescontado($almacen, $vendedor, 'pendiente');
+    crearTurnoActivo($vendedor);
+
+    $this->actingAs($vendedor)
+        ->postJson(route('ventas.anular', $venta), ['motivo_anulacion' => 'error_pedido'])
+        ->assertOk();
+
+    Notification::assertNotSentTo($vendedor, VentaEnTuAlmacenNotification::class);
+});
+
+test('al rechazar una solicitud especial se avisa al dueño del almacén, pero no a quien la pidió', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $dueno = User::factory()->vendedor()->create();
+    $quienPidio = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $dueno->almacenes()->attach($almacen->id);
+    $quienPidio->almacenes()->attach($almacen->id);
+    $venta = crearVentaConStockDescontado($almacen, $quienPidio, 'solicitud_especial');
+    $venta->update(['es_venta_especial' => true, 'tipo_venta_especial' => 'descuento']);
+
+    $this->actingAs($admin)
+        ->postJson(route('ventas.especial.rechazar', $venta))
+        ->assertOk();
+
+    Notification::assertSentTo($dueno, VentaEnTuAlmacenNotification::class, fn ($notification) => $notification->accion === 'rechazada');
+    Notification::assertNotSentTo($quienPidio, VentaEnTuAlmacenNotification::class);
+});
+
+// ==========================================================================
+// AVISO AL DUEÑO DE LA CUENTA — al aprobar, de su cuenta sale mensajería o comisión
+// ==========================================================================
+
+test('al aprobar una venta, el vendedor dueño de la cuenta del mensajero recibe el aviso con el monto', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $duenoCuenta = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $cuentaMensajero = crearCuentaCup(saldo: 10000);
+    $duenoCuenta->cuentas()->attach($cuentaMensajero->id);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $admin->id, 'almacen_id' => $almacen->id, 'estado' => 'pendiente',
+        'moneda_id' => $monedaUsd->id, 'total' => 50,
+        'mensajero_monto' => 5, 'mensajero_tipo' => 'externo',
+        'mensajero_cuenta_id' => $cuentaMensajero->id,
+        'mensajero_monto_final_cup' => 1800, 'mensajero_monto_original' => 1800,
+    ]);
+    crearDestinatario($venta);
+
+    $this->actingAs($admin)->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
+
+    Notification::assertSentTo($duenoCuenta, VentaDescontoDeTuCuentaNotification::class, function ($notification) use ($duenoCuenta, $cuentaMensajero) {
+        $datos = $notification->toArray($duenoCuenta);
+
+        return $datos['concepto'] === 'mensajeria'
+            && $datos['monto'] === 1800.0
+            && $datos['cuenta_id'] === $cuentaMensajero->id
+            && str_contains($datos['message'], 'mensajería');
+    });
+});
+
+test('al aprobar una venta con comisión, el vendedor dueño de la cuenta de comisión recibe el aviso, pero no quien aprueba', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $vendedor = User::factory()->vendedor()->create();
+    $cuentaUsd = crearCuentaComision('USD', 'efectivo', saldo: 500);
+    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $venta = ventaPendienteConComision($vendedor, comision: 10);
+    crearDestinatario($venta);
+    $this->actingAs($admin)->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaUsd->id])->assertOk();
+
+    $this->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
+
+    Notification::assertSentTo($vendedor, VentaDescontoDeTuCuentaNotification::class, fn ($notification) => $notification->concepto === 'comision' && $notification->monto === 10.0);
+    Notification::assertNotSentTo($admin, VentaDescontoDeTuCuentaNotification::class);
+});
+
+test('si el dueño de la cuenta es quien aprueba, no se avisa a sí mismo', function () {
+    Notification::fake();
+    $vendedor = User::factory()->vendedor()->create();
+    crearTurnoActivo($vendedor);
+    $cuentaUsd = crearCuentaComision('USD', 'efectivo', saldo: 500);
+    $vendedor->cuentas()->attach($cuentaUsd->id);
+    $venta = ventaPendienteConComision($vendedor, comision: 10);
+    crearDestinatario($venta);
+    $this->actingAs($vendedor)->postJson(route('ventas.distribucion.store', $venta), ['comision_cuenta_id' => $cuentaUsd->id])->assertOk();
+
+    $this->postJson(route('ventas.aprobar', $venta))->assertJson(['success' => true]);
+
+    Notification::assertNotSentTo($vendedor, VentaDescontoDeTuCuentaNotification::class);
 });

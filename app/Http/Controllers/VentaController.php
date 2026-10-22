@@ -18,9 +18,11 @@ use App\Models\Venta;
 use App\Models\VentaDetalle;
 use App\Models\VentaDetalleLote;
 use App\Notifications\VentaCreadaNotification;
+use App\Notifications\VentaDescontoDeTuCuentaNotification;
 use App\Notifications\VentaDevueltaNotification;
 use App\Notifications\VentaEspecialDecisionNotification;
 use App\Notifications\VentaEspecialSolicitudNotification;
+use App\Services\AvisoVendedoresAlmacen;
 use App\Services\CatalogoTarjetasService;
 use App\Services\CodigoStockService;
 use App\Services\DashboardStatsService;
@@ -1339,6 +1341,8 @@ class VentaController extends Controller
                 \Log::error('Error enviando notificación de venta: '.$e->getMessage());
             }
 
+            app(AvisoVendedoresAlmacen::class)->porVenta($venta, 'vendida', $venta->usuario);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Venta creada correctamente.',
@@ -1561,6 +1565,35 @@ class VentaController extends Controller
                 'moneda_imagen_url' => CatalogoTarjetasService::monedaImagenPorSlug($cuenta->moneda?->imagen)['imagen_url'] ?? null,
             ] : null,
         ];
+    }
+
+    /**
+     * Al aprobar, avisa a los vendedores dueños de la cuenta de la que salió la mensajería (solo
+     * la externa) o la comisión, salvo a quien aprobó. Un fallo al notificar nunca tumba la aprobación.
+     */
+    private function avisarDuenosDeCuentasDescontadas(Venta $venta): void
+    {
+        try {
+            $venta->refresh();
+            $autor = Auth::user();
+            $descuentos = [];
+
+            if ($venta->mensajero_monto > 0 && $venta->mensajero_tipo === 'externo' && $venta->mensajeroCuenta) {
+                $descuentos[] = ['mensajeria', $venta->mensajeroCuenta, (float) ($venta->mensajero_monto_final_cup ?: $venta->mensajero_monto_original)];
+            }
+
+            $comision = $this->comisionPago($venta);
+            if (! $venta->es_venta_gestor && $comision && $comision['monto_cuenta'] > 0) {
+                $descuentos[] = ['comision', $venta->comisionCuenta, (float) $comision['monto_cuenta']];
+            }
+
+            foreach ($descuentos as [$concepto, $cuenta, $monto]) {
+                $duenos = $cuenta->users()->where('role', 'vendedor')->whereKeyNot($autor?->id)->get();
+                Notification::send($duenos, new VentaDescontoDeTuCuentaNotification($venta, $cuenta, $concepto, $monto, $autor));
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error avisando al dueño de la cuenta descontada: '.$e->getMessage());
+        }
     }
 
     private function puedeGestionarVenta(Venta $venta): bool
@@ -1801,6 +1834,8 @@ class VentaController extends Controller
                 }
             }
         });
+
+        $this->avisarDuenosDeCuentasDescontadas($venta);
 
         return response()->json([
             'success' => true,
@@ -2518,6 +2553,8 @@ class VentaController extends Controller
             }
         }
 
+        app(AvisoVendedoresAlmacen::class)->porVenta($venta, $eraCompletada ? 'devuelta' : 'cancelada', Auth::user());
+
         return response()->json([
             'success' => true,
             'message' => $eraCompletada ? 'Devolución procesada correctamente' : 'Venta anulada correctamente',
@@ -2617,6 +2654,8 @@ class VentaController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error enviando notificación de decisión especial: '.$e->getMessage());
         }
+
+        app(AvisoVendedoresAlmacen::class)->porVenta($venta, 'rechazada', Auth::user());
 
         return response()->json([
             'success' => true,

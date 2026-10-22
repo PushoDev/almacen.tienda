@@ -18,7 +18,9 @@ use App\Models\ProductoCodigo;
 use App\Models\Proveedor;
 use App\Models\TipoMovimientoFinanciero;
 use App\Models\User;
+use App\Notifications\StockCambiadoEnTuAlmacenNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * El proveedor de una compra es un cliente: su saldo vive en `clientes.deuda_pago_cliente`, con el mismo signo de
@@ -332,6 +334,48 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra, a 
 });
 
 // ─── Acceso: admin y moderador (vendedor no tiene acceso a Compras) ────
+
+test('aprobar una compra avisa a los vendedores de cada almacén que recibió stock, no a quien la aprobó', function () {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $duenoUno = User::factory()->vendedor()->create();
+    $duenoDos = User::factory()->vendedor()->create();
+    $sinRelacion = User::factory()->vendedor()->create();
+    $this->actingAs($admin);
+
+    $moneda = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta Test USD', 'saldo_cuenta' => 1000, 'tipo_cuenta' => 'permanentes',
+        'moneda_id' => $moneda->id, 'estado' => 'activa',
+    ]);
+    $almacenUno = Almacen::factory()->create();
+    $almacenDos = Almacen::factory()->create();
+    $duenoUno->almacenes()->attach($almacenUno->id);
+    $duenoDos->almacenes()->attach($almacenDos->id);
+    $categoria = Categoria::factory()->create();
+
+    $linea = fn (Almacen $almacen, string $nombre, string $codigo) => [
+        'almacen_id' => $almacen->id, 'producto' => $nombre, 'marca' => 'Marca', 'modelo' => 'Modelo',
+        'categoria' => $categoria->nombre_categoria, 'codigo' => $codigo, 'cantidad' => 2, 'precio' => 5,
+    ];
+
+    $this->post(route('comprar.store'), [
+        'compra' => 'pago_cash', 'proveedor' => 'Proveedor Test', 'fecha' => '2026-07-30',
+        'productos' => [$linea($almacenUno, 'Producto Uno', 'AVISO001'), $linea($almacenDos, 'Producto Dos', 'AVISO002')],
+        'pagos' => [['cuenta_id' => $cuenta->id, 'monto' => 20]],
+    ])->assertSessionHasNoErrors();
+    $compra = Compra::firstOrFail();
+
+    $this->post(route('comprar.aprobar', $compra->id))->assertSessionHasNoErrors();
+
+    Notification::assertSentTo($duenoUno, StockCambiadoEnTuAlmacenNotification::class, fn ($notification) => $notification->tipo === 'compra'
+        && $notification->almacen->is($almacenUno)
+        && str_contains($notification->toArray($duenoUno)['message'], "2 × Producto Uno ({$categoria->nombre_categoria} · Marca · Modelo), ahora hay 2")
+        && ! str_contains($notification->toArray($duenoUno)['message'], 'Producto Dos'));
+    Notification::assertSentTo($duenoDos, StockCambiadoEnTuAlmacenNotification::class, fn ($notification) => $notification->almacen->is($almacenDos));
+    Notification::assertNotSentTo($sinRelacion, StockCambiadoEnTuAlmacenNotification::class);
+    Notification::assertNotSentTo($admin, StockCambiadoEnTuAlmacenNotification::class);
+});
 
 test('las rutas comprar.create/edit/update/destroy ya no existen (el controller nunca las implementó)', function () {
     $admin = User::factory()->admin()->create();

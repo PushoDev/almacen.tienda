@@ -7,9 +7,11 @@ use App\Models\ImportacionProducto;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\User;
+use App\Notifications\StockCambiadoEnTuAlmacenNotification;
 use App\Services\ImportacionProductosService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 
 function prepararBorrador(array $filas, Almacen $almacen): TestResponse
@@ -148,6 +150,33 @@ test('confirmar importa lo que hay en la hoja, con historial, y elimina el borra
     expect($importacion->nombre_archivo)->toBe('productos.xlsx');
     expect($importacion->hash_archivo)->toBe($borrador->hash_archivo);
     expect(ImportacionBorrador::count())->toBe(0);
+});
+
+test('confirmar una importación con stock avisa al vendedor del almacén, y sin stock no avisa', function () {
+    Notification::fake();
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    prepararBorrador([['Olla', 'Cocina', null, null, null, null, 10, 3, null]], $almacen);
+    $borrador = ImportacionBorrador::firstOrFail();
+
+    $this->post(route('importaciones-borradores.confirmar', $borrador->id), [
+        'filas' => [filaBorrador(['nombre_producto' => 'Olla', 'cantidad' => '5'])],
+    ])->assertRedirect(route('productos.index'));
+
+    Notification::assertSentToTimes($vendedor, StockCambiadoEnTuAlmacenNotification::class, 1);
+    Notification::assertSentTo($vendedor, StockCambiadoEnTuAlmacenNotification::class, fn ($notification) => $notification->tipo === 'importacion'
+        && str_contains($notification->resumen, '5 unidades')
+        && $notification->toArray($vendedor)['productos'][0]['cantidad'] === 5
+        && $notification->toArray($vendedor)['productos'][0]['stock_actual'] === 5
+        && str_contains($notification->toArray($vendedor)['message'], '5 × Olla (Cocina), ahora hay 5'));
+
+    prepararBorrador([['Solo Ficha', 'Cocina', null, null, null, null, null, 0, null]], $almacen);
+    $this->post(route('importaciones-borradores.confirmar', ImportacionBorrador::firstOrFail()->id), [
+        'filas' => [filaBorrador(['nombre_producto' => 'Solo Ficha', 'precio_compra' => '', 'cantidad' => ''])],
+    ])->assertRedirect(route('productos.index'));
+
+    Notification::assertSentToTimes($vendedor, StockCambiadoEnTuAlmacenNotification::class, 1);
 });
 
 test('las filas con error de la hoja se omiten con su motivo y no impiden importar las demás', function () {

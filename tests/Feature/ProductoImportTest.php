@@ -9,8 +9,10 @@ use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
 use App\Models\User;
+use App\Notifications\StockCambiadoEnTuAlmacenNotification;
 use App\Services\CodigoStockService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 
 function importarExcel(array $filas, Almacen $almacen, bool $confirmarRepetido = false): TestResponse
@@ -388,6 +390,21 @@ test('si algo de lo importado ya se movió no se revierte nada y se listan los b
         'es menor que lo importado (3)',
     ],
 ]);
+
+test('deshacer una importación avisa al vendedor del almacén cuánto stock se quitó', function () {
+    Notification::fake();
+    $vendedor = User::factory()->vendedor()->create();
+    $almacen = Almacen::factory()->create();
+    $vendedor->almacenes()->attach($almacen->id);
+    $importacion = importarParaDeshacer($almacen);
+
+    deshacerImportacion($importacion)->assertSessionHasNoErrors();
+
+    Notification::assertSentTo($vendedor, StockCambiadoEnTuAlmacenNotification::class, fn ($notification) => $notification->tipo === 'importacion_revertida'
+        && str_contains($notification->resumen, "importación #{$importacion->id}")
+        && collect($notification->toArray($vendedor)['productos'])->every(fn ($linea) => $linea['stock_actual'] === 0)
+        && str_contains($notification->toArray($vendedor)['message'], '3 × Producto Deshacer A'));
+});
 
 test('deshacer pide el motivo y la contraseña del usuario, y con una contraseña incorrecta no cambia nada', function () {
     $importacion = importarParaDeshacer(Almacen::factory()->create());

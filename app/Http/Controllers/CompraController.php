@@ -14,6 +14,7 @@ use App\Models\Cuenta;
 use App\Models\LoteStock;
 use App\Models\Producto;
 use App\Models\ProductoCodigo;
+use App\Services\AvisoVendedoresAlmacen;
 use App\Services\CodigoStockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -678,7 +679,36 @@ class CompraController extends Controller
             return back()->withErrors(['error' => $e->getMessage()]);
         }
 
+        $this->avisarVendedoresDeLaEntrada($comprar);
+
         return redirect()->route('comprar.show', $comprar->id)->with('success', 'Compra aprobada — stock actualizado.');
+    }
+
+    /**
+     * Avisa a los vendedores de cada almacén que recibió stock con la compra aprobada (una línea
+     * puede ir a un almacén distinto), salvo a quien la aprobó.
+     */
+    private function avisarVendedoresDeLaEntrada(Compra $compra): void
+    {
+        $compra->loadMissing('productos');
+
+        $compra->productos->groupBy(fn ($producto) => (int) $producto->pivot->almacen_id)
+            ->each(function ($lineas, int $almacenId) use ($compra) {
+                $almacen = Almacen::find($almacenId);
+
+                if (! $almacen) {
+                    return;
+                }
+
+                app(AvisoVendedoresAlmacen::class)->porCambioDeStock(
+                    $almacen,
+                    'compra',
+                    "compra #{$compra->id}",
+                    $lineas->map(fn ($producto) => ['producto_id' => $producto->id, 'cantidad' => (int) $producto->pivot->cantidad])->all(),
+                    route('productos.index'),
+                    auth()->user(),
+                );
+            });
     }
 
     /**

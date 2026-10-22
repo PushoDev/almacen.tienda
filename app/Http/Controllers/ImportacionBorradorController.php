@@ -6,6 +6,7 @@ use App\Imports\ProductoBorradorLector;
 use App\Imports\ProductoImport;
 use App\Models\Almacen;
 use App\Models\ImportacionBorrador;
+use App\Services\AvisoVendedoresAlmacen;
 use App\Services\ImportacionProductosService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -149,6 +150,18 @@ class ImportacionBorradorController extends Controller
                 }
 
                 $borrador->delete();
+
+                if ($importacion->unidades_importadas > 0) {
+                    app(AvisoVendedoresAlmacen::class)->porCambioDeStock(
+                        $almacen,
+                        'importacion',
+                        "importación #{$importacion->id}: {$importacion->unidades_importadas} unidades en {$importacion->lotes_creados} lotes",
+                        $importacion->filas()->where('resultado', 'importada')->whereNotNull('producto_id')->get(['producto_id', 'cantidad'])
+                            ->map(fn ($fila) => ['producto_id' => (int) $fila->producto_id, 'cantidad' => (int) $fila->cantidad])->all(),
+                        route('productos.index'),
+                        $request->user(),
+                    );
+                }
 
                 return redirect()
                     ->route('productos.index')
